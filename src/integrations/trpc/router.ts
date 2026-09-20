@@ -1,0 +1,32 @@
+import type { TRPCRouterRecord } from "@trpc/server";
+import { z } from "zod";
+import { createTRPCRouter, publicProcedure } from "./init";
+import { configRouter } from "./routers/config";
+import { dictRouter } from "./routers/dict";
+import { menuRouter } from "./routers/menu";
+
+const todos = [
+	{ id: 1, name: "Get groceries" },
+	{ id: 2, name: "Buy a new phone" },
+	{ id: 3, name: "Finish the project" },
+];
+
+const todosRouter = {
+	list: publicProcedure.query(() => todos),
+	add: publicProcedure.input(z.object({ name: z.string() })).mutation(({ input }) => {
+		const newTodo = { id: todos.length + 1, name: input.name };
+		todos.push(newTodo);
+		return newTodo;
+	}),
+} satisfies TRPCRouterRecord;
+
+export const trpcRouter = createTRPCRouter({
+	todos: todosRouter,
+	/** 系统设置 ▸ 菜单管理 —— 读写 `sys_menu` */
+	menu: menuRouter,
+	/** 系统设置 ▸ 字段管理 —— 读写 `sys_dict` */
+	dict: dictRouter,
+	/** 系统设置 ▸ 参数管理 —— 读写 `sys_config` */
+	config: configRouter,
+});
+export type TRPCRouter = typeof trpcRouter;

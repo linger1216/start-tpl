@@ -1,0 +1,182 @@
+/**
+ * 菜单路由 —— 读写 `sys_menu` 表(自关联树),供侧边栏 / 面包屑 / 模块概览动态渲染,
+ * 以及「系统设置 ▸ 菜单管理」维护。
+ *
+ * | procedure | 类型 | 作用 |
+ * | --- | --- | --- |
+ * | `list` | query | 全部菜单行(按 `sort`,再按名称);树在前端由 `buildNavTree` 拼 |
+ * | `update` | mutation | 改一个节点的名称 / 路径 / 图标 / 上下线(`path` 冲突回 `CONFLICT`) |
+ * | `reorder` | mutation | **同级**重排:传入父节点 + 该父下的完整 id 顺序,逐行写 `sort` |
+ * | `create` | mutation | 新增(父节点 + 名称,可选路径 / 图标);排序追加到同级末尾 |
+ * | `delete` | mutation | 删除;**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
+ *
+ * 树为什么不在这里拼:渲染层要的是 `NavNode[](带图标组件映射)`,而图标映射属于前端资产;
+ * 服务端只回"事实"(平铺行),拼树 + 过滤是纯函数,放前端更好测。
+ */
+
+import { TRPCError } from "@trpc/server";
+import { asc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+
+import { db } from "#/db";
+import { sysMenu } from "#/db/data-base-schema";
+import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
+import { createTRPCRouter, publicProcedure } from "../init";
+
+/** 库行 → 接口出参(时间列不回,前端用不到) */
+function toMenuRow(row: typeof sysMenu.$inferSelect) {
+	return {
+		id: row.id,
+		parentId: row.parent_id ?? null,
+		name: row.name,
+		path: row.path ?? null,
+		icon: row.icon ?? null,
+		sort: Number(row.sort ?? 0),
+		visible: Number(row.visible ?? 1),
+	};
+}
+
+async function getMenuRow(id: string) {
+	const [row] = await db.select().from(sysMenu).where(eq(sysMenu.id, id)).limit(1);
+	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个菜单不存在(可能已被删除)" });
+	return row;
+}
+
+/** 路径唯一性:`path` 决定路由,重了两条菜单会指向同一个页面 */
+async function assertPathFree(path: string | null, selfId?: string) {
+	if (!path) return;
+	const rows = await db
+		.select({ id: sysMenu.id, name: sysMenu.name })
+		.from(sysMenu)
+		.where(selfId ? sql`${sysMenu.path} = ${path} and ${sysMenu.id} <> ${selfId}` : eq(sysMenu.path, path));
+	if (rows.length === 0) return;
+	// 参数化菜单(path = <前缀>/<记录 id>)的冲突要说人话:
+	// 这不是"路径被别人占了",而是"这条记录已经挂在一个菜单下面了"(一条记录只能挂一处)
+	if (recordIdFromMenuDetailPath(path)) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message: `这条记录已经关联到菜单「${rows[0]?.name}」了(一条记录只能挂一个菜单;想换地方先去那边解除关联)`,
+		});
+	}
+	throw new TRPCError({ code: "CONFLICT", message: `路径「${path}」已被菜单「${rows[0]?.name}」占用` });
+}
+
+export const menuRouter = createTRPCRouter({
+	list: publicProcedure.query(async () => {
+		const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+		return rows.map(toMenuRow);
+	}),
+
+	update: publicProcedure
+		.input(
+			z.object({
+				id: z.string().min(1),
+				name: z.string().min(1, "菜单名不能为空").max(60),
+				path: z.string().max(191).nullable(),
+				icon: z.string().max(64).nullable(),
+				visible: z.boolean(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			await getMenuRow(input.id);
+			const path = input.path?.trim() ?? "";
+			await assertPathFree(path || null, input.id);
+			await db
+				.update(sysMenu)
+				.set({ name: input.name.trim(), path: path || null, icon: input.icon || null, visible: input.visible ? 1 : 0 })
+				.where(eq(sysMenu.id, input.id));
+			return toMenuRow(await getMenuRow(input.id));
+		}),
+
+	/**
+	 * 同级重排。传入**父节点 + 该父节点下所有子节点的 id 顺序**,服务端逐行写 `sort`。
+	 *
+	 * 为什么把"同一批"整体传上来:拖拽最容易出的错就是"跨级拖",与其在服务端猜,
+	 * 不如让调用方把"这一层的完整名单"给出来 —— 只要名单里出现了兄弟之外的行,直接拒绝。
+	 * (前端 UI 同样只允许落在同级之间,两层防线。)
+	 */
+	reorder: publicProcedure
+		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
+		.mutation(async ({ input }) => {
+			const parentId = input.parentId ?? null;
+			const siblings = await db
+				.select({ id: sysMenu.id, parentId: sysMenu.parent_id })
+				.from(sysMenu)
+				.where(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId));
+			const siblingIds = new Set(siblings.map((row) => row.id));
+			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
+			if (unknown.length > 0) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: `只能在同一级内排序,以下菜单不属于同一父节点:${unknown.join("、")}`,
+				});
+			}
+			if (input.orderedIds.length !== siblingIds.size) {
+				throw new TRPCError({ code: "BAD_REQUEST", message: "排序清单必须包含该级下全部菜单" });
+			}
+			// 事务里逐行写 sort:要么全改、要么不改
+			await db.transaction(async (tx) => {
+				for (const [index, id] of input.orderedIds.entries()) {
+					await tx.update(sysMenu).set({ sort: index }).where(eq(sysMenu.id, id));
+				}
+			});
+			const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+			return { updated: input.orderedIds.length, rows: rows.map(toMenuRow) };
+		}),
+
+	create: publicProcedure
+		.input(
+			z.object({
+				parentId: z.string().nullable(),
+				name: z.string().min(1, "菜单名不能为空").max(60),
+				path: z.string().max(191).nullable(),
+				icon: z.string().max(64).nullable(),
+				visible: z.boolean().default(true),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const parentId = input.parentId ?? null;
+			if (parentId) await getMenuRow(parentId);
+			const name = input.name.trim();
+			const path = input.path?.trim() || null;
+			await assertPathFree(path);
+
+			// id 规则与种子脚本一致:叶子用 path,分组用 `@名称`;被占了就加后缀
+			const base = path ?? `@${name}`;
+			const taken = new Set((await db.select({ id: sysMenu.id }).from(sysMenu)).map((row) => row.id));
+			let id = base;
+			let suffix = 2;
+			while (taken.has(id)) {
+				id = `${base}#${suffix}`;
+				suffix += 1;
+			}
+			const siblings = await db
+				.select({ sort: sysMenu.sort })
+				.from(sysMenu)
+				.where(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId));
+			const sort = siblings.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
+			await db.insert(sysMenu).values({
+				id,
+				parent_id: parentId,
+				name,
+				path,
+				icon: input.icon || null,
+				sort,
+				visible: input.visible ? 1 : 0,
+			});
+			return toMenuRow(await getMenuRow(id));
+		}),
+
+	delete: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+		await getMenuRow(input.id);
+		const children = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.parent_id, input.id));
+		if (children.length > 0) {
+			throw new TRPCError({
+				code: "PRECONDITION_FAILED",
+				message: `它下面还有 ${children.length} 个菜单,请先删子菜单(避免误删整枝)`,
+			});
+		}
+		await db.delete(sysMenu).where(eq(sysMenu.id, input.id));
+		return { success: true };
+	}),
+});

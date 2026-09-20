@@ -1,0 +1,24 @@
+# EditorConfig — 代码风格统一配置
+# 缩进与引号由 biome.json 强制执行(见 `pnpm check`),此处保持一致,
+# 以免编辑器自动保存与格式化器互相改写。JSON 配置保持 2 空格(不在 biome 管辖范围内)。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# TS/TSX/JS/JSX 及 CSS:与 biome.json 的 indentStyle = "tab" 对齐
+indent_style = tab
+indent_size = 2
+
+# JSON 配置文件(package.json / tsconfig.json / .vscode 等)保持 2 空格
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false

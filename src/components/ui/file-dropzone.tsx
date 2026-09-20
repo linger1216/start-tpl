@@ -1,0 +1,133 @@
+import { FileSpreadsheet, Upload, X } from "lucide-react";
+import type { ReactNode } from "react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "#/components/ui/button";
+import { cn } from "#/lib/utils";
+
+/**
+ * 文件拖拽上传区 —— 拖拽 / 点击选文件 + 校验 + 展示已选文件名。
+ *
+ * 只负责"把文件交出去",不负责解析:校验通过后回调 `onFile`,由调用方决定
+ * `await file.arrayBuffer()` 之后干什么(解析表格 / 上传 / 预览图,用途各不相同)。
+ *
+ * `validate` 返回错误文案即拒绝该文件并 toast 提示;不传则只做大小校验。
+ */
+
+export function FileDropzone({
+	onFile,
+	fileName,
+	onClear,
+	disabled = false,
+	accept,
+	maxSizeMb,
+	/** 主文案,默认「把文件拖到这里,或点击选择」 */
+	label,
+	/** 副文案(格式 / 大小说明);不传则按 `accept` 与 `maxSizeMb` 自动生成 */
+	hint,
+	icon,
+	validate,
+	className,
+}: {
+	/** 校验通过后回调 */
+	onFile: (file: File) => void | Promise<void>;
+	/** 已选文件名(有值时展示"已选择"状态与清除按钮) */
+	fileName?: string | null;
+	onClear?: () => void;
+	disabled?: boolean;
+	/** input 的 accept,如 `.xlsx,.csv` */
+	accept?: string;
+	/** 单个文件大小上限(MB);不传则不限制 */
+	maxSizeMb?: number;
+	label?: ReactNode;
+	hint?: ReactNode;
+	/** 区内的提示图标,默认 `Upload` */
+	icon?: ReactNode;
+	/** 自定义校验:返回字符串表示拒绝(该字符串会 toast 出来) */
+	validate?: (file: File) => string | null;
+	className?: string;
+}) {
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	const [dragging, setDragging] = useState(false);
+
+	const autoHint =
+		accept || maxSizeMb
+			? `支持 ${accept ?? "任意格式"}${maxSizeMb ? ` · 单个文件不超过 ${maxSizeMb}MB` : ""}`
+			: undefined;
+
+	function acceptFile(file: File) {
+		const rejected = validate?.(file);
+		if (rejected) {
+			toast.error(rejected);
+			return;
+		}
+		if (maxSizeMb !== undefined && file.size > maxSizeMb * 1024 * 1024) {
+			toast.error(`文件不能超过 ${maxSizeMb}MB`);
+			return;
+		}
+		void onFile(file);
+	}
+
+	return (
+		<div className={cn("space-y-2", className)}>
+			<button
+				type="button"
+				disabled={disabled}
+				onClick={() => inputRef.current?.click()}
+				onDragOver={(event) => {
+					event.preventDefault();
+					if (!disabled) setDragging(true);
+				}}
+				onDragLeave={() => setDragging(false)}
+				onDrop={(event) => {
+					event.preventDefault();
+					setDragging(false);
+					if (disabled) return;
+					const file = event.dataTransfer.files?.[0];
+					if (file) acceptFile(file);
+				}}
+				className={cn(
+					"flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-center transition-colors",
+					dragging ? "border-primary bg-primary/5" : "border-border hover:border-ring/60 hover:bg-secondary/50",
+					disabled && "cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent",
+				)}
+			>
+				{icon ?? <Upload className="size-4 text-muted-foreground" />}
+				<span className="text-[13px] text-foreground">
+					{label ?? (
+						<>
+							把文件拖到这里,或<span className="text-primary">点击选择</span>
+						</>
+					)}
+				</span>
+				{(hint ?? autoHint) ? <span className="text-[12px] text-muted-foreground">{hint ?? autoHint}</span> : null}
+			</button>
+
+			<input
+				ref={inputRef}
+				type="file"
+				accept={accept}
+				className="hidden"
+				onChange={(event) => {
+					const file = event.target.files?.[0];
+					if (file) acceptFile(file);
+					// 允许连续选同一个文件(否则第二次 change 不触发)
+					event.target.value = "";
+				}}
+			/>
+
+			{fileName ? (
+				<div className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-[12.5px]">
+					<FileSpreadsheet className="size-3.5 shrink-0 text-muted-foreground" />
+					<span className="min-w-0 flex-1 truncate text-foreground">{fileName}</span>
+					{onClear ? (
+						<Button type="button" variant="ghost" size="icon-sm" aria-label="移除文件" onClick={onClear}>
+							<X className="size-3.5" />
+						</Button>
+					) : null}
+				</div>
+			) : null}
+		</div>
+	);
+}

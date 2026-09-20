@@ -1,0 +1,99 @@
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import { type HTMLMotionProps, motion } from "motion/react";
+
+import { cn } from "#/lib/utils";
+
+const buttonVariants = cva(
+	"group/button inline-flex shrink-0 items-center justify-center rounded-xl border border-transparent bg-clip-padding text-[14px] font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow] duration-[160ms] ease-brand outline-none select-none active:shadow-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+	{
+		variants: {
+			variant: {
+				/* 主操作:Airtable Blue 实底(DESIGN.md §4 Primary Blue)+ hover 蓝调光晕 */
+				default:
+					"bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-(--shadow-glow) active:bg-primary/85",
+				/* 幽灵：极轻底 */
+				ghost: "hover:bg-muted aria-expanded:bg-muted text-foreground",
+				/* 次级:surface 面板(DESIGN.md §4 White Secondary) */
+				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary",
+				/* 描边：白底细边框 */
+				outline: "border-border bg-background hover:bg-muted text-foreground aria-expanded:bg-muted",
+				/* 危险：红字淡底 */
+				destructive:
+					"bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30",
+				/* 文字链接 */
+				link: "text-primary underline-offset-4 hover:underline",
+			},
+			size: {
+				/* xs: 28px 高 —— **表格行内**专用(一行要塞 4~5 个操作按钮,sm 会撑得行高翻倍) */
+				xs: "h-7 gap-1 rounded-md px-2 text-[12px] [&_svg:not([class*='size-'])]:size-3",
+				/* sm: 32px 高(表格工具条密度) */
+				sm: "h-8 gap-1.5 rounded-lg px-3.5 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
+				/* default: 36px 高(后台默认密度) */
+				default: "h-9 gap-2 px-4 [&_svg:not([class*='size-'])]:size-4",
+				/* lg: DESIGN.md §4 的 Primary Blue 按钮 —— 16px 字号 + 16px/24px padding ≈ 52px 高 */
+				lg: "h-[52px] gap-2 px-6 text-[16px] [&_svg:not([class*='size-'])]:size-4",
+				/* icon: 32px 方 */
+				"icon-sm": "size-8 rounded-lg",
+				/* icon default: 36px 方 */
+				icon: "size-9 rounded-lg",
+				/* icon lg: 44px 方 */
+				"icon-lg": "size-11 rounded-xl",
+			},
+		},
+		defaultVariants: {
+			variant: "default",
+			size: "default",
+		},
+	},
+);
+
+function Button({
+	className,
+	variant = "default",
+	size = "default",
+	...props
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+	return <ButtonPrimitive data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+}
+
+/**
+ * 带 motion 动效的按钮:原生 <button> + 复用 buttonVariants。
+ * 外观(边框/尺寸)完全不变,hover 时按钮内部一条斜向光带
+ * 从左扫到右(shine sweep),用 motion variants 传播实现。
+ * ponytail: 主 CTA / 工具栏按钮用这个,行内 ghost 按钮保持原样。
+ */
+function MotionButton({
+	className,
+	variant = "default",
+	size = "default",
+	children,
+	...props
+}: HTMLMotionProps<"button"> &
+	VariantProps<typeof buttonVariants> & {
+		className?: string;
+		children?: React.ReactNode;
+	}) {
+	return (
+		<motion.button
+			data-slot="button"
+			whileHover="hover"
+			className={cn(buttonVariants({ variant, size, className }), "relative overflow-hidden")}
+			{...props}
+		>
+			{/* 内容保持在扫光带上层 */}
+			<span className="relative z-20 flex items-center gap-2">{children}</span>
+			{/* 扫光带:初始左外 -75%,hover 扫到右外 125%;x 相对自身宽度。
+			    时长与曲线对齐 DESIGN.md §7(160–200ms + 统一缓动),避免"装饰噪声"。 */}
+			<motion.span
+				aria-hidden
+				variants={{ hover: { x: "400%" } }}
+				initial={false}
+				transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+				className="pointer-events-none absolute top-0 left-[-75%] z-10 h-full w-[50%] rotate-12 bg-white/25 blur-lg"
+			/>
+		</motion.button>
+	);
+}
+
+export { Button, MotionButton, buttonVariants };

@@ -1,0 +1,124 @@
+# ─── 依赖 ───────────────────────────────────────────────
+node_modules
+# 本机 pnpm 使用「项目内 store」(可达数百 MB),绝不能入库或被派生复制
+.pnpm-store
+.pnp
+.pnp.js
+jspm_packages
+
+# ─── 构建产物 ───────────────────────────────────────────
+# Nitro 产物目录是 .output/,不是 dist/
+dist
+dist-ssr
+.output
+.nitro
+.vinxi
+build
+.vite
+vite.config.*.timestamp-*
+*.tsbuildinfo
+
+# ─── 框架 / 工具缓存 ────────────────────────────────────
+# TanStack Router / Devtools 的临时目录
+.tanstack
+# 注意:生成物 src/routeTree.gen.ts 属于源码要入库,不要在这里忽略它
+.turbo
+.wrangler
+__unconfig*
+todos.json
+.eslintcache
+.stylelintcache
+
+# ─── 环境变量(绝不入库) ─────────────────────────────────
+# .env.example 是唯一随模板分发的 env 文件,不含真实凭据
+.env
+.env.*
+!.env.example
+*.local
+
+# ─── 密钥 / 凭据(绝不入库) ──────────────────────────────
+# Sentry CLI 配置里含 auth token
+.sentryclirc
+.sentryclirc.*
+sentry.properties
+# 本地 HTTPS 调试证书 / 私钥
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ─── 日志 ───────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── 测试 / 覆盖率 ──────────────────────────────────────
+coverage
+.nyc_output
+*.lcov
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# ─── 数据库 / 迁移本地产物 ──────────────────────────────
+# ./drizzle 下的迁移 SQL 与 meta 属于源码,必须入库
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+.mysql_history
+
+# ─── 系统文件 ───────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+
+# ─── 编辑器 / IDE ───────────────────────────────────────
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.history/
+.vscode/*
+# .vscode/settings.json 是共享的编辑器配置(见 AGENTS.md),必须入库
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/*.code-snippets
+
+# ─── 临时 / 备份文件 ────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+*.rej
+*.pid
+*.seed
+*.tgz
+.cache/
+
+# ─── 部署平台 ───────────────────────────────────────────
+.vercel
+.netlify
+.firebase/
+.serverless/
+
+# macOS 垃圾文件
+.DS_Store
+*.xlsx
+*.html
+doc/archive

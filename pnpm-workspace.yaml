@@ -1,0 +1,9 @@
+# pnpm 配置归属地(pnpm 10+ 起,package.json 里的 "pnpm" 字段不再被读取)。
+#
+# pnpm 11 用 allowBuilds 显式声明哪些依赖可以运行安装期构建脚本。
+# 未列出的依赖其构建脚本会被阻止——这是 pnpm 的默认安全策略,不是错误。
+# 新增需要编译的依赖时,在这里补 true,或运行 `pnpm approve-builds`。
+allowBuilds:
+  esbuild: true
+  lightningcss: true
+  '@sentry/cli': true

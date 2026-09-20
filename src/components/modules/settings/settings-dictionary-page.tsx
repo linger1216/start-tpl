@@ -1,0 +1,292 @@
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Library, ListChecks, Plus, ToggleLeft } from "lucide-react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { PageHeader } from "#/components/layout/page-header";
+import { SettingsDictionaryForm } from "#/components/modules/settings/settings-dictionary-form";
+import {
+	type SettingsDictCallbacks,
+	SettingsDictionaryTable,
+} from "#/components/modules/settings/settings-dictionary-table";
+import {
+	type DictFormValues,
+	dictToForm,
+	emptyDictForm,
+	type SettingsDictRow,
+} from "#/components/modules/settings/settings-dictionary-types";
+import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
+import { PaginationControl } from "#/components/modules/shared/pagination-control";
+import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
+import { TableLoadingShell } from "#/components/modules/shared/table-kit";
+import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { useTRPC } from "#/integrations/trpc/react";
+import { toApiError } from "#/lib/api/error";
+
+/**
+ * 系统设置 ▸ 字段管理 —— `sys_dict`(全系统共用字典表)的维护页。
+ *
+ * 指标 + 搜索 + 表格 + 分页(与全站台账同一套骨架);每行是一个字典,
+ * 「编辑字典项」在弹窗里改 `items = [{label, value}]`(顺序就是下拉顺序)。
+ *
+ * 为什么值得单独一页:档案类型、接入方式、状态码这类固定取值以后都放这张表 ——
+ * 页面里改一次,用到它的地方(如治理规则的「写入档案」下拉)立刻跟着变。
+ */
+export function SettingsDictionaryPage() {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const listQuery = useQuery({ ...trpc.dict.list.queryOptions(), placeholderData: keepPreviousData });
+	const rows = useMemo<SettingsDictRow[]>(
+		() => (listQuery.data ?? []).map((row) => ({ ...row, items: row.items ?? [] })),
+		[listQuery.data],
+	);
+
+	const [keyword, setKeyword] = useState("");
+	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(10);
+	const [form, setForm] = useState<{ editing: SettingsDictRow | null } | null>(null);
+	const [values, setValues] = useState<DictFormValues>(emptyDictForm);
+	const [formError, setFormError] = useState<string | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<SettingsDictRow | null>(null);
+
+	const invalidate = () => queryClient.invalidateQueries(trpc.dict.pathFilter());
+
+	const createMutation = useMutation(
+		trpc.dict.create.mutationOptions({
+			onSuccess: async () => {
+				await invalidate;
+				setForm(null);
+				toast.success("已创建字典");
+			},
+			onError: (error) => setFormError(toApiError(error).message),
+		}),
+	);
+	const updateMutation = useMutation(
+		trpc.dict.update.mutationOptions({
+			onSuccess: async () => {
+				await invalidate;
+				// 规则表单的「写入档案」下拉也读这个字典,顺手让它失效(revalidate 一次)
+				await queryClient.invalidateQueries(trpc.dict.pathFilter());
+				setForm(null);
+				toast.success("已保存字典");
+			},
+			onError: (error) => setFormError(toApiError(error).message),
+		}),
+	);
+	const deleteMutation = useMutation(
+		trpc.dict.delete.mutationOptions({
+			onSuccess: async () => {
+				await invalidate;
+				setDeleteTarget(null);
+				toast.success("已删除字典");
+			},
+			onError: (error) => {
+				setDeleteTarget(null);
+				toast.error(toApiError(error).message);
+			},
+		}),
+	);
+
+	/** 关键词过滤:名称 / 编码 / 说明 / 字典项(label 与 value) */
+	const filtered = useMemo(() => {
+		const key = keyword.trim().toLowerCase();
+		if (!key) return rows;
+		return rows.filter((row) =>
+			[row.name, row.id, row.remark ?? "", ...row.items.flatMap((item) => [item.label, item.value])].some((text) =>
+				text.toLowerCase().includes(key),
+			),
+		);
+	}, [rows, keyword]);
+
+	const total = filtered.length;
+	const pageRows = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
+
+	const stats: StatItem[] = useMemo(() => {
+		const itemCount = rows.reduce((sum, row) => sum + row.items.length, 0);
+		const disabled = rows.filter((row) => row.status !== 1).length;
+		const empty = rows.filter((row) => row.items.length === 0).length;
+		return [
+			{
+				key: "dicts",
+				label: "字典数",
+				value: rows.length,
+				description: "sys_dict 行数",
+				Icon: Library,
+				tone: "bg-secondary text-foreground",
+				unit: "个",
+			},
+			{
+				key: "items",
+				label: "字典项总数",
+				value: itemCount,
+				description: "所有字典的 label/value 合计",
+				Icon: ListChecks,
+				tone: "bg-secondary text-foreground",
+				unit: "项",
+			},
+			{
+				key: "empty",
+				label: "空字典",
+				value: empty,
+				description: "还没有字典项",
+				Icon: Plus,
+				tone: "bg-secondary text-foreground",
+				unit: "个",
+			},
+			{
+				key: "disabled",
+				label: "已停用",
+				value: disabled,
+				description: "停用后不参与下拉",
+				Icon: ToggleLeft,
+				tone: "bg-secondary text-foreground",
+				unit: "个",
+			},
+		];
+	}, [rows]);
+
+	const callbacks: SettingsDictCallbacks = useMemo(
+		() => ({
+			onEdit: (row) => {
+				setFormError(null);
+				setValues(dictToForm(row));
+				setForm({ editing: row });
+			},
+			onToggle: async (row) => {
+				updateMutation.mutate({
+					id: row.id,
+					name: row.name,
+					remark: row.remark ?? "",
+					items: row.items,
+					status: row.status !== 1,
+				});
+			},
+			onDelete: setDeleteTarget,
+		}),
+		[updateMutation],
+	);
+
+	function openCreate() {
+		setFormError(null);
+		setValues(emptyDictForm);
+		setForm({ editing: null });
+	}
+
+	function submit() {
+		setFormError(null);
+		const items = values.items.filter((item) => item.label.trim() || item.value.trim());
+		const payload = { name: values.name.trim(), remark: values.remark.trim(), items, status: values.status };
+		if (!payload.name) return setFormError("请填写字典名称");
+		if (form?.editing) {
+			updateMutation.mutate({ ...payload, id: form.editing.id });
+			return;
+		}
+		if (!values.id.trim()) return setFormError("请填写字典编码");
+		createMutation.mutate({ ...payload, id: values.id.trim() });
+	}
+
+	return (
+		<div className="space-y-4">
+			<PageHeader
+				title="字段管理"
+				description="系统设置 ▸ 字段管理:维护全系统共用的字典表 `sys_dict` —— 一个字典一行,字典项是「显示名(label)+ 取值(value)」。档案类型(治理规则的「写入档案」)就存在这里,改完立即生效。"
+				actions={
+					<>
+						<Badge variant="secondary" className="gap-1">
+							共 {rows.length} 个字典
+						</Badge>
+						<Button size="sm" onClick={openCreate}>
+							<Plus className="size-3.5" />
+							新建字典
+						</Button>
+					</>
+				}
+			/>
+
+			<StatCards items={stats} />
+
+			<Card className="gap-4 hover:border-border hover:shadow-none">
+				<CardHeader className="flex-row items-center justify-between gap-3">
+					<CardTitle className="flex items-center gap-2">
+						<Library className="size-4 text-muted-foreground" />
+						字典清单
+					</CardTitle>
+					<div className="flex flex-wrap items-center gap-1.5">
+						{listQuery.isFetching ? (
+							<Badge variant="secondary" className="tabular-nums">
+								读取中…
+							</Badge>
+						) : null}
+						<Badge variant="outline" className="tabular-nums">
+							匹配 {total} 个
+						</Badge>
+					</div>
+				</CardHeader>
+				<CardContent className="space-y-3">
+					<LedgerToolbar
+						search={keyword}
+						onSearchChange={(value) => {
+							setKeyword(value);
+							setPage(1);
+						}}
+						searchPlaceholder="搜索字典名 / 编码 / 字典项…"
+					/>
+					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
+						<SettingsDictionaryTable
+							rows={pageRows}
+							busyId={deleteMutation.isPending ? (deleteMutation.variables?.id ?? null) : null}
+							callbacks={callbacks}
+						/>
+					</TableLoadingShell>
+					<PaginationControl
+						page={page}
+						pageSize={pageSize}
+						total={total}
+						onPageChange={setPage}
+						onPageSizeChange={(next) => {
+							setPageSize(next);
+							setPage(1);
+						}}
+					/>
+				</CardContent>
+			</Card>
+
+			<p className="text-[12.5px] text-muted-foreground">
+				说明:字典项顺序就是下拉里的顺序(编辑弹窗里可上移/下移);停用的字典不参与下拉,但不影响已存在的数据。
+				删除字典前会检查有没有功能在用(例:治理规则的「写入档案」在用档案类型字典时会拒绝删除)。
+			</p>
+
+			<SettingsDictionaryForm
+				open={form !== null}
+				onOpenChange={(next) => {
+					if (!next) setForm(null);
+				}}
+				editing={form?.editing ? { id: form.editing.id } : null}
+				values={values}
+				onChange={setValues}
+				pending={createMutation.isPending || updateMutation.isPending}
+				error={formError}
+				onSubmit={submit}
+			/>
+
+			<ConfirmDialog
+				open={deleteTarget !== null}
+				onOpenChange={(next) => {
+					if (!next) setDeleteTarget(null);
+				}}
+				title={`删除字典「${deleteTarget?.name ?? ""}」?`}
+				description="删掉后用到它的地方会取不到候选;已经有功能在用它时会被拒绝。"
+				confirmText="删除"
+				confirmVariant="destructive"
+				isPending={deleteMutation.isPending}
+				pendingText="删除中…"
+				onConfirm={() => {
+					if (deleteTarget) deleteMutation.mutate({ id: deleteTarget.id });
+				}}
+			/>
+		</div>
+	);
+}

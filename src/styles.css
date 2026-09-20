@@ -1,0 +1,947 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   设计系统 —— 实现见 DESIGN.md(Inspired by Airtable)
+   白底画布 + 深海军蓝文字 + Airtable Blue 强调色;Swiss-precision 排版。
+
+   品牌色 → 语义 token 映射(DESIGN.md §2 的 7 个角色):
+
+     DESIGN.md 角色              值          本文件里的语义 token
+     background                #ffffff     --background / --popover / --sidebar
+     foreground                #181d26     --foreground / --card-foreground …
+     accent (Airtable Blue)    #1b61c9     --primary / --ring / --sidebar-primary
+     surface                   #f8fafc     --card / --muted / --secondary / --accent
+     muted (次要文字)           #333333     --muted-foreground
+     border                    #e0e2e6     --border / --input / --sidebar-border
+     accent-secondary (Success) #006400    --success / --success-fg
+
+   规范未覆盖、但功能上必需的三项(视作功能色,不是品牌色,改前先读 DESIGN.md §10):
+     --warn-* / --danger-*   规范没有警示色与危险色,但状态徽章、表单校验需要
+     --destructive           错误态,与 --danger 同源
+     --chart-1..5            分类图表调色板,规范未定义
+
+   注意:DESIGN.md §2 里给的是「可直接复制」的 --color-* 变量名,与 Tailwind 由
+   @theme 生成的 --color-accent(= shadcn 的浅色 hover 面,非品牌蓝)同名冲突,
+   所以这里统一落到语义 token,组件侧继续用 bg-primary / text-foreground 这类工具类。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* ── 品牌原色(DESIGN.md §2,不要在这里之外新增品牌色字面量) ───────── */
+  --af-white: #ffffff;
+  --af-navy: #181d26;
+  --af-blue: #1b61c9;
+  --af-surface: #f8fafc;
+  --af-gray: #333333;
+  --af-border: #e0e2e6;
+  --af-green: #006400;
+
+  /* ── 功能色(规范未定义,见文件头说明) ────────────────────────────── */
+  --af-warn: #8a6100;
+  --af-danger: #b3261e;
+
+  /* ── 语义 token:组件消费的就是这一层 ──────────────────────────────── */
+  --background: var(--af-white);
+  --foreground: var(--af-navy);
+  --card: var(--af-surface);
+  --card-foreground: var(--af-navy);
+  --popover: var(--af-white);
+  --popover-foreground: var(--af-navy);
+  --primary: var(--af-blue);
+  --primary-foreground: var(--af-white);
+  --secondary: var(--af-surface);
+  --secondary-foreground: var(--af-navy);
+  --muted: var(--af-surface);
+  --muted-foreground: var(--af-gray);
+  --accent: var(--af-surface);
+  --accent-foreground: var(--af-navy);
+  --border: var(--af-border);
+  --input: var(--af-border);
+  --ring: var(--af-blue);
+  --destructive: var(--af-danger);
+  --destructive-foreground: var(--af-white);
+
+  /* 状态色:soft 作底、fg 作字,配对使用(见 lib/constants.ts / score-text.tsx) */
+  --success: var(--af-green);
+  --success-fg: var(--af-green);
+  --success-soft: color-mix(in oklab, var(--af-green) 9%, var(--af-white));
+  --warn: var(--af-warn);
+  --warn-fg: var(--af-warn);
+  --warn-soft: color-mix(in oklab, var(--af-warn) 10%, var(--af-white));
+  --danger: var(--af-danger);
+  --danger-fg: var(--af-danger);
+  --danger-soft: color-mix(in oklab, var(--af-danger) 8%, var(--af-white));
+
+  /* 分类图表色(规范未定义) */
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  /* ── 侧边栏(白底 + surface 悬停,不引入新色) ────────────────────── */
+  --sidebar: var(--af-white);
+  --sidebar-foreground: var(--af-navy);
+  --sidebar-primary: var(--af-blue);
+  --sidebar-primary-foreground: var(--af-white);
+  --sidebar-accent: var(--af-surface);
+  --sidebar-accent-foreground: var(--af-navy);
+  --sidebar-border: var(--af-border);
+  --sidebar-ring: var(--af-blue);
+
+  /* ── 阴影(DESIGN.md §6:蓝调多层,永不用厚重纯黑) ───────────────── */
+  --shadow-card:
+    rgba(0, 0, 0, 0.32) 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 0px 2px,
+    rgba(45, 127, 249, 0.28) 0px 1px 3px, rgba(0, 0, 0, 0.06) 0px 0px 0px 0.5px inset;
+  --shadow-soft: rgba(15, 48, 106, 0.05) 0px 0px 20px;
+  /* 按钮 hover 的蓝调光晕(DESIGN.md §7) */
+  --shadow-glow: 0 4px 14px -4px color-mix(in srgb, var(--af-blue) 32%, transparent);
+
+  /* ── 动效(DESIGN.md §7:统一曲线,160–200ms) ───────────────────── */
+  --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-brand: 160ms;
+  /* 三档动效:120 反馈 / 180 默认 / 260 强调。 */
+  --t-fast: 120ms;
+  --t-base: 180ms;
+  --t-slow: 260ms;
+  /* Airtable Blue 派生面 —— 选中态 / 弱背景 / focus ring 全部从这一档走 */
+  --af-blue-soft: color-mix(in oklab, var(--af-blue) 10%, var(--af-white));
+  --af-blue-faint: color-mix(in oklab, var(--af-blue) 6%, var(--af-surface));
+  --af-blue-ring: color-mix(in oklab, var(--af-blue) 24%, transparent);
+  --af-hover: color-mix(in oklab, var(--af-surface) 70%, var(--af-blue) 4%);
+  --af-selected: var(--af-blue-soft);
+  --af-border-strong: color-mix(in oklch, var(--af-navy) 16%, var(--af-border));
+  --af-card-shadow:
+    rgba(0, 0, 0, 0.32) 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 0px 2px,
+    rgba(45, 127, 249, 0.28) 0px 1px 3px, rgba(0, 0, 0, 0.06) 0px 0px 0px 0.5px inset;
+  --af-soft-shadow:
+    0 1px 2px rgba(15, 48, 106, 0.04), 0 0 0 1px var(--af-border);
+  --af-pop-shadow:
+    0 12px 32px -8px rgba(15, 48, 106, 0.12), 0 2px 6px rgba(15, 48, 106, 0.06),
+    0 0 0 1px var(--af-border);
+}
+
+/* 深色模式:DESIGN.md 只规定了浅色,这里用品牌色推导一套对偶值,
+   全部经 color-mix 从上面的品牌原色得到,不新增字面量。 */
+.dark {
+  --background: var(--af-navy);
+  --foreground: var(--af-surface);
+  --card: color-mix(in oklab, var(--af-navy) 92%, var(--af-white));
+  --card-foreground: var(--af-surface);
+  --popover: color-mix(in oklab, var(--af-navy) 88%, var(--af-white));
+  --popover-foreground: var(--af-surface);
+  --primary: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+  --primary-foreground: var(--af-navy);
+  --secondary: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
+  --secondary-foreground: var(--af-surface);
+  --muted: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
+  --muted-foreground: color-mix(in oklab, var(--af-surface) 62%, var(--af-navy));
+  --accent: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
+  --accent-foreground: var(--af-surface);
+  --border: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
+  --input: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
+  --ring: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+  --destructive: color-mix(in oklab, var(--af-danger) 62%, var(--af-white));
+  --destructive-foreground: var(--af-navy);
+
+  --success-fg: color-mix(in oklab, var(--af-green) 52%, var(--af-white));
+  --success-soft: color-mix(in oklab, var(--af-green) 22%, var(--af-navy));
+  --warn-fg: color-mix(in oklab, var(--af-warn) 52%, var(--af-white));
+  --warn-soft: color-mix(in oklab, var(--af-warn) 22%, var(--af-navy));
+  --danger-fg: color-mix(in oklab, var(--af-danger) 62%, var(--af-white));
+  --danger-soft: color-mix(in oklab, var(--af-danger) 22%, var(--af-navy));
+
+  --sidebar: color-mix(in oklab, var(--af-navy) 94%, var(--af-white));
+  --sidebar-foreground: var(--af-surface);
+  --sidebar-primary: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+  --sidebar-primary-foreground: var(--af-navy);
+  --sidebar-accent: color-mix(in oklab, var(--af-navy) 86%, var(--af-white));
+  --sidebar-accent-foreground: var(--af-surface);
+  --sidebar-border: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
+  --sidebar-ring: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+
+  --shadow-soft: rgba(0, 0, 0, 0.35) 0px 0px 20px;
+}
+
+@theme inline {
+  /* 字体(DESIGN.md §3)。Haas 是商用字体,加载不到时走系统栈 —— fallback 必须保留。
+     想换成自有字体:只改这两行。 */
+  --font-sans:
+    Haas, -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-heading:
+    'Haas Groot Disp', Haas, -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-fg: var(--success-fg);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-fg: var(--warn-fg);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-soft: var(--danger-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* 圆角:刻意不覆盖 Tailwind 的 --radius-* 命名空间。
+     它的默认阶刚好就是 DESIGN.md §5 要的档位:
+       rounded-lg 8px(默认)/ rounded-xl 12px(按钮)/
+       rounded-2xl 16px(小卡片)/ rounded-3xl 24px(区块)
+     覆盖这四个会让所有组件的圆角一起漂移(shadcn 老模板就是这么埋坑的)。 */
+
+  /* 动效曲线进 @theme,npm 侧可直接用 `ease-brand` 工具类 */
+  --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  /* DESIGN.md §11:正文正向字距 */
+  letter-spacing: 0.08px;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--primary);
+  text-decoration-color: color-mix(in oklab, var(--primary) 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: color-mix(in oklab, var(--primary) 78%, black);
+}
+
+code {
+  font-size: 0.9em;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  border-radius: 7px;
+  padding: 2px 7px;
+}
+
+pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.prose pre {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--af-navy);
+  color: var(--af-surface);
+}
+
+/* 动效:统一曲线与时长(DESIGN.md §7) */
+/* hover / 激活只做**颜色与阴影**,不做位移 —— 元素一动,光标就可能落在它外面,
+   hover 随之反复开关,视觉上就是"抖"。位移类动效一律不做(仅保留按压反馈)。
+   同时把 transform 从过渡列表里去掉:残留的 transform 变化也不再被动画化。 */
+button,
+a {
+  transition:
+    background-color var(--duration-brand) var(--ease-brand),
+    color var(--duration-brand) var(--ease-brand),
+    border-color var(--duration-brand) var(--ease-brand),
+    box-shadow var(--duration-brand) var(--ease-brand);
+}
+
+/* 路由切换进场动画 —— 配合 components/layout/page-transition.tsx 的 key={pathname} 重挂载。
+   DESIGN.md §7 Entry:opacity 0→1 + translateY 6px→0。 */
+.page-enter {
+  animation: page-enter var(--duration-brand) var(--ease-brand) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* DESIGN.md §7:减少动态效果时全部复位 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Micro-interactions 层 —— 全站统一的"卡片级"动效。
+   优先 transform / opacity,200ms ease-out,默认尊重 prefers-reduced-motion。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* KPI 卡片:hover 只允许颜色 / 阴影变化 —— 之前是 1px 上浮,会让光标追不上卡片而抖 */
+.kpi {
+  transition:
+    box-shadow var(--t-base) var(--ease-brand),
+    border-color var(--t-base) var(--ease-brand);
+}
+
+/* Stagger 入场:每张 KPI 错开 40ms 浮入,优先 opacity + translateY,200ms ease-out。
+   prefers-reduced-motion 在 §7 媒体查询里已统一重置,无需额外兜底。 */
+.kpi {
+  animation: kpi-in var(--t-slow) var(--ease-brand) both;
+}
+.kpi:nth-of-type(1) { animation-delay: 0ms; }
+.kpi:nth-of-type(2) { animation-delay: 40ms; }
+.kpi:nth-of-type(3) { animation-delay: 80ms; }
+.kpi:nth-of-type(4) { animation-delay: 120ms; }
+.kpi:nth-of-type(5) { animation-delay: 160ms; }
+.kpi:nth-of-type(6) { animation-delay: 200ms; }
+@keyframes kpi-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 表格行:hover 左侧 2px 主色竖线滑入 —— 表格的"当前行"提示 */
+.table tbody tr {
+  position: relative;
+  transition: background-color var(--t-base) var(--ease-brand);
+}
+.table tbody td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--af-blue);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--t-base) var(--ease-brand);
+}
+.table tbody tr:hover td:first-child::before,
+.table tbody tr.is-selected td:first-child::before {
+  transform: scaleY(0.7);
+}
+
+/* 卡片:hover 只换边框色 / 阴影,**不做 1px 上浮** ——
+   整块卡片位移会把里面的按钮、行一起挪走,鼠标在边缘时会反复触发 hover。 */
+[data-slot="card"] {
+  transition:
+    border-color var(--t-base) var(--ease-brand),
+    box-shadow var(--t-base) var(--ease-brand);
+}
+
+/* 按钮:active 1px 下沉 —— 微反馈,符合 §7 "avoid transforms except feedback" */
+button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
+  transform: translateY(0.5px);
+}
+
+/* 焦点环微调:focus-visible 时 1px 蓝调 inset + 外圈 3px soft ring */
+:focus-visible {
+  outline: none;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  /* 滚动条始终占位:弹窗打开会锁 body 滚动,不占位时整页会横向跳一下(布局抖动) */
+  html {
+    scrollbar-gutter: stable;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  /* DESIGN.md §4 字距规则(组件里的 tracking-* 工具类优先级更高,会覆盖这里) */
+  h1 {
+    letter-spacing: -0.02em;
+  }
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+  button,
+  label,
+  th {
+    letter-spacing: 0.02em;
+  }
+  /* 全局聚焦环:边框 + 3px soft ring,蓝调,符合设计系统 */
+  :where(button, a, input, select, textarea, [role='button'], [role='switch']):focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--af-blue-ring);
+    border-color: var(--af-blue);
+  }
+  /* 代码/时间统一走 tabular-nums,正负号对齐(原 .num / .mono 两个类无人使用,已摘掉) */
+  :where(code, kbd, time) {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   组件层 —— 把原型里证明过好用的样式沉淀到这里,业务页面直接用 class 引用。
+   命名沿用 prototype 一致前缀,组件侧直接 `<div className="kpi">` 即可。
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  /* KPI 卡:数字大、字距收紧、副信息行带趋势 chip */
+  .kpi {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    box-shadow: var(--af-soft-shadow);
+    transition:
+      border-color var(--t-base) var(--ease-brand),
+      box-shadow var(--t-base) var(--ease-brand),
+      transform var(--t-base) var(--ease-brand);
+  }
+  .kpi:hover {
+    border-color: var(--af-blue);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--af-blue) 18%, transparent);
+  }
+  .kpi-label {
+    font-size: 11px;
+    color: var(--muted-foreground);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .kpi-value {
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.15;
+    margin-top: 4px;
+    color: var(--foreground);
+    letter-spacing: -0.01em;
+  }
+  .kpi-value .unit {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+    margin-left: 3px;
+    letter-spacing: 0;
+  }
+  .trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .trend.up {
+    color: var(--success-fg);
+    background: var(--success-soft);
+  }
+  .trend.down {
+    color: var(--danger-fg);
+    background: var(--danger-soft);
+  }
+  .trend.flat {
+    color: var(--muted-foreground);
+    background: var(--muted);
+  }
+  .spark {
+    width: 56px;
+    height: 18px;
+    margin-left: auto;
+  }
+  .spark polyline {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .spark.blue polyline {
+    stroke: var(--af-blue);
+  }
+  .spark.red polyline {
+    stroke: var(--danger);
+  }
+  .spark.green polyline {
+    stroke: var(--success);
+  }
+  .spark.amber polyline {
+    stroke: var(--warn);
+  }
+
+  /* 筛选条 chip:带状态点 + 箭头 */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 13px;
+    transition:
+      border-color var(--t-base) var(--ease-brand),
+      background var(--t-base) var(--ease-brand);
+  }
+  .chip:hover {
+    border-color: var(--af-border-strong);
+  }
+  .chip.is-on {
+    background: var(--af-selected);
+    border-color: color-mix(in oklch, var(--af-blue) 30%, var(--border));
+    color: var(--af-blue);
+  }
+
+  /* 搜索框:左侧图标 + 右侧快捷键占位 */
+  .search-input {
+    position: relative;
+    width: 280px;
+  }
+  .search-input input {
+    width: 100%;
+    height: 36px;
+    padding: 0 36px 0 36px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--background);
+    font-size: 13px;
+    transition:
+      border-color var(--t-base) var(--ease-brand),
+      box-shadow var(--t-base) var(--ease-brand);
+  }
+  .search-input input:focus {
+    outline: none;
+    border-color: var(--af-blue);
+    box-shadow: 0 0 0 3px var(--af-blue-ring);
+  }
+  .search-input > svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+  }
+  .search-input .shortcut {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--muted-foreground);
+    padding: 2px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--muted);
+    pointer-events: none;
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 12px;
+    padding: 8px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-row:last-child {
+    border-bottom: 0;
+  }
+  .detail-row .label {
+    color: var(--muted-foreground);
+  }
+  .detail-row .value {
+    color: var(--foreground);
+  }
+
+  /* 时间线:每个节点有圆点 + 当前态蓝调高亮 */
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .timeline li {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 10px;
+    padding: 10px 16px;
+    position: relative;
+  }
+  .timeline li::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 26px;
+    bottom: -10px;
+    width: 1px;
+    background: var(--border);
+  }
+  .timeline li:last-child::before {
+    display: none;
+  }
+  .timeline .t-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--background);
+    border: 2px solid var(--af-border-strong);
+    margin: 4px 0 0 8px;
+    z-index: 1;
+  }
+  .timeline li.is-current .t-dot {
+    background: var(--af-blue);
+    border-color: var(--af-blue);
+    box-shadow: 0 0 0 3px var(--af-blue-soft);
+  }
+  .timeline .t-title {
+    font-size: 12px;
+    color: var(--foreground);
+    line-height: 1.4;
+  }
+  .timeline .t-meta {
+    font-size: 11px;
+    color: var(--muted-foreground);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 工作台外壳:栅格布局,主区 ≥ 1fr,右侧详情 360px */
+  .work-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .work-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* 表格骨架:与 shadcn Table 兼容,做表头和行 hover/选中的细节修正 */
+  .table thead th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    user-select: none;
+  }
+  .table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--foreground);
+    vertical-align: middle;
+  }
+  .table tbody tr {
+    transition: background var(--t-base) var(--ease-brand);
+  }
+  .table tbody tr:hover {
+    background: var(--af-hover);
+  }
+
+  /* 页面头:左侧标题描述 + 右侧操作,与现有 PageHeader 共存 */
+  .page-head {
+    padding: 20px 24px 16px;
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
+  }
+  .page-head-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.25;
+    color: var(--foreground);
+  }
+  .page-sub {
+    margin-top: 4px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+    max-width: 60ch;
+  }
+  .page-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 切换开关(Switch):32×18 圆角 + 滑块,蓝调激活 */
+  .switch {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: var(--af-border-strong);
+    border-radius: 999px;
+    transition: background var(--t-base) var(--ease-brand);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--background);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transition: transform var(--t-base) var(--ease-brand);
+  }
+  .switch.on {
+    background: var(--af-blue);
+  }
+  .switch.on::after {
+    transform: translateX(14px);
+  }
+
+  /* 字段行(label + control)通用间距 */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field label {
+    font-size: 12px;
+    color: var(--foreground);
+    font-weight: 500;
+  }
+  .field .hint {
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+
+  /* ═══ 页面头:标题 + (i) trigger → hover/focus popover ═══ */
+  .page-title-group {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .page-title-group > .page-title {
+    flex: none;
+  }
+  .info-trigger {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--background);
+    color: var(--muted-foreground);
+    transition:
+      border-color var(--t-base) var(--ease-brand),
+      color var(--t-base) var(--ease-brand),
+      background var(--t-base) var(--ease-brand);
+    cursor: help;
+    flex: none;
+  }
+  .info-trigger:hover,
+  .info-trigger:focus-visible {
+    border-color: var(--af-blue);
+    color: var(--af-blue);
+    background: var(--af-blue-soft);
+    box-shadow: 0 0 0 3px var(--af-blue-ring);
+  }
+  .info-popover {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    width: 360px;
+    padding: 12px 14px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow:
+      0 12px 32px -8px rgba(15, 48, 106, 0.12),
+      0 2px 6px rgba(15, 48, 106, 0.06),
+      0 0 0 1px var(--border);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--foreground);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--t-base) var(--ease-brand),
+      visibility var(--t-base) var(--ease-brand);
+    z-index: 30;
+    pointer-events: none;
+    letter-spacing: 0.04px;
+  }
+  /* 小三角(顶) */
+  .info-popover::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 18px;
+    width: 10px;
+    height: 10px;
+    background: var(--background);
+    border-top: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    transform: rotate(45deg);
+  }
+  .page-title-group:hover .info-popover,
+  .page-title-group:focus-within .info-popover {
+    opacity: 1;
+    visibility: visible;
+  }
+  .info-popover.is-inline {
+    position: static;
+    width: 100%;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    box-shadow: none;
+    border: 0;
+    padding: 0;
+    margin-top: 6px;
+  }
+  .info-popover.is-inline::before { display: none; }
+
+}
+
+/* ── 按住执行按钮(HoldButton)─────────────────────────────────────────────
+   为什么这几个规则还在 CSS 里:它们靠 rAF 每帧改的 `--hb-p` 驱动
+   (clip-path 波浪 + 冠形 mask + 完成脉冲),Tailwind 的表达不了这种"每帧变量";
+   其余尺寸/颜色/排版已全部改成 Tailwind 工具类 + 设计 token。
+   颜色默认取 token(自动跟随深浅色),需要更醒目时由调用方传 props 覆盖。       */
+@layer components {
+	.hold-button {
+		--hb-radius: 12px;
+		--hb-fill: var(--primary);
+		--hb-fill-text: var(--primary-foreground);
+		--hb-wave: 6px;
+		--hb-p: 0;
+		position: relative;
+		isolation: isolate;
+		overflow: hidden;
+	}
+	/* 填充:从左/从下推进,边缘是一道波浪(clip-path 用百分比 + 波幅算) */
+	.hold-button .hold-fill {
+		clip-path: inset(0 calc((1 - var(--hb-p)) * (100% + 0.75 * var(--hb-wave)) - var(--hb-p) * 0.25 * var(--hb-wave)) 0 0);
+	}
+	.hold-button[data-direction="up"] .hold-fill {
+		clip-path: inset(calc((1 - var(--hb-p)) * (100% + 0.75 * var(--hb-wave)) - var(--hb-p) * 0.25 * var(--hb-wave)) 0 0 0);
+	}
+	/* 浪尖:一段重复的 mask 图形,跟着填充边缘走(它就是"波"本体) */
+	.hold-button .hold-crest {
+		-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='200' viewBox='0 0 20 200' preserveAspectRatio='none'%3E%3Cpath d='M0 0H10C18 8 18 25.3 10 33.3S2 58.7 10 66.7S18 92 10 100S2 125.3 10 133.3S18 158.7 10 166.7S2 192 10 200H0Z'/%3E%3C/svg%3E");
+		mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='200' viewBox='0 0 20 200' preserveAspectRatio='none'%3E%3Cpath d='M0 0H10C18 8 18 25.3 10 33.3S2 58.7 10 66.7S18 92 10 100S2 125.3 10 133.3S18 158.7 10 166.7S2 192 10 200H0Z'/%3E%3C/svg%3E");
+		-webkit-mask-repeat: repeat-y;
+		mask-repeat: repeat-y;
+	}
+	/* 完成后的一圈脉冲 */
+	.hold-button[data-phase="done"] .hold-pulse {
+		animation: hb-pulse 600ms var(--hb-ease-out, cubic-bezier(0.23, 1, 0.32, 1)) forwards;
+	}
+	@keyframes hb-pulse {
+		from {
+			opacity: 1;
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--hb-fill) 55%, transparent);
+		}
+		to {
+			opacity: 0;
+			box-shadow: 0 0 0 14px color-mix(in srgb, var(--hb-fill) 0%, transparent);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.hold-button[data-phase="done"] .hold-pulse {
+			animation: none;
+		}
+	}
+}
+

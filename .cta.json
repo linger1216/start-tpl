@@ -1,0 +1,35 @@
+{
+  "projectName": "pujin-code",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "pnpm",
+  "includeExamples": true,
+  "tailwind": true,
+  "projectPreset": "default",
+  "addOnOptions": {
+    "drizzle": {
+      "database": "mysql"
+    }
+  },
+  "git": true,
+  "install": true,
+  "intent": true,
+  "routerOnly": false,
+  "version": 1,
+  "addOns": true,
+  "framework": "react",
+  "chosenAddOns": [
+    "biome",
+    "nitro",
+    "sentry",
+    "drizzle",
+    "form",
+    "shadcn",
+    "t3env",
+    "table",
+    "tRPC",
+    "store",
+    "tanstack-query",
+    "better-auth"
+  ]
+}
