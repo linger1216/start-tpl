@@ -97,3 +97,28 @@
   命中而变蓝,与设计不符,5 月 Round-2 已修,见 `2026-09-20.md`)。
 - **连接线 / 肘形接头**:每个子项**自己被选中**才亮,不再用整枝判断 —— 否则"选第 N 项,线
   亮在第 1 项"。这是侧边栏最容易被踩坑的点。
+
+## 2026-09-21 收敛重构(已提交 9256157)
+
+从 198 文件/28.3k 行 → 154 文件/20.0k 行(-8858 行,49 文件),typecheck 0 / biome 0err+4warn / prod build OK。
+
+**删了什么**
+- `showcase/`(7 路由 + 7 组件):自我文档,派生新项目时必删 → 现在 UI 示例移进工作台。
+- `settings/groups`、`settings/roles`(共 14 文件 ~90KB):与 `users` 近乎相同的 CRUD,重复概念。
+- 传递闭包孤儿 21 个(ui/shared/layout):删 showcase 后暴露的新孤儿要**迭代扫描**(删完再扫,直到稳定)。
+- `demo/sentry.testing`(纯占位)、`demo/form.address`(与 form.simple 重复)。
+
+**保留了什么 / 移到哪**
+- **UI 原语不删**:45 个 `components/ui/*` 全部保留,新增 `workbench/ui-gallery.tsx`
+  在工作台 `/` 展示全部最小可用示例(受控组件都给好 useState)。改 ui/ 时同步改这里,否则又变孤儿。
+- settings 保留 5 个**形态各异**的示例:users(CRUD+授权)、tags(树)、menus(树+驱动侧边栏)、
+  dictionary(轻量)、parameters(DB 配置)。
+
+**关键坑(已修)**
+- `mocks/settings.ts` 的「选」匹配式必须与 `NAV_NODES` 对齐:删了 showcase/groups/roles 后,
+  原来的 `re:^showcase:` / `re:^settings:(users|groups|roles)$` 会匹配到 **0 个权限点且不报错**。
+  已改为 `re:^settings:tags$` / `re:^settings:users$` / `re:^demo:`。
+- `--af-hover` 改为纯中性灰(原 70% surface + 4% blue):侧边栏设计注释写「hover 不变蓝」,
+  旧值和选中态混淆。
+- base-ui 的 Trigger(Popover/Tooltip/Collapsible/Dialog/Sheet/DropdownMenu/Menubar)**不支持 asChild**,
+  要用 `className={buttonVariants({...})}` 直接渲染。
