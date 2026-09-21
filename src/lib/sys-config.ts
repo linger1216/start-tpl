@@ -9,7 +9,17 @@ import { eq } from "drizzle-orm";
 import { db } from "#/db";
 import { sysConfig } from "#/db/data-base-schema";
 
-export type ConfigType = "int" | "bool" | "string";
+export type ConfigType = "string" | "int" | "bool" | "json" | "array" | "map";
+
+/** 类型 → 中文名 + 录入提示(参数页 / 表单共用,不要在页面里另写) */
+export const CONFIG_TYPE_META: Record<ConfigType, { label: string; hint: string }> = {
+	string: { label: "文本", hint: "任意文本" },
+	int: { label: "整数", hint: "整数,不能为负" },
+	bool: { label: "开关", hint: "只能填 true / false" },
+	json: { label: "JSON", hint: "合法的 JSON(对象或数组均可)" },
+	array: { label: "数组", hint: 'JSON 数组,如 ["a","b"]' },
+	map: { label: "映射", hint: 'JSON 对象,如 {"k":"v"}' },
+};
 
 /** 代码内置的默认参数(库里没有时用这些,并作为"参数管理"页的初始清单) */
 export const CONFIG_DEFAULTS: Record<string, { value: string; type: ConfigType; group: string; remark: string }> = {
@@ -98,11 +108,23 @@ export const CONFIG_VALUE_MAX = 4000;
 
 /** 参数值按类型校验:参数页保存前也用它(不接受乱七八糟的值) */
 export function validateConfigValue(type: ConfigType, value: string): string | null {
+	const trimmed = value.trim();
 	if (type === "int") {
-		if (!/^-?\d+$/.test(value.trim())) return "这个参数要填整数";
-		if (Number(value) < 0) return "不能为负数";
+		if (!/^-?\d+$/.test(trimmed)) return "这个参数要填整数";
+		if (Number(trimmed) < 0) return "不能为负数";
 	}
-	if (type === "bool" && !["true", "false"].includes(value.trim())) return "这个参数只能填 true / false";
+	if (type === "bool" && !["true", "false"].includes(trimmed)) return "这个参数只能填 true / false";
+	if (type === "json" || type === "array" || type === "map") {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(trimmed);
+		} catch {
+			return "不是合法的 JSON";
+		}
+		if (type === "array" && !Array.isArray(parsed)) return '这个参数要填 JSON 数组,如 ["a","b"]';
+		if (type === "map" && (Array.isArray(parsed) || typeof parsed !== "object" || parsed === null))
+			return '这个参数要填 JSON 对象,如 {"k":"v"}';
+	}
 	/**
 	 * 长度上限与**列宽**和 **tRPC 入参**保持一致(4000)。
 	 * 曾经是 500 —— 而「列可见性 + 顺序」这类 JSON 在 24 列时就已经 650 字符,

@@ -253,7 +253,7 @@ const ROLE_SPECS = [
 		范围: "全部数据",
 		态: "启用",
 		天: 260,
-		注: "菜单 / 字段 / 参数三页,负责系统配置",
+		注: "菜单 / 字典 / 参数三页,负责系统配置",
 		选: "re:^settings:(menus|dictionary|parameters)$",
 	},
 	{

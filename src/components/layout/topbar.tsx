@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
+import { cn } from "#/lib/utils";
 import { findVisibleNavTrail } from "./nav-config";
 import { useGrantedNavPermissions } from "./nav-permissions";
 
@@ -50,7 +51,7 @@ function buildCrumbs(pathname: string, granted: ReadonlySet<string> | null = nul
 	const out: Crumb[] = [{ label: "首页", href: "/" }];
 	parts.forEach((p, i) => {
 		const label = map[p] ?? p;
-		const href = i === parts.length - 1 ? undefined : "/" + parts.slice(0, i + 1).join("/");
+		const href = i === parts.length - 1 ? undefined : `/${parts.slice(0, i + 1).join("/")}`;
 		out.push({ label, href });
 	});
 	return out;
@@ -94,31 +95,37 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 	};
 
 	return (
-		<header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-4 border-b border-border bg-background/95 px-5 backdrop-blur-md">
+		<header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-4 border-b border-border bg-background/90 px-5 backdrop-blur-md">
+			{/* 头部下沿的一道极淡主色渐隐 —— 把页头和内容区"轻轻分开",比纯 1px 灰线有层次 */}
+			<span
+				aria-hidden
+				className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-hue-blue-line via-transparent to-transparent"
+			/>
+
 			{/* ── 左:菜单 + 面包屑 ──────────────────────────────────────── */}
 			<div className="flex min-w-0 items-center gap-3">
 				<Button variant="ghost" size="icon" onClick={onToggle} aria-label="切换侧边栏" className="size-8">
 					<Menu className="size-4" />
 				</Button>
-				<nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+				{/* key=pathname:换页时整条面包屑重挂载一次,播放一次进场而不是"原地改字" */}
+				<nav
+					key={pathname}
+					aria-label="breadcrumb"
+					className="stagger flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground"
+				>
 					{crumbs.map((c, i) => (
-						<span key={`${c.label}:${c.href ?? ""}`} className="flex items-center gap-1.5">
+						<span key={`${c.label}:${c.href ?? ""}`} className="flex items-center gap-1">
 							{i > 0 && <ChevronRight className="size-3.5 opacity-40" aria-hidden="true" />}
 							{c.href ? (
 								<Link
 									to={c.href}
-									className="rounded-md px-1 py-0.5 transition-colors hover:bg-muted hover:text-foreground"
+									className="rounded-md px-1.5 py-0.5 transition-colors duration-150 hover:bg-muted hover:text-foreground"
 								>
 									{c.label}
 								</Link>
 							) : (
-								<span
-									style={{
-										background: "var(--af-blue-soft)",
-										color: "var(--af-blue)",
-									}}
-									className="rounded-md px-2 py-0.5 font-medium"
-								>
+								<span className="flex items-center gap-1.5 rounded-md bg-[color:var(--af-blue-soft)] px-2 py-0.5 font-medium text-primary">
+									<span aria-hidden className="size-1.5 rounded-full bg-primary" />
 									{c.label}
 								</span>
 							)}
@@ -129,12 +136,12 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 
 			{/* ── 右:搜索 + 主操作 + 通知 + 主题 + 用户 ──────────────────── */}
 			<div className="flex items-center gap-1.5">
-				{/* 搜索 —— 蓝调聚焦环 + 圆形快捷键徽标 */}
+				{/* 搜索 —— 蓝调聚焦环 + 快捷键徽标 */}
 				<div className="search-input hidden md:block">
 					<Search aria-hidden="true" />
 					<Input
 						placeholder="搜索页面 / 档案 / 主体"
-						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-[13px] transition-colors focus-visible:border-primary"
+						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-[13px] transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:shadow-[0_0_0_3px_var(--af-blue-ring)]"
 					/>
 					<span className="shortcut">⌘ K</span>
 				</div>
@@ -150,19 +157,26 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 				{/* 通知 */}
 				<Button variant="ghost" size="icon" aria-label="通知" className="relative size-8">
 					<Bell className="size-4" />
-					<span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-danger ring-2 ring-background" />
+					<span className="attention-dot absolute top-1.5 right-1.5 size-1.5 rounded-full bg-danger ring-2 ring-background" />
 				</Button>
 
-				{/* 主题 */}
+				{/* 主题:切换时图标原地转着换出来(icon-swap 绑 key 重挂载) */}
 				<Button variant="ghost" size="icon" aria-label="切换主题" onClick={toggleTheme} className="size-8">
-					{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+					<span key={theme} className="icon-swap flex">
+						{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+					</span>
 				</Button>
 
 				<div className="mx-1 h-5 w-px bg-border" />
 
-				{/* 用户 */}
+				{/* 用户 —— 头像环跟随当前模块色相 */}
 				<div className="flex items-center gap-2">
-					<div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[12px] font-medium text-foreground">
+					<div
+						className={cn(
+							"flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[12px] font-medium text-foreground ring-1 transition-[box-shadow] duration-200",
+							"ring-border hover:ring-2",
+						)}
+					>
 						{username.slice(0, 1)}
 					</div>
 					<span className="hidden text-[13px] sm:block">{username}</span>

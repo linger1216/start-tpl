@@ -1,4 +1,5 @@
 import { ArrowLeft, Building2, Inbox, MapPin } from "lucide-react";
+import { useState } from "react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { ModuleOverview } from "#/components/layout/module-overview";
 import { PageHeader } from "#/components/layout/page-header";
@@ -100,6 +101,61 @@ function TabsSample() {
 	);
 }
 
+/**
+ * 动效原语演示板 —— 每个原语挂一次类名就能看到效果。
+ * 交错入场那一排用 `key` 重挂载来"重播",否则只有在首次挂载时才动。
+ */
+function MotionBoard() {
+	const [round, setRound] = useState(0);
+	const [swapped, setSwapped] = useState(false);
+
+	// 点缀色谱的四个色相(class 必须写成字面量 —— Tailwind 扫不到拼接出来的类名)
+	const TONES = [
+		{ chip: "bg-hue-blue-soft text-hue-blue-fg", label: "blue" },
+		{ chip: "bg-hue-violet-soft text-hue-violet-fg", label: "violet" },
+		{ chip: "bg-hue-teal-soft text-hue-teal-fg", label: "teal" },
+		{ chip: "bg-hue-amber-soft text-hue-amber-fg", label: "amber" },
+	];
+
+	return (
+		<div className="space-y-4">
+			<div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+				<span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+					<span className="pulse-dot relative inline-flex size-2 shrink-0 rounded-full bg-hue-emerald" />
+					pulse-dot
+				</span>
+				<span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+					<span className="attention-dot inline-flex size-2 shrink-0 rounded-full bg-danger" />
+					attention-dot
+				</span>
+				<Button size="xs" variant="outline" onClick={() => setSwapped((v) => !v)} className="gap-1.5">
+					<span key={String(swapped)} className="icon-swap flex">
+						{swapped ? "★" : "☆"}
+					</span>
+					icon-swap(点我切换)
+				</Button>
+				<Button size="xs" variant="outline" onClick={() => setRound((n) => n + 1)}>
+					重播 stagger
+				</Button>
+			</div>
+
+			<div key={round} className="stagger grid gap-2 sm:grid-cols-4">
+				{TONES.map(({ chip, label }) => (
+					<div
+						key={label}
+						className="flex items-center gap-2 rounded-xl border border-border bg-card p-2.5 shadow-(--af-raise-1)"
+					>
+						<span className={`flex size-6 shrink-0 items-center justify-center rounded-lg ${chip}`}>
+							<span className="size-2 rounded-full bg-current" />
+						</span>
+						<span className="font-mono text-[12px] text-muted-foreground">{label}</span>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
 export function ShowcaseLayoutPage() {
 	return (
 		<ShowcasePage
@@ -108,9 +164,10 @@ export function ShowcaseLayoutPage() {
 			toc={[
 				["shell", "后台外壳"],
 				["header", "页面头部"],
+				["motion", "动效与卡片"],
 				["empty", "空态"],
 				["stub", "占位页"],
-				["tabs", "卡片式页签"],
+				["tabs", "下划线页签"],
 				["overview", "模块概览"],
 			]}
 		>
@@ -171,6 +228,72 @@ export function ShowcaseLayoutPage() {
 					}
 					code={`<PageHeader title="…" description="长说明" />
 <PageHeader title="…" description="短说明" descriptionInline />`}
+				/>
+			</ShowcaseSection>
+
+			<ShowcaseSection
+				id="motion"
+				title="动效与卡片"
+				description="全站动效原语(定义在 styles.css 的「动效层」,清单见 DESIGN.md §7.1)与卡片的两个可选口子。"
+			>
+				<ShowcaseItem
+					name="动效原语"
+					summary="挂类名即可的 CSS 动效:交错入场 / 脉冲 / 呼吸 / 图标换位"
+					source="styles.css · 动效层"
+					note={
+						<>
+							表里还有<strong className="text-foreground">没有可视化 demo 的两条</strong>:<code>.collapse-grid</code>
+							(侧边栏分组的 <code>grid-template-rows</code> 展开 —— 本项目唯一的布局动画, 要给收起态加{" "}
+							<code>inert</code>)与 <code>.page-enter</code> / <code>.route-progress-bar</code>
+							(路由切换,由 <code>layout/page-transition.tsx</code> 与 <code>layout/route-progress.tsx</code> 自动触发)。
+							全部原语都已处理 <code>prefers-reduced-motion</code>。
+						</>
+					}
+					demo={<MotionBoard />}
+					code={`<span className="pulse-dot relative size-2 rounded-full bg-hue-emerald" />
+<span className="attention-dot size-2 rounded-full bg-danger" />
+<div className="stagger grid gap-2 sm:grid-cols-4">…</div>
+<span key={state} className="icon-swap">…</span>`}
+				/>
+
+				<ShowcaseItem
+					name="Card"
+					summary="卡片:分层阴影 + 可选强调色线 + 可选交互态"
+					source="ui/card.tsx"
+					note={
+						<>
+							悬停<strong className="text-foreground">只抬升阴影档位</strong>(<code>--af-raise-1 → 2</code>
+							)并让边框加深一档,
+							<strong className="text-foreground">不做位移</strong> ——
+							整卡上浮会把卡内按钮一起挪走,鼠标在边缘时会反复触发 hover。
+							<code>tone</code> 传一个 CSS 颜色值即出现顶部 2px 强调线;传 <code>interactive</code>{" "}
+							表示整卡可点(悬停抬得更明显 + 手型光标)。
+						</>
+					}
+					demo={
+						<div className="grid gap-3 md:grid-cols-3">
+							<Card tone="var(--hue-blue)" className="gap-2">
+								<CardContent className="pt-4">
+									<div className="text-[13px] font-medium">强调色线(blue)</div>
+									<p className="mt-1 text-[12px] text-muted-foreground">tone=&quot;var(--hue-blue)&quot;</p>
+								</CardContent>
+							</Card>
+							<Card tone="var(--hue-violet)" className="gap-2" interactive>
+								<CardContent className="pt-4">
+									<div className="text-[13px] font-medium">可点卡片(violet)</div>
+									<p className="mt-1 text-[12px] text-muted-foreground">tone + interactive,悬停抬两档</p>
+								</CardContent>
+							</Card>
+							<Card className="gap-2">
+								<CardContent className="pt-4">
+									<div className="text-[13px] font-medium">默认卡片</div>
+									<p className="mt-1 text-[12px] text-muted-foreground">不传 tone,只有静置阴影</p>
+								</CardContent>
+							</Card>
+						</div>
+					}
+					code={`<Card tone="var(--hue-blue)">…</Card>
+<Card tone="var(--hue-violet)" interactive>…</Card>`}
 				/>
 			</ShowcaseSection>
 

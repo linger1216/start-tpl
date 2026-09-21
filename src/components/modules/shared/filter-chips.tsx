@@ -18,15 +18,15 @@ import { cn } from "#/lib/utils";
 
 export type FilterChipTone = keyof typeof BADGE_THEMES;
 
-/** 组图标的着色:与 `BADGE_THEMES` 同一色系(不引入新的色板) */
+/** 组图标的着色:与 `BADGE_THEMES` 同一色系(走点缀色 token,不再是高饱和的 `*-600`) */
 const GROUP_ICON_TONE: Record<FilterChipTone, string> = {
 	brand: "text-primary",
-	rainbow: "text-fuchsia-600",
-	ocean: "text-sky-600",
-	forest: "text-emerald-600",
-	sunset: "text-orange-600",
-	lavender: "text-violet-600",
-	stone: "text-slate-600",
+	rainbow: "text-hue-violet-fg",
+	ocean: "text-hue-teal-fg",
+	forest: "text-hue-emerald-fg",
+	sunset: "text-hue-amber-fg",
+	lavender: "text-hue-violet-fg",
+	stone: "text-muted-foreground",
 };
 
 export type FilterChipOption = {
@@ -72,7 +72,10 @@ export function FilterChipBar({
 	const hasActive = Object.values(active).some(Boolean);
 
 	return (
-		<section aria-label="快速筛选" className={cn("rounded-xl border border-border bg-card px-3.5 py-3", className)}>
+		<section
+			aria-label="快速筛选"
+			className={cn("rounded-xl border border-border bg-card px-3.5 py-3 shadow-(--af-raise-1)", className)}
+		>
 			<div className="mb-2.5 flex items-center justify-between gap-3">
 				<div className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
 					<Filter className="size-3.5 text-muted-foreground" />
@@ -111,10 +114,13 @@ export function FilterChipBar({
 											aria-pressed={on}
 											onClick={() => onSelect(group.key, on ? undefined : option.value)}
 											className={cn(
-												"inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-colors duration-150",
+												"inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-[color,background-color,border-color,box-shadow] duration-150",
 												on
-													? cn("border-transparent font-medium", activeChipClass(group.tone, index))
-													: "border-border bg-background text-muted-foreground hover:border-ring/60 hover:bg-secondary hover:text-foreground",
+													? cn(
+															"border-transparent font-medium shadow-[0_1px_2px_rgba(15,48,106,0.08)]",
+															activeChipClass(group.tone, index),
+														)
+													: "border-border bg-background text-muted-foreground hover:border-hue-blue-line hover:bg-secondary hover:text-foreground",
 											)}
 										>
 											{on ? <Check className="size-3" /> : null}

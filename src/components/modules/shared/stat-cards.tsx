@@ -30,8 +30,11 @@ export type StatItem = {
  *   · 1px hairline 分隔(0.5px 在 retina 上呈现为 1px),不用 box-shadow
  *   · 大数字 20px / 500 / -0.01em 字距,tabular-nums
  *   · 趋势 chip + sparkline 同行靠右
- *   · hover:`bg-muted/40` 轻微高亮,无粗边框
- *   · 微动效:每张卡 staggered 入场(40ms 间隔),hover 时 1px 上浮,优先 transform/opacity
+ *   · hover:整格换成 hover 底色(不用粗边框,避免整条指标条都在"闪边")
+ *   · 入场:整条错落入场(stagger,每格 22ms)—— 四格指标一次性浮入比硬出现更稳
+ *
+ * `tone` 是**类名字符串**(不是色相名):调用方传 `"bg-hue-violet-soft text-hue-violet-fg"`
+ * 这类组合,组件层不解释颜色语义 —— 于是同一张表里不同口径可以配不同色相。
  */
 export function StatCards({
 	items,
@@ -45,8 +48,8 @@ export function StatCards({
 }) {
 	const wrapperClass =
 		variant === "strip"
-			? "flex flex-row divide-x divide-[color:var(--border)] rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] overflow-hidden"
-			: "grid grid-cols-2 gap-2 lg:grid-cols-4";
+			? "stagger flex flex-row divide-x divide-[color:var(--border)] rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] shadow-(--af-raise-1) overflow-hidden"
+			: "stagger grid grid-cols-2 gap-2 lg:grid-cols-4";
 	return (
 		<div className={cn(wrapperClass, className)}>
 			{items.map(({ key, label, value, description, Icon, tone, trend, delta, spark, sparkPoints, unit }) => (
@@ -110,10 +113,10 @@ function StatCell({
 
 	if (variant === "strip") {
 		return (
-			<div className="group/stat-cell flex flex-1 min-w-0 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-[color:var(--muted)]/40">
+			<div className="group/stat-cell flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-[color:var(--af-hover)]">
 				<div
 					className={cn(
-						"flex size-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150",
+						"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-[color:var(--border)] ring-inset transition-shadow duration-200 group-hover/stat-cell:ring-[color:var(--af-border-strong)]",
 						tone,
 					)}
 				>
@@ -121,7 +124,7 @@ function StatCell({
 				</div>
 				<div className="flex min-w-0 flex-1 flex-col gap-px">
 					<div className="flex items-baseline gap-1">
-						<span className="font-heading text-[20px] font-medium leading-none tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
+						<span className="font-heading text-[20px] leading-none font-medium tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
 							{typeof value === "number" ? value.toLocaleString() : value}
 						</span>
 						{unit ? <span className="text-[11px] text-[color:var(--muted-foreground)]">{unit}</span> : null}
@@ -160,13 +163,18 @@ function StatCell({
 
 	// ── cards variant: 小卡片 ──
 	return (
-		<div className="group relative flex min-w-0 items-center gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2.5 transition-colors duration-150 hover:border-[color:var(--af-blue)] hover:bg-[color:var(--muted)]/30">
-			<div className={cn("flex size-7 shrink-0 items-center justify-center rounded-md", tone)}>
+		<div className="group relative flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2.5 shadow-(--af-raise-1) transition-[border-color,box-shadow] duration-200 ease-brand hover:border-[color:var(--af-border-strong)] hover:shadow-(--af-raise-2)">
+			<div
+				className={cn(
+					"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-[color:var(--border)] ring-inset",
+					tone,
+				)}
+			>
 				<Icon className="size-3.5" />
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-px">
 				<div className="flex items-baseline gap-1">
-					<span className="font-heading text-[18px] font-medium leading-none tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
+					<span className="font-heading text-[18px] leading-none font-medium tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
 						{typeof value === "number" ? value.toLocaleString() : value}
 					</span>
 					{unit ? <span className="text-[11px] text-[color:var(--muted-foreground)]">{unit}</span> : null}

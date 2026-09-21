@@ -26,7 +26,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:menus": "dotenv -e .env.local -- tsx scripts/seed-menus.ts",
     "db:seed:dicts": "dotenv -e .env.local -- tsx scripts/seed-dicts.ts",
-    "db:seed:configs": "dotenv -e .env.local -- tsx scripts/seed-configs.ts"
+    "db:seed:configs": "dotenv -e .env.local -- tsx scripts/seed-configs.ts",
+    "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

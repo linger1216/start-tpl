@@ -96,13 +96,18 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 
 - **改视觉只改 token**,不要在组件里写死 hex 或逐个改色值。
 - 品牌色映射:`#1b61c9`(Airtable Blue)→ `--primary` / `--ring`;`#181d26` → `--foreground`;`#ffffff` → `--background`;`#f8fafc` → `--card` / `--muted` / `--secondary` / `--accent`;`#333333` → `--muted-foreground`;`#e0e2e6` → `--border` / `--input`;`#006400` → `--success`。
-- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` / `JsonCell` 的彩色主题(`rainbow` / `ocean` / …)同理,属于分类色板;两者默认值都是规范内的 `brand` 主题。
+- **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相四个角色 —— 实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`,外加反白前景 `--hue-X-on`(浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
+  - 色相 → 类名的映射**只有一份**:`src/components/layout/nav-tone.ts`。加色相要改四处:①`styles.css` 的 `:root` ②`styles.css` 的 `.dark` ③`styles.css` 的 `@theme inline` ④`nav-config.ts` 的 `NAV_TONES` + `nav-tone.ts` 补一条(**漏了第 ④ 步会在 typecheck 阶段报缺 key,不会静默失效**)。
+  - **Tailwind 只扫描源码里的字面量类名**,不能写 `bg-hue-${tone}-soft` 这种拼接 —— 扫描不到就不会生成 CSS。所有按色相取类名的地方必须查表。
+  - 告警语义仍然只走 `--success` / `--warn` / `--danger`,`emerald` ≠ `success`。一屏内出现的色相不超过 4 个。
+- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` / `JsonCell` 的彩色主题(`rainbow` / `ocean` / …,定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES`)**已改为读点缀色 token**(原先用的是 Tailwind 默认 `*-100/*-700`,约 25%–40% 彩度,太亮)。改那一处 = 全站分类色统一。默认值仍是规范内的 `brand` 主题。
 - **不要在渲染期用 `Math.random()`**:会造成 SSR 水合不一致,而且每次重渲染都变值。需要"看起来随机"的效果时,用基于 `useId()` 或数据本身的稳定哈希(`BadgeList` 的 `stable` 就是这么做的)。
 - **不要覆盖 Tailwind 的 `--radius-*` 命名空间。** 它的默认阶就是 `DESIGN.md` §5 要的:`rounded-lg` 8px、`rounded-xl` 12px(按钮)、`rounded-2xl` 16px(小卡片)、`rounded-3xl` 24px(区块)。覆盖会让所有组件圆角一起漂移。
 - 字体在 `@theme inline` 的 `--font-sans` / `--font-heading`(Haas / Haas Groot Disp,fallback 到系统栈,**fallback 必须保留**)。换字体只改这两行。
 - 字距在 `@layer base`:正文 `0.08px`、标题负向、按钮与 label `0.02em`、全大写 `0.08em`。组件里的 `tracking-*` 会覆盖 base。
 - 阴影用 `--shadow-card` / `--shadow-soft` / `--shadow-glow`,**不要写厚重纯黑阴影**。
-- 动效用 `--ease-brand` + `--duration-brand`(160ms),并保证 `prefers-reduced-motion` 下复位。
+  **抬升三档用 `--af-raise-1|2|3`(静置 / 悬停 / 浮起)**:`shadow-(--af-raise-1)`。hover **只换档位**(可加边框加深),不做位移 —— 三档同族颜色,切换才不跳。
+- 动效用 `--ease-brand` + `--t-fast|base|slow`(120 / 180 / 260ms)。**先查 `DESIGN.md` §7.1 的「现成动效原语」表**,不要每次现搓 keyframes;表里没有的才自己写,并保证 `prefers-reduced-motion` 下复位(全局媒体查询已兜底,但别用 `transform` 表达"必须保持的位置")。
 - `.dark` 是品牌色经 `color-mix` 推导的对偶值;`DESIGN.md` 只规定浅色,加新 token 时记得同时补 `.dark`。
 
 ## 目录职责
@@ -113,8 +118,8 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 | `src/routes/(main)/showcase/` | **组件展示台**:7 页,每页对应组件分层的一层。纯展示、无业务,派生新项目时可整目录删 |
 | `src/routes/(main)/demo/` | 框架能力示例页(表格 / 表单 / Query / tRPC / store / DB / Auth / Sentry),用模板自身组件写成,可整目录删除。放在 `(main)` 里是为了复用后台外壳,URL 仍是 `/demo/*` |
 | `src/routes/(main)/settings/` | 唯一保留的真实业务模块,7 个页面。派生新项目时**从这里开始改**,不要删 |
-| `src/components/ui/` | 叶子原语,45 个(vendored shadcn + 自研组合控件)。**例外:`tabs.tsx` 已被项目改写为卡片式页签** —— 全项目唯一的页签实现(计数走 `count` 属性),规格见 `DESIGN.md` §5.5;`pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在 `/showcase/ui` 的「其他可用原语」里点名,否则等于不存在 |
-| `src/components/layout/` | 后台外壳:侧边栏、顶栏、面包屑、页头、空态、占位页、导航配置,以及 `showcase.tsx`(展示台骨架:`ShowcasePage` / `ShowcaseSection` / `ShowcaseItem` / `PropTable` / `CodeBlock`) |
+| `src/components/ui/` | 叶子原语,45 个(vendored shadcn + 自研组合控件)。**例外:`tabs.tsx` 已被项目改写为下划线页签** —— 全项目唯一的页签实现(计数走 `count` 属性),规格见 `DESIGN.md` §5.5(该节此前误写成"卡片式页签",已按代码修正);`pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在 `/showcase/ui` 的「其他可用原语」里点名,否则等于不存在 |
+| `src/components/layout/` | 后台外壳:侧边栏(含 60px 迷你图标栏折叠态)、顶栏、面包屑、页头、空态、占位页、导航配置,以及 `nav-tone.ts`(**色相 → 类名的唯一映射表**,侧边栏 / 顶栏 / 工作台共用)与 `showcase.tsx`(展示台骨架:`ShowcasePage` / `ShowcaseSection` / `ShowcaseItem` / `PropTable` / `CodeBlock`) |
 | `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件,23 个:表格套件(`table-kit` 的 `DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell`)、只读子表(`readonly-table`)、详情页版式(`detail-profile`)、台账工具栏(`ledger-toolbar`)、快速筛选条(`filter-chips`)、列选择器与列可见性(`column-visibility-menu` / `use-column-visibility`)、分页器、指标卡与语义层(`stat-cards` / `stat-kit`)、标签徽章与标签输入(`tag-badges`)、迷你图表(`mini-chart`)、Excel 导入弹窗与导入导出流程(`excel-import` / `ledger-excel`)、导入解析选项(`sheet-parse-options`)、操作结果反馈(`op-result`)、可排序树(`sortable-tree`)、权限树与权限选择区(`permission-tree` 的 `PermissionTree` / **`PermissionPicker`**)、表单套件(`form-kit`)、图标选择器(`icon-picker`)、编目信息条(`catalog-banner`) |
 | `src/components/modules/showcase/` | 展示台 7 个页面本体(纯文档,不含业务逻辑) |
 | `src/components/modules/<域>/` | 业务域模块。每页固定文件角色:`-page` / `-table` / `-form` / `-form-mappers` / `-detail`(或整页 `-detail-page`)/ `-stats`;多页面域用 `<域>-<页面>-<角色>`。**不做通用增删改查封装** —— 列定义、行类型、增删改写操作逐页手写。完整约定见 `doc/前端结构与组件约定.md`;现成范例见 `components/modules/settings/` |
@@ -237,12 +242,13 @@ pnpm build            # 产物落在 .output/
 
 改了 `src/routes/` 下的文件,别忘了 `pnpm generate-routes`。**不要手改 `src/routeTree.gen.ts`**,它是生成物。
 
-已知基线:`pnpm check` 为 **0 error / 4 warning**(另有 1 条 info),只有三个文件、两类规则:
+已知基线:`pnpm check` 为 **0 error / 4 warning**(另有 1 条 info),只有两个文件、一类规则:
 
 | 文件 | 规则 |
 | --- | --- |
 | `src/components/ui/badge-list.tsx` | `noNonNullAssertion`(3 处) |
 | `src/components/modules/shared/icons-list.ts` | `noNonNullAssertion` |
-| `src/components/layout/topbar.tsx` | `useTemplate` |
 
 都不影响退出码,且都在"不要顺手修"的范围里(vendored `ui/`、或上游写法决定的 `!` 断言)。**新代码不要新增 warning** —— 出现新 warning 说明引入了新的写法问题。
+
+> `layout/topbar.tsx` 的 `useTemplate` 警告已修(2026-09),基线从 5 warning 降到 4。

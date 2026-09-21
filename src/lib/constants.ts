@@ -46,3 +46,12 @@ export const STATUS_BADGE_CLASS: Record<StatusValue, string> = {
  * localStorage,主题会互相串。
  */
 export const THEME_STORAGE_KEY = "app-theme";
+
+/**
+ * 侧边栏「折叠后长什么样」写入 localStorage 的键。
+ *
+ * 与主题一样是**本机界面偏好**(不是业务数据),所以走 localStorage 而不是入库;
+ * 读取逻辑在 `lib/ui-prefs.ts`,设置入口在「系统设置 ▸ 界面偏好」。
+ * 同样带项目前缀,理由见 `THEME_STORAGE_KEY`。
+ */
+export const SIDEBAR_MODE_STORAGE_KEY = "app-sidebar-mode";

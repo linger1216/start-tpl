@@ -4,6 +4,7 @@
  * 只有两件事:列出参数(库里值 + 代码默认值合并)、改一个值(按类型校验)。
  * 参数影响的是**保留策略**与**定时同步开关**,所以改完要清缓存,并且明确告诉调用方"下次任务生效"。
  */
+import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -72,4 +73,45 @@ export const configRouter = createTRPCRouter({
 			clearConfigCache();
 			return { key: input.key, value };
 		}),
+
+	/** 新增一个参数(库里没有的新键)。已存在则报错,避免和 `update` 抢活。 */
+	create: publicProcedure
+		.input(
+			z.object({
+				key: z.string().min(1, "参数名不能为空").max(64),
+				value: z.string().max(CONFIG_VALUE_MAX),
+				type: z.enum(["string", "int", "bool", "json", "array", "map"]),
+				/** 库里已存在的键沿用它的分组;新键可指定,缺省归到「其它」 */
+				group: z.string().max(32).optional(),
+				remark: z.string().max(255).optional(),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const problem = validateConfigValue(input.type, input.value);
+			if (problem) throw new Error(`${input.key}:${problem}`);
+			const [existing] = await db
+				.select({ key: sysConfig.cfg_key })
+				.from(sysConfig)
+				.where(eq(sysConfig.cfg_key, input.key))
+				.limit(1);
+			if (existing) throw new TRPCError({ code: "CONFLICT", message: `参数 ${input.key} 已存在,改值请走「修改」` });
+			const fallback = CONFIG_DEFAULTS[input.key];
+			await db.insert(sysConfig).values({
+				cfg_key: input.key,
+				cfg_value: input.value.trim(),
+				value_type: input.type,
+				cfg_group: input.group ?? fallback?.group ?? "其它",
+				remark: input.remark ?? fallback?.remark ?? "",
+				editable: 1,
+			});
+			clearConfigCache();
+			return { key: input.key, value: input.value.trim() };
+		}),
+
+	/** 删除一个参数的库里覆盖值:代码内置的默认参数删完回到默认值,界面新建的参数删完即消失。 */
+	delete: publicProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
+		await db.delete(sysConfig).where(eq(sysConfig.cfg_key, input.key));
+		clearConfigCache();
+		return { key: input.key };
+	}),
 });

@@ -1,4 +1,4 @@
-// 系统设置 ▸ 字段管理:全系统共用字典表 sys_dict 的维护页
+// 系统设置 ▸ 字典管理:全系统共用字典表 sys_dict 的维护页
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsDictionaryPage } from "#/components/modules/settings/settings-dictionary-page";

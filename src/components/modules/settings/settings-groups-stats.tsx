@@ -22,7 +22,7 @@ export function SettingsGroupsStats({ rows }: { rows: readonly GroupRow[] }) {
 			value: stats.用户组数,
 			description: "全部用户组",
 			Icon: UserSquare,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-blue-soft text-hue-blue-fg",
 		},
 		{
 			key: "members",
@@ -31,7 +31,7 @@ export function SettingsGroupsStats({ rows }: { rows: readonly GroupRow[] }) {
 			value: stats.组内成员合计,
 			description: "多组用户在每组各计一次",
 			Icon: Users,
-			tone: "bg-secondary text-secondary-foreground",
+			tone: "bg-hue-teal-soft text-hue-teal-fg",
 		},
 		{
 			key: "granted",
@@ -40,7 +40,7 @@ export function SettingsGroupsStats({ rows }: { rows: readonly GroupRow[] }) {
 			value: stats.已授权的组,
 			description: "组权限点非空",
 			Icon: ShieldCheck,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-violet-soft text-hue-violet-fg",
 		},
 		{
 			key: "average",
@@ -49,7 +49,7 @@ export function SettingsGroupsStats({ rows }: { rows: readonly GroupRow[] }) {
 			value: stats.平均成员数,
 			description: "按组数取均值",
 			Icon: Layers,
-			tone: "bg-warn-soft text-warn-fg",
+			tone: "bg-hue-amber-soft text-hue-amber-fg",
 		},
 		{
 			key: "ready",

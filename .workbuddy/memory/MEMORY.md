@@ -31,12 +31,39 @@
   那是「标签管理」页的业务示例数据,按需求保留。
 - **权限点选择区只有 `PermissionPicker` 一个实现**;三个授权弹窗共用它,不要手写「标题+计数+搜索+全选/清空+树」。
 
+## 视觉与配色(改 UI 前必读)
+
+- **点缀色谱 = 6 个低饱和色相,是「配色编码」不是装饰**。`--hue-{blue,violet,teal,amber,rose,emerald}`,
+  每个色相五个角色:实体 `--hue-X` / 文字 `-fg` / 软底 `-soft` / 描边 `-line` / 反白前景 `-on`。
+  一级模块各认一色,**侧边栏图标块 → 面包屑胶囊 → 页头强调条 → 工作台入口卡四处同色**。
+  规格见 `DESIGN.md` §2.1。告警语义仍只走 success/warn/danger(`emerald ≠ success`);一屏内不超过 4 个色相。
+- **色相 → 类名的映射只有一份**:`src/components/layout/nav-tone.ts`。
+  加色相要改四处:`styles.css` 的 `:root` / `.dark` / `@theme inline` + `nav-config.ts` 的 `NAV_TONES` + `nav-tone.ts`。
+  **漏最后一步 typecheck 会报缺 key**(不会静默失效)。
+- **Tailwind 只扫描源码里的字面量类名**:`bg-hue-${tone}-soft` 这种拼接不会生成 CSS。
+  所有按色相取类名的地方必须查 `nav-tone.ts`。**这是改配色最容易踩的坑。**
+- **`BADGE_THEMES`(`ui/badge-list.tsx`)是全站分类色的唯一来源**(标签列 / 标签输入 / 快速筛选 chip /
+  已选筛选 pill 都读它)。已从 Tailwind 默认 `*-100/*-700`(25%–40% 彩度,太亮)换成点缀色 token。
+- **动效先查 `DESIGN.md` §7.1 的「现成动效原语」表**,不要每次现搓 keyframes:
+  `.page-enter` / `.route-progress-bar` / `.stagger` / `<Reveal>` / `.pulse-dot` / `.attention-dot` /
+  `.icon-swap` / `.collapse-grid` / `.MotionButton`。全部已处理 `prefers-reduced-motion`。
+  `.collapse-grid`(grid-template-rows 展开)是本项目**唯一允许的布局动画**。
+- **阴影抬升用 `--af-raise-1|2|3`(静置 / 悬停 / 浮起)**:`shadow-(--af-raise-1)`。
+  hover **只换档位 + 边框加深**,不做位移(位移会让元素从光标下移走 → hover 反复开关 → 抖)。
+- **`ui/tabs.tsx` 是下划线页签**(不是卡片式;`DESIGN.md` §5.5 之前写错过,已按代码修正)。
+- **侧边栏 `aside` 的 `overflow-hidden` 不能删**:宽度 240↔60 动画期间要靠它裁住内容。
+  因此迷你栏的名字用**原生 `title`** 而不是自绘浮层 —— 自绘气泡必定被裁,而 CSS 做不到
+  "纵向 `auto` + 横向可见"(一个轴为 `auto`,另一个轴必然也是 `auto`)。
+- **侧边栏分组行上色的判据是「这一枝含当前页」,不是「这一枝展开了」** ——
+  否则同时展开三个分组会看到三行都像选中。
+- 文档入口:`DESIGN.md`(视觉规范唯一来源)· `AGENTS.md` §设计系统(token 约定)· `/showcase/layout` 的「动效与卡片」节。
+
 ## 自检基线
 
 | 命令 | 期望 |
 | --- | --- |
 | `pnpm typecheck` | 0 error |
-| `pnpm check` | **0 error / 4 warning**(3 处在 `ui/badge-list.tsx` 的 `!` 断言,不要清理) |
+| `pnpm check` | **0 error / 4 warning**(`ui/badge-list.tsx` 3 处 + `shared/icons-list.ts` 1 处 `!` 断言,不要清理) |
 | `pnpm generate-routes` | 改过 `src/routes/` 必跑 |
 | `pnpm build` | exit 0 → `.output/` |
 

@@ -44,6 +44,73 @@
   --af-warn: #8a6100;
   --af-danger: #b3261e;
 
+  /* ── 点缀色谱(6 色相 × 4 角色)─────────────────────────────────────
+     为什么要有这一层:单一蓝强调色在长列表/大密度后台里「能看但不鲜活」。
+     这里给出 6 个**低饱和**色相(oklch chroma 0.086–0.135,约 9%–13% 彩度,
+     远低于 Material 的 0.18+ 鲜艳档),用来做**有含义的配色编码**而不是装饰:
+
+       ① 一级模块配色编码 —— 侧边栏 / 面包屑 / 工作台入口各认一色,扫一眼就知道在哪;
+       ② 指标卡与分类标签 —— 同一张表里的不同口径用不同色相区分;
+       ③ 状态强调 —— 与 --success / --warn / --danger 互补,不做告警语义。
+
+     每个色相四个角色(务必配对使用):
+       --hue-X        实体色(图标底 / 进度条 / 小圆点)
+       --hue-X-fg     文字态(比实体深一档,保证浅底上的可读性)
+       --hue-X-soft   10% 软底(选中行 / 胶囊背景)
+       --hue-X-line   28% 描边(细边框 / 分隔)
+
+     加新色相只改这一段 + 下面的 `.dark` 对偶 + `@theme inline` 的三行映射。 */
+  --hue-blue: var(--af-blue);
+  --hue-violet: oklch(0.525 0.132 293);
+  --hue-teal: oklch(0.548 0.086 197);
+  --hue-amber: oklch(0.632 0.108 72);
+  --hue-rose: oklch(0.57 0.128 14);
+  --hue-emerald: oklch(0.528 0.098 162);
+
+  /* 文字态:实体色往深海军蓝压一档 —— 浅底上仍满足 4.5:1 */
+  --hue-blue-fg: color-mix(in oklab, var(--hue-blue) 88%, var(--af-navy));
+  --hue-violet-fg: color-mix(in oklab, var(--hue-violet) 86%, var(--af-navy));
+  --hue-teal-fg: color-mix(in oklab, var(--hue-teal) 84%, var(--af-navy));
+  --hue-amber-fg: color-mix(in oklab, var(--hue-amber) 78%, var(--af-navy));
+  --hue-rose-fg: color-mix(in oklab, var(--hue-rose) 86%, var(--af-navy));
+  --hue-emerald-fg: color-mix(in oklab, var(--hue-emerald) 84%, var(--af-navy));
+
+  /* 软底 / 描边:统一从实体色与白底混出来,不写死第二组十六进制 */
+  --hue-blue-soft: color-mix(in oklab, var(--hue-blue) 10%, var(--af-white));
+  --hue-violet-soft: color-mix(in oklab, var(--hue-violet) 10%, var(--af-white));
+  --hue-teal-soft: color-mix(in oklab, var(--hue-teal) 11%, var(--af-white));
+  --hue-amber-soft: color-mix(in oklab, var(--hue-amber) 13%, var(--af-white));
+  --hue-rose-soft: color-mix(in oklab, var(--hue-rose) 10%, var(--af-white));
+  --hue-emerald-soft: color-mix(in oklab, var(--hue-emerald) 11%, var(--af-white));
+
+  --hue-blue-line: color-mix(in oklab, var(--hue-blue) 28%, transparent);
+  --hue-violet-line: color-mix(in oklab, var(--hue-violet) 28%, transparent);
+  --hue-teal-line: color-mix(in oklab, var(--hue-teal) 30%, transparent);
+  --hue-amber-line: color-mix(in oklab, var(--hue-amber) 32%, transparent);
+  --hue-rose-line: color-mix(in oklab, var(--hue-rose) 28%, transparent);
+  --hue-emerald-line: color-mix(in oklab, var(--hue-emerald) 30%, transparent);
+
+  /* 实心色块上的前景色。浅色模式 = 白;深色模式下实体色被提亮,白字会糊,
+     所以深色模式改成深海军蓝(--af-navy 在 `.dark` 里已定义,见下)。
+     组件用 `text-hue-X-on`,不要在调用点硬编码 `text-white`。 */
+  --hue-blue-on: var(--af-white);
+  --hue-violet-on: var(--af-white);
+  --hue-teal-on: var(--af-white);
+  --hue-amber-on: var(--af-white);
+  --hue-rose-on: var(--af-white);
+  --hue-emerald-on: var(--af-white);
+
+  /* ── 氛围层(环境渐晕 / 高光边)──────────────────────────────────
+     极低不透明度,只在**大面积**背景上铺一层极淡的色温差,让白底不"死白"。
+     不做可见的装饰渐变 —— 目标是"说不上哪里不一样,但更耐看"。 */
+  --ambient-top: color-mix(in oklab, var(--af-blue) 5%, transparent);
+  --ambient-corner-a: color-mix(in oklab, var(--hue-violet) 6%, transparent);
+  --ambient-corner-b: color-mix(in oklab, var(--hue-teal) 6%, transparent);
+  /* 侧边栏顶部品牌区的一层色温 */
+  --sidebar-veil: color-mix(in oklab, var(--hue-blue) 4%, transparent);
+  /* 细高光边:1px,用于卡片/控件顶部,模拟受光面 */
+  --hairline-light: color-mix(in oklab, var(--af-white) 70%, transparent);
+
   /* ── 语义 token:组件消费的就是这一层 ──────────────────────────────── */
   --background: var(--af-white);
   --foreground: var(--af-navy);
@@ -123,6 +190,18 @@
   --af-pop-shadow:
     0 12px 32px -8px rgba(15, 48, 106, 0.12), 0 2px 6px rgba(15, 48, 106, 0.06),
     0 0 0 1px var(--af-border);
+
+  /* 抬升三档:静置 / 悬停 / 浮起。统一带 1px 描边,避免"纸片无边界";
+     末尾那条 inset 是"受光边"(浅色模式下几乎不可见,深色模式下把卡片顶边点亮一档)。
+     hover 只换这一档(**不做位移**),所以三档之间必须是同族颜色,切换才不跳。 */
+  --af-raise-1:
+    0 1px 1px rgba(15, 48, 106, 0.03), 0 0 0 1px var(--af-border), inset 0 1px 0 var(--hairline-light);
+  --af-raise-2:
+    0 1px 2px rgba(15, 48, 106, 0.05), 0 6px 16px -8px rgba(15, 48, 106, 0.1), 0 0 0 1px var(--af-border),
+    inset 0 1px 0 var(--hairline-light);
+  --af-raise-3:
+    0 2px 4px rgba(15, 48, 106, 0.05), 0 14px 32px -12px rgba(15, 48, 106, 0.16), 0 0 0 1px var(--af-border),
+    inset 0 1px 0 var(--hairline-light);
 }
 
 /* 深色模式:DESIGN.md 只规定了浅色,这里用品牌色推导一套对偶值,
@@ -163,6 +242,51 @@
   --sidebar-accent-foreground: var(--af-surface);
   --sidebar-border: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
   --sidebar-ring: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+
+  /* 点缀色的深色对偶:实体色提亮一档(深底上要看得见),
+     软底改成"实体系色压进深色底",描边不变(透明混色本身自适应)。 */
+  --hue-blue: color-mix(in oklab, var(--af-blue) 74%, var(--af-white));
+  --hue-violet: color-mix(in oklab, oklch(0.525 0.132 293) 62%, var(--af-white));
+  --hue-teal: color-mix(in oklab, oklch(0.548 0.086 197) 64%, var(--af-white));
+  --hue-amber: color-mix(in oklab, oklch(0.632 0.108 72) 70%, var(--af-white));
+  --hue-rose: color-mix(in oklab, oklch(0.57 0.128 14) 64%, var(--af-white));
+  --hue-emerald: color-mix(in oklab, oklch(0.528 0.098 162) 62%, var(--af-white));
+
+  --hue-blue-fg: color-mix(in oklab, var(--hue-blue) 84%, var(--af-white));
+  --hue-violet-fg: color-mix(in oklab, var(--hue-violet) 84%, var(--af-white));
+  --hue-teal-fg: color-mix(in oklab, var(--hue-teal) 84%, var(--af-white));
+  --hue-amber-fg: color-mix(in oklab, var(--hue-amber) 86%, var(--af-white));
+  --hue-rose-fg: color-mix(in oklab, var(--hue-rose) 84%, var(--af-white));
+  --hue-emerald-fg: color-mix(in oklab, var(--hue-emerald) 84%, var(--af-white));
+
+  --hue-blue-soft: color-mix(in oklab, var(--hue-blue) 20%, var(--af-navy));
+  --hue-violet-soft: color-mix(in oklab, var(--hue-violet) 20%, var(--af-navy));
+  --hue-teal-soft: color-mix(in oklab, var(--hue-teal) 20%, var(--af-navy));
+  --hue-amber-soft: color-mix(in oklab, var(--hue-amber) 20%, var(--af-navy));
+  --hue-rose-soft: color-mix(in oklab, var(--hue-rose) 20%, var(--af-navy));
+  --hue-emerald-soft: color-mix(in oklab, var(--hue-emerald) 20%, var(--af-navy));
+
+  /* 深色模式下实体色被提亮 → 实心块上的前景改用深底,不然白字压浅块读不出来 */
+  --hue-blue-on: var(--af-navy);
+  --hue-violet-on: var(--af-navy);
+  --hue-teal-on: var(--af-navy);
+  --hue-amber-on: var(--af-navy);
+  --hue-rose-on: var(--af-navy);
+  --hue-emerald-on: var(--af-navy);
+
+  --ambient-top: color-mix(in oklab, var(--af-blue) 8%, transparent);
+  --ambient-corner-a: color-mix(in oklab, oklch(0.525 0.132 293) 7%, transparent);
+  --ambient-corner-b: color-mix(in oklab, oklch(0.548 0.086 197) 7%, transparent);
+  --sidebar-veil: color-mix(in oklab, var(--af-blue) 7%, transparent);
+  --hairline-light: color-mix(in oklab, var(--af-white) 12%, transparent);
+
+  --af-raise-1: 0 1px 1px rgba(0, 0, 0, 0.24), 0 0 0 1px var(--af-border), inset 0 1px 0 var(--hairline-light);
+  --af-raise-2:
+    0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--af-border),
+    inset 0 1px 0 var(--hairline-light);
+  --af-raise-3:
+    0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--af-border),
+    inset 0 1px 0 var(--hairline-light);
 
   --shadow-soft: rgba(0, 0, 0, 0.35) 0px 0px 20px;
 }
@@ -209,6 +333,40 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  /* 点缀色进 @theme —— 于是 `bg-hue-violet-soft` / `text-hue-violet-fg` /
+     `border-hue-violet-line` 这类工具类可直接用,调用方不必写 `bg-[color:var(--…)]`。
+     四角色对应:`-hue-X`(实体)/`-hue-X-fg`(文字)/`-hue-X-soft`(软底)/`-hue-X-line`(描边)。 */
+  --color-hue-blue: var(--hue-blue);
+  --color-hue-blue-fg: var(--hue-blue-fg);
+  --color-hue-blue-soft: var(--hue-blue-soft);
+  --color-hue-blue-line: var(--hue-blue-line);
+  --color-hue-blue-on: var(--hue-blue-on);
+  --color-hue-violet: var(--hue-violet);
+  --color-hue-violet-fg: var(--hue-violet-fg);
+  --color-hue-violet-soft: var(--hue-violet-soft);
+  --color-hue-violet-line: var(--hue-violet-line);
+  --color-hue-violet-on: var(--hue-violet-on);
+  --color-hue-teal: var(--hue-teal);
+  --color-hue-teal-fg: var(--hue-teal-fg);
+  --color-hue-teal-soft: var(--hue-teal-soft);
+  --color-hue-teal-line: var(--hue-teal-line);
+  --color-hue-teal-on: var(--hue-teal-on);
+  --color-hue-amber: var(--hue-amber);
+  --color-hue-amber-fg: var(--hue-amber-fg);
+  --color-hue-amber-soft: var(--hue-amber-soft);
+  --color-hue-amber-line: var(--hue-amber-line);
+  --color-hue-amber-on: var(--hue-amber-on);
+  --color-hue-rose: var(--hue-rose);
+  --color-hue-rose-fg: var(--hue-rose-fg);
+  --color-hue-rose-soft: var(--hue-rose-soft);
+  --color-hue-rose-line: var(--hue-rose-line);
+  --color-hue-rose-on: var(--hue-rose-on);
+  --color-hue-emerald: var(--hue-emerald);
+  --color-hue-emerald-fg: var(--hue-emerald-fg);
+  --color-hue-emerald-soft: var(--hue-emerald-soft);
+  --color-hue-emerald-line: var(--hue-emerald-line);
+  --color-hue-emerald-on: var(--hue-emerald-on);
 
   /* 圆角:刻意不覆盖 Tailwind 的 --radius-* 命名空间。
      它的默认阶刚好就是 DESIGN.md §5 要的档位:
@@ -310,6 +468,197 @@ a {
     opacity: 1;
     transform: none;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   动效层 —— 全站可复用的「有含义的动画」。三条纪律:
+
+   1. **只在两处用位移动画**:① 一次性入场(opacity + 4~6px 位移,不循环);
+      ② 按压反馈(≤1px)。**hover 一律不做位移**(见 DESIGN.md §7.1 抖动红线)。
+   2. **时长分三档**:120ms 反馈 / 180ms 默认 / 260ms 入场,与 --t-fast|base|slow 对齐。
+   3. **全部走 transform / opacity**,除了列表展开用 grid-template-rows
+      (折叠面板本来就该改布局高度,这是唯一例外)。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 滚动入场(components/ui/reveal.tsx 消费)──────────────────────
+   元素进入视口时淡入上浮一次。Reveal 组件负责加 `.reveal-in`;
+   `delay` 通过内联 animation-delay 注入,做同级的错落进入。 */
+.reveal {
+  opacity: 0;
+}
+
+.reveal-in {
+  animation: reveal-in var(--t-slow) var(--ease-brand) both;
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 路由进度条(components/layout/route-progress.tsx 消费)─────────
+   一次路由切换 = 一条 2px 主色渐变条从左推到 88%,再快速滑完淡出。
+   之前这个类**只有引用没有定义**,进度条是隐形的;这里是补上的实现。 */
+.route-progress-bar {
+  height: 2px;
+  width: 100%;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--hue-blue) 35%, transparent) 0%,
+    var(--hue-blue) 42%,
+    var(--hue-violet) 78%,
+    color-mix(in oklab, var(--hue-violet) 40%, transparent) 100%
+  );
+  transform-origin: left center;
+  animation: route-progress var(--t-slow) var(--ease-brand) both;
+}
+
+@keyframes route-progress {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  55% {
+    transform: scaleX(0.88);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* ── 交错入场:给列表容器加 `.stagger`,子项依次浮入(每档 22ms)──
+   比逐个传 delay 省事,且子项数量变化时不会漏。 */
+.stagger > * {
+  animation: stagger-in var(--t-slow) var(--ease-brand) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 22ms; }
+.stagger > *:nth-child(3) { animation-delay: 44ms; }
+.stagger > *:nth-child(4) { animation-delay: 66ms; }
+.stagger > *:nth-child(5) { animation-delay: 88ms; }
+.stagger > *:nth-child(6) { animation-delay: 110ms; }
+.stagger > *:nth-child(7) { animation-delay: 132ms; }
+.stagger > *:nth-child(8) { animation-delay: 154ms; }
+.stagger > *:nth-child(n + 9) { animation-delay: 176ms; }
+
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 在线状态点:一圈向外扩散的脉冲(2.4s,极轻)──────────────────── */
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: inherit;
+  animation: pulse-ring 2400ms var(--ease-brand) infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* ── 通知红点:两拍呼吸(比脉冲克制,不分散注意力)──────────────── */
+.attention-dot {
+  animation: attention 2000ms var(--ease-brand) infinite;
+}
+
+@keyframes attention {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--danger) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, var(--danger) 0%, transparent);
+  }
+}
+
+/* ── 折叠面板:grid-template-rows 0fr→1fr 的平滑展开 ──────────────
+   唯一的布局动画例外(展开本来就该改高度)。外层 grid,内层 overflow:hidden。 */
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--t-base) var(--ease-brand);
+}
+.collapse-grid.is-open {
+  grid-template-rows: 1fr;
+}
+.collapse-grid > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── 顶部环境渐晕(侧边栏品牌区 / 主区页头用)─────────────────────
+   一层极淡的径向色温。不写进组件,避免每个页面各配一次。 */
+.ambient-veil {
+  background-image:
+    radial-gradient(120% 100% at 0% 0%, var(--ambient-corner-a) 0%, transparent 62%),
+    radial-gradient(110% 90% at 100% 0%, var(--ambient-corner-b) 0%, transparent 58%);
+}
+
+/* ── 高光边:1px 内阴影模拟受光面(深色下自动变弱)─────────────────
+   直接写进 `--af-raise-*` 三档阴影里(见上文 :root),所以不再单独提供工具类 ——
+   一个只有深色模式看得见的 1px 内高光,不值得让调用方记一个类名。 */
+
+/* ── 图标换位(主题切换、展开指示这类"同一个位置换了东西")────────
+   给元素挂 `key={状态}` 让它重挂载即可播放一次;比"两个图标交叉淡出"省一层 DOM。 */
+.icon-swap {
+  animation: icon-swap var(--t-slow) var(--ease-brand) both;
+}
+
+@keyframes icon-swap {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 卡片顶部强调色线(仅在传了 tone 时出现)────────────────────── */
+.tone-topline {
+  position: relative;
+}
+.tone-topline::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(
+    90deg,
+    var(--tone-color) 0%,
+    color-mix(in oklab, var(--tone-color) 45%, transparent) 55%,
+    transparent 100%
+  );
 }
 
 /* DESIGN.md §7:减少动态效果时全部复位 */
@@ -684,9 +1033,16 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   .table thead th {
     text-align: left;
     padding: 10px 12px;
-    background: var(--muted);
+    /* 表头铺一层极淡的斜向色温,而不是一整块死灰面 ——
+       与内容区顶部那层渐晕同源,让"表头"读起来是内容区的一部分而不是贴上去的条 */
+    background-color: var(--af-surface);
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--af-blue) 4%, transparent) 0%,
+      transparent 100%
+    );
     color: var(--muted-foreground);
-    font-weight: 500;
+    font-weight: 600;
     font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -706,12 +1062,30 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   .table tbody tr:hover {
     background: var(--af-hover);
   }
+  .table tbody tr.is-selected {
+    background: var(--af-selected);
+  }
 
   /* 页面头:左侧标题描述 + 右侧操作,与现有 PageHeader 共存 */
   .page-head {
+    position: relative;
     padding: 20px 24px 16px;
     background: var(--background);
-    border-bottom: 1px solid var(--border);
+  }
+  /* 下沿不用实线,改成"左实右虚"的渐隐 hairline ——
+     与侧边栏分组标题、顶栏下沿共用同一套分隔线语言(实线切成三条会显得很生硬) */
+  .page-head::after {
+    content: '';
+    position: absolute;
+    inset-inline: 24px;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--border) 0%,
+      color-mix(in oklab, var(--border) 55%, transparent) 68%,
+      transparent 100%
+    );
   }
   .page-head-row {
     display: flex;
@@ -719,16 +1093,19 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     gap: 16px;
   }
   .page-title {
+    font-family: var(--font-heading);
     font-size: 22px;
     font-weight: 500;
     line-height: 1.25;
+    letter-spacing: -0.015em;
     color: var(--foreground);
   }
   .page-sub {
-    margin-top: 4px;
+    margin-top: 6px;
     color: var(--muted-foreground);
     font-size: 13px;
-    max-width: 60ch;
+    line-height: 1.65;
+    max-width: 68ch;
   }
   .page-actions {
     margin-left: auto;

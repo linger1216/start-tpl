@@ -22,7 +22,7 @@ export function SettingsUsersStats({ rows }: { rows: readonly UserRow[] }) {
 			value: stats.用户总数,
 			description: "账号台账全量",
 			Icon: Users,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-blue-soft text-hue-blue-fg",
 		},
 		{
 			key: "enabled",
@@ -49,7 +49,7 @@ export function SettingsUsersStats({ rows }: { rows: readonly UserRow[] }) {
 			value: stats.覆盖用户组数,
 			description: "按多组归属去重",
 			Icon: Layers,
-			tone: "bg-warn-soft text-warn-fg",
+			tone: "bg-hue-violet-soft text-hue-violet-fg",
 		},
 		{
 			key: "active",
@@ -58,7 +58,7 @@ export function SettingsUsersStats({ rows }: { rows: readonly UserRow[] }) {
 			value: stats.近30天有登录,
 			description: "活跃账号",
 			Icon: CalendarClock,
-			tone: "bg-secondary text-secondary-foreground",
+			tone: "bg-hue-teal-soft text-hue-teal-fg",
 		},
 	];
 

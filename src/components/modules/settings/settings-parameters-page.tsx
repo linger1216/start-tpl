@@ -1,11 +1,14 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cog, RefreshCw, SlidersHorizontal, Timer } from "lucide-react";
+import { Cog, Plus, RefreshCw, SlidersHorizontal, Timer } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersCleanup } from "#/components/modules/settings/settings-parameters-cleanup";
-import { SettingsParametersForm } from "#/components/modules/settings/settings-parameters-form";
+import {
+	type ParameterFormPayload,
+	SettingsParametersForm,
+} from "#/components/modules/settings/settings-parameters-form";
 import { type ParameterRow, SettingsParametersTable } from "#/components/modules/settings/settings-parameters-table";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -13,6 +16,7 @@ import { TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 
@@ -23,12 +27,19 @@ import { toApiError } from "#/lib/api/error";
  * - **raw 保留**:已抽取的数据保留多久软删、软删后再多久物理删、每批清理多少行;
  * - **对接同步**:定时同步开关(默认关)、间隔、增量窗口重叠秒数。
  * 参数值改了**下一趟任务生效**,不需要重新发版。
+ *
+ * 支持**完整 CRUD**:新增(指定类型 / 分组 / 说明)、修改(按类型校验)、删除(回到默认值或彻底消失)。
+ * 类型含 string / int / bool / json / array / map,json 类用多行 JSON 文本录入。
  */
 export function SettingsParametersPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [keyword, setKeyword] = useState("");
 	const [editing, setEditing] = useState<ParameterRow | null>(null);
+	const [creating, setCreating] = useState(false);
+	const [pendingDelete, setPendingDelete] = useState<ParameterRow | null>(null);
+
+	const formOpen = editing !== null || creating;
 
 	const listQuery = useQuery({ ...trpc.config.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as ParameterRow[];
@@ -44,6 +55,43 @@ export function SettingsParametersPage() {
 		}),
 	);
 
+	const createMutation = useMutation(
+		trpc.config.create.mutationOptions({
+			onSuccess: async (outcome) => {
+				await queryClient.invalidateQueries(trpc.config.pathFilter());
+				setCreating(false);
+				toast.success(`已新增参数 ${outcome.key}`, { description: "下一趟任务生效。" });
+			},
+			onError: (error) => toast.error(toApiError(error).message),
+		}),
+	);
+
+	const deleteMutation = useMutation(
+		trpc.config.delete.mutationOptions({
+			onSuccess: async (outcome) => {
+				await queryClient.invalidateQueries(trpc.config.pathFilter());
+				setPendingDelete(null);
+				toast.success(`已删除 ${outcome.key}`);
+			},
+			onError: (error) => toast.error(toApiError(error).message),
+		}),
+	);
+
+	function handleSubmit(payload: ParameterFormPayload) {
+		if (creating) {
+			if (!payload.type) return;
+			createMutation.mutate({
+				key: payload.key,
+				value: payload.value,
+				type: payload.type,
+				group: payload.group,
+				remark: payload.remark,
+			});
+		} else if (payload.key) {
+			updateMutation.mutate({ key: payload.key, value: payload.value });
+		}
+	}
+
 	const filtered = useMemo(() => {
 		const key = keyword.trim();
 		if (!key) return rows;
@@ -58,7 +106,7 @@ export function SettingsParametersPage() {
 				value: rows.length,
 				description: "代码内置 + 库里覆盖",
 				Icon: SlidersHorizontal,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-[color:var(--hue-blue-soft)] text-[color:var(--hue-blue-fg)]",
 				unit: "条",
 			},
 			{
@@ -67,7 +115,7 @@ export function SettingsParametersPage() {
 				value: rows.filter((row) => row.overridden).length,
 				description: "被改过、不再是默认值的",
 				Icon: Cog,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-[color:var(--hue-amber-soft)] text-[color:var(--hue-amber-fg)]",
 				unit: "条",
 			},
 			{
@@ -76,7 +124,7 @@ export function SettingsParametersPage() {
 				value: rows.find((row) => row.key === "sync.enabled")?.value === "true" ? "已开启" : "已关闭",
 				description: "默认关闭:先手动跑通再打开",
 				Icon: Timer,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-[color:var(--hue-teal-soft)] text-[color:var(--hue-teal-fg)]",
 			},
 		],
 		[rows],
@@ -86,12 +134,24 @@ export function SettingsParametersPage() {
 		<div className="space-y-4">
 			<PageHeader
 				title="参数管理"
-				description="系统设置 ▸ 参数管理:raw 保留策略(软删 / 物理删)与对接同步开关都在这儿调。参数改了下一趟任务生效,不需要发版。"
+				description="系统设置 ▸ 参数管理:raw 保留策略(软删 / 物理删)与对接同步开关都在这儿调。支持字符串 / 整数 / 开关 / JSON / 数组 / 映射六种类型,参数改了下一趟任务生效,不需要发版。"
 				actions={
-					<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => void listQuery.refetch}>
-						<RefreshCw className={listQuery.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
-						刷新
-					</Button>
+					<div className="flex flex-wrap items-center gap-2">
+						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => void listQuery.refetch}>
+							<RefreshCw className={listQuery.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
+							刷新
+						</Button>
+						<Button
+							size="sm"
+							onClick={() => {
+								setEditing(null);
+								setCreating(true);
+							}}
+						>
+							<Plus className="size-3.5" />
+							新增参数
+						</Button>
+					</div>
 				}
 			/>
 
@@ -112,19 +172,40 @@ export function SettingsParametersPage() {
 				<CardContent className="space-y-3">
 					<LedgerToolbar search={keyword} onSearchChange={setKeyword} searchPlaceholder="搜索参数名 / 分组 / 说明…" />
 					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
-						<SettingsParametersTable rows={filtered} onEdit={setEditing} />
+						<SettingsParametersTable
+							rows={filtered}
+							onEdit={(row) => {
+								setCreating(false);
+								setEditing(row);
+							}}
+							onDelete={setPendingDelete}
+						/>
 					</TableLoadingShell>
 				</CardContent>
 			</Card>
 
 			<SettingsParametersForm
 				row={editing}
-				open={editing !== null}
-				pending={updateMutation.isPending}
+				creating={creating}
+				open={formOpen}
+				pending={updateMutation.isPending || createMutation.isPending}
 				onOpenChange={(next) => {
-					if (!next) setEditing(null);
+					if (!next) {
+						setEditing(null);
+						setCreating(false);
+					}
 				}}
-				onSubmit={(key, value) => updateMutation.mutate({ key, value })}
+				onSubmit={handleSubmit}
+			/>
+
+			<ConfirmDialog
+				open={pendingDelete !== null}
+				onOpenChange={(next) => {
+					if (!next) setPendingDelete(null);
+				}}
+				title="删除参数"
+				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值,界面新建的参数会彻底消失。`}
+				onConfirm={() => pendingDelete && deleteMutation.mutate({ key: pendingDelete.key })}
 			/>
 		</div>
 	);

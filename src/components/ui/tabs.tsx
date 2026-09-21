@@ -65,9 +65,11 @@ function TabsTrigger({
 			{typeof count === "number" ? (
 				<span
 					className={cn(
-						"inline-flex items-center justify-center min-w-[1.25rem] h-[1.125rem] rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums transition-colors duration-200",
+						"inline-flex h-[1.125rem] min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums transition-colors duration-200",
 						"bg-[color:var(--muted)] text-muted-foreground",
-						"group-data-[state=active]/tabs-trigger:bg-[color:var(--af-blue)]/12 group-data-[state=active]/tabs-trigger:text-[color:var(--af-blue)]",
+						// 选中态的计数胶囊走点缀色 token(而不是 `bg-[color:var(--af-blue)]/12`
+						// 那种"任意值 + 透明度后缀"的写法 —— 后者在 Tailwind 里不保证生成)
+						"group-data-[state=active]/tabs-trigger:bg-hue-blue-soft group-data-[state=active]/tabs-trigger:text-hue-blue-fg",
 					)}
 				>
 					{count}
@@ -76,13 +78,13 @@ function TabsTrigger({
 			{/*
 			 * 双层下划线:absolute 定位的 2px 蓝条 + 2px 浅灰 hover 条。
 			 *  - 浅灰条:未激活时显示(hover 提示线),激活时隐藏
-			 *  - 蓝色条:仅激活时显示
+			 *  - 蓝色条:仅激活时显示,两端圆头 + 一层极淡外发光(选中更"立"一点)
 			 * 用 absolute 而非 border,过渡 200ms,选中切换是平滑的滑入
 			 */}
 			<span
 				aria-hidden
 				className={cn(
-					"pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] transition-[background-color,opacity,transform] duration-200 ease-out",
+					"pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full transition-[background-color,opacity,transform] duration-200 ease-out",
 					// hover 位置提示线:未激活时浅灰,激活时透明
 					"bg-[color:var(--border)] opacity-100 group-data-[state=active]/tabs-trigger:opacity-0",
 				)}
@@ -90,9 +92,10 @@ function TabsTrigger({
 			<span
 				aria-hidden
 				className={cn(
-					"pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] transition-[background-color,opacity] duration-200 ease-out",
-					// 激活蓝色实线
-					"bg-transparent opacity-0 group-data-[state=active]/tabs-trigger:bg-[color:var(--af-blue)] group-data-[state=active]/tabs-trigger:opacity-100",
+					"pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full transition-[background-color,opacity,box-shadow] duration-200 ease-out",
+					// 激活蓝色实线 + 一层向下扩散的极淡蓝晕
+					"bg-transparent opacity-0 group-data-[state=active]/tabs-trigger:bg-hue-blue group-data-[state=active]/tabs-trigger:opacity-100",
+					"group-data-[state=active]/tabs-trigger:shadow-[0_2px_6px_-1px_var(--af-blue-ring)]",
 				)}
 			/>
 		</TabsPrimitive.Trigger>

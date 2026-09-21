@@ -47,6 +47,46 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 |---|---|---|---|---|
 | `accent-secondary` | Success Green | `#006400` | `oklch(0.436 0.148 142.5)` | 成功状态与语义链接 |
 
+---
+
+## 2.1 点缀色谱(Hue Palette)—— 6 个低饱和色相
+
+> 上表 7 色是**品牌骨架**。只有一条蓝强调色的后台在长列表里"能看但不鲜活",
+> 于是补一组点缀色 —— 但**不是**加高饱和色:全部压在 oklch chroma 0.086–0.135
+> (约 9%–13% 彩度),比 Material 的鲜艳档(0.18+)低一半以上。
+> 目标观感是"耐看、有层次",不是"亮、吵"。
+
+| 色相 | Oklch | 用途 |
+|---|---|---|
+| `blue` | `oklch(0.513 0.176 259.1)`(即 Airtable Blue) | 主 CTA、工作台 |
+| `violet` | `oklch(0.525 0.132 293)` | 组件展示 / 分类标签 |
+| `teal` | `oklch(0.548 0.086 197)` | 框架能力 / 次级指标 |
+| `amber` | `oklch(0.632 0.108 72)` | 系统设置 / 提醒类指标 |
+| `rose` | `oklch(0.570 0.128 14)` | 停用类、需要留意但不告警的计数 |
+| `emerald` | `oklch(0.528 0.098 162)` | 在线状态、可用性 |
+
+**四个角色,必须配对使用**(定义在 `src/styles.css` 的「点缀色谱」段):
+
+| 角色 | token | 值 | 用在哪 |
+|---|---|---|---|
+| 实体 | `--hue-X` | 色相本体 | 图标实心块 / 小圆点 / 标记条 / 进度条 |
+| 文字 | `--hue-X-fg` | 实体往深海军蓝压一档 | 浅底上的文字与图标(保证 4.5:1) |
+| 软底 | `--hue-X-soft` | 实体 10% 混白 | 选中行底色 / 胶囊 / 图标浅块 |
+| 描边 | `--hue-X-line` | 实体 28% 透明 | 细边框 / 分隔 |
+| 反白前景 | `--hue-X-on` | 浅色模式=白;深色模式=深海军蓝 | 压在实体块上的文字 |
+
+> `-on` 这一项为什么单独存在:深色模式下实体色会被提亮,白字压浅色块读不出来,
+> 所以前景要跟着模式翻转。组件里用 `text-hue-X-on`,**不要在调用点硬编码 `text-white`**。
+
+**用法纪律**
+
+- ✅ 做**有含义的编码**:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡,四处一致);
+  同一张表里不同口径的指标卡 / 分类标签用不同色相区分。
+- ❌ 不做装饰性上色。一屏内出现的色相**不超过 4 个**;不做彩虹渐变;不把色相当背景大色块。
+- ❌ 告警语义仍然只走 `--success` / `--warn` / `--danger`,不拿点缀色顶替(emerald ≠ success)。
+- 色相 → 类名的映射**只有一份**:`src/components/layout/nav-tone.ts`。
+  侧边栏 / 顶栏 / 工作台三处共用;加色相时改那一个文件 + `styles.css` 两处 + `NAV_TONES`。
+
 ### 可直接复制的 CSS 变量
 
 ```css
@@ -59,14 +99,39 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
   --color-border:    #e0e2e6;
   --color-success:   #006400;
 
+  /* 点缀色:低饱和(oklch chroma ≤ 0.135),四角色齐全 */
+  --hue-blue:        #1b61c9;
+  --hue-violet:      oklch(0.525 0.132 293);
+  --hue-teal:        oklch(0.548 0.086 197);
+  --hue-amber:       oklch(0.632 0.108 72);
+  --hue-rose:        oklch(0.570 0.128 14);
+  --hue-emerald:     oklch(0.528 0.098 162);
+  /* --hue-X-fg / -soft / -line / -on 由 color-mix 从上面派生,见 styles.css */
+
   /* Blue-tinted multi-layer shadow */
   --shadow-card:     rgba(0,0,0,0.32) 0px 0px 1px,
                      rgba(0,0,0,0.08) 0px 0px 2px,
                      rgba(45,127,249,0.28) 0px 1px 3px,
                      rgba(0,0,0,0.06) 0px 0px 0px 0.5px inset;
   --shadow-soft:     rgba(15,48,106,0.05) 0px 0px 20px;
+
+  /* 抬升三档(静置 / 悬停 / 浮起):hover **只换这一档**,不做位移 */
+  --af-raise-1:  0 1px 1px rgba(15,48,106,.03), 0 0 0 1px var(--border);
+  --af-raise-2:  0 1px 2px rgba(15,48,106,.05), 0 6px 16px -8px rgba(15,48,106,.10), 0 0 0 1px var(--border);
+  --af-raise-3:  0 2px 4px rgba(15,48,106,.05), 0 14px 32px -12px rgba(15,48,106,.16), 0 0 0 1px var(--border);
 }
 ```
+
+---
+
+## 2.2 分类色板(`BADGE_THEMES`)
+
+标签列、可编辑标签输入、快速筛选 chip、已选筛选 pill 都读
+`src/components/ui/badge-list.tsx` 的 `BADGE_THEMES`。这套主题**已从 Tailwind 默认的
+`*-100 / *-700`(约 25%–40% 彩度)换成上表的点缀色 token** —— 改那一处 = 全站分类色一次性统一。
+
+各主题的区别在**色相轮转顺序**(每页从不同色相起手),不是"用不同的色板";
+色相就 6 个,靠顺序 + 起手色制造区分度,同时保证同一屏里不撞色。
 
 ---
 
@@ -154,39 +219,59 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 - **Border**: 1px solid `#e0e2e6`
 - **Breakpoints**: 425px / 768px / 1024px / 1440px / 1664px (23 个细档)
 
-### 5.1 侧边栏激活态 — 不画左蓝条,只用内容内高亮(蓝底 + 蓝字 + 蓝图标)
+### 5.1 侧边栏 —— 配色编码 + 内嵌标记条
 
-> 不再使用"激活态 chevron":它在选中时插入元素会改变 flex 布局,切换菜单时出现抖动。
+> 实现:`src/components/layout/sidebar.tsx` + `nav-tone.ts`。
+> 2026-09 重做了一版:从"只有一条蓝强调色"改成"按一级模块分配色相"。
 
-**Do:** 选中项用 8px 圆角浅蓝底 + 主色文字 + 主色图标 + 右侧 `chevron-right` 微动效。
-**Don't:** 不要 3px 左边蓝条 — 视觉上像「外贴在侧边栏的标签」,与菜单本身割裂。
+**一、每个一级模块固定一色(色相见 §2.1)。** 颜色在这一层是**导航线索**,不是装饰:
+侧边栏图标块 → 面包屑胶囊 → 页头强调条 → 工作台入口卡,四处同色,
+从任何入口进去都能认出"这是哪一块"。子节点**继承**父级色相(一层一个颜色就花了)。
 
-```css
-.nav-item { padding: 7px 10px; border-radius: 8px; transition: 180ms; }
-.nav-item.is-active {
-  background: var(--selected);   /* 浅蓝 7% */
-  color: var(--accent);
-  font-weight: 600;
-}
-/* 右侧 chevron:常显,不做"从左滑入"(hover 位移动效 = 抖动源) */
-.nav-item .nav-chevron {
-  margin-left: auto; color: var(--accent);
-  transition: color 180ms;
-}
-.nav-item.is-active .nav-chevron { opacity: 1; transform: translateX(0); }
-```
+**二、图标块分三态:**
 
-### 5.2 页面头 — 标题 + 问号 trigger,hover 显示说明 popover
+| 状态 | 表现 |
+|---|---|
+| 静置(一级分组行 / 一级叶子) | `--hue-X-soft` 浅底 + `--hue-X-fg` 图标 |
+| 悬停(子级叶子) | 浅色块**浮现**(由 0 到 `-soft`),标签转 `foreground` |
+| 含当前页(分组行) / 选中(叶子) | `--hue-X` 实心块 + `--hue-X-on` 反白图标 + `shadow` 一档 |
 
-副标题放到标题右侧的小问号 trigger 上,hover / focus-within 时弹出 popover。**默认不占视觉空间**,鼠标上去再展开。
+> 分组行上色的判据是**"这一枝里有当前页"**,不是"这一枝展开了" ——
+> 否则同时展开三个分组时会看到三行都像"选中",反而找不到自己在哪。
 
-```html
-<div class="page-title-group">
-  <h1>案件档案</h1>
-  <button class="info-trigger" aria-label="页面说明"><InfoIcon /></button>
-  <div class="info-popover">详细描述...</div>
-</div>
-```
+**三、选中行** = 四项叠加,缺一项都会显得"没选中":
+
+1. 整行 `--hue-X-soft` 浅底;
+2. 文字 `--hue-X-fg` + `font-semibold`;
+3. 图标块转实心(见上表);
+4. 行内左侧一条 **3px 圆角标记条**(`h-3.5 w-[3px] rounded-full`),`scaleY 0→1` 长出来。
+
+> **与上一版的区别(踩过的坑别改回去):**
+> 早先的规范写"不要左边蓝条,只要内容内高亮",理由是那条**贴在侧边栏边缘**、
+> 与菜单本体割裂。现在这条不是贴在侧边栏上 —— 它在**胶囊内部**、带圆角、比行矮,
+> 是胶囊自己的组成部分。所以旧结论作废,**新规格以上面四条为准**。
+> 同理,分组行的 chevron **只做旋转 `rotate-90`**,不换图标:换图标是硬切,旋转才是连续的。
+
+**四、缩进由外层面板负责,行内横 padding 固定 8px。**
+展开面板是 `ml-5 pl-3` —— `ml-5`(20px)刚好把导引线对到父级图标块的**中心**
+(行 `pl-2` + 图标 `size-6` ⇒ 中心 20px);嵌套时这条规则递归成立,
+二级分组的线自然落在它自己图标的中心下方。**不要按 depth 手算 `paddingLeft`**,
+两套缩进会叠在一起。
+
+**五、分组展开用 `grid-template-rows: 0fr → 1fr`。**
+这是本项目**唯一允许的布局动画**(折叠面板本来就该改高度)。
+收起时必须给面板加 `inert` —— 内容仍在 DOM 里,不然键盘 Tab 会钻进看不见的链接。
+
+**六、折叠态是 60px 迷你图标栏,不是"整条消失"。**
+仍能看到全部分区并直接跳转;图标块沿用所属模块色相,所以折叠后配色编码依然成立。
+名字用**原生 `title`** 而不是自绘浮层:迷你栏的滚动容器在 CSS 上无法同时
+"纵向 `auto` + 横向可见"(一个轴为 `auto`,另一个轴就会变成 `auto`),自绘气泡必被裁掉。
+
+**七、首屏交错入场。** 导航容器挂 `stagger` 类,一级项按 22ms 依次浮入(见 §7)。
+
+### 5.2 页面头
+
+见 §5.6(标题 + 色相强调条 + 问号 popover 的完整规格)。
 
 ### 5.3 列表页布局节奏 — 三段式独立行,不挤一起
 
@@ -220,30 +305,60 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 操作按钮之间 8px gap,主操作(+ 新建)与次操作之间加 4px `margin-left` 形成视觉分组。
 
-### 5.5 Tab 模式 — **卡片式页签**(全项目唯一实现)
+### 5.5 Tab 模式 — **下划线页签**(全项目唯一实现)
 
-实现固定在 `src/components/ui/tabs.tsx`(`Tabs / TabsList / TabsTrigger / TabsContent`),**只有这一种样式**:不要新增 `variant`、不要手写 `role="tablist"`(守卫 `pnpm check:convergence` 会拦)。
+> ⚠️ 本节 2026-09 修正过一次:文档此前写的是"卡片式页签",但 `ui/tabs.tsx` 的实际实现
+> 一直是**下划线**式(Linear / Vercel / Stripe 风格)。代码是真源,文档按代码重写。
+> 想改成卡片式请**先改代码再改本节**,不要再让两边漂移。
 
-- **形态**:每个页签本身就是一张小卡片 —— `rounded-xl`(12px,与 `ui/card.tsx` 同阶)+ `border-border` + `bg-card`;`h-9`、`px-3`、`text-[13px] font-medium`、标签间距 `gap-1.5`。
-- **选中态**:`border-primary`(品牌蓝边框)+ `bg-primary/5`(5% 蓝底)+ `shadow-(--shadow-card)`。**不做底色反转**(不把整张卡涂蓝),否则会和下方台账卡片抢视觉。
-- **hover**:`border-primary/45` + `bg-secondary` + 文字转 `foreground`。
-- **focus-visible**:`border-ring` + `ring-[3px] ring-ring/40`,保证键盘可达。
-- **计数**:页签上的数字一律用 `count` 属性(渲染成 `rounded-full bg-muted` 小胶囊,选中态转 `bg-primary/15 text-primary`);不要在页面里手写 `({n})` 或自定义 span。
-- **换行**:`TabsList` 内置 `flex-wrap max-w-full`,6 个以上页签不会横向溢出,调用点不必再写 class。
-- **动效**:`transition-[color,background-color,border-color,box-shadow] duration-150`(阴影也参与过渡,选中态的卡片阴影不会硬切);与 `filter-chips`、`card` 同一档克制程度,不做位移/缩放弹跳。
-- **为什么不用下划线**:底边线与下方表格列头视觉重复;也不再使用早先设想的 `.seg` 分段控件(该说法已失效,仓库里没有 `.seg` 实现)。
+实现固定在 `src/components/ui/tabs.tsx`(`Tabs / TabsList / TabsTrigger / TabsContent`),
+**只有这一种样式**:不要新增 `variant`、不要手写 `role="tablist"`。
+
+- **理念**:tab **不是**一个独立元素,而是页面头部延伸出的导航条 —— 无边框、无背景、无圆角。
+- **形状**:`TabsList` 零间隙横向排开 + 底部 **1px 浅灰基线**(所有 tab 共享的视觉基线);
+  `TabsTrigger` `h-9`、`px-3.5`、`text-[13px] font-medium`、标签间距 `gap-1.5`。
+- **选中**:文字加深加粗 + **底部 2px 主色实线**(两端圆头,带一层极淡蓝晕
+  `shadow-[0_2px_6px_-1px_var(--af-blue-ring)]`)。**不做底色反转。**
+- **hover(未激活)**:文字转 `foreground` + **底部 2px 浅灰提示线** —— 让用户知道"点哪里都会激活"。
+- **focus-visible**:`ring-[3px] ring-ring/40`,保证键盘可达。
+- **计数**:页签上的数字一律用 `count` 属性(渲染成 `rounded-full bg-muted` 小胶囊,
+  选中态转 `bg-hue-blue-soft text-hue-blue-fg`);不要在页面里手写 `({n})` 或自定义 span。
+- **换行**:`TabsList` 内置 `flex-wrap max-w-full`,6 个以上页签不会横向溢出。
+- **动效**:`duration-200 ease-out`,过渡 `color / background-color / opacity`;不做位移与缩放。
+- **为什么不用卡片式**:卡片式会在视觉上与下方台账卡片**抢层级** —— 页签是导航,不该长得像内容。
 
 ```tsx
-<Tabs defaultValue="12345">
+<Tabs defaultValue="users">
 	<TabsList>
-		<TabsTrigger value="12345" count={caseRows.length}>12345 案件</TabsTrigger>
-		<TabsTrigger value="petition" count={petitionRows.length}>信访案件</TabsTrigger>
+		<TabsTrigger value="users" count={userRows.length}>用户</TabsTrigger>
+		<TabsTrigger value="groups" count={groupRows.length}>用户组</TabsTrigger>
 	</TabsList>
-	<TabsContent value="12345" className="space-y-4 pt-2">…</TabsContent>
+	<TabsContent value="users" className="space-y-4 pt-2">…</TabsContent>
 </Tabs>
 ```
 
-> ⚠️ `src/components/ui/` 是 vendored 目录,但**这一个文件已被项目改写**为卡片式:跑 `pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后按本节重做。
+> ⚠️ `src/components/ui/` 是 vendored 目录,但**这一个文件已被项目改写**:
+> 跑 `pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后按本节重做。
+
+### 5.6 页面头 —— 标题 + 色相强调条 + 问号 popover
+
+实现:`src/components/layout/page-header.tsx`。
+
+- 标题左侧一条 **3px 圆角强调条**(`h-[18px] w-[3px] rounded-full`),
+  色相**自动取当前页所属一级模块**(`toneOfTrail`)—— 与侧边栏 / 面包屑同色。
+  需要覆盖时传 `tone="violet"`。
+- 下沿分隔**不用实线**,用"左实右虚"的渐隐 hairline(`.page-head::after`)——
+  与侧边栏分组标题、顶栏下沿共用同一套分隔线语言。
+- 副标题放到标题右侧的小问号 trigger 上,hover / focus-within 弹出 popover。
+  **默认不占视觉空间**,鼠标上去再展开(见下)。
+
+```html
+<div class="page-title-group">
+  <h1>角色管理</h1>
+  <button class="info-trigger" aria-label="页面说明"><InfoIcon /></button>
+  <div class="info-popover">详细描述...</div>
+</div>
+```
 
 ---
 
@@ -293,7 +408,31 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 ---
 
-### 7.1 抖动红线(别踩)
+### 7.1 现成的动效原语(先查这张表,不要每次现搓)
+
+全部定义在 `src/styles.css` 的「动效层」。**它们已经处理过 `prefers-reduced-motion`**,
+业务侧直接挂类名即可。
+
+| 原语 | 类名 / 组件 | 时长 | 用在哪 |
+|---|---|---|---|
+| 页面进场 | `.page-enter`(由 `layout/page-transition.tsx` 按 `pathname` 重挂载触发) | 260ms | 每次路由切换 |
+| 路由进度条 | `.route-progress-bar`(`layout/route-progress.tsx`) | 260ms | 主色→紫的渐变条从左推到满再淡出 |
+| 列表交错入场 | `.stagger`(挂在**容器**上,子项各 22ms 延迟) | 260ms | 侧边栏一级菜单、面包屑、指标条、工作台卡片网格 |
+| 滚动入场 | `<Reveal delay={n}>`(`ui/reveal.tsx` → `.reveal` / `.reveal-in`) | 260ms | 长页面里逐块揭示 |
+| 状态脉冲 | `.pulse-dot`(父元素需 `relative`) | 2.4s 循环 | 侧边栏"已连接"绿点 |
+| 通知呼吸 | `.attention-dot` | 2s 循环 | 顶栏未读红点 |
+| 图标换位 | `.icon-swap`(给元素挂 `key={状态}`) | 260ms | 主题切换的日/月图标 |
+| 折叠展开 | `.collapse-grid` + `.is-open`(`grid-template-rows` 0fr→1fr) | 180ms | 侧边栏分组(唯一允许的布局动画) |
+| 入场(KPI) | `.kpi`(自带 40ms 交错) | 260ms | 旧版指标卡(新代码优先用 `.stagger`) |
+| 扫光 | `<MotionButton>`(`ui/button.tsx`,motion 驱动) | 200ms | 主 CTA、工具栏按钮 |
+| 主题/环境色温 | `.ambient-veil`、`.tone-topline`(`--tone-color`) | — | 侧边栏顶部、内容区顶部、卡片强调线 |
+
+**新增动效前先问三句:** ① 它传达了什么信息?② 这张表里有现成的吗?③ 去掉位移还成立吗?
+三问都过了再写 keyframes。
+
+---
+
+### 7.2 抖动红线(别踩)
 
 | 别做 | 为什么 |
 | --- | --- |

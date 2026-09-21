@@ -12,6 +12,7 @@ import { NAV_ICON_MAP, type NavIcon, type NavNode } from "#/components/layout/na
 import { useVisibleNavNodes } from "#/components/layout/nav-permissions";
 import { PageHeader } from "#/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
+import { cn } from "#/lib/utils";
 
 /** 「可以展开」的入口(只有有 path 的一级模块才算) */
 function navigableTopLevel(nodes: readonly NavNode[]): Array<NavNode & { path: string }> {
@@ -75,20 +76,20 @@ export function WorkbenchPage() {
 			/>
 
 			{/* 上手四件 */}
-			<Card>
+			<Card tone="var(--hue-blue)">
 				<CardHeader>
 					<CardTitle className="text-[15px]">新项目上手四件</CardTitle>
 					<CardDescription>照着走一遍,你就有了一个干净的 TanStack Start 模板。</CardDescription>
 				</CardHeader>
 				<CardContent className="pt-0">
-					<ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+					<ol className="stagger grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 						{CHECKS.map((check, index) => (
 							<li
 								key={check.title}
-								className="rounded-xl border border-border bg-card/60 p-3 transition-colors hover:bg-card"
+								className="rounded-xl border border-border bg-card/60 p-3 transition-[background-color,border-color] duration-150 hover:border-[color:var(--af-border-strong)] hover:bg-card"
 							>
 								<div className="mb-2 flex items-center gap-2">
-									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 font-mono text-[12px] text-primary">
+									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[color:var(--af-blue-soft)] font-mono text-[12px] text-primary">
 										{index + 1}
 									</span>
 									<check.icon className="size-3.5 text-muted-foreground" />
@@ -102,26 +103,26 @@ export function WorkbenchPage() {
 			</Card>
 
 			{/* 模板四大块 */}
-			<Card>
+			<Card tone="var(--hue-violet)">
 				<CardHeader>
 					<CardTitle className="text-[15px]">模板自带的四大入口</CardTitle>
 					<CardDescription>由 NAV_NODES 派生 —— 改 nav-config.ts 这里全部跟着变。</CardDescription>
 				</CardHeader>
 				<CardContent className="pt-0">
-					<div className="grid gap-3 md:grid-cols-3">
+					<div className="stagger grid gap-3 md:grid-cols-3">
 						{STRUCTURE.map((item) => (
 							<Link
 								key={item.title}
 								to={item.path}
-								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-colors hover:border-ring/60 hover:bg-secondary"
+								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:border-[color:var(--af-border-strong)] hover:bg-secondary hover:shadow-(--af-raise-1)"
 							>
-								<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+								<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--af-blue-soft)] text-primary ring-1 ring-[color:var(--border)] ring-inset">
 									<item.icon className="size-4" />
 								</span>
 								<div className="min-w-0 flex-1">
 									<div className="flex items-baseline justify-between gap-2">
 										<span className="font-medium text-foreground">{item.title}</span>
-										<ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+										<ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 group-hover:opacity-100" />
 									</div>
 									<p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{item.desc}</p>
 								</div>
@@ -132,7 +133,7 @@ export function WorkbenchPage() {
 			</Card>
 
 			{/* 一级菜单索引(派生自 NAV_NODES) */}
-			<Card>
+			<Card tone="var(--hue-teal)">
 				<CardHeader>
 					<CardTitle className="text-[15px]">一级菜单索引</CardTitle>
 					<CardDescription>点进去就是对应模块。这里列的是直接挂 path 的一级叶子。</CardDescription>
@@ -143,7 +144,7 @@ export function WorkbenchPage() {
 							当前没有任何直接挂 path 的一级叶子 —— 工作台就不会渲染这块。
 						</div>
 					) : (
-						<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+						<div className="stagger grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 							{entries.map((node) => (
 								<EntryCard key={node.path} node={node} />
 							))}
@@ -153,7 +154,7 @@ export function WorkbenchPage() {
 			</Card>
 
 			{/* 派生时删什么 */}
-			<Card className="border-dashed">
+			<Card tone="var(--hue-amber)" className="border-dashed">
 				<CardHeader>
 					<CardTitle className="text-[15px]">派生新项目时删什么</CardTitle>
 					<CardDescription>以下三处是模板自带的入口,新业务上线前可整块删掉。</CardDescription>
@@ -188,18 +189,23 @@ export function WorkbenchPage() {
 
 function EntryCard({ node }: { node: NavNode & { path: string } }) {
 	const Icon = NAV_ICON_MAP[node.icon as NavIcon];
+	// 入口卡是**导航**,所以只用品牌色 —— 与侧边栏同一口径(多色留给数据展示,见 DESIGN.md §2.1)
 	return (
 		<Link
 			to={node.path}
-			className="group flex items-start gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-ring/60 hover:bg-secondary"
+			className={cn(
+				"group flex items-start gap-3 rounded-xl border border-border bg-card p-3 shadow-(--af-raise-1)",
+				"transition-[background-color,border-color,box-shadow] duration-200 ease-brand",
+				"hover:border-[color:var(--af-border-strong)] hover:shadow-(--af-raise-2)",
+			)}
 		>
-			<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+			<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--af-blue-soft)] text-primary ring-1 ring-[color:var(--border)] ring-inset">
 				{Icon ? <Icon className="size-4" /> : <Layers className="size-4" />}
 			</span>
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center justify-between gap-2">
 					<span className="truncate font-medium text-foreground">{node.name}</span>
-					<ArrowRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+					<ArrowRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 group-hover:opacity-100" />
 				</div>
 				{node.description ? (
 					<p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{node.description}</p>

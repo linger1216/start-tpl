@@ -91,7 +91,7 @@ export const sysConfig = mysqlTable(
 		 * 存不下会被 MySQL 截断 → 界面上"保存了但没生效")。与 tRPC 入参的 zod 上限(4000)对齐。
 		 */
 		cfg_value: varchar("cfg_value", { length: 4000 }),
-		/** int / bool / string */
+		/** int / bool / string / json / array / map */
 		value_type: varchar("value_type", { length: 16 }).notNull().default("string"),
 		cfg_group: varchar("cfg_group", { length: 32 }),
 		/** 给人看的说明(界面直接展示,所以参数要自带文档) */
@@ -102,4 +102,40 @@ export const sysConfig = mysqlTable(
 		update_time: datetime("update_time", { mode: "date" }),
 	},
 	(table) => [index("idx_cfg_group").on(table.cfg_group)],
+);
+
+// ── 标签树表 ────────────────────────────────────────────
+
+/**
+ * 标签体系(`sys_tag`)—— 「系统设置 ▸ 标签管理」的**持久化来源**(自关联树)。
+ *
+ * 标签体系是树状的:顶层是「维度」(标签分类,如「场所风险等级」),其下挂若干「标签」(如「红色」)。
+ * 所以一棵 `sys_tag` 树就是「维度 → 标签」两级:
+ *  - `parent_id` 为 null 的行 = 维度(一级节点);
+ *  - `parent_id` 指向某维度的行 = 该维度下的标签(叶子)。
+ * 每个节点都有 `label`(展示名)/ `value`(取值,可空)/ `desc`(含义说明)。
+ *
+ * 与 `sys_menu` 同级:`drizzle.config.ts` 的 `schema` 不指向本文件,**不进迁移**(库里已存在,
+ * 进迁移会 1050)。本文件只定义「读写的形状」。首次可用 `pnpm db:seed:tags` 灌种子。
+ *
+ * 时间列由 MySQL 的 `DEFAULT CURRENT_TIMESTAMP` / `ON UPDATE` 提供(同 `sys_menu`)。
+ */
+export const sysTag = mysqlTable(
+	"sys_tag",
+	{
+		id: varchar("id", { length: 191 }).primaryKey(),
+		/** 父节点 id;null = 维度(一级节点) */
+		parent_id: varchar("parent_id", { length: 191 }),
+		/** 展示名(维度名 / 标签名) */
+		label: varchar("label", { length: 191 }).notNull(),
+		/** 取值(同名字可空,或存编码值);叶子标签通常用得到 */
+		value: varchar("value", { length: 512 }),
+		/** 含义说明(hover / 详情用) */
+		desc: varchar("desc", { length: 512 }),
+		/** 同级排序,越小越靠前 */
+		sort: int("sort").notNull().default(0),
+		create_time: datetime("create_time", { mode: "date", fsp: 3 }),
+		update_time: datetime("update_time", { mode: "date", fsp: 3 }),
+	},
+	(table) => [index("idx_sys_tag_parent").on(table.parent_id)],
 );

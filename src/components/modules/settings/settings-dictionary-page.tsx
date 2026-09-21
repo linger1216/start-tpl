@@ -27,7 +27,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 
 /**
- * 系统设置 ▸ 字段管理 —— `sys_dict`(全系统共用字典表)的维护页。
+ * 系统设置 ▸ 字典管理 —— `sys_dict`(全系统共用字典表)的维护页。
  *
  * 指标 + 搜索 + 表格 + 分页(与全站台账同一套骨架);每行是一个字典,
  * 「编辑字典项」在弹窗里改 `items = [{label, value}]`(顺序就是下拉顺序)。
@@ -115,7 +115,7 @@ export function SettingsDictionaryPage() {
 				value: rows.length,
 				description: "sys_dict 行数",
 				Icon: Library,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-hue-blue-soft text-hue-blue-fg",
 				unit: "个",
 			},
 			{
@@ -124,7 +124,7 @@ export function SettingsDictionaryPage() {
 				value: itemCount,
 				description: "所有字典的 label/value 合计",
 				Icon: ListChecks,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-hue-teal-soft text-hue-teal-fg",
 				unit: "项",
 			},
 			{
@@ -133,7 +133,7 @@ export function SettingsDictionaryPage() {
 				value: empty,
 				description: "还没有字典项",
 				Icon: Plus,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-hue-amber-soft text-hue-amber-fg",
 				unit: "个",
 			},
 			{
@@ -142,7 +142,7 @@ export function SettingsDictionaryPage() {
 				value: disabled,
 				description: "停用后不参与下拉",
 				Icon: ToggleLeft,
-				tone: "bg-secondary text-foreground",
+				tone: "bg-hue-rose-soft text-hue-rose-fg",
 				unit: "个",
 			},
 		];
@@ -191,8 +191,8 @@ export function SettingsDictionaryPage() {
 	return (
 		<div className="space-y-4">
 			<PageHeader
-				title="字段管理"
-				description="系统设置 ▸ 字段管理:维护全系统共用的字典表 `sys_dict` —— 一个字典一行,字典项是「显示名(label)+ 取值(value)」。档案类型(治理规则的「写入档案」)就存在这里,改完立即生效。"
+				title="字典管理"
+				description="系统设置 ▸ 字典管理:维护全系统共用的字典表 `sys_dict` —— 一个字典一行,字典项是「显示名(label)+ 取值(value)」。档案类型(治理规则的「写入档案」)就存在这里,改完立即生效。"
 				actions={
 					<>
 						<Badge variant="secondary" className="gap-1">

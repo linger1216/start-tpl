@@ -55,7 +55,7 @@ src/
 │   └── api/auth/$.ts             # Better Auth 请求入口 /api/auth/*
 ├── components/
 │   ├── ui/                       # 45 个叶子原语(shadcn 风格 + 自研组合控件)
-│   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页,以及 showcase.tsx(展示台骨架)
+│   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 / nav-tone.ts(色相映射),以及 showcase.tsx(展示台骨架)
 │   ├── modules/shared/           # 23 个领域无关展示件(表格套件 / 工具栏 / 图表 / 导入 / 树 / 标签…)
 │   ├── modules/showcase/         # 7 个展示页(纯文档,无业务)
 │   ├── modules/workbench/        # 工作台
@@ -124,16 +124,53 @@ src/
 
 **规范未覆盖、但功能上必需的色**(不是品牌色):`--warn-*` / `--danger-*`(规范没有警示色与危险色,但状态徽章、表单校验需要)、`--destructive`、`--chart-1..5`。改这些之前先读 `DESIGN.md` §10。
 
-`BadgeList` / `JsonCell` 的配色同理:默认 `color="brand"`,色板全部取自语义 token;`rainbow` / `ocean` / `forest` / `sunset` / `lavender` / `stone` 是**规范外的分类色板**(用途与 `chart-1..5` 相同 —— 一屏内要区分多个取值),按需 opt-in。另有 `color="stable"`:按值稳定哈希选色,同一份数据永远同一套颜色(也避免了 `Math.random()` 造成的 SSR 水合不一致)。
+### 点缀色谱 —— 6 个低饱和色相
+
+只有一条蓝强调色的后台在长列表里"能看但不鲜活"。所以补了一组点缀色,但**不是**加高饱和色:
+全部压在 oklch chroma 0.086–0.135(约 9%–13% 彩度,比 Material 鲜艳档低一半以上)。
+
+| 色相 | 用途 |
+| --- | --- |
+| `blue` | 主 CTA、工作台 |
+| `violet` | 组件展示 / 分类标签 |
+| `teal` | 框架能力 / 次级指标 |
+| `amber` | 系统设置 / 提醒类计数 |
+| `rose` | 停用类、需留意但不告警的计数 |
+| `emerald` | 在线状态、可用性 |
+
+**颜色在这里是导航线索,不是装饰**:一级模块各认一色 —— 侧边栏图标块 → 面包屑胶囊 →
+页头强调条 → 工作台入口卡,**四处同色**;同一张表里不同口径的指标卡用不同色相区分。
+
+每个色相五个角色,定义在 `src/styles.css` 的「点缀色谱」段:
+
+| 角色 | token | 用在哪 |
+| --- | --- | --- |
+| 实体 | `--hue-X` | 图标实心块 / 小圆点 / 标记条 / 进度条 |
+| 文字 | `--hue-X-fg` | 浅底上的文字与图标(保证 4.5:1) |
+| 软底 | `--hue-X-soft` | 选中行底色 / 胶囊 / 图标浅块 |
+| 描边 | `--hue-X-line` | 细边框 / 分隔 |
+| 反白前景 | `--hue-X-on` | 压在实体块上的文字(深色模式自动翻转) |
+
+> **色相 → 类名的映射只有一份**:`src/components/layout/nav-tone.ts`。
+> 加色相要改四处(`styles.css` 的 `:root` / `.dark` / `@theme inline` + `NAV_TONES` + `nav-tone.ts`)。
+> **Tailwind 只扫描字面量类名**,不能写 `bg-hue-${tone}-soft` —— 所有按色相取类名的地方必须查那张表。
+
+`BadgeList` / `JsonCell` 的配色同理:默认 `color="brand"`,色板全部取自语义 token;
+`rainbow` / `ocean` / `forest` / `sunset` / `lavender` / `stone` 是**分类色板**,
+定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES` —— 已换成上面的点缀色 token(原先用 Tailwind 默认的
+`*-100 / *-700`,彩度 25%–40%,铺一屏标签会显得"亮、吵")。**改那一处 = 全站标签 / 筛选 / 徽章配色一次性统一。**
+另有 `color="stable"`:按值稳定哈希选色,同一份数据永远同一套颜色(也避免了 `Math.random()` 造成的 SSR 水合不一致)。
 
 几处实现要点:
 
 - **字体**(§3):`--font-sans` / `--font-heading` 在 `styles.css` 的 `@theme inline` 里,加载不到时落到系统栈 —— **fallback 必须保留**。换字体只改那两行。
 - **字距**(§4):`body` 正向 `0.08px`;标题负向;按钮与 label `0.02em`;全大写 `0.08em`。写在 `@layer base`,组件里的 `tracking-*` 会覆盖它。
 - **阴影**(§6):`--shadow-card` / `--shadow-soft` / `--shadow-glow`。不要写厚重纯黑阴影。
-- **动效**(§7):统一 `--ease-brand` + `--duration-brand`(160ms);`prefers-reduced-motion` 下全部复位。
+  抬升用 **`--af-raise-1|2|3`**(静置 / 悬停 / 浮起),`shadow-(--af-raise-1)`;hover 只换档位 + 边框加深,**不做位移**。
+- **动效**(§7):统一 `--ease-brand`,时长三档 `--t-fast|base|slow`(120 / 180 / 260ms);`prefers-reduced-motion` 下全部复位。
+  **新增动效前先查 `DESIGN.md` §7.1 的「现成动效原语」表** —— 页面进场 / 交错入场 / 脉冲 / 呼吸 / 图标换位 / 折叠展开都已经有了,不要每次现搓 keyframes。
 - **圆角**(§5):**刻意不覆盖 Tailwind 的 `--radius-*`** —— 它的默认阶恰好就是规范要的档位(`rounded-lg` 8px / `rounded-xl` 12px / `rounded-2xl` 16px / `rounded-3xl` 24px)。覆盖会让全部组件圆角一起漂移。
-- **深色模式**:`DESIGN.md` 只规定浅色。`.dark` 是用品牌色经 `color-mix` 推导出的对偶值,不新增色字面量。
+- **深色模式**:`DESIGN.md` 只规定浅色。`.dark` 是用品牌色经 `color-mix` 推导出的对偶值,不新增色字面量。加新 token 时**记得同时补 `.dark`**(点缀色的实体色在深色下要提亮,否则深底上看不见)。
 
 ---
 
@@ -462,6 +499,26 @@ pnpm check
 
 审计后基线:`pnpm typecheck` 0 error · `pnpm check` 0 error / 4 warning · `vite build` 通过 · 产物内容校验 0 问题。
 
+### 第三轮:视觉精修(2026-09)
+
+在"能跑、干净"之后做的一轮观感与体验升级。三件事:**侧边栏重做**、**加点缀色**、**逐组件微动效**。
+
+核心判断是「**颜色要用得有含义**」—— 与其多铺几种色,不如让每色承担一个导航职责:
+
+| 改了什么 | 说明 |
+| --- | --- |
+| **点缀色谱** | 新增 6 个低饱和色相(oklch chroma 9%–13%,比 Material 鲜艳档低一半),每个五角色(实体 / 文字 / 软底 / 描边 / 反白前景),浅深两套。规格见 `DESIGN.md` §2.1 |
+| **配色编码** | 一级模块各认一色 —— 侧边栏图标块 → 面包屑胶囊 → 页头强调条 → 工作台入口卡**四处同色**;指标卡按口径分色;告警语义仍只走 success/warn/danger |
+| **侧边栏重做** | 品牌渐变标识 + 脉冲状态点;分组行常驻色相图标块;**含当前页**才上色(不是"展开了"就上色,否则三行都像选中);叶子 hover 浮现色块;选中 = 色底 + 色字 + 实心图标块 + 行内 3px 圆角标记条(从中间长出来);分组展开用 `grid-template-rows` 平滑过渡;chevron 只旋转不换图标;**折叠态改成 60px 迷你图标栏**(不再是"整条消失") |
+| **全站分类色统一** | `BADGE_THEMES` 从 Tailwind 默认 `*-100/*-700`(彩度 25%–40%,偏亮)换成点缀色 token —— 标签列 / 标签输入 / 快速筛选 chip / 已选筛选 pill 一次性统一 |
+| **动效层** | 抽出一批可复用原语:页面进场 / 路由进度条 / 交错入场 / 滚动入场 / 脉冲 / 呼吸 / 图标换位 / 折叠展开,全部已处理 `prefers-reduced-motion`。清单见 `DESIGN.md` §7.1 |
+| **组件精修** | Card 悬停改**分层阴影抬升**(不再把边框刷蓝 + 3px 蓝环 —— 每张卡都闪是噪音)、新增 `tone` 强调线与 `interactive`;指标卡加内描边与交错入场;表格表头改渐隐色温 + 补选中态;页签计数胶囊与下划线走 token;页头加跟随模块色相的 3px 强调条与渐隐分隔线 |
+
+顺手修掉三个**真缺陷**:`.route-progress-bar` 与 `.reveal` 两个类**只有引用没有定义**(路由进度条与滚动入场一直是隐形的,已补实现);
+`DESIGN.md` §5.5 把页签写成"卡片式"而代码一直是**下划线**式(已按代码重写)。
+
+视觉升级后基线:`pnpm typecheck` 0 error · `pnpm check` **0 error / 4 warning** · `vite build` 通过 · 产物内容校验 0 问题。
+
 ---
 
 ## 延伸阅读
@@ -471,7 +528,7 @@ pnpm check
 - `doc/前端结构与组件约定.md` —— **目录与文件角色约定、契约中枢形状、公共复用件与封装边界(必读)**
 - `doc/后端接口约定.md` —— tRPC procedure 命名与出入参约定
 - `AGENTS.md` —— 面向 AI 编码代理的项目约定与踩坑清单
-- `DESIGN.md` —— 视觉规范(7 个品牌色 + 间距 / 圆角 / 阴影 / 动效)
+- `DESIGN.md` —— 视觉规范(品牌 7 色 + 点缀 6 色相 + 间距 / 圆角 / 阴影 / 动效原语清单)
 - `doc/archive/` —— 原业务系统的设计文档(表结构设计、需求清单、测试方案…),**仅供追溯,与新项目无关**
 
 外部资料:

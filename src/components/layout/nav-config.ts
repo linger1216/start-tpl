@@ -41,6 +41,7 @@ import {
 	ListChecks,
 	Menu as MenuIcon,
 	MessageSquare,
+	Palette,
 	RefreshCw,
 	Settings,
 	ShieldAlert,
@@ -82,6 +83,7 @@ export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	tags: Tags,
 	menu: MenuIcon,
 	"sliders-horizontal": SlidersHorizontal,
+	palette: Palette,
 	// 兜底
 	"file-text": FileText,
 };
@@ -171,15 +173,16 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"真实业务示例:用户 / 用户组 / 角色 / 标签 / 菜单 / 字段 / 参数七个模块。演示「列表 + 表单 + 详情 + 授权 + Excel 导入导出 + 树形排序」的完整骨架,以及 mock 数据与数据库两种数据来源。",
+			"真实业务示例:用户 / 用户组 / 角色 / 标签 / 菜单 / 字典 / 参数七个模块。演示「列表 + 表单 + 详情 + 授权 + Excel 导入导出 + 树形排序」的完整骨架,以及 mock 数据与数据库两种数据来源。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
 			{ name: "用户组管理", path: "/settings/groups", icon: "contact" },
 			{ name: "角色管理", path: "/settings/roles", icon: "key-round" },
 			{ name: "标签管理", path: "/settings/tags", icon: "tags" },
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },
-			{ name: "字段管理", path: "/settings/dictionary", icon: "library" },
+			{ name: "字典管理", path: "/settings/dictionary", icon: "library" },
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
+			{ name: "界面偏好", path: "/settings/appearance", icon: "palette" },
 		],
 	},
 ];

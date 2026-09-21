@@ -24,9 +24,23 @@ import { cn } from "#/lib/utils";
  *  - string[]          → 自定义色板,按 i % len 取色,每项 Tailwind 类(如 "bg-primary/10 text-primary")
  */
 
-/** 主题色板:每项 = 底色 + 文字色 */
+/**
+ * 主题色板:每项 = 底色 + 文字色。
+ *
+ * 配色口径(2026-09 重调):
+ *  之前这几个主题直接用了 Tailwind 的 `*-100 / *-700`(如 `bg-violet-100 text-violet-700`),
+ *  那些是**高饱和**的默认调色板(约 25%–40% 彩度),铺一屏标签会显得"亮、吵"。
+ *  现在全部改走 `styles.css` 的「点缀色谱」—— 6 个低饱和色相(9%–13% 彩度),
+ *  每个色相的软底/文字态由 token 保证浅底深字可读性。
+ *
+ *  这套替换是**全局生效**的:表格标签列、可编辑标签输入、快速筛选 chip、已选筛选 pill
+ *  都读这张表,所以改这里 = 全站分类色一次性统一。
+ *
+ *  各主题的区别在**色相轮转顺序**(每页从不同的色相起手),而不是"用不同的色板" ——
+ *  色相就那 6 个,靠顺序 + 起手色制造区分度,同时保证同一屏里不会出现撞色。
+ */
 export const BADGE_THEMES = {
-	/** 默认:全部取自语义 token,天然符合 DESIGN.md 的 7 色规范 */
+	/** 默认:全部取自语义 token,天然符合 DESIGN.md 的配色规范 */
 	brand: [
 		"bg-primary/10 text-primary",
 		"bg-success-soft text-success-fg",
@@ -34,47 +48,50 @@ export const BADGE_THEMES = {
 		"bg-secondary text-secondary-foreground",
 	],
 	rainbow: [
-		"bg-violet-100 text-violet-700",
-		"bg-amber-100 text-amber-700",
-		"bg-emerald-100 text-emerald-700",
-		"bg-sky-100 text-sky-700",
-		"bg-indigo-100 text-indigo-700",
-		"bg-pink-100 text-pink-700",
+		"bg-hue-violet-soft text-hue-violet-fg",
+		"bg-hue-amber-soft text-hue-amber-fg",
+		"bg-hue-emerald-soft text-hue-emerald-fg",
+		"bg-hue-blue-soft text-hue-blue-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
+		"bg-hue-teal-soft text-hue-teal-fg",
 	],
 	ocean: [
-		"bg-sky-100 text-sky-700",
-		"bg-cyan-100 text-cyan-700",
-		"bg-teal-100 text-teal-700",
-		"bg-blue-100 text-blue-700",
-		"bg-indigo-100 text-indigo-700",
+		"bg-hue-blue-soft text-hue-blue-fg",
+		"bg-hue-teal-soft text-hue-teal-fg",
+		"bg-hue-emerald-soft text-hue-emerald-fg",
+		"bg-hue-violet-soft text-hue-violet-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
+		"bg-hue-amber-soft text-hue-amber-fg",
 	],
 	forest: [
-		"bg-emerald-100 text-emerald-700",
-		"bg-lime-100 text-lime-700",
-		"bg-teal-100 text-teal-700",
-		"bg-green-100 text-green-700",
-		"bg-amber-100 text-amber-700",
+		"bg-hue-emerald-soft text-hue-emerald-fg",
+		"bg-hue-teal-soft text-hue-teal-fg",
+		"bg-hue-amber-soft text-hue-amber-fg",
+		"bg-hue-blue-soft text-hue-blue-fg",
+		"bg-hue-violet-soft text-hue-violet-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
 	],
 	sunset: [
-		"bg-orange-100 text-orange-700",
-		"bg-amber-100 text-amber-700",
-		"bg-yellow-100 text-yellow-700",
-		"bg-pink-100 text-pink-700",
-		"bg-fuchsia-100 text-fuchsia-700",
+		"bg-hue-amber-soft text-hue-amber-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
+		"bg-hue-violet-soft text-hue-violet-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
+		"bg-hue-teal-soft text-hue-teal-fg",
+		"bg-hue-emerald-soft text-hue-emerald-fg",
 	],
 	lavender: [
-		"bg-violet-100 text-violet-700",
-		"bg-purple-100 text-purple-700",
-		"bg-fuchsia-100 text-fuchsia-700",
-		"bg-pink-100 text-pink-700",
-		"bg-indigo-100 text-indigo-700",
+		"bg-hue-violet-soft text-hue-violet-fg",
+		"bg-hue-blue-soft text-hue-blue-fg",
+		"bg-hue-rose-soft text-hue-rose-fg",
+		"bg-hue-teal-soft text-hue-teal-fg",
+		"bg-hue-amber-soft text-hue-amber-fg",
+		"bg-hue-emerald-soft text-hue-emerald-fg",
 	],
 	stone: [
-		"bg-slate-100 text-slate-700",
-		"bg-gray-100 text-gray-700",
-		"bg-zinc-100 text-zinc-700",
-		"bg-neutral-100 text-neutral-700",
-		"bg-stone-100 text-stone-700",
+		"bg-secondary text-secondary-foreground",
+		"bg-muted text-muted-foreground",
+		"bg-foreground/8 text-foreground",
+		"bg-foreground/5 text-muted-foreground",
 	],
 } as const satisfies Record<string, readonly string[]>;
 

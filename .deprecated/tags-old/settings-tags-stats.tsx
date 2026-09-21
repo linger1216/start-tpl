@@ -28,7 +28,7 @@ export function SettingsTagsStats({
 			value: dimensionStats.标签维度,
 			description: "按数据对象分组",
 			Icon: Tags,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-violet-soft text-hue-violet-fg",
 		},
 		{
 			key: "tags",
@@ -37,7 +37,7 @@ export function SettingsTagsStats({
 			value: stats.标签总数,
 			description: "标签明细全量",
 			Icon: Tag,
-			tone: "bg-warn-soft text-warn-fg",
+			tone: "bg-hue-amber-soft text-hue-amber-fg",
 		},
 		{
 			key: "meaning",
@@ -55,7 +55,7 @@ export function SettingsTagsStats({
 			value: stats.覆盖维度数,
 			description: "至少有一条标签",
 			Icon: Layers,
-			tone: "bg-secondary text-secondary-foreground",
+			tone: "bg-hue-teal-soft text-hue-teal-fg",
 		},
 		{
 			key: "noted",
@@ -64,7 +64,7 @@ export function SettingsTagsStats({
 			value: dimensionStats.有备注维度,
 			description: "备注里记录了补齐口径",
 			Icon: Tags,
-			tone: "bg-secondary text-secondary-foreground",
+			tone: "bg-hue-rose-soft text-hue-rose-fg",
 		},
 	];
 

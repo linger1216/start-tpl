@@ -22,7 +22,7 @@ export function SettingsRolesStats({ rows }: { rows: readonly RoleRow[] }) {
 			value: stats.角色总数,
 			description: "全部角色",
 			Icon: Layers,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-blue-soft text-hue-blue-fg",
 		},
 		{
 			key: "enabled",
@@ -40,7 +40,7 @@ export function SettingsRolesStats({ rows }: { rows: readonly RoleRow[] }) {
 			value: stats.权限点总量,
 			description: `覆盖 ${stats.覆盖模块数} 个一级模块`,
 			Icon: Database,
-			tone: "bg-primary/10 text-primary",
+			tone: "bg-hue-violet-soft text-hue-violet-fg",
 		},
 		{
 			key: "users",
@@ -49,7 +49,7 @@ export function SettingsRolesStats({ rows }: { rows: readonly RoleRow[] }) {
 			value: stats.关联用户合计,
 			description: "多角色用户在各角色下各计一次",
 			Icon: Users,
-			tone: "bg-secondary text-secondary-foreground",
+			tone: "bg-hue-teal-soft text-hue-teal-fg",
 		},
 		{
 			key: "average",
@@ -58,7 +58,7 @@ export function SettingsRolesStats({ rows }: { rows: readonly RoleRow[] }) {
 			value: stats.平均权限点数,
 			description: "按角色数取均值",
 			Icon: BarChart3,
-			tone: "bg-warn-soft text-warn-fg",
+			tone: "bg-hue-amber-soft text-hue-amber-fg",
 		},
 	];
 
