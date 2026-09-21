@@ -394,44 +394,56 @@ body,
   min-height: 100%;
 }
 
-body {
-  margin: 0;
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  background-color: var(--background);
-  /* DESIGN.md §11:正文正向字距 */
-  letter-spacing: 0.08px;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/**
+ * 元素级默认值 —— **必须放在 `@layer base` 里**。
+ *
+ * ⚠️ 这是踩过的坑:CSS 的层叠层规则是「**未分层**的样式压过**任何**分层样式」,
+ * 所以一段没进 @layer 的 `a { color: var(--primary) }` 会**盖掉 `text-foreground` 这类 utility**
+ * (utility 在 `@layer utilities`,无论选择器多具体都赢不了未分层的规则)。
+ * 症状:侧边栏/面包屑里每一个 `<a>` 都变成品牌蓝,`text-foreground` 形同虚设 —— 实测踩到。
+ * 结论:写裸元素选择器就进 base 层;只给某个组件写的类(如 `.prose pre`)另说。
+ */
+@layer base {
+  body {
+    margin: 0;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    /* DESIGN.md §11:正文正向字距 */
+    letter-spacing: 0.08px;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-a {
-  color: var(--primary);
-  text-decoration-color: color-mix(in oklab, var(--primary) 40%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
+  /* 链接默认蓝 + 下划线;要改这一处颜色请在调用点用 utility(text-foreground / text-primary …) */
+  a {
+    color: var(--primary);
+    text-decoration-color: color-mix(in oklab, var(--primary) 40%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
 
-a:hover {
-  color: color-mix(in oklab, var(--primary) 78%, black);
-}
+  a:hover {
+    color: color-mix(in oklab, var(--primary) 78%, black);
+  }
 
-code {
-  font-size: 0.9em;
-  border: 1px solid var(--border);
-  background: var(--muted);
-  border-radius: 7px;
-  padding: 2px 7px;
-}
+  code {
+    font-size: 0.9em;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    border-radius: 7px;
+    padding: 2px 7px;
+  }
 
-pre code {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
+  pre code {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: inherit;
+  }
 }
 
 .prose pre {
@@ -757,10 +769,7 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   html {
     scrollbar-gutter: stable;
   }
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-  }
+  /* body 的 color / background-color 见文件顶部那一块元素级默认值(同样在 base 层,不在这里重复) */
   /* DESIGN.md §4 字距规则(组件里的 tracking-* 工具类优先级更高,会覆盖这里) */
   h1 {
     letter-spacing: -0.02em;

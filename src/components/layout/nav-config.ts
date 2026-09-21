@@ -5,7 +5,7 @@
  * 侧边栏 / 面包屑 / 模块概览都读它);本文件负责三件事:
  *  1. **兜底**:`sys_menu` 表为空(或还没返回)时,渲染这棵树 —— 配置表被清空不会白屏;
  *  2. **权限点派生**:`navRequiredPermission` / `menuPermissionCode` / `modulePermissionCode`
- *     从这棵树派生(授权页的权限点目录见 `mocks/settings.ts`,同样派生自这里);
+ *     从这棵树派生(权限点目录曾经在 `mocks/settings.ts`,那份 mock 已随用户/角色页一起删除);
  *  3. **种子来源**:`pnpm db:seed:menus` 把这里逐节点写进 `sys_menu` 表(只补不覆盖)。
  *
  * 侧边栏(sidebar.tsx)、面包屑(topbar.tsx)与模块概览页(module-overview.tsx)
@@ -144,19 +144,20 @@ export const NAV_NODES: NavNode[] = [
 		],
 	},
 	{
-		// ★ 本模板唯一保留的真实业务模块 —— 派生新项目时从这里开始改
+		// ★ 本模板保留的真实业务模块 —— 派生新项目时从这里开始改
 		name: "系统设置",
 		path: "/settings",
 		icon: "settings",
 		description:
-			"真实业务示例:用户(完整 CRUD + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数五个模块。演示「列表 + 表单 + 详情 + 授权 + Excel 导入导出 + 树形排序」的骨架,以及 mock 数据与数据库两种数据来源。",
+			"真实业务示例:标签(树)、菜单(树 + 驱动侧边栏)、字典、参数四个模块——数据都走真实接口 / 数据库,演示「列表 + 表单 + 详情 + 树形排序」的骨架。用户 / 用户组 / 角色三页**尚未接入数据源**,是「待实现」占位页(原先的 mock 已删除)。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
+			{ name: "用户组管理", path: "/settings/groups", icon: "contact" },
+			{ name: "角色管理", path: "/settings/roles", icon: "key-round" },
 			{ name: "标签管理", path: "/settings/tags", icon: "tags" },
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },
 			{ name: "字典管理", path: "/settings/dictionary", icon: "library" },
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
-			{ name: "界面偏好", path: "/settings/appearance", icon: "palette" },
 		],
 	},
 ];
@@ -233,9 +234,9 @@ export function collectNavGroupIds(nodes: NavNode[] = NAV_NODES): string[] {
 //   ② 可见性:`filterNavByPermission(当前菜单树, 有效权限码集合)` —— 未登录 / 未接权限服务时传
 //      `undefined`,表示**不过滤**(默认全可见),所以本文件在权限模块落地前不影响现有渲染。
 //
-// **权限点目录**(「某个角色能勾哪些项」)不在本文件,在 `mocks/settings.ts` 的
-// `PERMISSION_TREE` / `PERMISSION_POINTS` —— 那边把 `NAV_NODES` 转成"带中文目录层级的树",
-// 形状是授权界面要的(本文件的 `NavNode` 是渲染要的),两者都从同一棵 `NAV_NODES` 派生,不会漂移。
+// **权限点目录**(「某个角色能勾哪些项」)曾经在 `mocks/settings.ts` 的
+// `PERMISSION_TREE` / `PERMISSION_POINTS` —— 那份 mock 已随用户 / 角色页一起删除,现在就剩这里
+// 这两个纯函数(编码口径)。将来权限服务上线时,目录应当由**服务端**返回,不要再在前端摆一份。
 
 /** 页面路径 → 菜单权限点编码(`/settings/users` → `settings:users`);`/`(工作台)得空串 */
 export function menuPermissionCode(path: string): string {

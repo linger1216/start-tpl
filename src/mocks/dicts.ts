@@ -34,7 +34,7 @@ export type DeptNode = {
 /** 顶级单位(整棵树的根)名称 —— 派生新项目时改成自己的 */
 export const ROOT_DEPT_NAME = "示例单位";
 
-/** 部门名称(与 `#/mocks/settings` 的「所属部门 / 条线」同口径;那边直接引用本列表) */
+/** 部门名称(全站唯一的部门/条线口径;原先 `mocks/settings.ts` 直接引用本列表,那份 mock 已删除) */
 export const DEPT_NAMES: readonly string[] = [
 	"综合办公室",
 	"业务一处",

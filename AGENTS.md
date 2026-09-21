@@ -22,7 +22,7 @@ Before editing files for a substantial task:
 | 工作台 | `routes/(main)/index.tsx` + `components/modules/workbench/` | 模板入口页 |
 | 组件展示 | `routes/(main)/showcase/` + `components/modules/showcase/` + `components/layout/showcase.tsx` | ★ 7 页组件活文档(纯展示,无业务)。**改组件后这里就是验收现场** |
 | 框架能力 | `routes/(main)/demo/` | 9 个可运行样例:tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry |
-| 系统设置 | `routes/(main)/settings/` + `components/modules/settings/` | ★ 唯一保留的真实业务,7 页覆盖完整 CRUD 骨架 |
+| 系统设置 | `routes/(main)/settings/` + `components/modules/settings/` | ★ 唯一保留的真实业务:**7 页 = 4 页真实数据 + 3 页「待实现」占位** |
 
 新增可复用组件时,**顺手在对应的 `/showcase/*` 页加一个 `ShowcaseItem`** —— 这一层是模板的核心资产,没有展示就等于没有。
 
@@ -117,7 +117,7 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 | `src/routes/` | 文件路由。文件名即 URL;`(main)` 是无路径布局组 |
 | `src/routes/(main)/showcase/` | **组件展示台**:7 页,每页对应组件分层的一层。纯展示、无业务,派生新项目时可整目录删 |
 | `src/routes/(main)/demo/` | 框架能力示例页(表格 / 表单 / Query / tRPC / store / DB / Auth / Sentry),用模板自身组件写成,可整目录删除。放在 `(main)` 里是为了复用后台外壳,URL 仍是 `/demo/*` |
-| `src/routes/(main)/settings/` | 唯一保留的真实业务模块,7 个页面。派生新项目时**从这里开始改**,不要删 |
+| `src/routes/(main)/settings/` | 唯一保留的真实业务模块,**7 个页面 = 4 页真实数据(标签 / 菜单 / 字典 / 参数)+ 3 页「待实现」占位(用户 / 用户组 / 角色)**。派生新项目时**从这里开始改**,不要删 |
 | `src/components/ui/` | 叶子原语,45 个(vendored shadcn + 自研组合控件)。**例外:`tabs.tsx` 已被项目改写为下划线页签** —— 全项目唯一的页签实现(计数走 `count` 属性),规格见 `DESIGN.md` §5.5(该节此前误写成"卡片式页签",已按代码修正);`pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在 `/showcase/ui` 的「其他可用原语」里点名,否则等于不存在 |
 | `src/components/layout/` | 后台外壳:侧边栏(含 60px 迷你图标栏折叠态)、顶栏、面包屑、页头、空态、占位页、导航配置,以及 `nav-tone.ts`(**色相 → 类名的唯一映射表**,侧边栏 / 顶栏 / 工作台共用)与 `showcase.tsx`(展示台骨架:`ShowcasePage` / `ShowcaseSection` / `ShowcaseItem` / `PropTable` / `CodeBlock`) |
 | `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件,23 个:表格套件(`table-kit` 的 `DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell`)、只读子表(`readonly-table`)、详情页版式(`detail-profile`)、台账工具栏(`ledger-toolbar`)、快速筛选条(`filter-chips`)、列选择器与列可见性(`column-visibility-menu` / `use-column-visibility`)、分页器、指标卡与语义层(`stat-cards` / `stat-kit`)、标签徽章与标签输入(`tag-badges`)、迷你图表(`mini-chart`)、Excel 导入弹窗与导入导出流程(`excel-import` / `ledger-excel`)、导入解析选项(`sheet-parse-options`)、操作结果反馈(`op-result`)、可排序树(`sortable-tree`)、权限树与权限选择区(`permission-tree` 的 `PermissionTree` / **`PermissionPicker`**)、表单套件(`form-kit`)、图标选择器(`icon-picker`)、编目信息条(`catalog-banner`) |
@@ -146,6 +146,9 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 | DB 错误归一 | `lib/db-errors.ts` | MySQL 唯一键 / 外键错误的可读化 |
 | 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(「字段管理」页负责维护它) |
 | 列可见性持久化 | `shared/use-column-visibility.ts` | 存 `sys_config`(需要数据库) |
+| 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | 原先三个授权弹窗(用户 / 角色 / 用户组)共用;那三页改成占位页后**暂无调用方** —— 重建授权界面时直接用它,别另写一份 |
+| mock 数据原语 | `mocks/shared.ts` | `pick` / `idOf` / `phone` / `personName` / 固定基准日等**确定性**构造器(禁 `Math.random()`,否则 SSR 与水合不一致) |
+| 部门树示例 | `mocks/dicts.ts` | 示例单位 / 部门树的固定取值 + `deptName` / `deptSelectOptions` 等派生函数。原先只服务已删除的 `mocks/settings.ts`,做组织架构类页面时可直接复用 |
 | 5 个 ui 原语 | `ui/{popover,command,context-menu,menubar,sheet}.tsx` | 已在 `/showcase/ui` 的「其他可用原语」里点名 |
 
 **新增可复用件时:要么给它一个真实调用方,要么在 `/showcase/*` 展示,要么登记进上表** —— 三者都不做就会被下一轮清理当成死代码删掉。
@@ -222,8 +225,8 @@ pnpm dlx shadcn@latest add <component-name>
 - **`src/components/ui/*.tsx` 里残留的 `"use client"` 指令已清理**。那是 Next.js 专用指令,在 TanStack Start 里是无意义的噪音,新加组件时如果 shadcn 模板带进来,删掉即可。
 - **`components/ui/` 里 vendored 组件的 lint warning 不要顺手清理**(见上文"新增 shadcn 组件")。当前基线 4 个 warning 里有 3 个出自 `badge-list.tsx`。
 - **时间格式化只走 `lib/time.ts`**。`lib/format.ts` 曾与它各有一套日期函数(`formatDateTime` vs `formatLocalDateTime`),同一个值在两处可能给出不同结果 —— 已合并,日期函数只留在 `time.ts`。`utils.ts` / `format.ts` 里都不要再加日期函数。
-- **权限点选择区只有 `PermissionPicker` 一个实现**(`shared/permission-tree.tsx`)。三个授权弹窗(用户 / 角色 / 用户组)共用它,不要再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块。
-- **`mocks/*` 是演示数据,不是业务真相**。`mocks/settings.ts` 的角色 / 用户组种子里的 `选` 匹配式**必须与 `NAV_NODES` 对齐** —— 改菜单后要回来核对,否则角色会匹配到 0 个权限点(页面显示 0 项权限,且不报错)。唯一例外是 `mocks/tags.ts` 的 17 个标签维度:那是「标签管理」页的业务示例数据,按需求保留。
+- **权限点选择区只有 `PermissionPicker` 一个实现**(`shared/permission-tree.tsx`)。原先三个授权弹窗(用户 / 角色 / 用户组)共用它;那三页改成占位页后它**暂时没有调用方**,已登记进上面「备选件」表 —— 重建授权界面时直接用,不要再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块。
+- **`mocks/*` 是演示数据,不是业务真相**。当前只剩 `mocks/tags.ts`(「标签管理」页的业务示例数据,按需求保留)与两个无调用方的备选件(`mocks/shared.ts` 的确定性构造器、`mocks/dicts.ts` 的部门树)。原先撑起用户 / 用户组 / 角色三页的 `mocks/settings.ts`(791 行种子 + 权限点目录)**已整体删除**,那三页现在是 `StubPage` 占位、故意不摆假数据 —— 别再往回加。
 
 ## 改动完成后自检
 

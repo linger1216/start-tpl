@@ -13,27 +13,6 @@ export const PLACEHOLDER_EMPTY = "-";
 /** 分页每页可选条数 */
 export const PAGE_SIZES = [10, 20, 50, 100] as const;
 
-// ─── 业务层:通用状态 ───────────────────────────────────
-
-export const STATUS = {
-	DISABLED: 0,
-	ENABLED: 1,
-} as const;
-
-export type StatusValue = (typeof STATUS)[keyof typeof STATUS];
-
-/** 状态数字 → 中文标签 */
-export const STATUS_LABEL: Record<StatusValue, string> = {
-	[STATUS.DISABLED]: "禁用",
-	[STATUS.ENABLED]: "启用",
-};
-
-/** 状态 → badge 配色类(浅底深字) */
-export const STATUS_BADGE_CLASS: Record<StatusValue, string> = {
-	[STATUS.DISABLED]: "bg-danger-soft text-danger-fg",
-	[STATUS.ENABLED]: "bg-success-soft text-success-fg",
-};
-
 // ─── 主题 ──────────────────────────────────────────────
 
 /**
@@ -42,16 +21,11 @@ export const STATUS_BADGE_CLASS: Record<StatusValue, string> = {
  * 顶栏的切换按钮与 `src/routes/__root.tsx` 里的主题引导脚本**必须共用同一个值** ——
  * 否则首屏会先按系统偏好渲染、再被切换按钮纠正,肉眼能看到闪一下。
  *
+ * **为什么只有主题落在 localStorage**:它必须在首屏绘制之前同步读到,而引导脚本是内联脚本,
+ * 等不了任何请求 —— 只有本地存储做得到。其余界面偏好一律进 `sys_config` 的 `ui.*`
+ * (键与解析就近放在各自域里,如 `lib/sidebar-mode.ts`),**不要往这里再加键**。
+ *
  * 派生新项目时建议改掉这个名字:多个项目都用 localhost:3000 开发时同源共用
  * localStorage,主题会互相串。
  */
 export const THEME_STORAGE_KEY = "app-theme";
-
-/**
- * 侧边栏「折叠后长什么样」写入 localStorage 的键。
- *
- * 与主题一样是**本机界面偏好**(不是业务数据),所以走 localStorage 而不是入库;
- * 读取逻辑在 `lib/ui-prefs.ts`,设置入口在「系统设置 ▸ 界面偏好」。
- * 同样带项目前缀,理由见 `THEME_STORAGE_KEY`。
- */
-export const SIDEBAR_MODE_STORAGE_KEY = "app-sidebar-mode";

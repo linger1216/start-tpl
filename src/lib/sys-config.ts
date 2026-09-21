@@ -1,25 +1,23 @@
 /**
- * 系统参数(`sys_config`)—— 运维口径不写死在代码里。
+ * 系统参数(`sys_config`)—— 运维口径与界面偏好都不写死在代码里。
  *
- * 为什么单独一层:保留天数、同步开关这类东西**改一次不该发一次版**;
+ * 为什么单独一层:保留天数、同步开关、侧边栏收起形态这类东西**改一次不该发一次版**;
  * 而任务/执行器又要频繁读它 —— 所以这里带一个 30 秒内存缓存,避免每批执行都查库。
+ *
+ * 界面偏好为什么也在这里(而不是 localStorage):它是**系统设置级**偏好 ——
+ * 换机器 / 换浏览器都该一致,而且要在「参数管理」页改得到。
+ * 唯一的例外是主题:它必须在首屏脚本里同步读到,只有 localStorage 做得到(见 constants.ts)。
+ *
+ * ⚠️ **本文件 import 了 `db`,只能在服务端用**(tRPC procedure / 脚本)。
+ * 客户端组件需要类型名或校验时,从 `lib/config-spec.ts` 取 —— 那条界线是踩过坑的:
+ * 从客户端 import 本文件会把 mysql2 打进浏览器包,参数管理页直接白屏。
  */
 import { eq } from "drizzle-orm";
 
 import { db } from "#/db";
 import { sysConfig } from "#/db/data-base-schema";
-
-export type ConfigType = "string" | "int" | "bool" | "json" | "array" | "map";
-
-/** 类型 → 中文名 + 录入提示(参数页 / 表单共用,不要在页面里另写) */
-export const CONFIG_TYPE_META: Record<ConfigType, { label: string; hint: string }> = {
-	string: { label: "文本", hint: "任意文本" },
-	int: { label: "整数", hint: "整数,不能为负" },
-	bool: { label: "开关", hint: "只能填 true / false" },
-	json: { label: "JSON", hint: "合法的 JSON(对象或数组均可)" },
-	array: { label: "数组", hint: 'JSON 数组,如 ["a","b"]' },
-	map: { label: "映射", hint: 'JSON 对象,如 {"k":"v"}' },
-};
+import type { ConfigType } from "./config-spec";
+import { SIDEBAR_COLLAPSE_MODE_DEFAULT, SIDEBAR_MODE_CONFIG_KEY } from "./sidebar-mode";
 
 /** 代码内置的默认参数(库里没有时用这些,并作为"参数管理"页的初始清单) */
 export const CONFIG_DEFAULTS: Record<string, { value: string; type: ConfigType; group: string; remark: string }> = {
@@ -71,6 +69,14 @@ export const CONFIG_DEFAULTS: Record<string, { value: string; type: ConfigType; 
 		group: "对接同步",
 		remark: "增量窗口向前重叠多少秒 —— 防止边界上的数据被漏掉",
 	},
+	// ── 界面偏好 ──────────────────────────────────────────────
+	// 取值域 / 默认值 / 容错解析都在 lib/sidebar-mode.ts,这里只登记参数本身。
+	[SIDEBAR_MODE_CONFIG_KEY]: {
+		value: SIDEBAR_COLLAPSE_MODE_DEFAULT,
+		type: "string",
+		group: "界面偏好",
+		remark: "侧边栏收起后的样子:rail = 收成 60px 图标栏(默认),hidden = 整条隐藏、内容区铺满;填错按 rail 处理",
+	},
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -101,37 +107,6 @@ export async function getConfigBool(key: string, fallback: boolean): Promise<boo
 	const raw = (await getConfigMap()).get(key) ?? CONFIG_DEFAULTS[key]?.value;
 	if (raw === undefined) return fallback;
 	return raw === "true" || raw === "1";
-}
-
-/** 参数值长度上限 —— 与 `sys_config.cfg_value` 的列宽、tRPC 入参的 zod 上限三者必须一致 */
-export const CONFIG_VALUE_MAX = 4000;
-
-/** 参数值按类型校验:参数页保存前也用它(不接受乱七八糟的值) */
-export function validateConfigValue(type: ConfigType, value: string): string | null {
-	const trimmed = value.trim();
-	if (type === "int") {
-		if (!/^-?\d+$/.test(trimmed)) return "这个参数要填整数";
-		if (Number(trimmed) < 0) return "不能为负数";
-	}
-	if (type === "bool" && !["true", "false"].includes(trimmed)) return "这个参数只能填 true / false";
-	if (type === "json" || type === "array" || type === "map") {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(trimmed);
-		} catch {
-			return "不是合法的 JSON";
-		}
-		if (type === "array" && !Array.isArray(parsed)) return '这个参数要填 JSON 数组,如 ["a","b"]';
-		if (type === "map" && (Array.isArray(parsed) || typeof parsed !== "object" || parsed === null))
-			return '这个参数要填 JSON 对象,如 {"k":"v"}';
-	}
-	/**
-	 * 长度上限与**列宽**和 **tRPC 入参**保持一致(4000)。
-	 * 曾经是 500 —— 而「列可见性 + 顺序」这类 JSON 在 24 列时就已经 650 字符,
-	 * 结果是"界面上勾了、刷新就回来了"(保存被拒,只有一条 toast 一闪而过)。实测踩到。
-	 */
-	if (value.length > CONFIG_VALUE_MAX) return `参数值太长(最多 ${CONFIG_VALUE_MAX} 字符)`;
-	return null;
 }
 
 /** 某个参数是否允许在界面上改(库里标了 editable=0 就不允许) */

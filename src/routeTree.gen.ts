@@ -20,8 +20,10 @@ import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/
 import { Route as mainDemoTrpcTodoRouteImport } from './routes/(main)/demo/trpc-todo'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
 import { Route as mainSettingsDictionaryRouteImport } from './routes/(main)/settings/dictionary'
+import { Route as mainSettingsGroupsRouteImport } from './routes/(main)/settings/groups'
 import { Route as mainSettingsMenusRouteImport } from './routes/(main)/settings/menus'
 import { Route as mainSettingsParametersRouteImport } from './routes/(main)/settings/parameters'
+import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/roles'
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -82,6 +84,11 @@ const mainSettingsDictionaryRoute = mainSettingsDictionaryRouteImport.update({
   path: '/settings/dictionary',
   getParentRoute: () => mainRouteRoute,
 } as any)
+const mainSettingsGroupsRoute = mainSettingsGroupsRouteImport.update({
+  id: '/settings/groups',
+  path: '/settings/groups',
+  getParentRoute: () => mainRouteRoute,
+} as any)
 const mainSettingsMenusRoute = mainSettingsMenusRouteImport.update({
   id: '/settings/menus',
   path: '/settings/menus',
@@ -90,6 +97,11 @@ const mainSettingsMenusRoute = mainSettingsMenusRouteImport.update({
 const mainSettingsParametersRoute = mainSettingsParametersRouteImport.update({
   id: '/settings/parameters',
   path: '/settings/parameters',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainSettingsRolesRoute = mainSettingsRolesRouteImport.update({
+  id: '/settings/roles',
+  path: '/settings/roles',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainSettingsTagsRoute = mainSettingsTagsRouteImport.update({
@@ -128,8 +140,10 @@ export interface FileRoutesByFullPath {
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
+  '/settings/groups': typeof mainSettingsGroupsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
+  '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -147,8 +161,10 @@ export interface FileRoutesByTo {
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
+  '/settings/groups': typeof mainSettingsGroupsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
+  '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -168,8 +184,10 @@ export interface FileRoutesById {
   '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/(main)/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/(main)/settings/dictionary': typeof mainSettingsDictionaryRoute
+  '/(main)/settings/groups': typeof mainSettingsGroupsRoute
   '/(main)/settings/menus': typeof mainSettingsMenusRoute
   '/(main)/settings/parameters': typeof mainSettingsParametersRoute
+  '/(main)/settings/roles': typeof mainSettingsRolesRoute
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -189,8 +207,10 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/trpc-todo'
     | '/settings/dictionary'
+    | '/settings/groups'
     | '/settings/menus'
     | '/settings/parameters'
+    | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
     | '/api/auth/$'
@@ -208,8 +228,10 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/trpc-todo'
     | '/settings/dictionary'
+    | '/settings/groups'
     | '/settings/menus'
     | '/settings/parameters'
+    | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
     | '/api/auth/$'
@@ -228,8 +250,10 @@ export interface FileRouteTypes {
     | '/(main)/demo/tanstack-query'
     | '/(main)/demo/trpc-todo'
     | '/(main)/settings/dictionary'
+    | '/(main)/settings/groups'
     | '/(main)/settings/menus'
     | '/(main)/settings/parameters'
+    | '/(main)/settings/roles'
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
     | '/api/auth/$'
@@ -323,6 +347,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsDictionaryRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/settings/groups': {
+      id: '/(main)/settings/groups'
+      path: '/settings/groups'
+      fullPath: '/settings/groups'
+      preLoaderRoute: typeof mainSettingsGroupsRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/(main)/settings/menus': {
       id: '/(main)/settings/menus'
       path: '/settings/menus'
@@ -335,6 +366,13 @@ declare module '@tanstack/react-router' {
       path: '/settings/parameters'
       fullPath: '/settings/parameters'
       preLoaderRoute: typeof mainSettingsParametersRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/settings/roles': {
+      id: '/(main)/settings/roles'
+      path: '/settings/roles'
+      fullPath: '/settings/roles'
+      preLoaderRoute: typeof mainSettingsRolesRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/settings/tags': {
@@ -385,8 +423,10 @@ interface mainRouteRouteChildren {
   mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
   mainDemoTrpcTodoRoute: typeof mainDemoTrpcTodoRoute
   mainSettingsDictionaryRoute: typeof mainSettingsDictionaryRoute
+  mainSettingsGroupsRoute: typeof mainSettingsGroupsRoute
   mainSettingsMenusRoute: typeof mainSettingsMenusRoute
   mainSettingsParametersRoute: typeof mainSettingsParametersRoute
+  mainSettingsRolesRoute: typeof mainSettingsRolesRoute
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
   mainSettingsIndexRoute: typeof mainSettingsIndexRoute
@@ -403,8 +443,10 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,
   mainDemoTrpcTodoRoute: mainDemoTrpcTodoRoute,
   mainSettingsDictionaryRoute: mainSettingsDictionaryRoute,
+  mainSettingsGroupsRoute: mainSettingsGroupsRoute,
   mainSettingsMenusRoute: mainSettingsMenusRoute,
   mainSettingsParametersRoute: mainSettingsParametersRoute,
+  mainSettingsRolesRoute: mainSettingsRolesRoute,
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,
   mainSettingsIndexRoute: mainSettingsIndexRoute,

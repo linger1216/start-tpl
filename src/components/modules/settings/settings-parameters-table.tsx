@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
-import { CONFIG_TYPE_META, type ConfigType } from "#/lib/sys-config";
+import { CONFIG_TYPE_META, type ConfigType } from "#/lib/config-spec";
 
 export type ParameterRow = {
 	key: string;

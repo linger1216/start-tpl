@@ -12,7 +12,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
-import { CONFIG_TYPE_META, type ConfigType, validateConfigValue } from "#/lib/sys-config";
+import { CONFIG_TYPE_META, type ConfigType, validateConfigValue } from "#/lib/config-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
 export type ParameterFormPayload = {

@@ -7,9 +7,9 @@ import { Topbar } from "./topbar";
 /**
  * 主布局外壳：左侧栏 + 顶栏 + 路由进度 + 切换动画。
  *
- * `collapsed` 只管「收没收起」;**收起之后长什么样**由 `lib/ui-prefs.ts` 的
- * 折叠模式决定(窄菜单 / 完全隐藏,设置入口在「系统设置 ▸ 界面偏好」)——
- * 所以这里不需要知道模式,`Sidebar` 自己读。
+ * `collapsed` 只管「收没收起」;**收起之后长什么样**由系统参数
+ * `ui.sidebar.collapsed_mode` 决定(窄菜单 / 完全隐藏,设置入口在「系统设置 ▸ 参数管理」)——
+ * 所以这里不需要知道模式,`Sidebar` 自己读(见 `lib/sidebar-mode.ts`)。
  */
 export function SidebarProvider({ username = "管理员", children }: { username?: string; children: ReactNode }) {
 	const [collapsed, setCollapsed] = useState(false);

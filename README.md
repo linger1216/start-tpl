@@ -32,7 +32,7 @@ pnpm dev                       # http://localhost:3000
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
 | **组件展示** `/showcase/*` | ★ 组件活文档,7 页:基础 / 表单 / 表格 / 数据展示 / 布局 / 反馈 / 组合块 |
 | **框架能力** `/demo/*` | 9 个可运行样例:tRPC、Query、表单、表格、Drizzle、Auth、Store、Sentry |
-| **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,7 个页面覆盖完整 CRUD 骨架 |
+| **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,7 个页面:4 页真实数据 + 3 页待实现占位 |
 
 菜单树是**库 + 兜底**双源:`sys_menu` 表有数据时以表为准,为空则退回 `src/components/layout/nav-config.ts` 的 `NAV_NODES`。改 `NAV_NODES` 后侧边栏、面包屑、模块概览、工作台四处会一起变。
 
@@ -399,6 +399,9 @@ function UsersPage() {
 | DB 错误归一 | `lib/db-errors.ts` | MySQL 唯一键 / 外键错误的可读化 |
 | 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(维护入口是「字段管理」页) |
 | 列可见性持久化 | `shared/use-column-visibility.ts` | 列显示与顺序存 `sys_config`(需要数据库) |
+| 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | 原先三个授权弹窗(用户 / 角色 / 用户组)共用;那三页改成占位页后暂无调用方 |
+| mock 数据原语 | `mocks/shared.ts` | `pick` / `idOf` / `phone` / `personName` / 固定基准日等**确定性**构造器(禁 `Math.random()`) |
+| 部门树示例 | `mocks/dicts.ts` | 示例单位 / 部门树 + `deptName` / `deptSelectOptions` 派生函数;做组织架构类页面时可直接复用 |
 | 5 个 ui 原语 | `ui/{popover,command,context-menu,menubar,sheet}.tsx` | 已在 `/showcase/ui` 的「其他可用原语」里点名 |
 
 **约定**:新增可复用件时,**要么给它一个真实调用方,要么在 `/showcase/*` 展示,要么登记进上表** —— 三者都不做,它会被下一轮清理当成死代码删掉。
@@ -407,21 +410,26 @@ function UsersPage() {
 
 ## 系统设置模块(唯一保留的真实业务)
 
-`/settings/*` 七个页面,覆盖后台最常见的四种骨架:
+`/settings/*` 七个页面:**四页真实数据 + 三页待实现占位**。
 
 | 页面 | 路由 | 数据来源 | 演示的骨架 |
 | --- | --- | --- | --- |
-| 用户管理 | `/settings/users` | `mocks/settings.ts` | 列表 + 表单 + 详情 + 授权弹窗 + Excel 导入导出 |
-| 用户组管理 | `/settings/groups` | 同上 | 双 tab 弹窗(管理成员 / 组授权) |
-| 角色管理 | `/settings/roles` | 同上 | 权限树勾选 + 数据范围 |
+| 用户管理 | `/settings/users` | **待实现**(无数据源) | 占位页 —— 原先的 mock 已删除 |
+| 用户组管理 | `/settings/groups` | **待实现**(无数据源) | 占位页 —— 原先的 mock 已删除 |
+| 角色管理 | `/settings/roles` | **待实现**(无数据源) | 占位页 —— 原先的 mock 已删除 |
 | 标签管理 | `/settings/tags` | `mocks/tags.ts` | 主表 + 子表条目弹窗 |
 | 菜单管理 | `/settings/menus` | **`sys_menu` 表** | 可排序树 + 右侧编辑表单(改完即时生效) |
 | 字段管理 | `/settings/dictionary` | **`sys_dict` 表** | 字典 CRUD + 条目编辑 |
 | 参数管理 | `/settings/parameters` | **`sys_config` 表** | 按类型校验的参数表单 |
 
-前四个走 **mock**(内存表,刷新回到种子),后三个走**真库**。这样两种数据来源各有可参照的实现 —— 派生新项目时把 mock 那部分换成 tRPC 调用即可,页面结构不用动。
+后四页走**真库 / 真接口**;标签管理走内存 mock(演示"数据源可替换":刷新回到种子)。
+用户 / 用户组 / 角色三页**故意不摆假数据**:它们曾经跑一份 791 行的内存 mock,看上去能增删改查、
+实际刷新就回到种子、和真实库毫无关系,容易被当成"已经实现"。现在这三页只是路由 + 占位页
+(`modules/settings/settings-stub-page.tsx`),接上真实接口后再按页角色重建。
 
-权限树(`PERMISSION_POINTS` / `PERMISSION_TREE`)由 `NAV_NODES` 派生 —— **改菜单,授权项自动跟着变**,不会出现两处漂移。
+> 权限点目录(角色授权要勾的那棵树)原先由 `NAV_NODES` 在前端派生(`mocks/settings.ts` 的
+> `PERMISSION_TREE` / `PERMISSION_POINTS`),那份 mock 已随这三页一起删除 —— 权限服务上线时
+> 目录应当由**服务端**返回,不要再在前端摆一份。
 
 ---
 
@@ -480,7 +488,7 @@ pnpm check
 
 **删除**:12 个业务域目录(约 500 个文件)、80 条业务路由、29 个业务 lib、27 个业务 mocks、6 个业务 tRPC 路由、18 个业务脚本。`trpc/router.ts` 从 9 个命名空间收窄到 3 个(menu / dict / config)+ `todos` 示例。
 
-**保留**:系统设置模块(7 页,含 `mocks/tags.ts` 的 17 个标签维度 —— 那是「标签管理」页的业务示例数据)、框架能力样例(9 页)、完整组件层、CRUD 套件、Better Auth、Drizzle、tRPC、Sentry、设计系统。
+**保留**:系统设置模块(7 页 = **4 页真实数据 + 3 页「待实现」占位**,含 `mocks/tags.ts` 的 17 个标签维度 —— 那是「标签管理」页的业务示例数据)、框架能力样例(9 页)、完整组件层、CRUD 套件、Better Auth、Drizzle、tRPC、Sentry、设计系统。
 
 ### 第二轮:遗留与封装审计
 
@@ -494,7 +502,7 @@ pnpm check
 | **正面冲突的 ui 原语** | `ui/sidebar`(与 `layout/sidebar` + `SidebarProvider` 同名冲突)、`ui/pagination`(与 `shared/pagination-control` 重复)、`hooks/use-mobile`(只服务前者) | 三件一起删;其余通用但未用到的原语在 `/showcase/ui` 的「其他可用原语」里点名 |
 | **死导出** | `NAV_PERMISSION_POINTS` / `NAV_PERMISSION_IDS` / `findNavTrail` / `findNavNode` / `flattenNavNodes` / `TruncateCell` / `moveWithinSiblings` / `countMultiValueHits` / `SHEET_DROPZONE_PROPS` / `UI_PRIMITIVE_COUNT` | 删除;另有 `visiblePermissionIds*` / `menuIconOf` / `trpcClient` 等只在本文件内用到的,收回模块内部 |
 | **业务语汇残留** | `需求清单 #NN` / `应标点` / `浦锦街道` / 各业务域名词散在 25+ 个文件(含可见 UI 文案) | 全部泛化;`mocks/shared.ts` 从 299 行收到 91 行(只留真正被用到的 9 个原语) |
-| **功能性 bug** | 角色种子的权限点匹配式还写着已删的域名(`re:enterprise\|visit\|works` 等),而权限树已从新 `NAV_NODES` 派生 → **6 个角色匹配到 0 个权限点**(页面显示 0 项,且不报错) | 重写 8 个角色 / 8 个用户组的匹配式对齐新菜单,并加注释提醒「改菜单要回来核对」 |
+| **功能性 bug** | 角色种子的权限点匹配式还写着已删的域名(`re:enterprise\|visit\|works` 等),而权限树已从新 `NAV_NODES` 派生 → **6 个角色匹配到 0 个权限点**(页面显示 0 项,且不报错) | 重写 8 个角色 / 8 个用户组的匹配式对齐新菜单,并加注释提醒「改菜单要回来核对」。(那批角色 / 用户组种子随后已在「用户 / 用户组 / 角色三页去掉 mock」一轮**整体删除**) |
 | **孤儿基础设施** | `src/router.tsx` 不在任何 import 图里(TanStack Start 按约定路径加载),被清理脚本误判为死代码删掉 | 从构建产物反推恢复,并在 `AGENTS.md` 里加了显式警告 |
 
 审计后基线:`pnpm typecheck` 0 error · `pnpm check` 0 error / 4 warning · `vite build` 通过 · 产物内容校验 0 问题。

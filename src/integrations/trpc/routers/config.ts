@@ -1,8 +1,9 @@
 /**
  * 系统参数路由 —— 「系统设置 ▸ 参数管理」。
  *
- * 只有两件事:列出参数(库里值 + 代码默认值合并)、改一个值(按类型校验)。
- * 参数影响的是**保留策略**与**定时同步开关**,所以改完要清缓存,并且明确告诉调用方"下次任务生效"。
+ * 三件事:列出参数(库里值 + 代码默认值合并)、读单个参数、改一个值(按类型校验)。
+ * 参数影响的是**保留策略**、**定时同步开关**与**界面偏好**,所以改完要清缓存;
+ * 涉及任务口径的,界面上会明确告诉调用方"下次任务生效"。
  */
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
@@ -10,13 +11,8 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysConfig } from "#/db/data-base-schema";
-import {
-	CONFIG_DEFAULTS,
-	CONFIG_VALUE_MAX,
-	type ConfigType,
-	clearConfigCache,
-	validateConfigValue,
-} from "#/lib/sys-config";
+import { CONFIG_VALUE_MAX, type ConfigType, validateConfigValue } from "#/lib/config-spec";
+import { CONFIG_DEFAULTS, clearConfigCache } from "#/lib/sys-config";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 export const configRouter = createTRPCRouter({
@@ -43,6 +39,17 @@ export const configRouter = createTRPCRouter({
 				};
 			})
 			.sort((a, b) => (a.group === b.group ? a.key.localeCompare(b.key) : a.group.localeCompare(b.group)));
+	}),
+
+	/**
+	 * 读**单个**参数的值(库里的覆盖值优先,没有就用代码默认值)。
+	 *
+	 * 给"页面需要一条界面偏好"的场景用:侧边栏只关心 `ui.sidebar.collapsed_mode`,
+	 * 没必要为它拉全表(与 `dict.byId` 同一个思路)。键不存在时回空串,由解析侧回落默认值。
+	 */
+	byKey: publicProcedure.input(z.object({ key: z.string().min(1).max(64) })).query(async ({ input }) => {
+		const [row] = await db.select().from(sysConfig).where(eq(sysConfig.cfg_key, input.key)).limit(1);
+		return { key: input.key, value: row?.cfg_value ?? CONFIG_DEFAULTS[input.key]?.value ?? "" };
 	}),
 
 	/** 改一个参数值(upsert);按声明类型校验,不接受乱七八糟的值 */

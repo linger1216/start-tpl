@@ -21,7 +21,8 @@ import { boolean, index, int, mysqlTable, text, timestamp, uniqueIndex, varchar 
  *    两批表不互相引用。
  *
  * ⚠️ **RBAC 五表(`role` / `permission` / `user_role` / `role_permission` / `user_permission`)已下线**:
- * 本轮不做 RBAC,后期再加;前端「用户管理 / 角色管理」等页面仍在,数据走 `src/mocks/settings.ts` 的 mock。
+ * 本轮不做 RBAC,后期再加;前端「用户管理 / 用户组管理 / 角色管理」三页现在只是**待实现占位页**
+ * (原先那份内存 mock 已整体删除,不摆假数据)。
  */
 
 // ══ 一、Better Auth 内核四表 ═══════════════════════════════════
@@ -104,9 +105,9 @@ export const verification = mysqlTable(
 // `role` / `permission` / `user_role` / `role_permission` / `user_permission` 五张表**已删除**:
 // 本轮不做 RBAC,后期再加。原有的种子脚本 `scripts/seed-permissions.ts` 一并删除。
 //
-// **前端页面保留**:「系统设置 ▸ 用户管理 / 角色管理 / 用户组」等页面照常可用(演示用),
-// 它们的数据来源是 `src/mocks/settings.ts`(纯内存 mock),与这五张表无关 ——
-// 删表不影响任何界面。后期真做 RBAC 时,把定义加回这里 + 重建种子脚本即可。
+// **前端页面状态**:「系统设置 ▸ 用户管理 / 用户组管理 / 角色管理」三页现在是**待实现占位页** ——
+// 原先撑着它们的 `src/mocks/settings.ts`(纯内存 mock)已整体删除,页面不再摆假数据。
+// 后期真做 RBAC 时,把定义加回这里 + 重建种子脚本 + 把这三页接到真实接口即可。
 
 // ══ 三、模板示例表(删 demo 时一并删)═════════════════════════
 

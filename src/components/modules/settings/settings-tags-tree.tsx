@@ -163,7 +163,7 @@ export function SettingsTagsTree({
 							"group relative flex items-center gap-1.5 rounded-lg border border-transparent py-1.5 pr-1.5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/40",
 							selectedId === node.id
 								? "border-primary/40 bg-primary/5"
-								: "hover:border-[color:var(--af-blue-line)] hover:bg-[color:var(--af-hover)]",
+								: "hover:border-hue-blue-line hover:bg-[color:var(--af-hover)]",
 							hint && !hint.allowed && "opacity-60",
 							dragDisabled ? "cursor-default" : "cursor-grab",
 						)}
