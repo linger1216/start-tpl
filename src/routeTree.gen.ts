@@ -20,24 +20,13 @@ import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/
 import { Route as mainDemoTrpcTodoRouteImport } from './routes/(main)/demo/trpc-todo'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
 import { Route as mainSettingsDictionaryRouteImport } from './routes/(main)/settings/dictionary'
-import { Route as mainSettingsGroupsRouteImport } from './routes/(main)/settings/groups'
 import { Route as mainSettingsMenusRouteImport } from './routes/(main)/settings/menus'
 import { Route as mainSettingsParametersRouteImport } from './routes/(main)/settings/parameters'
-import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/roles'
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
-import { Route as mainShowcaseBlocksRouteImport } from './routes/(main)/showcase/blocks'
-import { Route as mainShowcaseDataRouteImport } from './routes/(main)/showcase/data'
-import { Route as mainShowcaseFeedbackRouteImport } from './routes/(main)/showcase/feedback'
-import { Route as mainShowcaseFormRouteImport } from './routes/(main)/showcase/form'
-import { Route as mainShowcaseLayoutRouteImport } from './routes/(main)/showcase/layout'
-import { Route as mainShowcaseTableRouteImport } from './routes/(main)/showcase/table'
-import { Route as mainShowcaseUiRouteImport } from './routes/(main)/showcase/ui'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
-import { Route as mainDemoFormAddressRouteImport } from './routes/(main)/demo/form.address'
 import { Route as mainDemoFormSimpleRouteImport } from './routes/(main)/demo/form.simple'
-import { Route as mainDemoSentryTestingRouteImport } from './routes/(main)/demo/sentry.testing'
 
 const mainRouteRoute = mainRouteRouteImport.update({
   id: '/(main)',
@@ -93,11 +82,6 @@ const mainSettingsDictionaryRoute = mainSettingsDictionaryRouteImport.update({
   path: '/settings/dictionary',
   getParentRoute: () => mainRouteRoute,
 } as any)
-const mainSettingsGroupsRoute = mainSettingsGroupsRouteImport.update({
-  id: '/settings/groups',
-  path: '/settings/groups',
-  getParentRoute: () => mainRouteRoute,
-} as any)
 const mainSettingsMenusRoute = mainSettingsMenusRouteImport.update({
   id: '/settings/menus',
   path: '/settings/menus',
@@ -106,11 +90,6 @@ const mainSettingsMenusRoute = mainSettingsMenusRouteImport.update({
 const mainSettingsParametersRoute = mainSettingsParametersRouteImport.update({
   id: '/settings/parameters',
   path: '/settings/parameters',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainSettingsRolesRoute = mainSettingsRolesRouteImport.update({
-  id: '/settings/roles',
-  path: '/settings/roles',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainSettingsTagsRoute = mainSettingsTagsRouteImport.update({
@@ -123,41 +102,6 @@ const mainSettingsUsersRoute = mainSettingsUsersRouteImport.update({
   path: '/settings/users',
   getParentRoute: () => mainRouteRoute,
 } as any)
-const mainShowcaseBlocksRoute = mainShowcaseBlocksRouteImport.update({
-  id: '/showcase/blocks',
-  path: '/showcase/blocks',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseDataRoute = mainShowcaseDataRouteImport.update({
-  id: '/showcase/data',
-  path: '/showcase/data',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseFeedbackRoute = mainShowcaseFeedbackRouteImport.update({
-  id: '/showcase/feedback',
-  path: '/showcase/feedback',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseFormRoute = mainShowcaseFormRouteImport.update({
-  id: '/showcase/form',
-  path: '/showcase/form',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseLayoutRoute = mainShowcaseLayoutRouteImport.update({
-  id: '/showcase/layout',
-  path: '/showcase/layout',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseTableRoute = mainShowcaseTableRouteImport.update({
-  id: '/showcase/table',
-  path: '/showcase/table',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainShowcaseUiRoute = mainShowcaseUiRouteImport.update({
-  id: '/showcase/ui',
-  path: '/showcase/ui',
-  getParentRoute: () => mainRouteRoute,
-} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -168,19 +112,9 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const mainDemoFormAddressRoute = mainDemoFormAddressRouteImport.update({
-  id: '/demo/form/address',
-  path: '/demo/form/address',
-  getParentRoute: () => mainRouteRoute,
-} as any)
 const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
   id: '/demo/form/simple',
   path: '/demo/form/simple',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoSentryTestingRoute = mainDemoSentryTestingRouteImport.update({
-  id: '/demo/sentry/testing',
-  path: '/demo/sentry/testing',
   getParentRoute: () => mainRouteRoute,
 } as any)
 
@@ -194,25 +128,14 @@ export interface FileRoutesByFullPath {
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
-  '/settings/groups': typeof mainSettingsGroupsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
-  '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
-  '/showcase/blocks': typeof mainShowcaseBlocksRoute
-  '/showcase/data': typeof mainShowcaseDataRoute
-  '/showcase/feedback': typeof mainShowcaseFeedbackRoute
-  '/showcase/form': typeof mainShowcaseFormRoute
-  '/showcase/layout': typeof mainShowcaseLayoutRoute
-  '/showcase/table': typeof mainShowcaseTableRoute
-  '/showcase/ui': typeof mainShowcaseUiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
-  '/demo/form/address': typeof mainDemoFormAddressRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
-  '/demo/sentry/testing': typeof mainDemoSentryTestingRoute
 }
 export interface FileRoutesByTo {
   '/blank': typeof mainBlankRoute
@@ -224,25 +147,14 @@ export interface FileRoutesByTo {
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
-  '/settings/groups': typeof mainSettingsGroupsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
-  '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
-  '/showcase/blocks': typeof mainShowcaseBlocksRoute
-  '/showcase/data': typeof mainShowcaseDataRoute
-  '/showcase/feedback': typeof mainShowcaseFeedbackRoute
-  '/showcase/form': typeof mainShowcaseFormRoute
-  '/showcase/layout': typeof mainShowcaseLayoutRoute
-  '/showcase/table': typeof mainShowcaseTableRoute
-  '/showcase/ui': typeof mainShowcaseUiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
-  '/demo/form/address': typeof mainDemoFormAddressRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
-  '/demo/sentry/testing': typeof mainDemoSentryTestingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -256,25 +168,14 @@ export interface FileRoutesById {
   '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/(main)/demo/trpc-todo': typeof mainDemoTrpcTodoRoute
   '/(main)/settings/dictionary': typeof mainSettingsDictionaryRoute
-  '/(main)/settings/groups': typeof mainSettingsGroupsRoute
   '/(main)/settings/menus': typeof mainSettingsMenusRoute
   '/(main)/settings/parameters': typeof mainSettingsParametersRoute
-  '/(main)/settings/roles': typeof mainSettingsRolesRoute
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
-  '/(main)/showcase/blocks': typeof mainShowcaseBlocksRoute
-  '/(main)/showcase/data': typeof mainShowcaseDataRoute
-  '/(main)/showcase/feedback': typeof mainShowcaseFeedbackRoute
-  '/(main)/showcase/form': typeof mainShowcaseFormRoute
-  '/(main)/showcase/layout': typeof mainShowcaseLayoutRoute
-  '/(main)/showcase/table': typeof mainShowcaseTableRoute
-  '/(main)/showcase/ui': typeof mainShowcaseUiRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
-  '/(main)/demo/form/address': typeof mainDemoFormAddressRoute
   '/(main)/demo/form/simple': typeof mainDemoFormSimpleRoute
-  '/(main)/demo/sentry/testing': typeof mainDemoSentryTestingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -288,25 +189,14 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/trpc-todo'
     | '/settings/dictionary'
-    | '/settings/groups'
     | '/settings/menus'
     | '/settings/parameters'
-    | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
-    | '/showcase/blocks'
-    | '/showcase/data'
-    | '/showcase/feedback'
-    | '/showcase/form'
-    | '/showcase/layout'
-    | '/showcase/table'
-    | '/showcase/ui'
     | '/api/auth/$'
     | '/api/trpc/$'
     | '/settings/'
-    | '/demo/form/address'
     | '/demo/form/simple'
-    | '/demo/sentry/testing'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/blank'
@@ -318,25 +208,14 @@ export interface FileRouteTypes {
     | '/demo/tanstack-query'
     | '/demo/trpc-todo'
     | '/settings/dictionary'
-    | '/settings/groups'
     | '/settings/menus'
     | '/settings/parameters'
-    | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
-    | '/showcase/blocks'
-    | '/showcase/data'
-    | '/showcase/feedback'
-    | '/showcase/form'
-    | '/showcase/layout'
-    | '/showcase/table'
-    | '/showcase/ui'
     | '/api/auth/$'
     | '/api/trpc/$'
     | '/settings'
-    | '/demo/form/address'
     | '/demo/form/simple'
-    | '/demo/sentry/testing'
   id:
     | '__root__'
     | '/(main)'
@@ -349,25 +228,14 @@ export interface FileRouteTypes {
     | '/(main)/demo/tanstack-query'
     | '/(main)/demo/trpc-todo'
     | '/(main)/settings/dictionary'
-    | '/(main)/settings/groups'
     | '/(main)/settings/menus'
     | '/(main)/settings/parameters'
-    | '/(main)/settings/roles'
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
-    | '/(main)/showcase/blocks'
-    | '/(main)/showcase/data'
-    | '/(main)/showcase/feedback'
-    | '/(main)/showcase/form'
-    | '/(main)/showcase/layout'
-    | '/(main)/showcase/table'
-    | '/(main)/showcase/ui'
     | '/api/auth/$'
     | '/api/trpc/$'
     | '/(main)/settings/'
-    | '/(main)/demo/form/address'
     | '/(main)/demo/form/simple'
-    | '/(main)/demo/sentry/testing'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -455,13 +323,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsDictionaryRouteImport
       parentRoute: typeof mainRouteRoute
     }
-    '/(main)/settings/groups': {
-      id: '/(main)/settings/groups'
-      path: '/settings/groups'
-      fullPath: '/settings/groups'
-      preLoaderRoute: typeof mainSettingsGroupsRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
     '/(main)/settings/menus': {
       id: '/(main)/settings/menus'
       path: '/settings/menus'
@@ -474,13 +335,6 @@ declare module '@tanstack/react-router' {
       path: '/settings/parameters'
       fullPath: '/settings/parameters'
       preLoaderRoute: typeof mainSettingsParametersRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/settings/roles': {
-      id: '/(main)/settings/roles'
-      path: '/settings/roles'
-      fullPath: '/settings/roles'
-      preLoaderRoute: typeof mainSettingsRolesRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/settings/tags': {
@@ -497,55 +351,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsUsersRouteImport
       parentRoute: typeof mainRouteRoute
     }
-    '/(main)/showcase/blocks': {
-      id: '/(main)/showcase/blocks'
-      path: '/showcase/blocks'
-      fullPath: '/showcase/blocks'
-      preLoaderRoute: typeof mainShowcaseBlocksRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/data': {
-      id: '/(main)/showcase/data'
-      path: '/showcase/data'
-      fullPath: '/showcase/data'
-      preLoaderRoute: typeof mainShowcaseDataRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/feedback': {
-      id: '/(main)/showcase/feedback'
-      path: '/showcase/feedback'
-      fullPath: '/showcase/feedback'
-      preLoaderRoute: typeof mainShowcaseFeedbackRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/form': {
-      id: '/(main)/showcase/form'
-      path: '/showcase/form'
-      fullPath: '/showcase/form'
-      preLoaderRoute: typeof mainShowcaseFormRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/layout': {
-      id: '/(main)/showcase/layout'
-      path: '/showcase/layout'
-      fullPath: '/showcase/layout'
-      preLoaderRoute: typeof mainShowcaseLayoutRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/table': {
-      id: '/(main)/showcase/table'
-      path: '/showcase/table'
-      fullPath: '/showcase/table'
-      preLoaderRoute: typeof mainShowcaseTableRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/showcase/ui': {
-      id: '/(main)/showcase/ui'
-      path: '/showcase/ui'
-      fullPath: '/showcase/ui'
-      preLoaderRoute: typeof mainShowcaseUiRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -560,25 +365,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(main)/demo/form/address': {
-      id: '/(main)/demo/form/address'
-      path: '/demo/form/address'
-      fullPath: '/demo/form/address'
-      preLoaderRoute: typeof mainDemoFormAddressRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
     '/(main)/demo/form/simple': {
       id: '/(main)/demo/form/simple'
       path: '/demo/form/simple'
       fullPath: '/demo/form/simple'
       preLoaderRoute: typeof mainDemoFormSimpleRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/sentry/testing': {
-      id: '/(main)/demo/sentry/testing'
-      path: '/demo/sentry/testing'
-      fullPath: '/demo/sentry/testing'
-      preLoaderRoute: typeof mainDemoSentryTestingRouteImport
       parentRoute: typeof mainRouteRoute
     }
   }
@@ -594,23 +385,12 @@ interface mainRouteRouteChildren {
   mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
   mainDemoTrpcTodoRoute: typeof mainDemoTrpcTodoRoute
   mainSettingsDictionaryRoute: typeof mainSettingsDictionaryRoute
-  mainSettingsGroupsRoute: typeof mainSettingsGroupsRoute
   mainSettingsMenusRoute: typeof mainSettingsMenusRoute
   mainSettingsParametersRoute: typeof mainSettingsParametersRoute
-  mainSettingsRolesRoute: typeof mainSettingsRolesRoute
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
-  mainShowcaseBlocksRoute: typeof mainShowcaseBlocksRoute
-  mainShowcaseDataRoute: typeof mainShowcaseDataRoute
-  mainShowcaseFeedbackRoute: typeof mainShowcaseFeedbackRoute
-  mainShowcaseFormRoute: typeof mainShowcaseFormRoute
-  mainShowcaseLayoutRoute: typeof mainShowcaseLayoutRoute
-  mainShowcaseTableRoute: typeof mainShowcaseTableRoute
-  mainShowcaseUiRoute: typeof mainShowcaseUiRoute
   mainSettingsIndexRoute: typeof mainSettingsIndexRoute
-  mainDemoFormAddressRoute: typeof mainDemoFormAddressRoute
   mainDemoFormSimpleRoute: typeof mainDemoFormSimpleRoute
-  mainDemoSentryTestingRoute: typeof mainDemoSentryTestingRoute
 }
 
 const mainRouteRouteChildren: mainRouteRouteChildren = {
@@ -623,23 +403,12 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,
   mainDemoTrpcTodoRoute: mainDemoTrpcTodoRoute,
   mainSettingsDictionaryRoute: mainSettingsDictionaryRoute,
-  mainSettingsGroupsRoute: mainSettingsGroupsRoute,
   mainSettingsMenusRoute: mainSettingsMenusRoute,
   mainSettingsParametersRoute: mainSettingsParametersRoute,
-  mainSettingsRolesRoute: mainSettingsRolesRoute,
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,
-  mainShowcaseBlocksRoute: mainShowcaseBlocksRoute,
-  mainShowcaseDataRoute: mainShowcaseDataRoute,
-  mainShowcaseFeedbackRoute: mainShowcaseFeedbackRoute,
-  mainShowcaseFormRoute: mainShowcaseFormRoute,
-  mainShowcaseLayoutRoute: mainShowcaseLayoutRoute,
-  mainShowcaseTableRoute: mainShowcaseTableRoute,
-  mainShowcaseUiRoute: mainShowcaseUiRoute,
   mainSettingsIndexRoute: mainSettingsIndexRoute,
-  mainDemoFormAddressRoute: mainDemoFormAddressRoute,
   mainDemoFormSimpleRoute: mainDemoFormSimpleRoute,
-  mainDemoSentryTestingRoute: mainDemoSentryTestingRoute,
 }
 
 const mainRouteRouteWithChildren = mainRouteRoute._addFileChildren(

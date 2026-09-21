@@ -1,7 +1,7 @@
 // Accurate usage scan: for each file, find any other file that imports it
 // (handles relative and alias paths).
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { resolve, extname } from "node:path";
+import { resolve } from "node:path";
 
 const ROOT = "src";
 const IGNORE_DIRS = new Set(["node_modules", ".git", ".output"]);
@@ -84,8 +84,6 @@ function reportDir(dir: string, threshold = 3) {
 	}
 }
 
-reportDir("src/components/ui", 3);
-reportDir("src/components/modules/shared", 3);
-reportDir("src/components/modules/settings", 3);
-reportDir("src/components/modules/workbench", 3);
-reportDir("src/components/layout", 3);
+reportDir("src/components/ui", 999);
+reportDir("src/components/modules/shared", 999);
+reportDir("src/components/layout", 999);

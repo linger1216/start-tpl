@@ -194,7 +194,7 @@ function matcherOf(token: string): PermissionMatcher {
  *
  * ⚠️ `选` 里的匹配式**必须与 `nav-config.ts` 的 `NAV_NODES` 对得上**。
  * 权限点 id 的形状由 `nav-config.ts` 派生:
- *  - 菜单 = 路径冒号化 → `settings:users`、`showcase:ui`、`demo:table`;
+ *  - 菜单 = 路径冒号化 → `settings:users`、`settings:tags`、`demo:table`;
  *  - 操作 = `op:<模块码>:<序号>` → `op:settings:1`…`op:settings:7`,
  *    `op:module-1`…`op:module-3`(无 path 的分组回落到 `module-<序号>`,见 `modulePermissionCode`)。
  *
@@ -226,8 +226,8 @@ const ROLE_SPECS = [
 		范围: "仅本模块",
 		态: "启用",
 		天: 360,
-		注: "组件展示 7 页 —— 维护组件库的人",
-		选: "re:^showcase:",
+		注: "标签管理 —— 维护标签树的人",
+		选: "re:^settings:tags$",
 	},
 	{
 		名: "前端开发",
@@ -235,8 +235,8 @@ const ROLE_SPECS = [
 		范围: "仅本模块",
 		态: "启用",
 		天: 330,
-		注: "组件展示与框架能力两组样例页",
-		选: "re:^(showcase|demo):",
+		注: "框架能力样例页",
+		选: "re:^demo:",
 	},
 	{
 		名: "权限管理员",
@@ -244,8 +244,8 @@ const ROLE_SPECS = [
 		范围: "全部数据",
 		态: "启用",
 		天: 300,
-		注: "用户 / 用户组 / 角色三页,负责授权",
-		选: "re:^settings:(users|groups|roles)$",
+		注: "用户管理页,负责授权",
+		选: "re:^settings:users$",
 	},
 	{
 		名: "配置管理员",
@@ -331,9 +331,9 @@ export const ROLE_STATUSES = ["启用", "停用"];
  */
 const GROUP_SPECS = [
 	{ 组: "系统管理组", 条线: "信息技术科", 态: "启用", 角色: "系统管理员", 选: "re:^(settings:|op:)" },
-	{ 组: "组件库维护组", 条线: "信息技术科", 态: "启用", 角色: "组件库维护", 选: "re:^showcase:" },
-	{ 组: "前端开发组", 条线: "信息技术科", 态: "启用", 角色: "前端开发", 选: "re:^(showcase|demo):" },
-	{ 组: "权限管理组", 条线: "综合办公室", 态: "启用", 角色: "权限管理员", 选: "re:^settings:(users|groups|roles)$" },
+	{ 组: "标签维护组", 条线: "信息技术科", 态: "启用", 角色: "组件库维护", 选: "re:^settings:tags$" },
+	{ 组: "前端开发组", 条线: "信息技术科", 态: "启用", 角色: "前端开发", 选: "re:^demo:" },
+	{ 组: "权限管理组", 条线: "综合办公室", 态: "启用", 角色: "权限管理员", 选: "re:^settings:users$" },
 	{
 		组: "配置管理组",
 		条线: "数据管理科",

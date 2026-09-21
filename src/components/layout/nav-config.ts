@@ -17,9 +17,9 @@
  *  框架能力   纯分组                  tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry
  *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(七个页面,完整 CRUD 骨架)
  *
- * 派生新项目时:把「组件展示 / 框架能力」两枝删掉(连同
- * `components/modules/showcase/` + `routes/(main)/showcase/` + `components/layout/showcase.tsx`),
- * 然后把「系统设置」按新业务改名 / 扩展即可。
+ * 派生新项目时:把「框架能力」这一枝删掉(连带 `routes/(main)/demo/`),
+ * 再把「系统设置」按新业务改名 / 扩展即可;UI 原语的示例在工作台
+ * (`components/modules/workbench/ui-gallery.tsx`),不需要时整块删掉。
  *
  * 图标约定:值来自 `NAV_ICON_MAP`,键名是「小写 kebab-case」。
  * `NavIcon` 是 `keyof NAV_ICON_MAP`,写错图标名会在 `pnpm typecheck` 阶段失败。
@@ -129,42 +129,18 @@ export const NAV_NODES: NavNode[] = [
 		description: "模板入口页:上手自检清单、目录职责速查、各展示页入口。",
 	},
 	{
-		// 纯分组:组件清单不该占一个"页面",7 个子页各管一层组件
-		name: "组件展示",
-		icon: "library",
-		description:
-			"模板自带组件的**活文档**:每个组件给出用途说明、真实渲染的例子与用法代码。改了组件这页立刻变 —— 文档不会过期。",
-		children: [
-			{ name: "基础组件", path: "/showcase/ui", icon: "boxes" },
-			{ name: "表单组件", path: "/showcase/form", icon: "clipboard-list" },
-			{ name: "表格与列表", path: "/showcase/table", icon: "table" },
-			{ name: "数据展示", path: "/showcase/data", icon: "bar-chart-3" },
-			{ name: "布局与外壳", path: "/showcase/layout", icon: "layout-panel-top" },
-			{ name: "反馈与交互", path: "/showcase/feedback", icon: "message-square" },
-			{ name: "组合块", path: "/showcase/blocks", icon: "list-checks" },
-		],
-	},
-	{
 		name: "框架能力",
 		icon: "workflow",
 		description:
-			"每一项框架能力一个**可运行**的样例页:tRPC 接口、TanStack Query、表单、表格、Drizzle 数据库、登录认证、全局状态、错误监控。",
+			"每一项框架能力一个**可运行**的样例页:tRPC 接口、TanStack Query、表单、表格、Drizzle 数据库、登录认证、全局状态。",
 		children: [
 			{ name: "tRPC 接口", path: "/demo/trpc-todo", icon: "cable" },
 			{ name: "数据请求", path: "/demo/tanstack-query", icon: "refresh-cw" },
-			{
-				name: "表单",
-				icon: "clipboard-list",
-				children: [
-					{ name: "简单表单", path: "/demo/form/simple", icon: "clipboard-list" },
-					{ name: "地址表单", path: "/demo/form/address", icon: "sparkles" },
-				],
-			},
+			{ name: "表单", path: "/demo/form/simple", icon: "clipboard-list" },
 			{ name: "表格", path: "/demo/table", icon: "table" },
 			{ name: "数据库", path: "/demo/drizzle", icon: "database" },
 			{ name: "登录认证", path: "/demo/better-auth", icon: "key-round" },
 			{ name: "全局状态", path: "/demo/store", icon: "boxes" },
-			{ name: "错误监控", path: "/demo/sentry.testing", icon: "shield-alert" },
 		],
 	},
 	{
@@ -173,11 +149,9 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"真实业务示例:用户 / 用户组 / 角色 / 标签 / 菜单 / 字典 / 参数七个模块。演示「列表 + 表单 + 详情 + 授权 + Excel 导入导出 + 树形排序」的完整骨架,以及 mock 数据与数据库两种数据来源。",
+			"真实业务示例:用户(完整 CRUD + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数五个模块。演示「列表 + 表单 + 详情 + 授权 + Excel 导入导出 + 树形排序」的骨架,以及 mock 数据与数据库两种数据来源。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
-			{ name: "用户组管理", path: "/settings/groups", icon: "contact" },
-			{ name: "角色管理", path: "/settings/roles", icon: "key-round" },
 			{ name: "标签管理", path: "/settings/tags", icon: "tags" },
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },
 			{ name: "字典管理", path: "/settings/dictionary", icon: "library" },

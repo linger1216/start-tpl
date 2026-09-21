@@ -6,13 +6,14 @@
  * 以及一个明显的「派生时删什么」的提示。
  */
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, BookOpen, Code2, FolderTree, Layers, Rocket, Settings, Workflow } from "lucide-react";
+import { ArrowRight, Code2, FolderTree, Layers, Rocket, Settings, Workflow } from "lucide-react";
 
 import { NAV_ICON_MAP, type NavIcon, type NavNode } from "#/components/layout/nav-config";
 import { useVisibleNavNodes } from "#/components/layout/nav-permissions";
 import { PageHeader } from "#/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { cn } from "#/lib/utils";
+import { UiGallery } from "./ui-gallery";
 
 /** 「可以展开」的入口(只有有 path 的一级模块才算) */
 function navigableTopLevel(nodes: readonly NavNode[]): Array<NavNode & { path: string }> {
@@ -27,8 +28,8 @@ const CHECKS = [
 	},
 	{
 		icon: Layers,
-		title: "看一遍 7 个展示页",
-		desc: "组件清单改一处全部跟着变 —— 文档不会过期",
+		title: "看一遍 UI 组件示例",
+		desc: "本页下方就是 —— 45 个原语的最小可用例子,可直接抄进业务页",
 	},
 	{
 		icon: Code2,
@@ -38,7 +39,7 @@ const CHECKS = [
 	{
 		icon: Settings,
 		title: "到 /settings 看真实业务示例",
-		desc: "7 个模块完整 CRUD 骨架,以及 mock 数据与数据库两种数据来源",
+		desc: "用户 / 标签 / 菜单 / 字典 / 参数五个模块,以及 mock 数据与数据库两种数据来源",
 	},
 ];
 
@@ -46,14 +47,8 @@ const STRUCTURE = [
 	{
 		icon: Workflow,
 		title: "框架能力(/demo/*)",
-		desc: "tRPC · Query · 表单 · 表格 · Drizzle · Auth · Store · Sentry —— 每项一个可运行的样例页",
+		desc: "tRPC · Query · 表单 · 表格 · Drizzle · Auth · Store —— 每项一个可运行的样例页",
 		path: "/demo/trpc-todo",
-	},
-	{
-		icon: BookOpen,
-		title: "组件展示(/showcase/*)",
-		desc: "7 页活的组件文档:基础 / 表单 / 表格 / 数据展示 / 布局 / 反馈 / 组合块",
-		path: "/showcase/ui",
 	},
 	{
 		icon: FolderTree,
@@ -74,6 +69,20 @@ export function WorkbenchPage() {
 				description="模板自带的入口页 —— 真实业务上手后会替换它。当前只做三件事:跳到各模块入口、给新项目的速查清单、把「派生时删什么」列清楚。"
 				descriptionInline
 			/>
+
+			{/* UI 组件示例 —— 原来 7 个 /showcase/* 路由收敛到这里一块 */}
+			<Card tone="var(--hue-violet)">
+				<CardHeader>
+					<CardTitle className="text-[15px]">UI 组件示例</CardTitle>
+					<CardDescription>
+						<code className="font-mono">components/ui/</code> 下 45 个通用原语的最小可用例子 —— 受控的都给好了
+						useState,可直接抄进业务页。新增/删除原语时同步在这里加减一格,别让它们变回孤儿。
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="pt-0">
+					<UiGallery />
+				</CardContent>
+			</Card>
 
 			{/* 上手四件 */}
 			<Card tone="var(--hue-blue)">
@@ -161,13 +170,13 @@ export function WorkbenchPage() {
 				</CardHeader>
 				<CardContent className="space-y-2 pt-0 text-[13px] leading-relaxed text-muted-foreground">
 					<p>
-						<code className="font-mono text-foreground">components/modules/showcase/</code> 与{" "}
-						<code className="font-mono text-foreground">routes/(main)/showcase/</code> —— 7 个展示页的源码与路由, 外加{" "}
-						<code className="font-mono text-foreground">components/layout/showcase.tsx</code>。
+						<code className="font-mono text-foreground">routes/(main)/demo/</code> —— 框架能力样例页(只保留 Better Auth
+						的配置即可),与 <code className="font-mono text-foreground">hooks/demo.form*</code>。
 					</p>
 					<p>
-						<code className="font-mono text-foreground">routes/(main)/demo/</code> —— 8 个框架能力样例页(只保留 Better
-						Auth 的配置即可),与 <code className="font-mono text-foreground">hooks/demo.form*</code>。
+						<code className="font-mono text-foreground">components/modules/workbench/ui-gallery.tsx</code> —— UI
+						组件示例(本页中部那一块),连同它引用的 <code className="font-mono text-foreground">components/ui/</code>{" "}
+						里业务用不到的原语。
 					</p>
 					<p>
 						<code className="font-mono text-foreground">components/modules/settings/</code> 与{" "}
