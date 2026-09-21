@@ -187,11 +187,6 @@ export const NAV_NODES: NavNode[] = [
 	},
 ];
 
-/** 分组(有 children 的节点)的稳定标识 —— 用于折叠状态。 */
-export function navGroupId(node: NavNode): string {
-	return node.path ?? node.name;
-}
-
 /** 路径是否命中某菜单节点(`/` 只精确匹配,避免命中所有路径)。 */
 function isPathMatch(pathname: string, path: string): boolean {
 	if (path === "/") return pathname === "/";
@@ -242,13 +237,13 @@ export function navNodeContains(node: NavNode, pathname: string): boolean {
 	return (node.children ?? []).some((child) => navNodeContains(child, pathname));
 }
 
-/** 全部分组 id —— 默认折叠态的初始集合。 */
+/** 全部分组(有 children 的节点)的稳定 id —— 折叠态用。 */
 export function collectNavGroupIds(nodes: NavNode[] = NAV_NODES): string[] {
 	const ids: string[] = [];
 	const walk = (list: NavNode[]) => {
 		for (const node of list) {
 			if (node.children?.length) {
-				ids.push(navGroupId(node));
+				ids.push(node.path ?? node.name);
 				walk(node.children);
 			}
 		}

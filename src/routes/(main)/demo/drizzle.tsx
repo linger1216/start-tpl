@@ -1,6 +1,18 @@
+// Drizzle ORM demo:用 server function 读 + 写 todos(模板 `src/db/schema.ts` 里唯一的一张示例表)。
+//
+// 关键:**模块顶层不能 import `drizzle-orm` / `#/db/...`**。
+//
+// `routeTree.gen.ts` 对所有路由做静态 import,这些顶层 import 会被 Vite 的
+// 客户端 deps optimizer 拉进 client bundle。`drizzle-orm/mysql2` 间接用
+// `Buffer.prototype`,浏览器里 `Buffer` 是 undefined,触发 "Cannot read
+// properties of undefined (reading 'prototype')" 把整个应用打挂 ——
+// `routeTree.gen.ts` 里随便哪个 `<Lazy>` route 命中都崩。
+//
+// 正确做法:`createServerFn().handler(...)` 的 handler 只在 server 跑,
+// 闭包里**动态 import** server-only 模块。这样路由文件顶层干干净净,
+// 客户端不会触碰 drizzle / db,server 端由 handler 按需加载。
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { desc } from "drizzle-orm";
 import { Database } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
@@ -12,8 +24,6 @@ import { Input } from "#/components/ui/input";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Label } from "#/components/ui/label";
 import { Spinner } from "#/components/ui/spinner";
-import { db } from "#/db/index";
-import { todos } from "#/db/schema";
 import { formatLocalMinute } from "#/lib/time";
 
 type TodoRow = { id: number; title: string; createdAt: Date | null };
@@ -21,6 +31,12 @@ type TodoRow = { id: number; title: string; createdAt: Date | null };
 type LoadResult = { ok: true; todos: TodoRow[] } | { ok: false; error: string };
 
 const getTodos = createServerFn({ method: "GET" }).handler(async (): Promise<LoadResult> => {
+	// 仅在 server 跑;client 端只是 RPC stub,不 evaluate 这段代码。
+	const [{ desc }, { db }, { todos }] = await Promise.all([
+		import("drizzle-orm"),
+		import("#/db/index"),
+		import("#/db/schema"),
+	]);
 	try {
 		const rows = await db.select().from(todos).orderBy(desc(todos.createdAt)).limit(20);
 		return { ok: true, todos: rows };
@@ -33,6 +49,8 @@ const getTodos = createServerFn({ method: "GET" }).handler(async (): Promise<Loa
 const createTodo = createServerFn({ method: "POST" })
 	.validator((data: { title: string }) => data)
 	.handler(async ({ data }) => {
+		// 同上:仅 server 跑,client 不触碰 db。
+		const [{ db }, { todos }] = await Promise.all([import("#/db/index"), import("#/db/schema")]);
 		await db.insert(todos).values({ title: data.title });
 	});
 

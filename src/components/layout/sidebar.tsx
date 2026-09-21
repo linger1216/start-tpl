@@ -1,27 +1,11 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronRight, Layers, Plus, Search } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useSidebarCollapseMode } from "#/lib/ui-prefs";
 import { cn } from "#/lib/utils";
-import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navGroupId, navNodeContains } from "./nav-config";
+import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
 import { useVisibleNavNodes, useVisibleNavTrail } from "./nav-permissions";
-
-/** Sidebar 分组折叠 Context(嵌套层级共享) */
-interface SidebarCollapseContext {
-	collapsed: Set<string>;
-	toggle: (id: string) => void;
-}
-const SidebarCollapseCtx = createContext<SidebarCollapseContext | null>(null);
-
-function useCollapse(): SidebarCollapseContext {
-	const ctx = useContext(SidebarCollapseCtx);
-	if (!ctx) {
-		// 兜底:未在 Provider 下时返回静态空集 + noop(避免崩溃)
-		return { collapsed: new Set(), toggle: () => {} };
-	}
-	return ctx;
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    侧边栏 —— 单强调色 + 连线层级(规格见 DESIGN.md §5.1)
@@ -55,8 +39,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 
 	// 当前路径命中的分组链(同样按权限过滤)—— 决定初始展开哪些分支
 	const trail = useVisibleNavTrail(pathname);
-	const trailIds = useMemo(() => trail.map(navGroupId), [trail]);
-	const trailKey = trailIds.join("|");
+	const trailIds = useMemo(() => trail.map((n) => n.path ?? n.name), [trail]);
 
 	// 默认折叠:只展开当前路径所在分支。
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(
@@ -65,29 +48,14 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 
 	// 客户端跳转后自动展开新分支;不强制收起用户手动展开过的分组
 	useEffect(() => {
-		const ids = trailKey ? trailKey.split("|") : [];
-		if (ids.length === 0) return;
+		if (trailIds.length === 0) return;
 		setCollapsedIds((prev) => {
-			if (ids.every((id) => !prev.has(id))) return prev;
+			if (trailIds.every((id) => !prev.has(id))) return prev;
 			const next = new Set(prev);
-			for (const id of ids) next.delete(id);
+			for (const id of trailIds) next.delete(id);
 			return next;
 		});
-	}, [trailKey]);
-
-	const collapseCtx = useMemo<SidebarCollapseContext>(
-		() => ({
-			collapsed: collapsedIds,
-			toggle: (id: string) =>
-				setCollapsedIds((prev) => {
-					const next = new Set(prev);
-					if (next.has(id)) next.delete(id);
-					else next.add(id);
-					return next;
-				}),
-		}),
-		[collapsedIds],
-	);
+	}, [trailIds]);
 
 	return (
 		<aside
@@ -161,11 +129,18 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 					rail ? "items-center gap-0.5 p-2" : "stagger gap-px p-2 pt-3",
 				)}
 			>
-				<SidebarCollapseCtx.Provider value={collapseCtx}>
-					{rail
-						? nodes.map((node) => <RailItem key={node.name} node={node} pathname={pathname} />)
-						: nodes.map((node) => <NavItem key={node.name} node={node} pathname={pathname} depth={0} />)}
-				</SidebarCollapseCtx.Provider>
+				{rail
+					? nodes.map((node) => <RailItem key={node.name} node={node} pathname={pathname} />)
+					: nodes.map((node) => (
+							<NavItem
+								key={node.name}
+								node={node}
+								pathname={pathname}
+								depth={0}
+								collapsedIds={collapsedIds}
+								onToggle={toggleCollapsedId}
+							/>
+						))}
 			</nav>
 
 			{/* ── Footer ─────────────────────────────────────────────── */}
@@ -207,67 +182,78 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 			</div>
 		</aside>
 	);
+
+	/** 切换一个分组的折叠态。useState setter 是稳定的,直接传 ref 让 NavItem 不必再 memo。 */
+	function toggleCollapsedId(id: string) {
+		setCollapsedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	}
 }
 
-/** 分组标题(无 path、无子级,对应 menu 表 path='-'):不可点击的区段头 */
-function SectionHeader({ name }: { name: string }) {
-	return (
-		<div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
-			<span className="text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">{name}</span>
-			<span className="h-px flex-1 bg-gradient-to-r from-[color:var(--border)] to-transparent" />
-		</div>
-	);
-}
-
-function NavItem({ node, pathname, depth }: { node: NavNode; pathname: string; depth: number }) {
+function NavItem({
+	node,
+	pathname,
+	depth,
+	collapsedIds,
+	onToggle,
+}: {
+	node: NavNode;
+	pathname: string;
+	depth: number;
+	collapsedIds: ReadonlySet<string>;
+	onToggle: (id: string) => void;
+}) {
 	const Icon = NAV_ICON_MAP[node.icon] ?? Layers;
 	const hasChildren = !!node.children?.length;
-	const { collapsed, toggle } = useCollapse();
-	const nodeCollapsed = collapsed.has(navGroupId(node));
-	/** 每个菜单都带 icon(图标 + 颜色是「选中」的视觉锚);`Layers` 是兜底 ——
-	   `NAV_ICON_MAP` 是白名单,登记了的图标才会渲染成真 lucide icon,未登记退回 `Layers`。 */
-	const showIcon = true;
+	// 折叠态的稳定 key:有 path 用 path,纯分组(没 path)用 name —— 同一棵树内都唯一
+	const nodeId = node.path ?? node.name;
 
+	// 纯文字分组(无 path 无 children):用一段小标题作区段头,inline 就够
 	if (!node.path && !hasChildren) {
-		return <SectionHeader name={node.name} />;
+		return (
+			<div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
+				<span className="text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+					{node.name}
+				</span>
+				<span className="h-px flex-1 bg-gradient-to-r from-[color:var(--border)] to-transparent" />
+			</div>
+		);
 	}
 
 	if (hasChildren) {
-		const isOpen = !nodeCollapsed;
-		const panelId = `nav-panel-${navGroupId(node)}`;
-		/** 父级文字是否变蓝:**只有路径精确命中父级自身**(如父级有独立页面 `/settings` 且就在该页)。
-		 *  子页(`/settings/tags`)不算 —— 否则父级会因前缀匹配被错判成"被选中"而变蓝。
-		 *  用户明确要求:默认全黑,只有"被点中的那一项"才是蓝色。 */
-		const isAccent = !!node.path && pathname === node.path;
+		// 父级按钮"自身被选中"= 路径精确命中(子页 /settings/users 不算);用户明确要求默认全黑,
+		// 蓝色只属于"被点中的那一项",所以父级这里必须用 `===` 而不是 prefix 匹配。
+		const selfSelected = pathname === node.path;
+		const open = !collapsedIds.has(nodeId);
 
 		return (
 			<div>
 				<button
 					type="button"
-					onClick={() => toggle(navGroupId(node))}
-					aria-expanded={isOpen}
-					aria-controls={panelId}
+					onClick={() => onToggle(nodeId)}
+					aria-expanded={open}
 					className={cn(
 						"group/nav relative flex w-full items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[13px] font-medium",
-						// 默认 / hover 文字色都走深色 —— 蓝色只给"自身被选中"(`isAccent`)和"叶子被选中"。
-						isAccent
+						selfSelected
 							? "bg-[color:var(--af-blue-soft)] text-primary"
 							: "text-foreground hover:bg-[color:var(--af-hover)] hover:text-foreground",
 						"transition-[color,background-color] duration-150 ease-brand",
 					)}
 				>
-					{showIcon ? (
-						<Icon
-							className={cn(
-								"size-4 shrink-0 transition-colors duration-150",
-								isAccent ? "text-primary" : "text-foreground",
-							)}
-						/>
-					) : null}
+					<Icon
+						className={cn(
+							"size-4 shrink-0 transition-colors duration-150",
+							selfSelected ? "text-primary" : "text-foreground",
+						)}
+					/>
 					<span
 						className={cn(
 							"flex-1 truncate transition-colors duration-150",
-							isAccent ? "text-primary" : "text-foreground",
+							selfSelected ? "text-primary" : "text-foreground",
 						)}
 					>
 						{node.name}
@@ -277,13 +263,20 @@ function NavItem({ node, pathname, depth }: { node: NavNode; pathname: string; d
 						aria-hidden
 						className={cn(
 							"size-3.5 shrink-0 transition-transform duration-200 ease-brand",
-							isAccent ? "text-primary" : "text-foreground",
-							isOpen && "rotate-90",
+							selfSelected ? "text-primary" : "text-foreground",
+							open && "rotate-90",
 						)}
 					/>
 				</button>
 
-				<NavPanel node={node} pathname={pathname} depth={depth} open={isOpen} panelId={panelId} />
+				<NavPanel
+					node={node}
+					pathname={pathname}
+					depth={depth}
+					open={open}
+					collapsedIds={collapsedIds}
+					onToggle={onToggle}
+				/>
 			</div>
 		);
 	}
@@ -303,14 +296,12 @@ function NavItem({ node, pathname, depth }: { node: NavNode; pathname: string; d
 					: "text-foreground hover:bg-[color:var(--af-hover)] hover:text-foreground",
 			)}
 		>
-			{showIcon ? (
-				<Icon
-					className={cn(
-						"size-4 shrink-0 transition-colors duration-150",
-						active ? "text-primary" : "text-foreground group-hover/nav:text-foreground",
-					)}
-				/>
-			) : null}
+			<Icon
+				className={cn(
+					"size-4 shrink-0 transition-colors duration-150",
+					active ? "text-primary" : "text-foreground group-hover/nav:text-foreground",
+				)}
+			/>
 			<span className="flex-1 truncate">{node.name}</span>
 		</Link>
 	);
@@ -341,24 +332,24 @@ function NavPanel({
 	pathname,
 	depth,
 	open,
-	panelId,
+	collapsedIds,
+	onToggle,
 }: {
 	node: NavNode;
 	pathname: string;
 	depth: number;
 	open: boolean;
-	panelId: string;
+	collapsedIds: ReadonlySet<string>;
+	onToggle: (id: string) => void;
 }) {
 	const children = node.children ?? [];
-	// 一级 / 二级菜单都按"图标中心"对连线(行 pl-2.5 + 图标 16px ⇒ 中心 18px)
-	const lineOffset = "ml-[18px]";
-	const elbowWidthPx = 14;
 
 	return (
 		// 收起时 inert —— 内容仍在 DOM 里,不然键盘 Tab 会钻进看不见的链接
-		<div id={panelId} inert={!open} className={cn("collapse-grid", open && "is-open")}>
+		<div inert={!open} className={cn("collapse-grid", open && "is-open")}>
 			<div>
-				<div className={cn("relative flex flex-col", lineOffset)}>
+				{/* 一级 / 二级菜单都按"图标中心"对连线(行 pl-2.5 + 图标 16px ⇒ 中心 18px) */}
+				<div className="relative ml-[18px] flex flex-col">
 					{children.map((child, index) => {
 						const isLast = index === children.length - 1;
 						/** 这一行对应的子菜单是否被选中 —— 连线的唯一判据。
@@ -386,14 +377,20 @@ function NavPanel({
 											"absolute top-0 left-0 rounded-bl-[8px] border-b border-l transition-colors duration-150",
 											elbowClass,
 										)}
-										style={{ height: ROW_HALF, width: elbowWidthPx }}
+										style={{ height: ROW_HALF, width: 14 }}
 									/>
 								) : null}
 								{/* 直接用 padding-left 推内容到连线右侧,不再嵌一层 pl-7 容器 ——
 								    旧实现把内容塞进独立 div,导致 ring 边框无法贴到行外,
 								    在行的顶/右侧出现"断裂"。现在行 = 链接本身,边框走 link 的 box。 */}
 								<div className="pl-5">
-									<NavItem node={child} pathname={pathname} depth={depth + 1} />
+									<NavItem
+										node={child}
+										pathname={pathname}
+										depth={depth + 1}
+										collapsedIds={collapsedIds}
+										onToggle={onToggle}
+									/>
 								</div>
 							</div>
 						);

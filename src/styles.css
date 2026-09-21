@@ -179,7 +179,8 @@
   --af-blue-soft: color-mix(in oklab, var(--af-blue) 10%, var(--af-white));
   --af-blue-faint: color-mix(in oklab, var(--af-blue) 6%, var(--af-surface));
   --af-blue-ring: color-mix(in oklab, var(--af-blue) 24%, transparent);
-  --af-hover: color-mix(in oklab, var(--af-surface) 70%, var(--af-blue) 4%);
+  /* hover 面 = 纯中性灰 —— 蓝色只属于"被选中"(af-blue-soft),hover 不变蓝 */
+  --af-hover: color-mix(in oklab, var(--af-surface) 60%, var(--af-border) 40%);
   --af-selected: var(--af-blue-soft);
   --af-border-strong: color-mix(in oklch, var(--af-navy) 16%, var(--af-border));
   --af-card-shadow:
