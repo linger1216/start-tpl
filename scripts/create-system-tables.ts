@@ -1,5 +1,5 @@
 /**
- * **系统设置相关表的建表脚本** —— 幂等,可重复执行。
+ * **系统表的建表脚本**(系统设置五张 + 认证四张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -104,6 +104,75 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_tag_rel_tag\` (\`tag_id\`),
 			key \`idx_tag_rel_obj\` (\`obj_type\`, \`obj_id\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '标签与业务对象的关联(多态多对多)'`,
+	},
+	// ── 认证四表(Better Auth 内核;「形状」见 src/db/data-base-schema.ts)────────────
+	// auth 是系统内部服务,所以和上面一样吃 sys_ 前缀、同样由本脚本维护(不进 drizzle 迁移)。
+	// ⚠️ 前缀去掉之后 better-auth 就找不到模型了 —— 它按 `src/lib/auth.ts` 传进去的**键名**找表。
+	{
+		name: "sys_user",
+		ddl: `create table if not exists \`sys_user\` (
+			\`id\` varchar(36) not null comment '主键(better-auth 生成)',
+			\`name\` varchar(128) not null,
+			\`email\` varchar(255) not null,
+			\`email_verified\` tinyint(1) not null default 0,
+			\`image\` varchar(512) default null,
+			\`created_at\` timestamp not null default current_timestamp,
+			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_user_email\` (\`email\`)
+		)`,
+	},
+	{
+		name: "sys_session",
+		ddl: `create table if not exists \`sys_session\` (
+			\`id\` varchar(36) not null,
+			\`expires_at\` timestamp not null,
+			\`token\` varchar(255) not null,
+			\`ip_address\` text,
+			\`user_agent\` text,
+			\`user_id\` varchar(36) not null,
+			\`created_at\` timestamp not null default current_timestamp,
+			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_session_token\` (\`token\`),
+			key \`idx_sys_session_user\` (\`user_id\`),
+			constraint \`fk_sys_session_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
+		)`,
+	},
+	{
+		name: "sys_account",
+		ddl: `create table if not exists \`sys_account\` (
+			\`id\` varchar(36) not null,
+			\`account_id\` varchar(255) not null,
+			\`provider_id\` varchar(64) not null,
+			\`user_id\` varchar(36) not null,
+			\`access_token\` text,
+			\`refresh_token\` text,
+			\`id_token\` text,
+			\`access_token_expires_at\` timestamp null default null,
+			\`refresh_token_expires_at\` timestamp null default null,
+			\`scope\` varchar(255) default null,
+			\`password\` text,
+			\`created_at\` timestamp not null default current_timestamp,
+			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_account_provider\` (\`provider_id\`, \`account_id\`),
+			key \`idx_sys_account_user\` (\`user_id\`),
+			constraint \`fk_sys_account_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
+		)`,
+	},
+	{
+		name: "sys_verification",
+		ddl: `create table if not exists \`sys_verification\` (
+			\`id\` varchar(36) not null,
+			\`identifier\` varchar(255) not null,
+			\`value\` text not null,
+			\`expires_at\` timestamp not null,
+			\`created_at\` timestamp not null default current_timestamp,
+			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			key \`idx_sys_verification_identifier\` (\`identifier\`)
+		)`,
 	},
 ];
 

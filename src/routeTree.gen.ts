@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as mainRouteRouteImport } from './routes/(main)/route'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
 import { Route as mainBlankRouteImport } from './routes/(main)/blank'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
@@ -32,6 +33,11 @@ import { Route as mainDemoFormSimpleRouteImport } from './routes/(main)/demo/for
 
 const mainRouteRoute = mainRouteRouteImport.update({
   id: '/(main)',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const mainIndexRoute = mainIndexRouteImport.update({
@@ -131,6 +137,7 @@ const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/login': typeof LoginRoute
   '/blank': typeof mainBlankRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -152,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
 }
 export interface FileRoutesByTo {
+  '/login': typeof LoginRoute
   '/blank': typeof mainBlankRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -175,6 +183,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(main)': typeof mainRouteRouteWithChildren
+  '/login': typeof LoginRoute
   '/(main)/blank': typeof mainBlankRoute
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -198,6 +207,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/login'
     | '/blank'
     | '/'
     | '/demo/better-auth'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/demo/form/simple'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/login'
     | '/blank'
     | '/'
     | '/demo/better-auth'
@@ -241,6 +252,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/(main)'
+    | '/login'
     | '/(main)/blank'
     | '/(main)/'
     | '/(main)/demo/better-auth'
@@ -264,6 +276,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   mainRouteRoute: typeof mainRouteRouteWithChildren
+  LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
@@ -275,6 +288,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof mainRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(main)/': {
@@ -459,6 +479,7 @@ const mainRouteRouteWithChildren = mainRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   mainRouteRoute: mainRouteRouteWithChildren,
+  LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }

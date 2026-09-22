@@ -1,11 +1,13 @@
 /**
- * 系统设置相关表的 drizzle 定义 —— 五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/
- * `sys_tag`(标签树)/ `sys_tag_relation`(标签 ↔ 业务对象 的关系)。
+ * **系统表**的 drizzle 定义 —— 九张:
+ *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
+ *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
+ *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`。
  *
  * 为什么单独一个文件、而不是并进 `src/db/schema.ts`:
  *   这几张表的 DDL 由**建表脚本**维护(`scripts/create-system-tables.ts`,幂等
  *   `create table if not exists`),**不进 drizzle 迁移**。
- *   `drizzle.config.ts` 的 `schema` 只指向 `./src/db/schema.ts`(认证四表 + `todos` 示例表);
+ *   `drizzle.config.ts` 的 `schema` 只指向 `./src/db/schema.ts`(现在只剩 `todos` 示例表);
  *   若把这些表并进去,下次 `pnpm db:generate` 会生成 CREATE,而库里已存在
  *   → `pnpm db:migrate` 直接 1050 报错。
  *   所以这里只定义「读写的形状」,迁移边界一行不改。
@@ -24,7 +26,19 @@
  * ⚠️ **API 协议 vs DB 列名的分层**:DB 走 snake_case;前端 API 协议(本文件 consumer)
  * 走 camelCase,翻译点在 `src/integrations/trpc/routers/{menu,dict,para,tag}.ts`。
  */
-import { datetime, index, int, json, mysqlTable, text, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import {
+	boolean,
+	datetime,
+	index,
+	int,
+	json,
+	mysqlTable,
+	text,
+	timestamp,
+	tinyint,
+	uniqueIndex,
+	varchar,
+} from "drizzle-orm/mysql-core";
 
 // ── 菜单表 ───────────────────────────────────────────────
 
@@ -221,4 +235,97 @@ export const sysTagRelation = mysqlTable(
 		index("idx_tag_rel_obj").on(table.obj_type, table.obj_id),
 		uniqueIndex("uk_tag_rel_unique").on(table.tag_id, table.obj_type, table.obj_id),
 	],
+);
+
+// ── 认证四表(Better Auth 内核)────────────────────────────
+//
+// 为什么在这儿:`auth` 是**系统的内部服务**,不是将来的业务应用 —— 所以和上面几张一样吃 `sys_` 前缀、
+// 同样**不进 drizzle 迁移**(MySQL 由 `scripts/create-system-tables.ts` 建,达梦由
+// `scripts/create-better-auth-tables-dm.ts` 建)。
+//
+// ⚠️ **本文件里唯独这四张表用驼峰属性名**(`emailVerified: boolean("email_verified")`)——
+// 不是笔误,是 better-auth 的硬要求:它按 **drizzle 的属性名**去找模型字段,找不到就报
+// `Drizzle schema mismatch / Missing columns: user.emailVerified …`,并顺带警告
+// 「session.expires_at 是 BA 永远不会写的必填列」。DB 列名仍然是 snake_case(显式写在第二个参数里)。
+// 另外**表名也不能左右它**:它按 `src/lib/auth.ts` 传给 adapter 的**映射键名**
+// (`user` / `session` / `account` / `verification`)找表,所以 DB 表叫 `sys_user` 完全没问题。
+//
+// `email_verified` 保留 drizzle 的 `boolean`(别换成 tinyint):better-auth 的客户端契约是布尔,
+// 换了 API 会开始返回 0/1。DDL 上它仍是 `tinyint(1)`。
+
+/** 用户 —— better-auth `user` 模型 */
+export const sysUser = mysqlTable(
+	"sys_user",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		name: varchar("name", { length: 128 }).notNull(),
+		email: varchar("email", { length: 255 }).notNull().unique(),
+		emailVerified: boolean("email_verified").notNull().default(false),
+		image: varchar("image", { length: 512 }),
+		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+	},
+	(table) => [uniqueIndex("uk_sys_user_email").on(table.email)],
+);
+
+/** 会话 —— 每个登录设备 / 浏览器一行;`user_id` 级联删除 */
+export const sysSession = mysqlTable(
+	"sys_session",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+		token: varchar("token", { length: 255 }).notNull().unique(),
+		ipAddress: text("ip_address"),
+		userAgent: text("user_agent"),
+		userId: varchar("user_id", { length: 36 })
+			.notNull()
+			.references(() => sysUser.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+	},
+	(table) => [uniqueIndex("uk_sys_session_token").on(table.token), index("idx_sys_session_user").on(table.userId)],
+);
+
+/**
+ * 账号 —— 一个用户可绑多个登录方式(邮箱密码算 `provider_id = 'credential'`),
+ * `password` 是 better-auth 自己的 scrypt 哈希,**不可与其它系统的哈希混用**。
+ * `(provider_id, account_id)` 唯一:同一来源的同一条外部账号只能绑一次。
+ */
+export const sysAccount = mysqlTable(
+	"sys_account",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		accountId: varchar("account_id", { length: 255 }).notNull(),
+		providerId: varchar("provider_id", { length: 64 }).notNull(),
+		userId: varchar("user_id", { length: 36 })
+			.notNull()
+			.references(() => sysUser.id, { onDelete: "cascade" }),
+		accessToken: text("access_token"),
+		refreshToken: text("refresh_token"),
+		idToken: text("id_token"),
+		accessTokenExpiresAt: timestamp("access_token_expires_at", { mode: "date" }),
+		refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { mode: "date" }),
+		scope: varchar("scope", { length: 255 }),
+		password: text("password"),
+		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_account_provider").on(table.providerId, table.accountId),
+		index("idx_sys_account_user").on(table.userId),
+	],
+);
+
+/** 验证码 / 一次性令牌(邮箱验证、改密、二次验证都用这张表) */
+export const sysVerification = mysqlTable(
+	"sys_verification",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		identifier: varchar("identifier", { length: 255 }).notNull(),
+		value: text("value").notNull(),
+		expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+	},
+	(table) => [index("idx_sys_verification_identifier").on(table.identifier)],
 );

@@ -135,6 +135,7 @@ export const tagRouter = createTRPCRouter({
 					label: input.label.trim(),
 					value: input.value?.trim() || null,
 					desc: input.desc?.trim() || null,
+					update_time: new Date(),
 				})
 				.where(eq(sysTag.id, input.id));
 			return toTagRow(await getTagRow(input.id));
@@ -186,9 +187,9 @@ export const tagRouter = createTRPCRouter({
 			}
 			await db.transaction(async (tx) => {
 				// 先改父(若跨父),再按序写 sort
-				await tx.update(sysTag).set({ parent_id: newParentId }).where(eq(sysTag.id, input.id));
+				await tx.update(sysTag).set({ parent_id: newParentId, update_time: new Date() }).where(eq(sysTag.id, input.id));
 				for (const [index, sibId] of input.orderedSiblingIds.entries()) {
-					await tx.update(sysTag).set({ sort: index }).where(eq(sysTag.id, sibId));
+					await tx.update(sysTag).set({ sort: index, update_time: new Date() }).where(eq(sysTag.id, sibId));
 				}
 			});
 			const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));

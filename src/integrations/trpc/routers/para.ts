@@ -73,7 +73,10 @@ export const paraRouter = createTRPCRouter({
 			if (problem) throw new Error(`${input.key}:${problem}`);
 			const value = input.value.trim();
 			if (row) {
-				await db.update(sysPara).set({ para_value: value }).where(eq(sysPara.para_key, input.key));
+				await db
+					.update(sysPara)
+					.set({ para_value: value, update_time: new Date() })
+					.where(eq(sysPara.para_key, input.key));
 			} else {
 				await db.insert(sysPara).values({
 					// 主键是 para_key;id 是 not null 的普通列,没有默认值 —— 必须自己生成

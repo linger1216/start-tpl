@@ -1,15 +1,26 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { Bell, ChevronRight, LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-
+import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
+import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
-import { cn } from "#/lib/utils";
 import { findNavTrailIn, type NavNode } from "./nav-config";
 import { useNavNodes } from "./nav-data";
 
 type Crumb = { label: string; href?: string };
+
+/** 当前登录用户(由 `(main)/route.tsx` 的 beforeLoad 在服务端取回,经外壳传下来) */
+export type SessionUser = { id: string; name: string; email: string };
 
 type ThemeMode = "light" | "dark";
 
@@ -66,10 +77,11 @@ function primaryCtaLabel(pathname: string): { label: string; icon: "plus" | "che
 	return null;
 }
 
-export function Topbar({ username, onToggle }: { username: string; onToggle: () => void }) {
+export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => void }) {
 	const { pathname } = useLocation();
 	const nodes = useNavNodes();
 	const crumbs = useMemo(() => buildCrumbs(nodes, pathname), [nodes, pathname]);
+	const router = useRouter();
 	const [theme, setTheme] = useState<ThemeMode>("light");
 	const cta = primaryCtaLabel(pathname);
 
@@ -88,9 +100,23 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 		window.localStorage.setItem(THEME_STORAGE_KEY, next);
 	};
 
-	const handleSignOut = () => {
-		// 鉴权未接：占位提示
-		console.warn("[topbar] signOut 占位（鉴权未接通）");
+	const handleSignOut = async () => {
+		try {
+			// ⚠️ 这里必须 try/catch:authClient 返回 { error } 也会**抛**(网络/解析失败),
+			// 只判 error 的话异常会变成一个没人管的 rejection —— 用户看到的就是"点了没反应"。
+			const { error } = await authClient.signOut();
+			if (error) {
+				toast.error(error.message ?? "退出失败,请重试");
+				return;
+			}
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : "退出失败,请重试");
+			return;
+		}
+		// 会话已清。先 invalidate 把当前路由的数据/守卫结果作废,再**明确跳**登录页 ——
+		// 不依赖"守卫因为 invalidate 而抛出重定向"这条路(那条依赖路由内部行为,不好保证)。
+		await router.invalidate();
+		await router.navigate({ to: "/login", replace: true });
 	};
 
 	return (
@@ -168,23 +194,29 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 
 				<div className="mx-1 h-5 w-px bg-border" />
 
-				{/* 用户 —— 头像环跟随当前模块色相 */}
-				<div className="flex items-center gap-2">
-					<div
-						className={cn(
-							"flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[12px] font-medium text-foreground ring-1 transition-[box-shadow] duration-200",
-							"ring-border hover:ring-2",
-						)}
+				{/* 用户菜单 —— 点开:显示姓名/邮箱 + 退出登录 */}
+				<DropdownMenu>
+					<DropdownMenuTrigger
+						aria-label="用户菜单"
+						className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/40"
 					>
-						{username.slice(0, 1)}
-					</div>
-					<span className="hidden text-[13px] sm:block">{username}</span>
-				</div>
-
-				<Button variant="ghost" size="sm" onClick={handleSignOut} className="gap-1.5 text-[12px]">
-					<LogOut className="size-3.5" />
-					<span className="hidden sm:inline">退出</span>
-				</Button>
+						<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[12px] font-medium text-foreground ring-1 ring-border">
+							{(user.name || user.email).slice(0, 1).toUpperCase()}
+						</span>
+						<span className="hidden max-w-32 truncate text-[13px] sm:block">{user.name || user.email}</span>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-56">
+						<DropdownMenuLabel className="font-normal">
+							<div className="truncate text-[13px] font-medium text-foreground">{user.name || "(未填姓名)"}</div>
+							<div className="truncate text-[11.5px] text-muted-foreground">{user.email}</div>
+						</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onClick={() => void handleSignOut()} className="gap-2 text-[13px]">
+							<LogOut className="size-3.5" />
+							退出登录
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 		</header>
 	);

@@ -114,6 +114,8 @@ export const dictRouter = createTRPCRouter({
 					remark: input.remark || null,
 					items: input.items,
 					status: input.status ? 1 : 0,
+					// 显式写 update_time:达梦没有 DDL 的 ON UPDATE CURRENT_TIMESTAMP
+					update_time: new Date(),
 				})
 				.where(eq(sysDict.code, input.code));
 			return { id: existing.id, code: input.code };

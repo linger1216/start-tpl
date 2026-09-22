@@ -28,10 +28,15 @@
     "db:create": "dotenv -e .env.local -- tsx scripts/create-system-tables.ts",
     "db:migrate:ids": "dotenv -e .env.local -- tsx scripts/migrate-ids-to-nanoid.ts",
     "db:sync:meta": "dotenv -e .env.local -- tsx scripts/sync-table-meta.ts",
+    "db:dm:poc": "tsx scripts/dm-poc.ts",
+    "db:dm:smoke": "dotenv -e .env.local -- tsx scripts/dm-drizzle-smoke.ts",
+    "db:dm:defaults": "dotenv -e .env.local -- tsx scripts/dm-sync-defaults.ts",
     "db:seed:menus": "dotenv -e .env.local -- tsx scripts/seed-menus.ts",
     "db:seed:dicts": "dotenv -e .env.local -- tsx scripts/seed-dicts.ts",
     "db:seed:paras": "dotenv -e .env.local -- tsx scripts/seed-paras.ts",
-    "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts"
+    "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts",
+    "check:legacy": "node scripts/check-legacy.mjs",
+    "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -58,6 +63,7 @@
     "cmdk": "^1.1.1",
     "cn": "^0.2.6",
     "date-fns": "^4.4.0",
+    "dmdb": "^1.0.52452",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",

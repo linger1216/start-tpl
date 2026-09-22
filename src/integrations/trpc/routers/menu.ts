@@ -86,7 +86,14 @@ export const menuRouter = createTRPCRouter({
 			await assertPathFree(path, input.id);
 			await db
 				.update(sysMenu)
-				.set({ name: input.name.trim(), path, icon: input.icon || null, visible: input.visible ? 1 : 0 })
+				.set({
+					name: input.name.trim(),
+					path,
+					icon: input.icon || null,
+					visible: input.visible ? 1 : 0,
+					// 显式写 update_time:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP,靠应用补齐
+					update_time: new Date(),
+				})
 				.where(eq(sysMenu.id, input.id));
 			return toMenuRow(await getMenuRow(input.id));
 		}),
@@ -120,7 +127,7 @@ export const menuRouter = createTRPCRouter({
 			// 事务里逐行写 sort:要么全改、要么不改
 			await db.transaction(async (tx) => {
 				for (const [index, id] of input.orderedIds.entries()) {
-					await tx.update(sysMenu).set({ sort: index }).where(eq(sysMenu.id, id));
+					await tx.update(sysMenu).set({ sort: index, update_time: new Date() }).where(eq(sysMenu.id, id));
 				}
 			});
 			const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));

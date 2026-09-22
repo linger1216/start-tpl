@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 
-import { db } from "../src/db/index.ts";
+import { db, dmPool } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
 
@@ -42,6 +42,11 @@ export function assertNanoid(value: unknown, label = "id"): void {
  * 池不关进程就不退出 —— 症状是"测试跑完了但不返回",CI 里直接卡到超时。
  */
 export async function closeDb(): Promise<void> {
+	// 达梦分支没有 mysql2 那个 $client,用它自己的 pool.close();MySQL 分支照旧
+	if (dmPool) {
+		await dmPool.close();
+		return;
+	}
 	await db.$client.end();
 }
 

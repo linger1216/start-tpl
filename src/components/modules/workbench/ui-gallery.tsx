@@ -8,12 +8,20 @@
  * 约定(改这个文件前读):
  *  - **只放最小可用示例**,不放长篇文档 —— 详细注释在各自 `ui/*.tsx` 的文件头;
  *  - 每个示例都要能**直接抄进业务页**:受控组件给好 useState,不给"半截用法";
- *  - 新增/删除 `ui/` 下的原语时,**同步在这里加减一格**,否则又会退回"孤儿组件";
+ *  - 新增/删除 `ui/` / `shared/` / `lib/` 下的封装时,**同步在这里加减一格**,否则又会退回"孤儿组件";
  *  - 表格那种"一格里塞不下"的例子不挤进网格 —— 给它自己的整宽卡片(见 `UiGalleryTable`)。
+ *  - **分层展示**:能独立渲染的就真跑(拖拽 / 勾选 / 校验都点得动);满足不了下面任一条的只给
+ *    「签名 + 指路」卡 —— ① 需要 TanStack Form 的 field context(`shared/form-kit`);
+ *    ② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 全量 lucide;`shared/excel-*` → xlsx);
+ *    ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。
  */
+
+import { useStore } from "@tanstack/react-store";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
+import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
+import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
@@ -97,6 +105,13 @@ import {
 import { TagInput } from "#/components/ui/tag-input";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { store as demoStore, selectFullName } from "#/lib/demo-store";
+import { formatJson, normalizeValue, orEmpty } from "#/lib/format";
+import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
+import { createMockTable, type MockRow } from "#/lib/mock-table";
+import { joinMultiValue, splitMultiValue } from "#/lib/multi-value";
+import { asParaType, PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
+import { formatLocalDate, formatLocalDateTime, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
@@ -555,6 +570,403 @@ export function UiGallery() {
 					<p className="text-[12px] text-muted-foreground">
 						{range.from ?? "—"} ~ {range.to ?? "—"}
 					</p>
+				</Cell>
+			</Group>
+
+			<ModuleGallery />
+		</div>
+	);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 通用件(shared)与通用工具(lib)的示例
+//
+// 与上面的 `ui/` 原语分开写:这些是「在多个 ui 原语之上组装、带交互或领域约定」的件,
+// 状态也与原语示例无关。能独立渲染的真跑;跑不了的给签名 + 指路(理由见文件头约定)。
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * `SortableTree` 只认 id / parentId / depth / children;业务字段(这里是 `label`)由调用方自己加。
+ * 写成显式类型而不是 `SortableTreeNode & { label }` —— 交叉类型会让嵌套 `children` 退回基础类型,
+ * 里面的 `label` 就"不存在"了(TS 会报字面量多出属性)。
+ */
+type DemoTTreeNode = {
+	id: string;
+	parentId: string | null;
+	depth: number;
+	children: DemoTTreeNode[];
+	label: string;
+};
+
+/** 两级树:维度 → 标签,和「菜单管理 / 标签管理」两页用的是同一套结构 */
+const DEMO_TREE: DemoTTreeNode[] = [
+	{
+		id: "dim-a",
+		parentId: null,
+		depth: 0,
+		label: "重点场所",
+		children: [
+			{ id: "tag-a1", parentId: "dim-a", depth: 1, label: "学校", children: [] },
+			{ id: "tag-a2", parentId: "dim-a", depth: 1, label: "医院", children: [] },
+		],
+	},
+	{
+		id: "dim-b",
+		parentId: null,
+		depth: 0,
+		label: "风险等级",
+		children: [{ id: "tag-b1", parentId: "dim-b", depth: 1, label: "一级", children: [] }],
+	},
+];
+
+/** 权限点树:菜单权限 + 操作权限(`kind: "操作"` 会带徽章区分) */
+const DEMO_PERMISSIONS: PermissionNode[] = [
+	{
+		id: "sys",
+		name: "系统设置",
+		children: [
+			{ id: "sys:menu", name: "菜单管理" },
+			{ id: "sys:menu:write", name: "菜单编辑", kind: "操作" },
+			{ id: "sys:tag", name: "标签管理" },
+			{ id: "sys:tag:write", name: "标签编辑", kind: "操作" },
+		],
+	},
+	{ id: "data", name: "数据", children: [{ id: "data:export", name: "导出", kind: "操作" }] },
+];
+
+/** 假后端表:模块级建一次 → 切走再回来数据还在(与业务页用法一致;刷页面回种子) */
+const demoMockTable = createMockTable<MockRow>([{ id: "ENT-0001", title: "示例记录", status: "未读" }], "ENT");
+
+function ModuleGallery() {
+	const [tree, setTree] = useState(DEMO_TREE);
+	const [treeSelected, setTreeSelected] = useState<string | null>("tag-a1");
+	const [permSelected, setPermSelected] = useState<string[]>(["sys:menu"]);
+	const [toolbarSearch, setToolbarSearch] = useState("");
+	const [multiValue, setMultiValue] = useState("紧急、待审;hot");
+	const [paraInput, setParaInput] = useState("0");
+	const [paraType, setParaType] = useState<ParaType>(PARA_TYPE.INT);
+	const [demoFirst, setDemoFirst] = useState("");
+
+	const mockRows = demoMockTable((state) => state.rows);
+	const fullName = useStore(demoStore, selectFullName);
+	const paraError = validateParaValue(asParaType(paraType), paraInput);
+
+	return (
+		<div className="space-y-4">
+			<Group
+				title="通用交互件(shared)"
+				desc="在多个 ui 原语之上组装、带交互的领域无关件。能独立渲染的真跑;要 form context 或会拖进重依赖的只给签名卡。"
+			>
+				<Cell name="SortableTree" hint="拖拽排序 + 折叠 + 选中 + 键盘上下移(菜单 / 标签管理两页共用)">
+					<div className="h-44 overflow-hidden rounded-lg border border-border bg-card p-2">
+						<SortableTree
+							nodes={tree}
+							selectedId={treeSelected}
+							ariaLabel="示例树"
+							onSelect={(node) => setTreeSelected(node.id)}
+							onReorder={(draggedId, targetId, position) =>
+								setTree((prev) => {
+									// 演示只做**同级**重排(根之间);跨父迁移的判定在组件内部
+									const from = prev.findIndex((n) => n.id === draggedId);
+									if (from < 0) return prev;
+									const next = [...prev];
+									const [moved] = next.splice(from, 1);
+									const at = next.findIndex((n) => n.id === targetId);
+									if (at < 0) return prev;
+									next.splice(position === "before" ? at : at + 1, 0, moved);
+									return next;
+								})
+							}
+							renderRow={(node) => <span className="truncate text-[13px]">{node.label}</span>}
+						/>
+					</div>
+					<p className="mt-2 text-[12px] text-muted-foreground">
+						选中:<code className="font-mono">{treeSelected ?? "—"}</code>
+					</p>
+				</Cell>
+
+				<Cell name="PermissionPicker" hint="权限点选择区:搜索 + 勾选(重建授权界面直接用,别另写一份)">
+					<div className="rounded-lg border border-border bg-card p-2">
+						<PermissionPicker
+							nodes={DEMO_PERMISSIONS}
+							selected={permSelected}
+							onToggle={(ids, on) =>
+								setPermSelected((prev) =>
+									on ? Array.from(new Set([...prev, ...ids])) : prev.filter((id) => !ids.includes(id)),
+								)
+							}
+						/>
+					</div>
+				</Cell>
+
+				<Cell name="LedgerToolbar" hint="台账工具条:搜索 + 选中态 + 批量操作 + 右侧 actions">
+					<LedgerToolbar
+						search={toolbarSearch}
+						onSearchChange={setToolbarSearch}
+						searchPlaceholder="搜索编号 / 标题"
+						actions={
+							<Button size="sm" variant="outline" onClick={() => toast.info("新增")}>
+								新增
+							</Button>
+						}
+					/>
+				</Cell>
+
+				<Cell name="IconPicker / ExcelImportDialog / form-kit" hint="这三件这里只给签名 —— 理由见下" wide>
+					<div className="space-y-2 text-[12.5px]">
+						<div>
+							<code className="font-mono text-foreground">shared/icon-picker</code> ·{" "}
+							<code className="font-mono">IconPicker</code> —— props:
+							<code className="font-mono">value / onChange / placeholder</code>
+							<p className="text-muted-foreground">
+								它的图标来自 <code className="font-mono">lucide-react</code> <b>全量</b>;在工作台 import
+								会把整包打进首屏。 实活示例在「系统设置 ▸ 菜单管理」的图标选择器。
+							</p>
+						</div>
+						<div>
+							<code className="font-mono text-foreground">shared/excel-import</code> ·{" "}
+							<code className="font-mono">ExcelImportDialog</code> —— 受控 props:
+							<code className="font-mono">open / onOpenChange / title / fields / onSubmit / isPending</code>
+							<p className="text-muted-foreground">
+								它依赖 <code className="font-mono">xlsx</code>(体积大)+ 必须配{" "}
+								<code className="font-mono">lib/excel</code> 的<code className="font-mono"> readSheetTable</code>
+								。实活用法见「参数管理 / 标签管理」页的导入导出。
+							</p>
+						</div>
+						<div>
+							<code className="font-mono text-foreground">shared/form-kit</code> ·{" "}
+							<code className="font-mono">
+								FieldRow / TextField / TextAreaField / SelectField / TagField / NumberField / SubmitButton / FormSection
+							</code>
+							<p className="text-muted-foreground">
+								每个字段用 <code className="font-mono">useFieldContext()</code> 读值 ——{" "}
+								<b>必须在 TanStack Form 的 field context 里</b>
+								才能渲染(单独放会直接抛错)。可运行示例在{" "}
+								<a className="text-primary hover:underline" href="/demo/form.simple">
+									/demo/form.simple
+								</a>
+								。
+							</p>
+						</div>
+					</div>
+				</Cell>
+			</Group>
+
+			<Group
+				title="通用工具(lib)"
+				desc="客户端能跑的纯函数工具 —— 都能直接抄。服务端专用的（auth / sys-para）只给签名,import 它们会把 mysql2 打进浏览器包。"
+			>
+				<Cell name="time" hint="时间只走这里 —— 自己写 toISOString 会差 8 小时(踩过两次)">
+					<div className="space-y-1 font-mono text-[12.5px]">
+						<div>formatLocalDateTime → {formatLocalDateTime(new Date())}</div>
+						<div>formatLocalMinute&nbsp;&nbsp; → {formatLocalMinute(new Date())}</div>
+						<div>formatLocalDate&nbsp;&nbsp;&nbsp;&nbsp; → {formatLocalDate(new Date())}</div>
+						<div className="font-sans text-muted-foreground">
+							对照:<code className="font-mono">new Date().toISOString()</code> = {new Date().toISOString()}(UTC)
+						</div>
+					</div>
+				</Cell>
+
+				<Cell name="ids" hint="主键(nanoid)+ 业务编号;派生项目先改 ID_PREFIX">
+					<div className="space-y-1 font-mono text-[12.5px]">
+						<div>newId() → {newId()}</div>
+						<div>formatCode("ENT") → {formatCode("ENT")}</div>
+						<div>ID_PREFIX.ENTITY = {ID_PREFIX.ENTITY}</div>
+						<div>ID_PATTERN = {ID_PATTERN}</div>
+					</div>
+				</Cell>
+
+				<Cell name="format" hint="空值兜底 / JSON 展示 / 值归一 —— 表格单元格常用">
+					<div className="space-y-1 font-mono text-[12.5px]">
+						<div>orEmpty(null) = "{orEmpty(null)}"</div>
+						<div>orEmpty("") = "{orEmpty("")}"</div>
+						<div>normalizeValue("a、b;c") = {JSON.stringify(normalizeValue("a、b;c"))}</div>
+						<div>formatJson(JS 对象) =</div>
+						<pre className="ml-2 rounded bg-muted px-2 py-1 text-[11.5px]">{formatJson({ a: 1 })}</pre>
+					</div>
+				</Cell>
+
+				<Cell name="multi-value" hint="多值字段的唯一分隔符口径(顿号 / 逗号 / 分号 / 竖线)">
+					<div className="space-y-2">
+						<Input
+							value={multiValue}
+							onChange={(e) => setMultiValue(e.target.value)}
+							placeholder="试试 紧急、待审;hot"
+						/>
+						<div className="text-[12px] text-muted-foreground">
+							拆:<code className="font-mono text-foreground">{JSON.stringify(splitMultiValue(multiValue))}</code>
+						</div>
+						<div className="text-[12px] text-muted-foreground">
+							合:<code className="font-mono text-foreground">{joinMultiValue(splitMultiValue(multiValue))}</code>
+						</div>
+					</div>
+				</Cell>
+
+				<Cell name="para-spec" hint="参数类型码 + 录入校验(参数管理页表单与后端 procedure 共用这一份)">
+					<div className="space-y-2">
+						<div className="flex flex-wrap gap-1.5">
+							{PARA_TYPES.map((code) => (
+								<Button
+									key={code}
+									size="sm"
+									variant={paraType === code ? "default" : "outline"}
+									onClick={() => setParaType(code)}
+								>
+									{PARA_TYPE_META[code].label}
+								</Button>
+							))}
+						</div>
+						<Input value={paraInput} onChange={(e) => setParaInput(e.target.value)} placeholder="输入值试试校验" />
+						<p className="text-[12px] text-muted-foreground">
+							{PARA_TYPE_META[asParaType(paraType)].hint} →{" "}
+							{paraError ? (
+								<span className="text-danger">{paraError}</span>
+							) : (
+								<span className="text-success">合法</span>
+							)}
+						</p>
+					</div>
+				</Cell>
+
+				<Cell name="mock-table" hint="设计期的假后端(zustand):增 / 删,切页面不丢、刷新回种子" wide>
+					<div className="space-y-2">
+						<div className="flex flex-wrap gap-2">
+							<Button
+								size="sm"
+								onClick={() => demoMockTable.getState().insert([{ title: `新记录 ${mockRows.length + 1}` }])}
+							>
+								追加一行
+							</Button>
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={() => demoMockTable.getState().remove(mockRows.slice(0, 1).map((r) => r.id))}
+							>
+								删第一行
+							</Button>
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={() => demoMockTable.getState().replaceAll([{ title: "只剩我" }])}
+							>
+								覆盖导入
+							</Button>
+						</div>
+						<ul className="space-y-1">
+							{mockRows.map((row) => (
+								<li
+									key={row.id}
+									className="flex items-center gap-2 rounded border border-border bg-card/60 px-3 py-1.5 text-[13px]"
+								>
+									<code className="font-mono text-[11.5px] text-muted-foreground">{row.id}</code>
+									<span className="truncate">{String(row.title ?? "")}</span>
+								</li>
+							))}
+						</ul>
+					</div>
+				</Cell>
+
+				<Cell name="demo-store" hint="全局 store(@tanstack/store)—— useStore(store, selector) 订阅">
+					<div className="space-y-2">
+						<p className="text-[13px]">
+							firstName = <code className="font-mono text-foreground">{fullName}</code>
+						</p>
+						<div className="flex gap-2">
+							<Input value={demoFirst} onChange={(e) => setDemoFirst(e.target.value)} placeholder="改成别的名字" />
+							<Button
+								size="sm"
+								disabled={!demoFirst.trim()}
+								onClick={() => {
+									demoStore.setState((state) => ({ ...state, firstName: demoFirst.trim() }));
+									setDemoFirst("");
+								}}
+							>
+								写入
+							</Button>
+						</div>
+						<p className="text-[12px] text-muted-foreground">切到别的 Group 再回来值还在;刷新页面回种子。</p>
+					</div>
+				</Cell>
+
+				<Cell
+					name="auth / auth-client / sys-para / excel(服务端或重依赖)"
+					hint="只给签名 —— 这些不能在浏览器 import"
+					wide
+				>
+					<div className="grid gap-3 md:grid-cols-2">
+						<div className="space-y-1 font-mono text-[12.5px]">
+							<div className="font-sans font-medium text-foreground">lib/auth.ts(服务端)</div>
+							<div>betterAuth(drizzleAdapter(db), emailAndPassword, plugins)</div>
+							<div className="font-sans text-muted-foreground">
+								它 import <code className="font-mono">#/db</code>(drizzle→mysql2)。客户端碰它会把驱动打进浏览器包 ——
+								浏览器里没有 <code className="font-mono">Buffer.prototype</code>,整页崩。客户端只用{" "}
+								<code className="font-mono">auth-client</code>。
+							</div>
+						</div>
+						<div className="space-y-1 font-mono text-[12.5px]">
+							<div className="font-sans font-medium text-foreground">lib/sys-para.ts(服务端)</div>
+							<div>getParaMap() / getParaInt() / getParaBool() / clearParaCache()</div>
+							<div className="font-sans text-muted-foreground">
+								带 30 秒内存缓存,同样 import 了 <code className="font-mono">#/db</code>。客户端要类型码 / 校验时从{" "}
+								<code className="font-mono">lib/para-spec</code> 取(就是上面那张卡)。
+							</div>
+						</div>
+						<div className="space-y-1 font-mono text-[12.5px]">
+							<div className="font-sans font-medium text-foreground">lib/auth-client.ts(客户端)</div>
+							<div>authClient.signIn.email(email, password)</div>
+							<div>authClient.signOut() / authClient.useSession()</div>
+							<div className="font-sans text-muted-foreground">全项目:登录页 + 顶栏用户菜单。</div>
+						</div>
+						<div className="space-y-1 font-mono text-[12.5px]">
+							<div className="font-sans font-medium text-foreground">lib/excel.ts(重依赖)</div>
+							<div>readSheetTable(buf, opts) / writeSheet(columns, rows, fileName) / cellText(v)</div>
+							<div className="font-sans text-muted-foreground">
+								依赖 <code className="font-mono">xlsx</code>;实活用法在「参数管理 / 标签管理」页的导入导出。
+							</div>
+						</div>
+					</div>
+				</Cell>
+
+				<Cell name="其余封装一览(不单独给示例)" hint="一句话交代每个件是干什么的 —— 免得它们在仓库里没有入口" wide>
+					<ul className="space-y-1.5 text-[12.5px]">
+						<li>
+							<code className="font-mono text-foreground">ui/sonner</code> —— Toast 的{" "}
+							<code className="font-mono">Toaster</code> 提供者。 已经在 <code className="font-mono">__root.tsx</code>{" "}
+							挂载一次,页面里 <code className="font-mono">toast.success(...)</code> 直接用(上面几个示例就在用)。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">shared/icons-list</code> +{" "}
+							<code className="font-mono">use-lucide-icons</code> —— 图标名清单与「名字 → 组件」解析,是{" "}
+							<code className="font-mono">IconPicker</code> 的底座(见上面那张卡:它带全量 lucide,不在这页 import)。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">lib/constants</code> —— 三个全局常量:
+							<code className="font-mono">PLACEHOLDER_EMPTY</code>("-")、<code className="font-mono">PAGE_SIZES</code>、
+							<code className="font-mono">THEME_STORAGE_KEY</code>(与 <code className="font-mono">__root.tsx</code>{" "}
+							的首屏脚本共用,别改单边)。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">lib/logger</code> —— 服务端结构化日志(
+							<code className="font-mono">logger.info/warn/error</code>),tRPC 中间件已按{" "}
+							<code className="font-mono">traceId</code> 全量记;客户端别用。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">lib/menu-detail-path</code> —— 「参数化菜单路径」约定(
+							<code className="font-mono">/data/raw/&lt;记录 id&gt;</code>),
+							模板底料:菜单里要挂"某条记录的明细页"时启用。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">lib/sidebar-mode</code> —— 侧边栏收起形态(
+							<code className="font-mono">rail</code> / <code className="font-mono">hidden</code>)的取值域与容错解析。
+							实活入口就在「系统设置 ▸ 参数管理」里那条 <code className="font-mono">ui.sidebar.collapsed_mode</code>。
+						</li>
+						<li>
+							<code className="font-mono text-foreground">shared/filter-chips</code> ·{" "}
+							<code className="font-mono">pagination-control</code> · <code className="font-mono">stat-cards</code> ·{" "}
+							<code className="font-mono">table-kit</code> · <code className="font-mono">tag-badges</code> ——
+							这五个已经在上面那张「台账表格(完整业务页骨架)」里带着用了一遍,不重复放。
+						</li>
+					</ul>
 				</Cell>
 			</Group>
 		</div>
