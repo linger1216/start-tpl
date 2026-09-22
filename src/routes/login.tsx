@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { LayoutDashboard } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -30,6 +30,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+	const router = useRouter();
 	const { redirect: to } = Route.useSearch();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const [email, setEmail] = useState("admin@example.com");
@@ -41,8 +42,8 @@ function LoginPage() {
 
 	// 已经登录了就别停在登录页(比如登录后又点回退)
 	useEffect(() => {
-		if (session) window.location.replace(target);
-	}, [session, target]);
+		if (session) void router.navigate({ to: target, replace: true });
+	}, [session, target, router]);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -55,9 +56,11 @@ function LoginPage() {
 				setError(signInError.message ?? "登录失败,请检查邮箱与密码");
 				return;
 			}
-			// 用整页跳转而不是 router.navigate:会话 cookie 刚由服务端下发,
-			// 重新走一次 SSR 才能让 beforeLoad 拿到它(且顺带刷新所有 loader 数据)。
-			window.location.replace(target);
+			// SPA 跳转(不是 window.location.replace):会话 cookie 已经由上面那次登录响应写好,
+			// 这次客户端导航会**带着新 cookie** 重跑 (main) 的 beforeLoad(服务端判会话)与所有 loader,
+			// 所以登录态一样生效;而整页刷新会把 Network 面板里那条登录请求(含响应体)清掉,不好排查。
+			await router.invalidate(); // 丢掉上一段会话可能留下的缓存数据
+			await router.navigate({ to: target, replace: true });
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
