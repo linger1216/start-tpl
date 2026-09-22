@@ -6,7 +6,7 @@ import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
 
 /**
- * 通用徽章列表 —— 展示层共享组件,供表格单元格(JsonCell)与可编辑标签输入(TagInput)复用。
+ * 通用徽章列表 —— 展示层共享组件,供表格「多值单元格」与可编辑标签输入(TagInput)复用。
  *
  * 渲染规则:
  *  - values 为空   → 显示 emptyPlaceholder(默认 PLACEHOLDER_EMPTY)

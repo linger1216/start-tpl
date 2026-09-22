@@ -164,7 +164,7 @@ export function SelectField({
  * 多值标签字段。
  *
  * 表单值是 `string[]`(数据模型就是这个形状),而 `TagInput` 需要 `{ value }[]`
- * —— 这层转换收在组件里,各域不必重复;候选标签来自 `#/mocks/tags.ts`。
+ * —— 这层转换收在组件里,各域不必重复。候选标签由调用方通过 `options` 传入(不内置任何标签清单)。
  */
 export function TagField({
 	label,

@@ -46,9 +46,7 @@ export function PaginationControl({
 									onClick={() => onPageSizeChange(n)}
 									className={cn(
 										"h-6 rounded-md px-2.5 text-xs font-medium transition-colors",
-										active
-											? "bg-card text-foreground shadow-(--shadow-card)"
-											: "text-muted-foreground hover:text-foreground",
+										active ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground",
 									)}
 								>
 									{n}

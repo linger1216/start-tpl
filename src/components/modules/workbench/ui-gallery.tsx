@@ -8,9 +8,13 @@
  * 约定(改这个文件前读):
  *  - **只放最小可用示例**,不放长篇文档 —— 详细注释在各自 `ui/*.tsx` 的文件头;
  *  - 每个示例都要能**直接抄进业务页**:受控组件给好 useState,不给"半截用法";
- *  - 新增/删除 `ui/` 下的原语时,**同步在这里加减一格**,否则又会退回"孤儿组件"。
+ *  - 新增/删除 `ui/` 下的原语时,**同步在这里加减一格**,否则又会退回"孤儿组件";
+ *  - 表格那种"一格里塞不下"的例子不挤进网格 —— 给它自己的整宽卡片(见 `UiGalleryTable`)。
  */
 import { useState } from "react";
+import { toast } from "sonner";
+
+import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
@@ -22,7 +26,7 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "#/components/ui/breadcrumb";
-import { Button, buttonVariants, MotionButton } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import { ButtonGroup, ButtonGroupSeparator, ButtonGroupText } from "#/components/ui/button-group";
 import { Calendar } from "#/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
@@ -45,15 +49,17 @@ import {
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
+	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { FileDropzone } from "#/components/ui/file-dropzone";
+import { HoldButton } from "#/components/ui/hold-button";
 import { Input } from "#/components/ui/input";
 import { JsonBlock } from "#/components/ui/json-block";
-import { JsonCell } from "#/components/ui/json-cell";
 import { Label } from "#/components/ui/label";
 import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from "#/components/ui/menubar";
 import { NumField } from "#/components/ui/num-field";
@@ -73,37 +79,45 @@ import {
 } from "#/components/ui/select";
 import { Separator } from "#/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "#/components/ui/sheet";
-import { Skeleton } from "#/components/ui/skeleton";
-import { StatCardsSkeleton, TableSkeleton } from "#/components/ui/skeleton-blocks";
+import { Skeleton, StatCardsSkeleton, TableSkeleton } from "#/components/ui/skeleton";
 import { Slider } from "#/components/ui/slider";
 import { Spinner } from "#/components/ui/spinner";
-import { StatusBadge, StatusWordBadge } from "#/components/ui/status-badge";
 import { Switch } from "#/components/ui/switch";
-import {
-	Table,
-	TableBody,
-	TableCaption,
-	TableCell,
-	TableFooter,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Table, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { TableResizeHandle } from "#/components/ui/table-resize-handle";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import {
+	TAB_VARIANT_META,
+	TABS_VARIANTS,
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+	type TabVariant,
+} from "#/components/ui/tabs";
 import { TagInput } from "#/components/ui/tag-input";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { cn } from "#/lib/utils";
 
-/** 一格:标题 + 说明 + 渲染区 */
-function Cell({ name, hint, children }: { name: string; hint?: string; children: React.ReactNode }) {
+/** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
+function Cell({
+	name,
+	hint,
+	wide = false,
+	children,
+}: {
+	name: string;
+	hint?: string;
+	wide?: boolean;
+	children: React.ReactNode;
+}) {
 	return (
-		<div className="min-w-0 rounded-xl border border-border bg-card p-3">
+		<div className={cn("min-w-0 rounded-xl border border-border bg-card p-3", wide && "md:col-span-2 xl:col-span-3")}>
 			<div className="mb-2 flex items-baseline gap-2">
 				<code className="font-mono text-[12px] text-foreground">{name}</code>
 				{hint ? <span className="truncate text-[11px] text-muted-foreground">{hint}</span> : null}
 			</div>
-			<div className="flex flex-wrap items-center gap-2">{children}</div>
+			<div className={cn(wide ? "space-y-2" : "flex flex-wrap items-center gap-2")}>{children}</div>
 		</div>
 	);
 }
@@ -136,6 +150,7 @@ export function UiGallery() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [collapsedOpen, setCollapsedOpen] = useState(false);
+	const [day, setDay] = useState<Date | undefined>(undefined);
 	const [range, setRange] = useState<{ from?: string; to?: string }>({
 		from: "2026-09-01",
 		to: "2026-09-07",
@@ -143,6 +158,22 @@ export function UiGallery() {
 
 	return (
 		<div className="space-y-4">
+			{/* 台账表格:一格里塞不下,给它整宽卡片(见文件头最后一条约定) */}
+			<Card>
+				<CardHeader>
+					<CardTitle className="text-[14px]">台账表格(完整业务页骨架)</CardTitle>
+					<CardDescription>
+						指标卡 → 快速筛选 chip → 工具条 → 批量操作条 → 表格(多选 / 排序 / 徽章 / 标签 / 数值对齐 / 行操作)→
+						分页。列定义走 <code className="font-mono">lib/table.ts</code> 的 v9 app hook,多选列与 操作列用{" "}
+						<code className="font-mono">shared/table-kit</code> 的 <code className="font-mono">selectColumn</code> /{" "}
+						<code className="font-mono">actionsColumn</code> —— 抄这一份就够搭一个台账页。
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="pt-0">
+					<UiGalleryTable />
+				</CardContent>
+			</Card>
+
 			<Group title="基础录入" desc="表单里最常用的受控原语 —— 每个都给好了 useState,可直接抄进业务页。">
 				<Cell name="Input" hint="单行输入">
 					<Input placeholder="请输入" className="w-40" />
@@ -150,9 +181,13 @@ export function UiGallery() {
 				<Cell name="Textarea" hint="多行输入">
 					<Textarea placeholder="备注" className="w-40" rows={2} />
 				</Cell>
-				<Cell name="Label" hint="表单标签">
-					<Label htmlFor="g-name">用户名</Label>
-					<Input id="g-name" className="w-32" />
+				<Cell name="Label + Input" hint="标签绑定(htmlFor)">
+					<div className="flex w-full items-center gap-2">
+						<Label htmlFor="g-name" className="shrink-0">
+							用户名
+						</Label>
+						<Input id="g-name" className="w-full" />
+					</div>
 				</Cell>
 				<Cell name="Checkbox" hint="勾选">
 					<Checkbox checked={checkOn} onCheckedChange={(v) => setCheckOn(v === true)} />
@@ -176,7 +211,7 @@ export function UiGallery() {
 				<Cell name="RateSlider" hint="评分滑杆">
 					<RateSlider value={rateVal} onChange={setRateVal} label="满意度" />
 				</Cell>
-				<Cell name="Select" hint="下拉选择">
+				<Cell name="Select" hint="下拉选择(可分组)">
 					<Select value={selectVal} onValueChange={(v) => setSelectVal(v ?? "")}>
 						<SelectTrigger className="w-32">
 							<SelectValue />
@@ -214,40 +249,37 @@ export function UiGallery() {
 			</Group>
 
 			<Group title="展示与反馈" desc="只读的展示类原语 —— 徽章 / 数值 / 加载态 / 头像。">
-				<Cell name="Badge" hint="徽章">
+				<Cell name="Badge" hint="徽章(4 个变体)">
 					<Badge>默认</Badge>
 					<Badge variant="secondary">次要</Badge>
 					<Badge variant="outline">描边</Badge>
+					<Badge variant="destructive">危险</Badge>
 				</Cell>
-				<Cell name="BadgeList" hint="徽章列表">
-					<BadgeList values={["紧急", "已核对"]} />
+				<Cell name="BadgeList" hint="徽章列表(可换配色主题)">
+					<BadgeList values={["紧急", "已核对", "跨区"]} />
 				</Cell>
-				<Cell name="StatusBadge" hint="状态徽章(按 status 数字)">
-					<StatusBadge status={1} />
-					<StatusBadge status={0} />
-				</Cell>
-				<Cell name="StatusWordBadge" hint="按文案映射状态">
-					<StatusWordBadge value="启用" />
-					<StatusWordBadge value="停用" />
+				<Cell name="BadgeList" hint="按值稳定取色(同一值永远同色)">
+					<BadgeList values={["华东", "华北", "华南", "西南"]} color="stable" />
 				</Cell>
 				<Cell name="ScoreText" hint="数值着色">
 					<ScoreText value={88} />
 					<ScoreText value={42} />
 				</Cell>
-				<Cell name="JsonBlock" hint="JSON 块">
+				<Cell name="JsonBlock" hint="JSON 块(只读)">
 					<JsonBlock value={{ ok: true, rows: 3 }} />
 				</Cell>
-				<Cell name="JsonCell" hint="表格里的 JSON 单元格">
-					<JsonCell value={["紧急", "已核对"]} />
-				</Cell>
 				<Cell name="DetailRow" hint="详情一行(标签 + 值)">
-					<div className="w-full">
+					<div className="w-full space-y-1.5">
 						<DetailRow label="创建人">管理员</DetailRow>
+						<DetailRow label="创建时间">2026-09-21 09:12</DetailRow>
 					</div>
 				</Cell>
-				<Cell name="Avatar" hint="头像">
+				<Cell name="Avatar" hint="头像(无图退回首字)">
 					<Avatar>
 						<AvatarFallback>管</AvatarFallback>
+					</Avatar>
+					<Avatar>
+						<AvatarFallback>李</AvatarFallback>
 					</Avatar>
 				</Cell>
 				<Cell name="Spinner" hint="加载中">
@@ -265,7 +297,84 @@ export function UiGallery() {
 				</Cell>
 			</Group>
 
-			<Group title="浮层与导航" desc="需要触发器的浮层类原语 —— Dialog / Sheet / Popover / 菜单 / 标签页。">
+			<Group title="按钮与动作" desc="按钮的变体 / 尺寸 / 组合,以及需要防误触的「长按执行」。">
+				<Cell name="Button" hint="变体">
+					<Button size="sm">默认</Button>
+					<Button size="sm" variant="outline">
+						描边
+					</Button>
+					<Button size="sm" variant="secondary">
+						次要
+					</Button>
+					<Button size="sm" variant="ghost">
+						幽灵
+					</Button>
+					<Button size="sm" variant="destructive">
+						危险
+					</Button>
+					<Button size="sm" variant="link">
+						链接
+					</Button>
+				</Cell>
+				<Cell name="Button" hint="尺寸 xs → lg + 禁用">
+					<Button size="xs">xs</Button>
+					<Button size="sm">sm</Button>
+					<Button>default</Button>
+					<Button size="lg">lg</Button>
+					<Button size="sm" disabled>
+						禁用
+					</Button>
+				</Cell>
+				<Cell name="HoldButton" hint="长按到进度走满才执行(防误触)">
+					<HoldButton
+						variant="destructive"
+						holdingLabel="松手取消…"
+						onHold={() => toast.success("已执行(示例)", { description: "松手早于进度走满则取消" })}
+					>
+						长按清空
+					</HoldButton>
+					<HoldButton variant="outline" onHold={() => toast.info("已提交(示例)")}>
+						长按提交
+					</HoldButton>
+				</Cell>
+				<Cell name="ButtonGroup" hint="并排按钮组">
+					<ButtonGroup>
+						<Button size="sm" variant="outline">
+							左
+						</Button>
+						<ButtonGroupSeparator />
+						<Button size="sm" variant="outline">
+							中
+						</Button>
+						<ButtonGroupSeparator />
+						<Button size="sm" variant="outline">
+							右
+						</Button>
+					</ButtonGroup>
+				</Cell>
+				<Cell name="ButtonGroupText" hint="按钮组里的只读文字">
+					<ButtonGroup>
+						<ButtonGroupText>共 3 条</ButtonGroupText>
+						<Button size="sm" variant="outline">
+							刷新
+						</Button>
+					</ButtonGroup>
+				</Cell>
+				<Cell name="TableResizeHandle" hint="列宽拖拽(放在 th 内)">
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead className="relative">
+									列
+									<TableResizeHandle columnId="demo" onChange={(u) => u} />
+								</TableHead>
+							</TableRow>
+						</TableHeader>
+					</Table>
+				</Cell>
+			</Group>
+
+			<Group title="浮层与导航" desc="需要触发器的浮层类原语,以及四种分割形态的页签(同一套 API,换 variant 即可)。">
 				<Cell name="Dialog" hint="模态对话框">
 					<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 						<DialogTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>打开</DialogTrigger>
@@ -282,7 +391,7 @@ export function UiGallery() {
 						</DialogContent>
 					</Dialog>
 				</Cell>
-				<Cell name="ConfirmDialog" hint="确认删除">
+				<Cell name="ConfirmDialog" hint="二次确认">
 					<Button variant="outline" size="sm" onClick={() => setConfirmOpen(true)}>
 						删除
 					</Button>
@@ -307,7 +416,6 @@ export function UiGallery() {
 				</Cell>
 				<Cell name="Popover" hint="气泡">
 					<Popover>
-						{/* base-ui 的触发器用 render,不是 asChild */}
 						<PopoverTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>气泡</PopoverTrigger>
 						<PopoverContent className="text-[12px]">内容</PopoverContent>
 					</Popover>
@@ -320,16 +428,27 @@ export function UiGallery() {
 						</Tooltip>
 					</TooltipProvider>
 				</Cell>
-				<Cell name="DropdownMenu" hint="下拉菜单">
+				<Cell name="DropdownMenu" hint="下拉菜单(分组 + 快捷键 + 危险项)">
 					<DropdownMenu>
 						<DropdownMenuTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>
 							菜单
 						</DropdownMenuTrigger>
-						<DropdownMenuContent>
-							<DropdownMenuLabel>操作</DropdownMenuLabel>
+						<DropdownMenuContent className="w-48">
+							{/* 需要「分组标题」用 label 属性 —— 不能把 <DropdownMenuLabel> 塞进 Group 里当标题 */}
+							<DropdownMenuGroup label="常用操作">
+								<DropdownMenuItem>
+									编辑
+									<DropdownMenuShortcut>⌘E</DropdownMenuShortcut>
+								</DropdownMenuItem>
+								<DropdownMenuItem>
+									复制
+									<DropdownMenuShortcut>⌘C</DropdownMenuShortcut>
+								</DropdownMenuItem>
+							</DropdownMenuGroup>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem>编辑</DropdownMenuItem>
-							<DropdownMenuItem>删除</DropdownMenuItem>
+							{/* 独立小标题:普通 div,放哪都行(不依赖分组) */}
+							<DropdownMenuLabel>危险区</DropdownMenuLabel>
+							<DropdownMenuItem variant="destructive">删除</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</Cell>
@@ -380,26 +499,36 @@ export function UiGallery() {
 						</MenubarMenu>
 					</Menubar>
 				</Cell>
-				<Cell name="Tabs" hint="标签页">
-					<Tabs defaultValue="a" className="w-48">
-						<TabsList>
-							<TabsTrigger value="a">A</TabsTrigger>
-							<TabsTrigger value="b">B</TabsTrigger>
-						</TabsList>
-						<TabsContent value="a" className="text-[12px]">
-							内容 A
-						</TabsContent>
-						<TabsContent value="b" className="text-[12px]">
-							内容 B
-						</TabsContent>
-					</Tabs>
-				</Cell>
+				{TABS_VARIANTS.map((variant: TabVariant) => (
+					<Cell key={variant} name={`Tabs · ${TAB_VARIANT_META[variant].label}`} hint={TAB_VARIANT_META[variant].hint}>
+						<Tabs variant={variant} defaultValue="all" className="w-full">
+							<TabsList>
+								<TabsTrigger value="all" count={12}>
+									全部
+								</TabsTrigger>
+								<TabsTrigger value="mine" count={3}>
+									我负责的
+								</TabsTrigger>
+								<TabsTrigger value="done">已完成</TabsTrigger>
+							</TabsList>
+							<TabsContent value="all" className="text-[12px] text-muted-foreground">
+								{variant} 形态的内容区 —— 换 variant 只改容器与选中态,API 完全一致。
+							</TabsContent>
+							<TabsContent value="mine" className="text-[12px] text-muted-foreground">
+								我负责的 3 条。
+							</TabsContent>
+							<TabsContent value="done" className="text-[12px] text-muted-foreground">
+								已完成的内容。
+							</TabsContent>
+						</Tabs>
+					</Cell>
+				))}
 				<Cell name="Collapsible" hint="折叠">
 					<Collapsible open={collapsedOpen} onOpenChange={setCollapsedOpen}>
 						<CollapsibleTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>
 							{collapsedOpen ? "收起" : "展开"}
 						</CollapsibleTrigger>
-						<CollapsibleContent className="text-[12px]">被折叠的内容</CollapsibleContent>
+						<CollapsibleContent className="pt-2 text-[12px]">被折叠的内容</CollapsibleContent>
 					</Collapsible>
 				</Cell>
 				<Cell name="Reveal" hint="进场动画">
@@ -414,84 +543,18 @@ export function UiGallery() {
 				</Cell>
 			</Group>
 
-			<Group title="按钮与表格" desc="动作类原语 —— 按钮变体 / 按钮组 / 表格(含列宽拖拽)。">
-				<Cell name="Button" hint="变体与尺寸">
-					<Button size="sm">默认</Button>
-					<Button size="sm" variant="outline">
-						描边
-					</Button>
-					<Button size="sm" variant="ghost">
-						幽灵
-					</Button>
-					<Button size="sm" variant="destructive">
-						危险
-					</Button>
+			<Group title="日期" desc="单月日历与日期区间选择器长得一样 —— 同一份默认值(中文 + 年月下拉 + 四箭头导航)。">
+				<Cell name="Calendar" hint="单月日历(受控)">
+					<div className="w-full rounded-lg border border-border bg-card p-2 shadow-card">
+						<Calendar mode="single" selected={day} onSelect={setDay} />
+					</div>
+					<p className="text-[12px] text-muted-foreground">已选:{day ? day.toLocaleDateString("zh-CN") : "—"}</p>
 				</Cell>
-				<Cell name="MotionButton" hint="带动效的按钮">
-					<MotionButton size="sm">动效</MotionButton>
-				</Cell>
-				<Cell name="ButtonGroup" hint="按钮组">
-					<ButtonGroup>
-						<Button size="sm" variant="outline">
-							左
-						</Button>
-						<ButtonGroupSeparator />
-						<Button size="sm" variant="outline">
-							右
-						</Button>
-					</ButtonGroup>
-				</Cell>
-				<Cell name="ButtonGroupText" hint="按钮组里的文字">
-					<ButtonGroup>
-						<ButtonGroupText>共 3 条</ButtonGroupText>
-						<Button size="sm" variant="outline">
-							刷新
-						</Button>
-					</ButtonGroup>
-				</Cell>
-				<Cell name="Table" hint="表格(含 caption / footer)">
-					<Table>
-						<TableCaption>示例表</TableCaption>
-						<TableHeader>
-							<TableRow>
-								<TableHead>名称</TableHead>
-								<TableHead>数量</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							<TableRow>
-								<TableCell>甲</TableCell>
-								<TableCell>12</TableCell>
-							</TableRow>
-						</TableBody>
-						<TableFooter>
-							<TableRow>
-								<TableCell>合计</TableCell>
-								<TableCell>12</TableCell>
-							</TableRow>
-						</TableFooter>
-					</Table>
-				</Cell>
-				<Cell name="TableResizeHandle" hint="列宽拖拽(放在 th 内)">
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead className="relative">
-									列
-									<TableResizeHandle columnId="demo" onChange={(u) => u} />
-								</TableHead>
-							</TableRow>
-						</TableHeader>
-					</Table>
-				</Cell>
-			</Group>
-
-			<Group title="日期" desc="日历与日期区间。">
-				<Cell name="Calendar" hint="单月日历">
-					<Calendar className="rounded-lg border border-border" />
-				</Cell>
-				<Cell name="DateRangePicker" hint="日期区间">
+				<Cell name="DateRangePicker" hint="日期区间(带快捷范围)">
 					<DateRangePicker value={range} onChange={setRange} />
+					<p className="text-[12px] text-muted-foreground">
+						{range.from ?? "—"} ~ {range.to ?? "—"}
+					</p>
 				</Cell>
 			</Group>
 		</div>

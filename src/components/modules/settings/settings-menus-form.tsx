@@ -74,7 +74,7 @@ export function SettingsMenusForm({
 					<div className="truncate text-[13.5px] font-medium text-foreground">{node.name}</div>
 					<div className="truncate font-mono text-[11.5px] text-muted-foreground">{node.id}</div>
 				</div>
-				{dirty ? <span className="shrink-0 text-[11.5px] text-[color:var(--warn-fg)]">未保存</span> : null}
+				{dirty ? <span className="shrink-0 text-[11.5px] text-warn-fg">未保存</span> : null}
 			</div>
 
 			<div className="space-y-1">

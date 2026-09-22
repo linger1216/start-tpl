@@ -4,6 +4,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { SettingsParametersPage } from "#/components/modules/settings/settings-parameters-page";
 
 export const Route = createFileRoute("/(main)/settings/parameters")({
-	loader: ({ context }) => context.queryClient.ensureQueryData(context.trpc.config.list.queryOptions()),
+	loader: ({ context }) => context.queryClient.ensureQueryData(context.trpc.para.list.queryOptions()),
 	component: SettingsParametersPage,
 });

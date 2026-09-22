@@ -1,23 +1,111 @@
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { addYears, startOfMonth } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon } from "lucide-react";
 import * as React from "react";
-import { type DayButton, DayPicker, getDefaultClassNames, type Locale } from "react-day-picker";
+import { type DayButton, DayPicker, getDefaultClassNames, type Locale, useDayPicker } from "react-day-picker";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { cn } from "#/lib/utils";
+
+/**
+ * 月份导航条 —— 全项目**唯一**一份(单月日历与日期区间选择器共用同一个,风格才不会各走各的)。
+ *
+ * 在「上一月 / 下一月」两侧各加一个「上一年 / 下一年」(双箭头):一次跳一年是台账类页面的高频诉求。
+ * 按钮用 `size-5`(20px)而不是 `--cell-size`(28px):一行里要并排放 4 个导航按钮 + 2 个下拉标题,
+ * 缩小按钮才腾得出中部空间,否则「月 / 年」下拉会被挤到换行。
+ */
+export function CalendarNav({ className }: { className?: string }) {
+	const { goToMonth, months, previousMonth, nextMonth, dayPickerProps } = useDayPicker();
+	const base = months[0]?.date ?? new Date();
+	const { startMonth, endMonth } = dayPickerProps;
+	const prevYear = startOfMonth(addYears(base, -1));
+	const nextYear = startOfMonth(addYears(base, 1));
+	const prevYearDisabled = startMonth ? prevYear < startMonth : false;
+	const nextYearDisabled = endMonth ? nextYear > endMonth : false;
+
+	const btn = "size-5 p-0 disabled:pointer-events-none disabled:opacity-50";
+
+	return (
+		<div
+			className={cn(
+				"absolute inset-x-0 top-0 flex h-(--cell-size) w-full items-center justify-between gap-0.5",
+				className,
+			)}
+		>
+			<div className="flex h-full items-center gap-0.5">
+				<button
+					type="button"
+					aria-label="上一年"
+					disabled={prevYearDisabled}
+					onClick={() => goToMonth(prevYear)}
+					className={cn(buttonVariants({ variant: "ghost" }), btn)}
+				>
+					<ChevronsLeftIcon className="size-4" />
+				</button>
+				<button
+					type="button"
+					aria-label="上一月"
+					disabled={!previousMonth}
+					onClick={() => previousMonth && goToMonth(previousMonth)}
+					className={cn(buttonVariants({ variant: "ghost" }), btn)}
+				>
+					<ChevronLeftIcon className="size-4" />
+				</button>
+			</div>
+			<div className="flex h-full items-center gap-0.5">
+				<button
+					type="button"
+					aria-label="下一月"
+					disabled={!nextMonth}
+					onClick={() => nextMonth && goToMonth(nextMonth)}
+					className={cn(buttonVariants({ variant: "ghost" }), btn)}
+				>
+					<ChevronRightIcon className="size-4" />
+				</button>
+				<button
+					type="button"
+					aria-label="下一年"
+					disabled={nextYearDisabled}
+					onClick={() => goToMonth(nextYear)}
+					className={cn(buttonVariants({ variant: "ghost" }), btn)}
+				>
+					<ChevronsRightIcon className="size-4" />
+				</button>
+			</div>
+		</div>
+	);
+}
+
+/** 下拉年份的默认范围:往前 10 年、往后 1 年(台账数据的历史余量) */
+function defaultMonthBounds() {
+	const now = new Date();
+	return {
+		startMonth: new Date(now.getFullYear() - 10, 0, 1),
+		endMonth: new Date(now.getFullYear() + 1, 11, 31),
+	};
+}
 
 function Calendar({
 	className,
 	classNames,
 	showOutsideDays = true,
-	captionLayout = "label",
+	/**
+	 * 默认与「日期区间选择器」保持一致:下拉式「年 + 月」标题 + 中文 + 四箭头导航。
+	 * 之前默认是 `label`(纯英文月份、只有两个箭头),和区间选择器里那张日历判若两人 ——
+	 * 同一天在页面上出现两种长相,是纯噪音。要单月标题的调用方显式传 `captionLayout="label"` 覆盖。
+	 */
+	captionLayout = "dropdown",
 	buttonVariant = "ghost",
-	locale,
+	locale = zhCN,
 	formatters,
 	components,
+	startMonth,
+	endMonth,
 	...props
 }: React.ComponentProps<typeof DayPicker> & {
 	buttonVariant?: React.ComponentProps<typeof Button>["variant"];
 }) {
 	const defaultClassNames = getDefaultClassNames();
+	const bounds = defaultMonthBounds();
 
 	return (
 		<DayPicker
@@ -30,6 +118,8 @@ function Calendar({
 			)}
 			captionLayout={captionLayout}
 			locale={locale}
+			startMonth={startMonth ?? bounds.startMonth}
+			endMonth={endMonth ?? bounds.endMonth}
 			formatters={{
 				formatMonthDropdown: (date) => date.toLocaleString(locale?.code, { month: "short" }),
 				...formatters,
@@ -50,11 +140,12 @@ function Calendar({
 					defaultClassNames.button_next,
 				),
 				month_caption: cn(
-					"flex h-(--cell-size) w-full items-center justify-center px-(--cell-size)",
+					// 两侧各留 ≈1.6 个单元格:清出 4 个导航按钮的位置,中部留给「月 / 年」下拉
+					"flex h-(--cell-size) w-full items-center justify-center px-[calc(var(--cell-size)*1.6)]",
 					defaultClassNames.month_caption,
 				),
 				dropdowns: cn(
-					"flex h-(--cell-size) w-full flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-sm font-medium",
+					"flex h-(--cell-size) w-full flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-sm font-medium [&>*]:shrink-0",
 					defaultClassNames.dropdowns,
 				),
 				dropdown_root: cn("relative min-w-0 rounded-(--cell-radius)", defaultClassNames.dropdown_root),
@@ -101,6 +192,8 @@ function Calendar({
 				...classNames,
 			}}
 			components={{
+				// 默认就是共用导航条(年 / 月四箭头);调用方可整体覆盖
+				Nav: CalendarNav,
 				Root: ({ className, rootRef, ...props }) => {
 					return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />;
 				},

@@ -160,13 +160,16 @@
   --sidebar-border: var(--af-border);
   --sidebar-ring: var(--af-blue);
 
-  /* ── 阴影(DESIGN.md §6:蓝调多层,永不用厚重纯黑) ───────────────── */
-  --shadow-card:
+  /* ── 阴影(DESIGN.md §6:蓝调多层,永不用厚重纯黑) ─────────────────
+   实现变量叫 --elev-*(不叫 --shadow-*):后者是 Tailwind 自己的命名空间,
+   同名会被 @theme 覆盖;这里再由下面的 @theme inline 映射成标准工具类
+   (`shadow-card` / `shadow-soft` / `shadow-glow` / `shadow-raise-1|2|3`)。 */
+  --elev-card:
     rgba(0, 0, 0, 0.32) 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 0px 2px,
     rgba(45, 127, 249, 0.28) 0px 1px 3px, rgba(0, 0, 0, 0.06) 0px 0px 0px 0.5px inset;
-  --shadow-soft: rgba(15, 48, 106, 0.05) 0px 0px 20px;
+  --elev-soft: rgba(15, 48, 106, 0.05) 0px 0px 20px;
   /* 按钮 hover 的蓝调光晕(DESIGN.md §7) */
-  --shadow-glow: 0 4px 14px -4px color-mix(in srgb, var(--af-blue) 32%, transparent);
+  --elev-glow: 0 4px 14px -4px color-mix(in srgb, var(--af-blue) 32%, transparent);
 
   /* ── 动效(DESIGN.md §7:统一曲线,160–200ms) ───────────────────── */
   --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
@@ -289,7 +292,7 @@
     0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--af-border),
     inset 0 1px 0 var(--hairline-light);
 
-  --shadow-soft: rgba(0, 0, 0, 0.35) 0px 0px 20px;
+  --elev-soft: rgba(0, 0, 0, 0.35) 0px 0px 20px;
 }
 
 @theme inline {
@@ -334,6 +337,22 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  /* 阴影工具类(实现变量是 --elev-* / --af-raise-*,见上文) */
+  --shadow-card: var(--elev-card);
+  --shadow-soft: var(--elev-soft);
+  --shadow-glow: var(--elev-glow);
+  --shadow-raise-1: var(--af-raise-1);
+  --shadow-raise-2: var(--af-raise-2);
+  --shadow-raise-3: var(--af-raise-3);
+
+  /* 中性 hover 面与品牌底/描边 —— 于是调用方写 `bg-hover` / `bg-brand-soft` / `border-border-strong`,
+     不必再写 `bg-[color:var(--af-hover)]` 这种任意值(既长又容易拼错,上一轮就踩过拼错 var 名导致整条规则失效)。 */
+  --color-hover: var(--af-hover);
+  --color-brand-soft: var(--af-blue-soft);
+  --color-brand-faint: var(--af-blue-faint);
+  --color-brand-ring: var(--af-blue-ring);
+  --color-border-strong: var(--af-border-strong);
 
   /* 点缀色进 @theme —— 于是 `bg-hue-violet-soft` / `text-hue-violet-fg` /
      `border-hue-violet-line` 这类工具类可直接用,调用方不必写 `bg-[color:var(--…)]`。

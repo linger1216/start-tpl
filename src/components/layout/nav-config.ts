@@ -1,11 +1,11 @@
 /**
- * 静态导航配置 —— 菜单的**兜底 + 权限点派生 + 种子来源**。
+ * 静态导航配置 —— 菜单的**兜底 + 种子来源** + 三个纯树工具。
  *
  * 运行时菜单以数据库 `sys_menu` 表为准(`nav-menu.ts` 的 `buildNavTree` 把平铺行拼成树,
  * 侧边栏 / 面包屑 / 模块概览都读它);本文件负责三件事:
  *  1. **兜底**:`sys_menu` 表为空(或还没返回)时,渲染这棵树 —— 配置表被清空不会白屏;
- *  2. **权限点派生**:`navRequiredPermission` / `menuPermissionCode` / `modulePermissionCode`
- *     从这棵树派生(权限点目录曾经在 `mocks/settings.ts`,那份 mock 已随用户/角色页一起删除);
+ *  2. **纯树工具**:`findNavTrailIn` / `findNavNodeIn` / `navNodeContains` / `collectNavGroupIds`
+ *     都只吃传进来的树,不依赖任何全局状态(读取由 `nav-data.ts` 负责);
  *  3. **种子来源**:`pnpm db:seed:menus` 把这里逐节点写进 `sys_menu` 表(只补不覆盖)。
  *
  * 侧边栏(sidebar.tsx)、面包屑(topbar.tsx)与模块概览页(module-overview.tsx)
@@ -53,8 +53,6 @@ import {
 	Workflow,
 } from "lucide-react";
 
-import { MENU_DETAIL_PATH_PREFIX } from "#/lib/menu-detail-path";
-
 /** 菜单可用图标表:键为「小写 kebab-case」,与存库图标名约定一致。 */
 export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	// 模块级
@@ -96,22 +94,6 @@ export type NavNode = {
 	icon: NavIcon;
 	/** 模块级节点的说明,用于模块概览页页头;叶子节点可留空。 */
 	description?: string;
-	/**
-	 * 访问该菜单所需的**权限点编码**(可选)。
-	 *
-	 * 不写就按 `path` 派生(`navRequiredPermission`):`/settings/users` → `settings:users`;
-	 * **带 `children` 的容器节点不派生** —— 容器的可见性由子节点决定,避免拦一个授权不了的码。
-	 * 只有三种情况需要显式声明:
-	 *  ① 权限点编码与页面路径不一致(沿用历史系统的编码,或一个页面被多处复用);
-	 *  ② 无 `path` 的分组节点要单独拦一道(如整块「系统设置」只给管理员);
-	 *  ③ 需要把权限点**钉死**(路由改名不该悄悄换掉已授权的权限点)。
-	 * 声明后以本字段为准,派生值被覆盖。
-	 *
-	 * 读写链路:本文件派生的权限点编码 → 用户有效权限 → `filterNavByPermission`
-	 * 过滤侧边栏。中间「权限点落库 → 角色授权」一段尚未落地
-	 * (见 `components/layout/nav-permissions.tsx` 顶部的说明)。
-	 */
-	permission?: string;
 	children?: NavNode[];
 };
 
@@ -225,98 +207,4 @@ export function collectNavGroupIds(nodes: NavNode[] = NAV_NODES): string[] {
 	};
 	walk(nodes);
 	return ids;
-}
-
-// ── 菜单 ↔ 权限:编码派生、按权限过滤 ─────────────────────────────
-//
-// 两条链路(唯一真源是本文件的 `NAV_NODES`):
-//   ① 权限点编码:菜单 = 页面路径(`/a/b` → `a:b`),操作 = `op:<模块码>:<序号>`;
-//   ② 可见性:`filterNavByPermission(当前菜单树, 有效权限码集合)` —— 未登录 / 未接权限服务时传
-//      `undefined`,表示**不过滤**(默认全可见),所以本文件在权限模块落地前不影响现有渲染。
-//
-// **权限点目录**(「某个角色能勾哪些项」)曾经在 `mocks/settings.ts` 的
-// `PERMISSION_TREE` / `PERMISSION_POINTS` —— 那份 mock 已随用户 / 角色页一起删除,现在就剩这里
-// 这两个纯函数(编码口径)。将来权限服务上线时,目录应当由**服务端**返回,不要再在前端摆一份。
-
-/** 页面路径 → 菜单权限点编码(`/settings/users` → `settings:users`);`/`(工作台)得空串 */
-export function menuPermissionCode(path: string): string {
-	return path.replace(/^\//, "").replace(/\//g, ":");
-}
-
-/**
- * 一级模块的权限码前缀:有 path 用路径码;`/`(工作台)与纯分组节点回落到 `module-<序号>`。
- * 操作权限点(`op:<模块码>:<序号>`)与「角色管理」页的授权项都按这个前缀命名。
- */
-export function modulePermissionCode(module: NavNode, index: number): string {
-	return (module.path ? menuPermissionCode(module.path) : "") || `module-${index + 1}`;
-}
-
-/**
- * 节点**自身**要求的权限码 —— 过滤菜单时只看这个。
- *
- * 规则(踩过的坑,别改回去):
- *  ① 显式 `permission` 优先(任何节点都能声明,声明了就必然是权限点目录里的一项);
- *  ② 没有显式声明时,**只有叶子节点**按 `path` 派生 —— 「系统设置」这种「一级模块首页 + 子菜单」
- *     的容器**不拿自己的 `/settings` 去拦**:那个码不在权限点目录里,一拦整个模块永远不可见
- *     (实测:给定权限码集合后,一级模块只剩「工作台」能显示)。容器的可见性由子节点决定:
- *     子项全被过滤 → 容器自身也消失。
- *  ③ 叶子 `/`(工作台)得空串 → 不设权限点 → 所有登录用户可见(系统入口页)。
- *
- * 导出它是因为它是**权限模型的公开契约**:接 RBAC 时,服务端与授权页都要用同一套派生规则。
- */
-export function navRequiredPermission(node: NavNode): string | undefined {
-	if (node.permission) return node.permission;
-	if (node.children?.length) return undefined;
-	// 「参数化菜单」(path = <前缀>/<记录 id>,见 lib/menu-detail-path.ts)不派生权限点:
-	// 路径里带的是记录 id,派生出来会是 `data:raw:SRC-260920-153045` 这种授权页无法表达的码。
-	// 这类菜单的可见性跟随"它指向的那条记录能不能看",由业务侧统一处理。
-	if (node.path?.startsWith(MENU_DETAIL_PATH_PREFIX)) return undefined;
-	const code = node.path ? menuPermissionCode(node.path) : "";
-	return code || undefined;
-}
-
-/** 各一级模块下固定的操作权限 —— 与「角色管理」页的授权项逐项一致 */
-export const MODULE_OPERATIONS = ["查看", "新增", "编辑", "删除", "导入", "导出", "授权"] as const;
-
-/**
- * 按用户的有效权限码过滤菜单树。
- *
- * - `granted` 为 `undefined` / `null` → **不过滤**(未登录、权限服务未接通时的默认态);
- * - 节点要求的权限码未授予 → 整枝隐藏(要求的码见 `navRequiredPermission`);
- * - 容器的子项全被过滤 → 容器自身也不显示;
- * - 过滤是**纯函数 + 返回新对象**,不改 `NAV_NODES`(SSR 与客户端拿到同一份输入 → 同一份输出)。
- */
-export function filterNavByPermission(nodes: readonly NavNode[], granted?: ReadonlySet<string> | null): NavNode[] {
-	if (!granted) return [...nodes];
-	const out: NavNode[] = [];
-	for (const node of nodes) {
-		const code = navRequiredPermission(node);
-		if (code && !granted.has(code)) continue;
-		if (node.children?.length) {
-			const children = filterNavByPermission(node.children, granted);
-			if (children.length === 0) continue;
-			out.push({ ...node, children });
-		} else {
-			out.push(node);
-		}
-	}
-	return out;
-}
-
-/** 命中的菜单链(面包屑用),按权限过滤:被隐藏的节点不进面包屑。 */
-export function findVisibleNavTrailIn(
-	nodes: readonly NavNode[],
-	pathname: string,
-	granted?: ReadonlySet<string> | null,
-): NavNode[] {
-	const trail = findNavTrailIn(nodes, pathname);
-	if (!granted) return trail;
-	return trail.filter((node) => {
-		const code = navRequiredPermission(node);
-		return !code || granted.has(code);
-	});
-}
-
-export function findVisibleNavTrail(pathname: string, granted?: ReadonlySet<string> | null): NavNode[] {
-	return findVisibleNavTrailIn(NAV_NODES, pathname, granted);
 }

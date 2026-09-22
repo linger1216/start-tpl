@@ -20,6 +20,7 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysMenu } from "#/db/data-base-schema";
+import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { createTRPCRouter, publicProcedure } from "../init";
 
@@ -29,7 +30,7 @@ function toMenuRow(row: typeof sysMenu.$inferSelect) {
 		id: row.id,
 		parentId: row.parent_id ?? null,
 		name: row.name,
-		path: row.path ?? null,
+		path: row.path,
 		icon: row.icon ?? null,
 		sort: Number(row.sort ?? 0),
 		visible: Number(row.visible ?? 1),
@@ -44,7 +45,7 @@ async function getMenuRow(id: string) {
 
 /** 路径唯一性:`path` 决定路由,重了两条菜单会指向同一个页面 */
 async function assertPathFree(path: string | null, selfId?: string) {
-	if (!path) return;
+	if (!path) return; // 兼容 update 传空串的场景(上面已单独拦过)
 	const rows = await db
 		.select({ id: sysMenu.id, name: sysMenu.name })
 		.from(sysMenu)
@@ -71,19 +72,21 @@ export const menuRouter = createTRPCRouter({
 		.input(
 			z.object({
 				id: z.string().min(1),
-				name: z.string().min(1, "菜单名不能为空").max(60),
-				path: z.string().max(191).nullable(),
-				icon: z.string().max(64).nullable(),
+				name: z.string().min(1, "菜单名不能为空").max(32),
+				path: z.string().max(128).nullable(),
+				icon: z.string().max(32).nullable(),
 				visible: z.boolean(),
 			}),
 		)
 		.mutation(async ({ input }) => {
 			await getMenuRow(input.id);
-			const path = input.path?.trim() ?? "";
-			await assertPathFree(path || null, input.id);
+			// 表定义里 path 是 not null + 唯一:没有"没有 path 的菜单"这一档
+			const path = (input.path ?? "").trim();
+			if (!path) throw new TRPCError({ code: "BAD_REQUEST", message: "路径不能为空(表定义要求 path 非空)" });
+			await assertPathFree(path, input.id);
 			await db
 				.update(sysMenu)
-				.set({ name: input.name.trim(), path: path || null, icon: input.icon || null, visible: input.visible ? 1 : 0 })
+				.set({ name: input.name.trim(), path, icon: input.icon || null, visible: input.visible ? 1 : 0 })
 				.where(eq(sysMenu.id, input.id));
 			return toMenuRow(await getMenuRow(input.id));
 		}),
@@ -128,9 +131,10 @@ export const menuRouter = createTRPCRouter({
 		.input(
 			z.object({
 				parentId: z.string().nullable(),
-				name: z.string().min(1, "菜单名不能为空").max(60),
-				path: z.string().max(191).nullable(),
-				icon: z.string().max(64).nullable(),
+				name: z.string().min(1, "菜单名不能为空").max(32),
+				/** 表定义是 not null + 唯一:每个菜单都必须有路由 */
+				path: z.string().min(1, "路径不能为空").max(128),
+				icon: z.string().max(32).nullable(),
 				visible: z.boolean().default(true),
 			}),
 		)
@@ -138,18 +142,12 @@ export const menuRouter = createTRPCRouter({
 			const parentId = input.parentId ?? null;
 			if (parentId) await getMenuRow(parentId);
 			const name = input.name.trim();
-			const path = input.path?.trim() || null;
+			const path = input.path.trim();
 			await assertPathFree(path);
 
-			// id 规则与种子脚本一致:叶子用 path,分组用 `@名称`;被占了就加后缀
-			const base = path ?? `@${name}`;
-			const taken = new Set((await db.select({ id: sysMenu.id }).from(sysMenu)).map((row) => row.id));
-			let id = base;
-			let suffix = 2;
-			while (taken.has(id)) {
-				id = `${base}#${suffix}`;
-				suffix += 1;
-			}
+			// 主键一律 nanoid(无意义短串)—— 业务的唯一性由 `path` 保证(`assertPathFree` 已校过),
+			// 不再拿 path 当 id:那样改一次路由就等于换主键,谁引用过都会断。
+			const id = newId();
 			const siblings = await db
 				.select({ sort: sysMenu.sort })
 				.from(sysMenu)

@@ -20,11 +20,11 @@ Before editing files for a substantial task:
 | 入口 | 位置 | 说明 |
 | --- | --- | --- |
 | 工作台 | `routes/(main)/index.tsx` + `components/modules/workbench/` | 模板入口页 |
-| 组件展示 | `routes/(main)/showcase/` + `components/modules/showcase/` + `components/layout/showcase.tsx` | ★ 7 页组件活文档(纯展示,无业务)。**改组件后这里就是验收现场** |
+| 组件示例 | 工作台 `/` 的 `components/modules/workbench/`(`ui-gallery.tsx` + `ui-gallery-table.tsx` + `workbench-tagging.tsx`) | ★ 44 个原语与表格 / 打标签两组实战示例都在这儿。**改组件后这里就是验收现场** |
 | 框架能力 | `routes/(main)/demo/` | 9 个可运行样例:tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry |
 | 系统设置 | `routes/(main)/settings/` + `components/modules/settings/` | ★ 唯一保留的真实业务:**7 页 = 4 页真实数据 + 3 页「待实现」占位** |
 
-新增可复用组件时,**顺手在对应的 `/showcase/*` 页加一个 `ShowcaseItem`** —— 这一层是模板的核心资产,没有展示就等于没有。
+新增可复用组件时,**顺手在工作台的 UI 示例里加一格** —— 这一层是模板的核心资产,没有展示就等于没有。
 
 ## 技术栈与版本要点
 
@@ -65,7 +65,10 @@ pnpm db:migrate       # 应用迁移
 pnpm db:studio        # Drizzle Studio
 pnpm db:seed:menus    # 把 NAV_NODES 写进 sys_menu(幂等)
 pnpm db:seed:dicts    # 示例字典种子(幂等)
-pnpm db:seed:configs  # 把 CONFIG_DEFAULTS 写进 sys_config(幂等)
+pnpm db:seed:paras    # 把 PARA_DEFAULTS 写进 sys_para(幂等)
+pnpm test             # 直调 tRPC procedure 的集成测试(需要 .env.local 指向的库)
+pnpm db:create        # 建五张系统设置表(幂等;建完顺带对齐列注释 / 索引名)
+pnpm db:sync:meta     # 只对齐列注释与索引名(老库升级用,幂等)
 ```
 
 `pnpm typecheck` 与 `pnpm check` 是最重要的两条自检命令。注意 `check` / `lint` / `format` 都带 `--write`,不是只读检查。
@@ -97,16 +100,17 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 - **改视觉只改 token**,不要在组件里写死 hex 或逐个改色值。
 - 品牌色映射:`#1b61c9`(Airtable Blue)→ `--primary` / `--ring`;`#181d26` → `--foreground`;`#ffffff` → `--background`;`#f8fafc` → `--card` / `--muted` / `--secondary` / `--accent`;`#333333` → `--muted-foreground`;`#e0e2e6` → `--border` / `--input`;`#006400` → `--success`。
 - **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相四个角色 —— 实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`,外加反白前景 `--hue-X-on`(浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
-  - 色相 → 类名的映射**只有一份**:`src/components/layout/nav-tone.ts`。加色相要改四处:①`styles.css` 的 `:root` ②`styles.css` 的 `.dark` ③`styles.css` 的 `@theme inline` ④`nav-config.ts` 的 `NAV_TONES` + `nav-tone.ts` 补一条(**漏了第 ④ 步会在 typecheck 阶段报缺 key,不会静默失效**)。
+  - 色相 → 类名的映射**只有一份**:`src/styles.css` 的 `@theme inline`(`--color-hue-X` / `-fg` / `-soft` / `-line` / `-on`)。加色相改三处:①`:root` ②`.dark` ③`@theme inline` —— 漏了第 ③ 步,`bg-hue-X-soft` 这类工具类不会生成(Tailwind 扫不到、也不报错)。
+  - 同理,`--af-*` 那套中性/品牌 token 也在 `@theme inline` 里映射成了标准工具类(`bg-hover` / `bg-brand-soft` / `border-border-strong` / `shadow-card` / `shadow-raise-1` …)。**组件里不要再写 `bg-[color:var(--af-hover)]` 这种任意值** —— 又长又容易拼错 var 名,拼错了整条规则静默失效。
   - **Tailwind 只扫描源码里的字面量类名**,不能写 `bg-hue-${tone}-soft` 这种拼接 —— 扫描不到就不会生成 CSS。所有按色相取类名的地方必须查表。
   - 告警语义仍然只走 `--success` / `--warn` / `--danger`,`emerald` ≠ `success`。一屏内出现的色相不超过 4 个。
-- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` / `JsonCell` 的彩色主题(`rainbow` / `ocean` / …,定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES`)**已改为读点缀色 token**(原先用的是 Tailwind 默认 `*-100/*-700`,约 25%–40% 彩度,太亮)。改那一处 = 全站分类色统一。默认值仍是规范内的 `brand` 主题。
+- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` 的彩色主题(`rainbow` / `ocean` / …,定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES`)**已改为读点缀色 token**(原先用的是 Tailwind 默认 `*-100/*-700`,约 25%–40% 彩度,太亮)。改那一处 = 全站分类色统一。默认值仍是规范内的 `brand` 主题。
 - **不要在渲染期用 `Math.random()`**:会造成 SSR 水合不一致,而且每次重渲染都变值。需要"看起来随机"的效果时,用基于 `useId()` 或数据本身的稳定哈希(`BadgeList` 的 `stable` 就是这么做的)。
 - **不要覆盖 Tailwind 的 `--radius-*` 命名空间。** 它的默认阶就是 `DESIGN.md` §5 要的:`rounded-lg` 8px、`rounded-xl` 12px(按钮)、`rounded-2xl` 16px(小卡片)、`rounded-3xl` 24px(区块)。覆盖会让所有组件圆角一起漂移。
 - 字体在 `@theme inline` 的 `--font-sans` / `--font-heading`(Haas / Haas Groot Disp,fallback 到系统栈,**fallback 必须保留**)。换字体只改这两行。
 - 字距在 `@layer base`:正文 `0.08px`、标题负向、按钮与 label `0.02em`、全大写 `0.08em`。组件里的 `tracking-*` 会覆盖 base。
-- 阴影用 `--shadow-card` / `--shadow-soft` / `--shadow-glow`,**不要写厚重纯黑阴影**。
-  **抬升三档用 `--af-raise-1|2|3`(静置 / 悬停 / 浮起)**:`shadow-(--af-raise-1)`。hover **只换档位**(可加边框加深),不做位移 —— 三档同族颜色,切换才不跳。
+- 阴影用工具类 `shadow-card` / `shadow-soft` / `shadow-glow`,**不要写厚重纯黑阴影**(实现变量叫 `--elev-*`、和 Tailwind 的 `--shadow-*` 命名空间避开;映射在 `@theme inline`)。
+  **抬升三档 `shadow-raise-1|2|3`(静置 / 悬停 / 浮起)**。hover **只换档位**(可加边框加深),不做位移 —— 三档同族颜色,切换才不跳。
 - 动效用 `--ease-brand` + `--t-fast|base|slow`(120 / 180 / 260ms)。**先查 `DESIGN.md` §7.1 的「现成动效原语」表**,不要每次现搓 keyframes;表里没有的才自己写,并保证 `prefers-reduced-motion` 下复位(全局媒体查询已兜底,但别用 `transform` 表达"必须保持的位置")。
 - `.dark` 是品牌色经 `color-mix` 推导的对偶值;`DESIGN.md` 只规定浅色,加新 token 时记得同时补 `.dark`。
 
@@ -115,23 +119,18 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 | 目录 | 职责 |
 | --- | --- |
 | `src/routes/` | 文件路由。文件名即 URL;`(main)` 是无路径布局组 |
-| `src/routes/(main)/showcase/` | **组件展示台**:7 页,每页对应组件分层的一层。纯展示、无业务,派生新项目时可整目录删 |
 | `src/routes/(main)/demo/` | 框架能力示例页(表格 / 表单 / Query / tRPC / store / DB / Auth / Sentry),用模板自身组件写成,可整目录删除。放在 `(main)` 里是为了复用后台外壳,URL 仍是 `/demo/*` |
 | `src/routes/(main)/settings/` | 唯一保留的真实业务模块,**7 个页面 = 4 页真实数据(标签 / 菜单 / 字典 / 参数)+ 3 页「待实现」占位(用户 / 用户组 / 角色)**。派生新项目时**从这里开始改**,不要删 |
-| `src/components/ui/` | 叶子原语,45 个(vendored shadcn + 自研组合控件)。**例外:`tabs.tsx` 已被项目改写为下划线页签** —— 全项目唯一的页签实现(计数走 `count` 属性),规格见 `DESIGN.md` §5.5(该节此前误写成"卡片式页签",已按代码修正);`pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在 `/showcase/ui` 的「其他可用原语」里点名,否则等于不存在 |
-| `src/components/layout/` | 后台外壳:侧边栏(含 60px 迷你图标栏折叠态)、顶栏、面包屑、页头、空态、占位页、导航配置,以及 `nav-tone.ts`(**色相 → 类名的唯一映射表**,侧边栏 / 顶栏 / 工作台共用)与 `showcase.tsx`(展示台骨架:`ShowcasePage` / `ShowcaseSection` / `ShowcaseItem` / `PropTable` / `CodeBlock`) |
-| `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件,23 个:表格套件(`table-kit` 的 `DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell`)、只读子表(`readonly-table`)、详情页版式(`detail-profile`)、台账工具栏(`ledger-toolbar`)、快速筛选条(`filter-chips`)、列选择器与列可见性(`column-visibility-menu` / `use-column-visibility`)、分页器、指标卡与语义层(`stat-cards` / `stat-kit`)、标签徽章与标签输入(`tag-badges`)、迷你图表(`mini-chart`)、Excel 导入弹窗与导入导出流程(`excel-import` / `ledger-excel`)、导入解析选项(`sheet-parse-options`)、操作结果反馈(`op-result`)、可排序树(`sortable-tree`)、权限树与权限选择区(`permission-tree` 的 `PermissionTree` / **`PermissionPicker`**)、表单套件(`form-kit`)、图标选择器(`icon-picker`)、编目信息条(`catalog-banner`) |
-| `src/components/modules/showcase/` | 展示台 7 个页面本体(纯文档,不含业务逻辑) |
+| `src/components/ui/` | 叶子原语,43 个(vendored shadcn + 自研组合控件)。**例外:`tabs.tsx` 已被项目改写为「四种分割形态」的页签**(下划线 / 分段 / 药丸 / 卡片,计数走 `count` 属性),规格见 `DESIGN.md` §5.5;`pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在工作台 UI 示例里点名,否则等于不存在 |
+| `src/components/layout/` | 后台外壳:`sidebar`(含 60px 迷你图标栏)+ `sidebar-header`(品牌标题区)+ `sidebar-provider`(折叠状态)+ `topbar`(面包屑/主题)+ `page-header` / `empty-state` / `stub-page` / `page-transition` / `route-progress` / `module-overview`,导航四件:`nav-config`(静态菜单 + 纯树工具)/ `nav-menu`(库行→树)/ `nav-data`(两个只读 hook)/ `nav-config` |
+| `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件:`table-kit`(表格套件:`DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell` / `TextCell`)、**`sortable-tree`(可拖拽排序树 —— 菜单管理 / 标签管理两页共用同一套交互)**、`ledger-toolbar`(台账工具条)、`filter-chips`(快速筛选 + 已选 pill)、`pagination-control`、`stat-cards`(指标卡)、`tag-badges`(标签渲染:`splitTags` + `TagBadges`,上色走 `ui/badge-list`)、`form-kit`(表单套件)、`icon-picker` + `icons-list` + `use-lucide-icons`(图标选择)、`permission-tree`(权限树 / 权限选择区)、`excel-import` + `ledger-excel`(导入导出) |
 | `src/components/modules/<域>/` | 业务域模块。每页固定文件角色:`-page` / `-table` / `-form` / `-form-mappers` / `-detail`(或整页 `-detail-page`)/ `-stats`;多页面域用 `<域>-<页面>-<角色>`。**不做通用增删改查封装** —— 列定义、行类型、增删改写操作逐页手写。完整约定见 `doc/前端结构与组件约定.md`;现成范例见 `components/modules/settings/` |
-| `src/lib/crud/` | CRUD 套件:mutation、Excel 导入导出、查询失效、表格辅助 hook |
 | `src/lib/api/` | `ApiError` 与错误归一化 |
-| `src/lib/validators/` | 复用的 zod 片段 |
-| `src/lib/` | 通用工具:`table.ts`(v9 app hook + `useRowSelection` 多选)、`excel.ts`(Excel 列类型与**唯一**写盘点 `writeSheet`/`cellText`)、`mock-table.ts`(内存表)、`multi-value.ts`、`format.ts`、`time.ts`、`ids.ts`(编号口径)、`menu-detail-path.ts`、`sys-config.ts`(系统参数)、`db-errors.ts`、`logger.ts`、`constants.ts`、`utils.ts` 等 |
-| `src/store/` | `createQueryParamsStore` 查询参数状态工厂 |
-| `src/db/` | `index.ts` 导出 drizzle 实例 `db`;`schema.ts` 是迁移管辖的表;`data-base-schema.ts` 是**不走迁移**的 `sys_menu` / `sys_dict` / `sys_config` 三表 |
+| `src/lib/` | 通用工具:`table.ts`(v9 app hook + `useRowSelection` 多选)、`excel.ts`(Excel 列类型与**唯一**写盘点 `writeSheet`/`cellText`)、`mock-table.ts`(内存表)、`multi-value.ts`、`format.ts`、`time.ts`、`ids.ts`(编号口径)、`menu-detail-path.ts`、`sys-para.ts`(系统参数读写)、`para-spec.ts`(参数类型码与校验,客户端可 import)、`logger.ts`、`constants.ts`、`utils.ts` 等 |
+| `src/db/` | `index.ts` 导出 drizzle 实例 `db`;`schema.ts` 是迁移管辖的表;`data-base-schema.ts` 是**不走迁移**的五张表:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag` / `sys_tag_relation` |
 | `src/integrations/` | 第三方接线:tRPC 初始化与路由、TanStack Query 上下文、Better Auth 客户端侧 |
 | `src/hooks/` | 通用 hook:`use-dict`(读 `sys_dict` 的统一入口)、`use-stable-keys`(列表稳定 key)、`demo.form*`(框架能力样例专用) |
-| `scripts/` | 只放**运维/种子脚本**(`seed-menus` / `seed-dicts` / `seed-configs`,全部幂等"只补不覆盖")。业务验证脚本随业务一起删 |
+| `scripts/` | 只放**运维/建表/迁移/种子脚本**:`create-system-tables`(建五张表)/ `migrate-ids-to-nanoid`(老库换主键)/ `seed-menus` / `seed-dicts` / `seed-paras` / `seed-tags`,全部幂等(建表 `if not exists`、迁移只改该改的行、种子"只补不覆盖")。业务验证脚本随业务一起删 |
 
 ## 随模板分发、但当前**没有调用方**的东西
 
@@ -139,19 +138,17 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 
 | 件 | 位置 | 说明 |
 | --- | --- | --- |
-| CRUD 套件 | `lib/crud/*` | mutation / Excel / 查询失效 / 列宽持久化。文件头注释是最准确的用法文档 |
-| zod 片段 | `lib/validators/common.ts` | 复用校验片段 |
-| 查询参数 store | `store/use-query-params.ts` | 列表页「草稿 → 提交」的参数状态工厂 |
-| 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`;改 `ID_PREFIX` 换成自己的前缀 |
-| DB 错误归一 | `lib/db-errors.ts` | MySQL 唯一键 / 外键错误的可读化 |
-| 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(「字段管理」页负责维护它) |
-| 列可见性持久化 | `shared/use-column-visibility.ts` | 存 `sys_config`(需要数据库) |
+| 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`(`formatCode` / `nextIdByTime`)+ `newId()`(nanoid 主键);改 `ID_PREFIX` 换成自己的前缀 |
+| 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(「字典管理」页负责维护它) |
+| 表单版式套件 | `shared/form-kit.tsx`(`FieldGrid` / `FormSection` / `FormActions` / `ReadonlyField` / `TagField`) | **0 调用方** —— 系统设置各页目前是手写表单(`doc/前端结构与组件约定.md` 那套「逐页手写」的口径)。要做表单域时先看它能不能直接用,别另写一套;不做就该删 |
 | 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | 原先三个授权弹窗(用户 / 角色 / 用户组)共用;那三页改成占位页后**暂无调用方** —— 重建授权界面时直接用它,别另写一份 |
-| mock 数据原语 | `mocks/shared.ts` | `pick` / `idOf` / `phone` / `personName` / 固定基准日等**确定性**构造器(禁 `Math.random()`,否则 SSR 与水合不一致) |
-| 部门树示例 | `mocks/dicts.ts` | 示例单位 / 部门树的固定取值 + `deptName` / `deptSelectOptions` 等派生函数。原先只服务已删除的 `mocks/settings.ts`,做组织架构类页面时可直接复用 |
-| 5 个 ui 原语 | `ui/{popover,command,context-menu,menubar,sheet}.tsx` | 已在 `/showcase/ui` 的「其他可用原语」里点名 |
 
-**新增可复用件时:要么给它一个真实调用方,要么在 `/showcase/*` 展示,要么登记进上表** —— 三者都不做就会被下一轮清理当成死代码删掉。
+> 这张表只登记**当前真的存在、但暂时没有调用方**的件。本轮删掉了三类名不副实的行:
+> 指向不存在的目录(`lib/crud` / `lib/validators` / `store` / `shared/use-column-visibility`)、
+> 本轮删掉的文件(`lib/db-errors.ts` / `mocks/shared.ts` / `mocks/dicts.ts`)、
+> 以及其实**有**调用方的 ui 原语(它们由工作台的 UI 示例使用)。
+
+**新增可复用件时:要么给它一个真实调用方,要么在 `/showcase` 级展示(本项目即工作台 `components/modules/workbench/ui-gallery.tsx`),要么登记进上表** —— 三者都不做就会被下一轮清理当成死代码删掉。
 
 沿用已有的目录分工,不要新造平级抽象层。业务无关的东西放 `lib/` 或 `components/modules/shared/`,页面专属组件就放页面文件里。
 
@@ -195,7 +192,7 @@ pnpm dlx shadcn@latest add <component-name>
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
 | `src/db/schema.ts` | Better Auth 四表(`user` / `session` / `account` / `verification`)+ `todos` 示例表 | 由 drizzle 迁移管理 |
-| `src/db/data-base-schema.ts` | `sys_menu` / `sys_dict` / `sys_config` | **不进迁移**:只声明"读写的形状",DDL 由建表脚本维护 |
+| `src/db/data-base-schema.ts` | `sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation` | **不进迁移**:只声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`,幂等)维护。**改列之后要同时改它 + 迁移脚本** |
 
 **不要把 `data-base-schema.ts` 的表并进 `schema.ts`** —— 下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
 
@@ -204,7 +201,10 @@ pnpm dlx shadcn@latest add <component-name>
 - env 流转:`.env.example`(随模板分发,无凭据)→ `cp .env.example .env.local`(本地填写,已 gitignore)
 - `DATABASE_URL` **缺失会直接抛错**,`src/db/index.ts` 与 `drizzle.config.ts` 都有显式检查
 - 改 schema 后:`pnpm db:push`(开发期)或 `pnpm db:generate && pnpm db:migrate`
-- 系统三表的种子:`pnpm db:seed:menus`(把 `NAV_NODES` 写进 `sys_menu`)、`db:seed:dicts`、`db:seed:configs` —— 三个都幂等"只补不覆盖"
+- 建表:`pnpm db:create`(五张系统表,幂等 `create table if not exists`,不 drop 不 seed)
+- 种子:`pnpm db:seed:menus`(把 `NAV_NODES` 写进 `sys_menu`)、`db:seed:dicts`、`db:seed:paras`、`db:seed:tags` —— 四个都幂等"只补不覆盖"
+- 老库换主键:`pnpm db:migrate:ids`(语义 id → nanoid + 补 `sys_dict.code` + 修 `para_type` 与值不匹配的行;幂等)
+- 列注释 / 索引名:`pnpm db:sync:meta`(表名改过之后注释不会跟着变,会留下"描述旧列名"的残留 —— 那比没注释更误导;准绳在 `scripts/sync-table-meta.ts`)
 - `db` 只能在服务端用(tRPC procedure、server function)。不要从客户端组件 import
 
 本模板是 **MySQL**。写文档或示例代码时不要出现 `pg` 的 `Pool` 或 `postgres` dialect。
@@ -216,8 +216,11 @@ pnpm dlx shadcn@latest add <component-name>
 - **不要把 `start-tpl` 这个字符串硬编码进业务代码。** 它只应该出现在 `package.json` 的 `name` 和文档里。项目名相关的展示文案走配置或 env。`localStorage` 的 key 尤其要注意加项目前缀。
 - **`src/routes/(main)/demo/` 及其支撑文件可以整目录删除**:`demo/` 目录、`hooks/demo.form-context.ts`、`hooks/demo.form.tsx`、`lib/demo-store.ts`。本模板 `__root.tsx` 的 devtools 只挂了 Router 与 Query 两项(Store devtools 已随业务清理),所以**删 demo 不需要改 `__root.tsx`**。
 - **删掉 demo 后必须补一行 `import "@tanstack/react-start";`**(放在 `src/router.tsx` 顶部)。`server: { handlers }` 这个路由选项的类型来自 `@tanstack/react-start` 的模块增强,而全项目只有 `(main)/demo/sentry.testing.tsx` 和 `(main)/demo/drizzle.tsx` 引用了它。不补的话 `src/routes/api/auth/$.ts` 与 `src/routes/api.trpc.$.tsx` 会报 `'server' does not exist in type ...`。
-- **`src/routes/(main)/showcase/` 可以整目录删**(连同 `components/modules/showcase/` 与 `layout/showcase.tsx`)。删完把 `nav-config.ts` 里 `NAV_NODES` 的「组件展示」一枝去掉即可,没有别的连带。
+- **UI 示例已收在 `components/modules/workbench/ui-gallery.tsx`(+ 同目录 `ui-gallery-table.tsx` 的台账表格示例)**。原来那 7 条 `/showcase/*` 路由在本轮之前就并进来了;要精简模板,删这一个文件即可(`routes/(main)/index.tsx` 引用它)。
 - **demo 目录是"简单示例页"**:每个页面只演示一项能力,且全部用模板自身的组件写。`(main)/demo/table.tsx` 用的是 `useAppTable`(`src/lib/table.ts`)而不是裸的 `useTable`,可以当作接真实 CRUD 表格的参照。这些页面当前不报任何类型或 lint 错误,删或留都不影响 `pnpm typecheck` / `pnpm check` / `pnpm build`。
+- **`sql\`... in (${数组})\` 是错的**:drizzle 会把数组渲染成**一个括号元组**(`in (('a','b'))`),MySQL 直接报 `ER_OPERAND_COLUMNS: Operand should contain 1 column(s)`。数组条件一律用 `inArray(column, ids)`。踩过:标签级联删除/子节点删除/按 id 批量查,三处都中招,单元素时不报错所以很难发现。
+- **调用函数漏括号 = 哑巴 bug(两处都真实踩过)**:`event.preventDefault`(无括号)是一个空表达式,什么也不做;`await invalidate;` 更隐蔽 —— 它 await 的是**函数引用**,立刻 resolve,于是"什么都没失效",症状是"改完了列表不动、得手动刷新"。同一批代码里这两类各踩了 7 次(菜单 4 + 字典 3)。写法上:`await invalidate()`、`event.preventDefault()`;**改完顺手 grep 一遍 `await \w+;`**。
+- **事件方法漏括号是「哑巴 bug」,拖拽尤其致命**:`event.preventDefault`(无括号)是一个空表达式 —— 不报错、不 lint、编译也能过,但它**什么也没做**。HTML5 拖放的规则是「`dragover` 里调了 `preventDefault()`,`drop` 才会触发」,所以漏这一对括号的症状就是"拖了半天没反应"。`settings-menus-tree.tsx` 踩过这个坑(同目录的 `settings-tags-tree.tsx` 是正确参照)。改事件处理时对一眼括号数。
 - **TanStack Table v9 的行模型必须写成「具名 slot + 调用」**:`tableFeatures({ sortedRowModel: createSortedRowModel() })`。写成 `createSortedRowModel`(无 key、未调用)属于**不会报错的错误**:类型照样通过,但 `getSortedRowModel()` / `getPaginationRowModel()` 实际不存在,症状是**页码算得对(显示"共 4 页")却把全部行都渲染出来**。`src/lib/table.ts` 已按正确写法修复并实测验证,不要改回去。
 - **设计 token 只有一套**:`src/styles.css` 只保留语义 token 与 `@theme inline` 映射,色值与字体全部由 `DESIGN.md` 决定(映射见上文"设计系统")。
 - **主题只有一套**:顶栏切换按钮(`components/layout/topbar.tsx`)与 `__root.tsx` 的首屏引导脚本共用 `src/lib/constants.ts` 的 `THEME_STORAGE_KEY`,无存储值时都回落到系统偏好。改主题必须同时改这两处的读取逻辑。
@@ -225,8 +228,11 @@ pnpm dlx shadcn@latest add <component-name>
 - **`src/components/ui/*.tsx` 里残留的 `"use client"` 指令已清理**。那是 Next.js 专用指令,在 TanStack Start 里是无意义的噪音,新加组件时如果 shadcn 模板带进来,删掉即可。
 - **`components/ui/` 里 vendored 组件的 lint warning 不要顺手清理**(见上文"新增 shadcn 组件")。当前基线 4 个 warning 里有 3 个出自 `badge-list.tsx`。
 - **时间格式化只走 `lib/time.ts`**。`lib/format.ts` 曾与它各有一套日期函数(`formatDateTime` vs `formatLocalDateTime`),同一个值在两处可能给出不同结果 —— 已合并,日期函数只留在 `time.ts`。`utils.ts` / `format.ts` 里都不要再加日期函数。
-- **权限点选择区只有 `PermissionPicker` 一个实现**(`shared/permission-tree.tsx`)。原先三个授权弹窗(用户 / 角色 / 用户组)共用它;那三页改成占位页后它**暂时没有调用方**,已登记进上面「备选件」表 —— 重建授权界面时直接用,不要再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块。
-- **`mocks/*` 是演示数据,不是业务真相**。当前只剩 `mocks/tags.ts`(「标签管理」页的业务示例数据,按需求保留)与两个无调用方的备选件(`mocks/shared.ts` 的确定性构造器、`mocks/dicts.ts` 的部门树)。原先撑起用户 / 用户组 / 角色三页的 `mocks/settings.ts`(791 行种子 + 权限点目录)**已整体删除**,那三页现在是 `StubPage` 占位、故意不摆假数据 —— 别再往回加。
+- **权限点选择区只有 `PermissionPicker` 一个实现**(`shared/permission-tree.tsx`)。它随用户 / 角色 / 用户组三页改成占位页后暂无调用方,已登记进上面「备选件」表 —— 重建授权界面时直接用,不要再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块。
+- **`mocks/*` 是演示数据,不是业务真相**。当前**只剩 `mocks/tags.ts`** 一个文件(「标签管理」页的示例标签体系 + `seed-tags` 的种子来源)。`mocks/settings.ts`(791 行种子 + 权限点目录)、`mocks/shared.ts`、`mocks/dicts.ts` 都已删除 —— 前者是因为用户 / 用户组 / 角色三页改成了 `StubPage` 占位,后两个是零调用方的残留。别再往回加。
+- **树的"限高 + 内部滚动"也在 `shared/sortable-tree.tsx` 里**(`max-h-[62vh] overflow-y-auto` + `scrollbar-gutter: stable`)。原来是页面各包一层,菜单页包了、标签页漏了,于是标签一多就复发同一个问题:树把页面撑得很长,点最下面那个节点时右侧详情已经滚出屏幕。**树的布局约束跟树一起走,不要分到调用方**。
+- **同一个交互不要写两遍**。菜单树与标签树曾经各有一份「同级判定 + dragover/drop + 提示线 + 折叠 + 键盘上下移」(约 150 行逐字重复),其中的括号坑只在其中一份修过。现在统一走 `shared/sortable-tree.tsx`,页面只提供 `renderRow`。**通用组件里不要出现具体业务的名字**:`shared/tag-badges.tsx` 曾经写死 17 个中文维度名并 import `mocks/tags` 取色 —— 通用层一旦耦合演示数据,派生新项目后全是死映射。
+- **不要重建"权限过滤"这层空转**。侧边栏 / 面包屑 / 模块概览现在直接读菜单树(`nav-data.ts`);曾经的 `nav-permissions.tsx`(Context + `filterNavByPermission`)在整个仓库里 `granted` 恒为 `null`,所有过滤都是恒等映射 —— 纯伪扩展点,已删。真接权限服务时再加参数,别提前把签名铺开。
 
 ## 改动完成后自检
 

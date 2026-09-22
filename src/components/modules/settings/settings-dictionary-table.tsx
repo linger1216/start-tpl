@@ -50,7 +50,7 @@ export function SettingsDictionaryTable({
 							<TableRow key={row.id}>
 								<TableCell className="text-[13px] font-medium text-foreground">{row.name}</TableCell>
 								<TableCell translate="no" className="font-mono text-[12px] text-muted-foreground">
-									{row.id}
+									{row.code}
 								</TableCell>
 								<TableCell>
 									<div className="flex flex-wrap items-center gap-1">

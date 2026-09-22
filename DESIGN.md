@@ -112,11 +112,11 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
   /* --hue-X-fg / -soft / -line / -on 由 color-mix 从上面派生,见 styles.css */
 
   /* Blue-tinted multi-layer shadow */
-  --shadow-card:     rgba(0,0,0,0.32) 0px 0px 1px,
+  --elev-card:       rgba(0,0,0,0.32) 0px 0px 1px,
                      rgba(0,0,0,0.08) 0px 0px 2px,
                      rgba(45,127,249,0.28) 0px 1px 3px,
                      rgba(0,0,0,0.06) 0px 0px 0px 0.5px inset;
-  --shadow-soft:     rgba(15,48,106,0.05) 0px 0px 20px;
+  --elev-soft:       rgba(15,48,106,0.05) 0px 0px 20px;
 
   /* 抬升三档(静置 / 悬停 / 浮起):hover **只换这一档**,不做位移 */
   --af-raise-1:  0 1px 1px rgba(15,48,106,.03), 0 0 0 1px var(--border);
@@ -187,7 +187,7 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 - `border: 1px solid #e0e2e6`
 - `border-radius: 16px` (小卡片) / `24px` (区块)
-- `box-shadow: var(--shadow-card)` — 蓝调多层阴影
+- `box-shadow: var(--elev-card)`(工具类 `shadow-card`)—— 蓝调多层阴影
 
 ### 输入框 (Inputs)
 
@@ -224,8 +224,8 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 ### 5.1 侧边栏 —— 单强调色 + 缩进层级
 
-> 实现:`src/components/layout/sidebar.tsx` + `nav-config.ts`(菜单与图标表)
-> + `lib/sidebar-mode.ts`(收起形态)。
+> 实现:`src/components/layout/sidebar.tsx` + `sidebar-header.tsx`(顶部品牌标题区,独立组件)
+> + `nav-config.ts`(菜单与图标表)+ `lib/sidebar-mode.ts`(收起形态)。
 > 层级的表达方式改过两回(色相编码 → 引导线 → 纯缩进),以下是**当前**规格。
 
 **一、导航只用品牌色一种强调色。**
@@ -259,18 +259,23 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 收起时必须给面板加 `inert` —— 内容仍在 DOM 里,不然键盘 Tab 会钻进看不见的链接。
 
 **六、收起后长什么样是系统参数,不是写死的。**
-键 `ui.sidebar.collapsed_mode`(存 `sys_config`,设置入口「系统设置 ▸ 参数管理」),两种取值:
+键 `ui.sidebar.collapsed_mode`(存 `sys_para`,设置入口「系统设置 ▸ 参数管理」),两种取值:
 
 | 值 | 表现 |
 |---|---|
-| `rail`(默认) | 60px 迷你图标栏:只列一级菜单,含当前页的那一项高亮;底部一枚圆形按钮可以展开回去 |
+| `rail`(默认) | 60px 迷你图标栏:只列一级菜单,含当前页的那一项高亮(底色与展开态的选中行**同一套** `--af-blue-soft` 浅蓝,不用实心主色块);底部一枚圆形按钮可以展开回去 |
 | `hidden` | 宽度归零、连右边框一起收掉(否则屏幕上留一条 1px 竖线);叫回来的入口是顶栏的菜单按钮 |
 
 > 迷你栏的名字用**原生 `title`** 而不是自绘浮层:它的滚动容器在 CSS 上无法同时
 > "纵向 `auto` + 横向可见"(一个轴为 `auto`,另一个轴必然也是 `auto`),自绘气泡必被裁掉。
 > 值非法 / 读不到 / 库里没这条 → 回落到 `rail`(见 `lib/sidebar-mode.ts`),不会白屏也不会崩。
 
-**七、首屏交错入场。** 导航容器挂 `stagger` 类,一级项按 22ms 依次浮入(见 §7)。
+**七、顶部品牌标题区**(`layout/sidebar-header.tsx`,**独立于菜单**)。
+`h-14`(与顶栏同高,两栏底边对齐)、左侧 28px 主色方块(icon)+ 右侧标题(`14px semibold`)/ 副标题(`10.5px muted`),
+整块可点回首页。迷你图标栏形态只留方块,名字走原生 `title`。
+标题区讲"这是哪个系统",菜单讲"有哪些页面、我在哪" —— 两者互不 import,换系统名不必动菜单逻辑。
+
+**八、首屏交错入场。** 导航容器挂 `stagger` 类,一级项按 22ms 依次浮入(见 §7)。
 
 ### 5.2 页面头
 
@@ -308,37 +313,60 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 操作按钮之间 8px gap,主操作(+ 新建)与次操作之间加 4px `margin-left` 形成视觉分组。
 
-### 5.5 Tab 模式 — **下划线页签**(全项目唯一实现)
+### 5.5 Tab 模式 —— 四种**分割形态**,一套 API
 
-> ⚠️ 本节 2026-09 修正过一次:文档此前写的是"卡片式页签",但 `ui/tabs.tsx` 的实际实现
-> 一直是**下划线**式(Linear / Vercel / Stripe 风格)。代码是真源,文档按代码重写。
-> 想改成卡片式请**先改代码再改本节**,不要再让两边漂移。
+> 本节 2026-09 修正过两次:先是从"卡片式"改为按代码重写,再是按需求**补出四种 variant**
+> (原先写死"只有下划线一种,不要新增 variant"—— 那条已作废)。
+> 代码是真源(`src/components/ui/tabs.tsx`),文档跟着代码走。
 
-实现固定在 `src/components/ui/tabs.tsx`(`Tabs / TabsList / TabsTrigger / TabsContent`),
-**只有这一种样式**:不要新增 `variant`、不要手写 `role="tablist"`。
+| variant | 形态 | 用在哪 |
+| --- | --- | --- |
+| `underline`(默认) | 下划线页签(Linear / Vercel 风格) | 页面头部的主分区:台账页的「列表 / 已归档」 |
+| `segmented` | 分段控件(iOS Segmented) | 同一份数据切**视图口径**(全部 / 我负责的 / 我参与的) |
+| `pill` | 药丸子(选中 = 主色实底) | 卡片内的轻量切换、筛选预设 |
+| `card` | 卡片式(与内容区相接) | 抽屉 / 弹窗里的分区,或需要"文件夹"隐喻的地方 |
 
-- **理念**:tab **不是**一个独立元素,而是页面头部延伸出的导航条 —— 无边框、无背景、无圆角。
-- **形状**:`TabsList` 零间隙横向排开 + 底部 **1px 浅灰基线**(所有 tab 共享的视觉基线);
-  `TabsTrigger` `h-9`、`px-3.5`、`text-[13px] font-medium`、标签间距 `gap-1.5`。
-- **选中**:文字加深加粗 + **底部 2px 主色实线**(两端圆头,带一层极淡蓝晕
-  `shadow-[0_2px_6px_-1px_var(--af-blue-ring)]`)。**不做底色反转。**
-- **hover(未激活)**:文字转 `foreground` + **底部 2px 浅灰提示线** —— 让用户知道"点哪里都会激活"。
-- **focus-visible**:`ring-[3px] ring-ring/40`,保证键盘可达。
-- **计数**:页签上的数字一律用 `count` 属性(渲染成 `rounded-full bg-muted` 小胶囊,
-  选中态转 `bg-hue-blue-soft text-hue-blue-fg`);不要在页面里手写 `({n})` 或自定义 span。
-- **换行**:`TabsList` 内置 `flex-wrap max-w-full`,6 个以上页签不会横向溢出。
-- **动效**:`duration-200 ease-out`,过渡 `color / background-color / opacity`;不做位移与缩放。
-- **为什么不用卡片式**:卡片式会在视觉上与下方台账卡片**抢层级** —— 页签是导航,不该长得像内容。
+**共同纪律(四种都要守):**
+
+- tab **不是**独立按钮:它属于某一组,组内几何统一,**只有选中态承担强调色**;
+- hover 只提示"这里可点",强度必须低于选中态 —— 否则同时几个都像选中;
+- **计数只走 `count` 属性**(渲染成小胶囊),不要在页面里手写 `({n})`;
+- 颜色 / 几何全部走 token(`--border` / `--muted` / `--primary` / `--hue-blue-*`);
+  要换样子就**往下加一种 variant**,不要在调用点覆盖颜色。
+
+**`underline` 的细节(默认形态):**
+
+- **形状**:`TabsList` 零间隙横向排开 + 底部 **1px 浅灰基线**;`TabsTrigger` `h-9` / `px-3.5` / `text-[13px]`;
+- **选中**:文字加深加粗 + **底部 2px 主色实线**(圆头 + 一层极淡蓝晕)。**不做底色反转**;
+- **hover(未激活)**:文字转 `foreground` + 底部 2px 浅灰提示线;
+- **聚焦**:`ring-[3px] ring-ring/40`;
+- **换行**:`TabsList` 内置 `flex-wrap max-w-full`。
+
+**另外三种的形状要点:**
+
+- `segmented`:浅灰轨道(`bg-muted`)+ 内边距 4px,选中项是**白底胶囊 + `--af-raise-1` 一档抬升**;
+  `h-7`、`text-[12.5px]`,比下划线更"紧凑一格"。
+- `pill`:无容器,选中 = **主色实底 + 反白**(`bg-primary text-primary-foreground` + `shadow-glow`);
+  计数胶囊压在实底上时用 `bg-primary-foreground/20`,**不要硬编码白色**。
+- `card`:容器是"底部一条边",选中页签白底 + 真边框,并用一条 1px 白线**盖住容器底边**,
+  与内容区连成一片;`TabsContent` 自动补 `pt-3`。
+
+**动效**:全部 `duration-200 ease-out`,只过渡 `color / background-color / opacity / transform`(下划线与卡片遮线),
+不做位移与缩放。
 
 ```tsx
-<Tabs defaultValue="users">
-	<TabsList>
-		<TabsTrigger value="users" count={userRows.length}>用户</TabsTrigger>
-		<TabsTrigger value="groups" count={groupRows.length}>用户组</TabsTrigger>
-	</TabsList>
-	<TabsContent value="users" className="space-y-4 pt-2">…</TabsContent>
+// 换形态只改 variant,子件 API 完全一致
+<Tabs variant="segmented" defaultValue="all">
+  <TabsList>
+    <TabsTrigger value="all" count={12}>全部</TabsTrigger>
+    <TabsTrigger value="mine" count={3}>我负责的</TabsTrigger>
+  </TabsList>
+  <TabsContent value="all" className="space-y-4 pt-2">…</TabsContent>
 </Tabs>
 ```
+
+> ⚠️ **类名必须是字面量**:variant 的样式表里存的是**完整类名字符串**(含 `data-[state=active]:` 前缀),
+> 不做 `${variant}` 二次拼接 —— Tailwind 只扫描源码文本,拼出来的类名不会生成 CSS。
 
 > ⚠️ `src/components/ui/` 是 vendored 目录,但**这一个文件已被项目改写**:
 > 跑 `pnpm dlx shadcn@latest add tabs` 会覆盖它,覆盖后按本节重做。
@@ -368,12 +396,12 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 ## 6. 阴影系统
 
 ```css
---shadow-card:  rgba(0,0,0,0.32) 0px 0px 1px,
+--elev-card:    rgba(0,0,0,0.32) 0px 0px 1px,
                 rgba(0,0,0,0.08) 0px 0px 2px,
                 rgba(45,127,249,0.28) 0px 1px 3px,
                 rgba(0,0,0,0.06) 0px 0px 0px 0.5px inset;
 
---shadow-soft:  rgba(15,48,106,0.05) 0px 0px 20px;
+--elev-soft:    rgba(15,48,106,0.05) 0px 0px 20px;
 ```
 
 蓝调多层阴影,永远不用厚重黑色阴影。
@@ -427,7 +455,6 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 | 图标换位 | `.icon-swap`(给元素挂 `key={状态}`) | 260ms | 主题切换的日/月图标 |
 | 折叠展开 | `.collapse-grid` + `.is-open`(`grid-template-rows` 0fr→1fr) | 180ms | 侧边栏分组(唯一允许的布局动画) |
 | 入场(KPI) | `.kpi`(自带 40ms 交错) | 260ms | 旧版指标卡(新代码优先用 `.stagger`) |
-| 扫光 | `<MotionButton>`(`ui/button.tsx`,motion 驱动) | 200ms | 主 CTA、工具栏按钮 |
 | 主题/环境色温 | `.ambient-veil`、`.tone-topline`(`--tone-color`) | — | 侧边栏顶部、内容区顶部、卡片强调线 |
 
 **新增动效前先问三句:** ① 它传达了什么信息?② 这张表里有现成的吗?③ 去掉位移还成立吗?
@@ -503,7 +530,7 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
     --font-display: "Haas Groot Disp", Haas, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --font-body:    Haas, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
-    --shadow-card: rgba(0,0,0,0.32) 0px 0px 1px,
+    --elev-card: rgba(0,0,0,0.32) 0px 0px 1px,
                    rgba(0,0,0,0.08) 0px 0px 2px,
                    rgba(45,127,249,0.28) 0px 1px 3px,
                    rgba(0,0,0,0.06) 0px 0px 0px 0.5px inset;
@@ -541,7 +568,7 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
     border: 1px solid var(--color-border);
     border-radius: 16px;
     padding: 18px;
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--elev-card);
   }
 </style>
 ```

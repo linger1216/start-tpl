@@ -18,7 +18,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { TAGS_BY_DIMENSION } from "#/mocks/tags";
 
 /**
  * 系统设置 ▸ 标签管理 —— **持久化**的 `sys_tag` 树(维度 → 标签两级)。
@@ -103,14 +102,8 @@ export function SettingsTagsPage() {
 	);
 
 	// ── 指标卡(替换原柱状图)───────────────────────────────
-	const refValues = useMemo(() => {
-		const set = new Set<string>();
-		for (const list of Object.values(TAGS_BY_DIMENSION)) for (const v of list) set.add(v);
-		return set;
-	}, []);
 	const dims = rows.filter((r) => r.parentId === null).length;
 	const leaves = rows.length - dims;
-	const referenced = rows.filter((r) => refValues.has(r.label)).length;
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -120,7 +113,7 @@ export function SettingsTagsPage() {
 				value: rows.length,
 				description: "维度 + 标签合计",
 				Icon: TagsIcon,
-				tone: "bg-[color:var(--hue-blue-soft)] text-[color:var(--hue-blue-fg)]",
+				tone: "bg-hue-blue-soft text-hue-blue-fg",
 				unit: "个",
 			},
 			{
@@ -129,7 +122,7 @@ export function SettingsTagsPage() {
 				value: dims,
 				description: "一级节点",
 				Icon: FolderTree,
-				tone: "bg-[color:var(--hue-violet-soft)] text-[color:var(--hue-violet-fg)]",
+				tone: "bg-hue-violet-soft text-hue-violet-fg",
 				unit: "个",
 			},
 			{
@@ -138,20 +131,11 @@ export function SettingsTagsPage() {
 				value: leaves,
 				description: "挂在维度下的取值",
 				Icon: TagsIcon,
-				tone: "bg-[color:var(--hue-teal-soft)] text-[color:var(--hue-teal-fg)]",
-				unit: "个",
-			},
-			{
-				key: "ref",
-				label: "被业务引用",
-				value: referenced,
-				description: "标签名命中业务字典",
-				Icon: TagsIcon,
-				tone: "bg-[color:var(--hue-amber-soft)] text-[color:var(--hue-amber-fg)]",
+				tone: "bg-hue-teal-soft text-hue-teal-fg",
 				unit: "个",
 			},
 		],
-		[rows.length, dims, leaves, referenced],
+		[rows.length, dims, leaves],
 	);
 
 	function openCreate(parent: TagNode | null) {
@@ -249,8 +233,8 @@ export function SettingsTagsPage() {
 					</CardContent>
 				</Card>
 
-				{/* 右:选中节点详情 */}
-				<Card className="gap-3 hover:border-border hover:shadow-none">
+				{/* 右:选中节点详情(宽屏吸顶:与「菜单详情」同一口径,页面需要滚动时详情也不会跑出视野) */}
+				<Card className="gap-3 self-start hover:border-border hover:shadow-none lg:sticky lg:top-20">
 					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
 						<CardTitle className="flex items-center gap-2">
 							<TagsIcon className="size-4 text-muted-foreground" />

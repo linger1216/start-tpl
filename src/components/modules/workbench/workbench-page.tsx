@@ -6,14 +6,25 @@
  * 以及一个明显的「派生时删什么」的提示。
  */
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Code2, FolderTree, Layers, Rocket, Settings, Workflow } from "lucide-react";
+import {
+	ArrowRight,
+	Code2,
+	Database,
+	FolderTree,
+	Layers,
+	Rocket,
+	Settings,
+	Tag as TagIcon,
+	Workflow,
+} from "lucide-react";
 
 import { NAV_ICON_MAP, type NavIcon, type NavNode } from "#/components/layout/nav-config";
-import { useVisibleNavNodes } from "#/components/layout/nav-permissions";
+import { useNavNodes } from "#/components/layout/nav-data";
 import { PageHeader } from "#/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { cn } from "#/lib/utils";
 import { UiGallery } from "./ui-gallery";
+import { WorkbenchTagging } from "./workbench-tagging";
 
 /** 「可以展开」的入口(只有有 path 的一级模块才算) */
 function navigableTopLevel(nodes: readonly NavNode[]): Array<NavNode & { path: string }> {
@@ -29,7 +40,7 @@ const CHECKS = [
 	{
 		icon: Layers,
 		title: "看一遍 UI 组件示例",
-		desc: "本页下方就是 —— 45 个原语的最小可用例子,可直接抄进业务页",
+		desc: "本页下方就是 —— 44 个原语的最小可用例子,可直接抄进业务页",
 	},
 	{
 		icon: Code2,
@@ -40,6 +51,52 @@ const CHECKS = [
 		icon: Settings,
 		title: "到 /settings 看真实业务示例",
 		desc: "用户 / 标签 / 菜单 / 字典 / 参数五个模块,以及 mock 数据与数据库两种数据来源",
+	},
+];
+
+/** 系统设置模块的七个页面 —— 数据源写清楚,免得后来人以为它们都是 mock */
+const SETTINGS_PAGES = [
+	{
+		name: "标签管理",
+		path: "/settings/tags",
+		source: "sys_tag",
+		desc: "维度 → 标签 两级树;可拖拽调序、跨父迁移。搭配 sys_tag_relation 给业务对象打标签",
+	},
+	{
+		name: "菜单管理",
+		path: "/settings/menus",
+		source: "sys_menu",
+		desc: "侧边栏 / 面包屑 / 工作台的运行时来源;改完即时生效(表为空则退回代码里的 NAV_NODES)",
+	},
+	{
+		name: "字典管理",
+		path: "/settings/dictionary",
+		source: "sys_dict",
+		desc: "全系统共用的固定取值表,业务按 code 引用(useDict 读它)",
+	},
+	{
+		name: "参数管理",
+		path: "/settings/parameters",
+		source: "sys_para",
+		desc: "运维口径 + 界面偏好(如侧边栏收起形态);按类型码校验,支持详情 / 编辑 / 删除",
+	},
+	{
+		name: "用户管理",
+		path: "/settings/users",
+		source: null,
+		desc: "待实现占位页 —— 原 mock 已整体删除,接上真实接口后重建",
+	},
+	{
+		name: "用户组管理",
+		path: "/settings/groups",
+		source: null,
+		desc: "待实现占位页(同上)",
+	},
+	{
+		name: "角色管理",
+		path: "/settings/roles",
+		source: null,
+		desc: "待实现占位页(同上)",
 	},
 ];
 
@@ -59,7 +116,7 @@ const STRUCTURE = [
 ];
 
 export function WorkbenchPage() {
-	const topLevel = useVisibleNavNodes();
+	const topLevel = useNavNodes();
 	const entries = navigableTopLevel(topLevel);
 
 	return (
@@ -75,7 +132,7 @@ export function WorkbenchPage() {
 				<CardHeader>
 					<CardTitle className="text-[15px]">UI 组件示例</CardTitle>
 					<CardDescription>
-						<code className="font-mono">components/ui/</code> 下 45 个通用原语的最小可用例子 —— 受控的都给好了
+						<code className="font-mono">components/ui/</code> 下 44 个通用原语的最小可用例子 —— 受控的都给好了
 						useState,可直接抄进业务页。新增/删除原语时同步在这里加减一格,别让它们变回孤儿。
 					</CardDescription>
 				</CardHeader>
@@ -83,6 +140,9 @@ export function WorkbenchPage() {
 					<UiGallery />
 				</CardContent>
 			</Card>
+
+			{/* 打标签示例 —— sys_tag_relation 四个接口的界面消费方 */}
+			<WorkbenchTagging />
 
 			{/* 上手四件 */}
 			<Card tone="var(--hue-blue)">
@@ -95,10 +155,10 @@ export function WorkbenchPage() {
 						{CHECKS.map((check, index) => (
 							<li
 								key={check.title}
-								className="rounded-xl border border-border bg-card/60 p-3 transition-[background-color,border-color] duration-150 hover:border-[color:var(--af-border-strong)] hover:bg-card"
+								className="rounded-xl border border-border bg-card/60 p-3 transition-[background-color,border-color] duration-150 hover:border-border-strong hover:bg-card"
 							>
 								<div className="mb-2 flex items-center gap-2">
-									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[color:var(--af-blue-soft)] font-mono text-[12px] text-primary">
+									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-soft font-mono text-[12px] text-primary">
 										{index + 1}
 									</span>
 									<check.icon className="size-3.5 text-muted-foreground" />
@@ -123,9 +183,9 @@ export function WorkbenchPage() {
 							<Link
 								key={item.title}
 								to={item.path}
-								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:border-[color:var(--af-border-strong)] hover:bg-secondary hover:shadow-(--af-raise-1)"
+								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:border-border-strong hover:bg-secondary hover:shadow-raise-1"
 							>
-								<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--af-blue-soft)] text-primary ring-1 ring-[color:var(--border)] ring-inset">
+								<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-primary ring-1 ring-border ring-inset">
 									<item.icon className="size-4" />
 								</span>
 								<div className="min-w-0 flex-1">
@@ -137,6 +197,78 @@ export function WorkbenchPage() {
 								</div>
 							</Link>
 						))}
+					</div>
+				</CardContent>
+			</Card>
+
+			{/* 系统设置模块介绍 —— 七个页面分别吃什么数据 */}
+			<Card tone="var(--hue-amber)">
+				<CardHeader>
+					<CardTitle className="flex items-center gap-2 text-[15px]">
+						<Database className="size-4 text-muted-foreground" />
+						系统设置模块(唯一保留的真实业务)
+					</CardTitle>
+					<CardDescription>
+						七个页面 = <strong className="text-foreground">4 页真实数据</strong> +
+						<strong className="text-foreground"> 3 页「待实现」占位</strong>。数据都在 MySQL 里,不是 mock ——
+						建表与本机开发按下面的命令走。
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-3 pt-0">
+					<div className="stagger grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+						{SETTINGS_PAGES.map((page) => (
+							<Link
+								key={page.path}
+								to={page.path}
+								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:border-border-strong hover:bg-secondary hover:shadow-raise-1"
+							>
+								<span
+									className={cn(
+										"flex size-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+										page.source
+											? "bg-hue-blue-soft text-primary ring-border"
+											: "bg-muted text-muted-foreground ring-border",
+									)}
+								>
+									<FolderTree className="size-4" />
+								</span>
+								<div className="min-w-0 flex-1">
+									<div className="flex items-center justify-between gap-2">
+										<span className="truncate font-medium text-foreground">{page.name}</span>
+										{page.source ? (
+											<span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+												{page.source}
+											</span>
+										) : (
+											<span className="shrink-0 rounded-md bg-hue-amber-soft px-1.5 py-0.5 text-[10.5px] text-hue-amber-fg">
+												待实现
+											</span>
+										)}
+									</div>
+									<p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{page.desc}</p>
+								</div>
+							</Link>
+						))}
+					</div>
+
+					<div className="rounded-xl border border-dashed border-border p-3 text-[12.5px] leading-relaxed text-muted-foreground">
+						<div className="mb-1.5 flex items-center gap-1.5 font-medium text-foreground">
+							<TagIcon className="size-3.5 text-muted-foreground" />
+							建表与灌种子(全部幂等)
+						</div>
+						<p>
+							<code className="font-mono text-foreground">pnpm db:create</code> 建五张系统表 ·{" "}
+							<code className="font-mono text-foreground">pnpm db:seed:menus</code> 把 NAV_NODES 写进 sys_menu ·{" "}
+							<code className="font-mono text-foreground">db:seed:dicts</code> /{" "}
+							<code className="font-mono text-foreground">db:seed:paras</code> /{" "}
+							<code className="font-mono text-foreground">db:seed:tags</code> 灌示例数据。
+						</p>
+						<p className="mt-1">
+							老库升级跑 <code className="font-mono text-foreground">pnpm db:migrate:ids</code>(语义 id → nanoid)与{" "}
+							<code className="font-mono text-foreground">pnpm db:sync:meta</code>(对齐列注释 / 索引名);接口改动由{" "}
+							<code className="font-mono text-foreground">pnpm test</code> 覆盖(直调 tRPC procedure 的集成测试,共 29
+							条)。
+						</p>
 					</div>
 				</CardContent>
 			</Card>
@@ -181,7 +313,7 @@ export function WorkbenchPage() {
 					<p>
 						<code className="font-mono text-foreground">components/modules/settings/</code> 与{" "}
 						<code className="font-mono text-foreground">routes/(main)/settings/</code> 以及对应的
-						<code className="font-mono text-foreground">trpc/routers/{`{menu,dict,config}`}</code> +{" "}
+						<code className="font-mono text-foreground">trpc/routers/{`{menu,dict,para,tag}`}</code> +{" "}
 						<code className="font-mono text-foreground">mocks/{`{tags,dicts}`}</code> +{" "}
 						<code className="font-mono text-foreground">db/data-base-schema.ts</code>。保留前先把真实业务模块的字段接上,
 						别直接整盘删。
@@ -203,12 +335,12 @@ function EntryCard({ node }: { node: NavNode & { path: string } }) {
 		<Link
 			to={node.path}
 			className={cn(
-				"group flex items-start gap-3 rounded-xl border border-border bg-card p-3 shadow-(--af-raise-1)",
+				"group flex items-start gap-3 rounded-xl border border-border bg-card p-3 shadow-raise-1",
 				"transition-[background-color,border-color,box-shadow] duration-200 ease-brand",
-				"hover:border-[color:var(--af-border-strong)] hover:shadow-(--af-raise-2)",
+				"hover:border-border-strong hover:shadow-raise-2",
 			)}
 		>
-			<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--af-blue-soft)] text-primary ring-1 ring-[color:var(--border)] ring-inset">
+			<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-primary ring-1 ring-border ring-inset">
 				{Icon ? <Icon className="size-4" /> : <Layers className="size-4" />}
 			</span>
 			<div className="min-w-0 flex-1">

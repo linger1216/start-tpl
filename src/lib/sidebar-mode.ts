@@ -1,7 +1,7 @@
 /**
  * 侧边栏「收起后长什么样」—— 唯一真源。
  *
- * 值存 `sys_config`(键 `ui.sidebar.collapsed_mode`,默认 `rail`),与「列可见性」同一套口径:
+ * 值存 `sys_para`(键 `ui.sidebar.collapsed_mode`,默认 `rail`),与「列可见性」同一套口径:
  * 这是**系统设置级**偏好,换机器 / 换浏览器都该一致,而且要在「系统设置 ▸ 参数管理」里能直接改。
  *
  * 所以这里**不碰 localStorage、不持有任何状态** —— 读取与订阅由 React Query 负责

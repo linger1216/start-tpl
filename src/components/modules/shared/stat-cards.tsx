@@ -48,7 +48,7 @@ export function StatCards({
 }) {
 	const wrapperClass =
 		variant === "strip"
-			? "stagger flex flex-row divide-x divide-[color:var(--border)] rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] shadow-(--af-raise-1) overflow-hidden"
+			? "stagger flex flex-row divide-x divide-border rounded-xl border border-border bg-background shadow-raise-1 overflow-hidden"
 			: "stagger grid grid-cols-2 gap-2 lg:grid-cols-4";
 	return (
 		<div className={cn(wrapperClass, className)}>
@@ -98,25 +98,15 @@ function StatCell({
 	variant: "strip" | "cards";
 }) {
 	/** 趋势配色:上升 = 绿、下降 = 红、持平 = 灰 */
-	const trendColor =
-		trend === "up"
-			? "text-[color:var(--success)]"
-			: trend === "down"
-				? "text-[color:var(--danger)]"
-				: "text-[color:var(--muted-foreground)]";
-	const trendBg =
-		trend === "up"
-			? "bg-[color:var(--success)]/8"
-			: trend === "down"
-				? "bg-[color:var(--danger)]/8"
-				: "bg-[color:var(--muted)]";
+	const trendColor = trend === "up" ? "text-success" : trend === "down" ? "text-danger" : "text-muted-foreground";
+	const trendBg = trend === "up" ? "bg-success/8" : trend === "down" ? "bg-danger/8" : "bg-muted";
 
 	if (variant === "strip") {
 		return (
-			<div className="group/stat-cell flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-[color:var(--af-hover)]">
+			<div className="group/stat-cell flex min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors duration-150 hover:bg-hover">
 				<div
 					className={cn(
-						"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-[color:var(--border)] ring-inset transition-shadow duration-200 group-hover/stat-cell:ring-[color:var(--af-border-strong)]",
+						"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-border ring-inset transition-shadow duration-200 group-hover/stat-cell:ring-border-strong",
 						tone,
 					)}
 				>
@@ -124,13 +114,13 @@ function StatCell({
 				</div>
 				<div className="flex min-w-0 flex-1 flex-col gap-px">
 					<div className="flex items-baseline gap-1">
-						<span className="font-heading text-[20px] leading-none font-medium tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
+						<span className="font-heading text-[20px] leading-none font-medium tracking-[-0.01em] tabular-nums text-foreground">
 							{typeof value === "number" ? value.toLocaleString() : value}
 						</span>
-						{unit ? <span className="text-[11px] text-[color:var(--muted-foreground)]">{unit}</span> : null}
+						{unit ? <span className="text-[11px] text-muted-foreground">{unit}</span> : null}
 					</div>
 					<div className="flex min-w-0 items-center justify-between gap-2">
-						<span className="truncate text-[11.5px] text-[color:var(--muted-foreground)]">
+						<span className="truncate text-[11.5px] text-muted-foreground">
 							{label}
 							{description ? <span className="ml-1 opacity-70">· {description}</span> : null}
 						</span>
@@ -163,10 +153,10 @@ function StatCell({
 
 	// ── cards variant: 小卡片 ──
 	return (
-		<div className="group relative flex min-w-0 items-center gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2.5 shadow-(--af-raise-1) transition-[border-color,box-shadow] duration-200 ease-brand hover:border-[color:var(--af-border-strong)] hover:shadow-(--af-raise-2)">
+		<div className="group relative flex min-w-0 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 shadow-raise-1 transition-[border-color,box-shadow] duration-200 ease-brand hover:border-border-strong hover:shadow-raise-2">
 			<div
 				className={cn(
-					"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-[color:var(--border)] ring-inset",
+					"flex size-7 shrink-0 items-center justify-center rounded-lg ring-1 ring-border ring-inset",
 					tone,
 				)}
 			>
@@ -174,13 +164,13 @@ function StatCell({
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-px">
 				<div className="flex items-baseline gap-1">
-					<span className="font-heading text-[18px] leading-none font-medium tracking-[-0.01em] tabular-nums text-[color:var(--foreground)]">
+					<span className="font-heading text-[18px] leading-none font-medium tracking-[-0.01em] tabular-nums text-foreground">
 						{typeof value === "number" ? value.toLocaleString() : value}
 					</span>
-					{unit ? <span className="text-[11px] text-[color:var(--muted-foreground)]">{unit}</span> : null}
+					{unit ? <span className="text-[11px] text-muted-foreground">{unit}</span> : null}
 				</div>
 				<div className="flex min-w-0 items-center justify-between gap-2">
-					<span className="truncate text-[11.5px] text-[color:var(--muted-foreground)]">{label}</span>
+					<span className="truncate text-[11.5px] text-muted-foreground">{label}</span>
 					{delta && trend ? (
 						<span
 							className={cn(

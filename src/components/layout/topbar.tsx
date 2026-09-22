@@ -6,8 +6,8 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
-import { findVisibleNavTrail } from "./nav-config";
-import { useGrantedNavPermissions } from "./nav-permissions";
+import { findNavTrailIn, type NavNode } from "./nav-config";
+import { useNavNodes } from "./nav-data";
 
 type Crumb = { label: string; href?: string };
 
@@ -21,10 +21,9 @@ function readTheme(): ThemeMode {
 	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function buildCrumbs(pathname: string, granted: ReadonlySet<string> | null = null): Crumb[] {
-	// 命中菜单的路径:面包屑完全由 nav-config 派生 —— 与侧边栏同一份来源,不会再漂移
-	// `granted` 非空时按权限过滤:被隐藏的菜单不进面包屑(见 nav-permissions.tsx)
-	const trail = findVisibleNavTrail(pathname, granted);
+function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
+	// 命中菜单的路径:面包屑完全由菜单树派生 —— 与侧边栏同一份来源,不会再漂移
+	const trail = findNavTrailIn(nodes, pathname);
 	if (trail.length > 0) {
 		if (trail.length === 1 && trail[0].path === "/") return [{ label: trail[0].name }];
 		return [
@@ -69,8 +68,8 @@ function primaryCtaLabel(pathname: string): { label: string; icon: "plus" | "che
 
 export function Topbar({ username, onToggle }: { username: string; onToggle: () => void }) {
 	const { pathname } = useLocation();
-	const granted = useGrantedNavPermissions();
-	const crumbs = useMemo(() => buildCrumbs(pathname, granted), [pathname, granted]);
+	const nodes = useNavNodes();
+	const crumbs = useMemo(() => buildCrumbs(nodes, pathname), [nodes, pathname]);
 	const [theme, setTheme] = useState<ThemeMode>("light");
 	const cta = primaryCtaLabel(pathname);
 
@@ -124,7 +123,7 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 									{c.label}
 								</Link>
 							) : (
-								<span className="flex items-center gap-1.5 rounded-md bg-[color:var(--af-blue-soft)] px-2 py-0.5 font-medium text-primary">
+								<span className="flex items-center gap-1.5 rounded-md bg-brand-soft px-2 py-0.5 font-medium text-primary">
 									<span aria-hidden className="size-1.5 rounded-full bg-primary" />
 									{c.label}
 								</span>
@@ -141,14 +140,14 @@ export function Topbar({ username, onToggle }: { username: string; onToggle: () 
 					<Search aria-hidden="true" />
 					<Input
 						placeholder="搜索页面 / 档案 / 主体"
-						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-[13px] transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:shadow-[0_0_0_3px_var(--af-blue-ring)]"
+						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-[13px] transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-brand-ring"
 					/>
 					<span className="shortcut">⌘ K</span>
 				</div>
 
 				{/* 页面相关主 CTA —— 与路由联动 */}
 				{cta ? (
-					<Button size="sm" className="ml-1 gap-1.5 shadow-[var(--shadow-glow)]">
+					<Button size="sm" className="ml-1 gap-1.5 shadow-glow">
 						<Plus className="size-3.5" />
 						{cta.label}
 					</Button>

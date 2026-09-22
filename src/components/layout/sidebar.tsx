@@ -7,7 +7,8 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { parseSidebarCollapseMode, SIDEBAR_MODE_CONFIG_KEY, type SidebarCollapseMode } from "#/lib/sidebar-mode";
 import { cn } from "#/lib/utils";
 import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
-import { useVisibleNavNodes, useVisibleNavTrail } from "./nav-permissions";
+import { useNavNodes, useNavTrail } from "./nav-data";
+import { SidebarHeader } from "./sidebar-header";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    侧边栏 —— 只做导航(规格见 DESIGN.md §5.1)
@@ -28,6 +29,10 @@ import { useVisibleNavNodes, useVisibleNavTrail } from "./nav-permissions";
 
    收起后的样子(60px 迷你图标栏 / 整条隐藏)是**系统参数**,
    键为 `ui.sidebar.collapsed_mode`,读取见 `lib/sidebar-mode.ts`,设置入口在「系统设置 ▸ 参数管理」。
+
+   ④ **顶部的品牌标题区不在这里** —— 它是独立组件 `layout/sidebar-header.tsx`
+      (icon + 标题 + 副标题)。标题区讲"这是哪个系统",菜单讲"有哪些页面、我在哪",
+      两件事各自演进,互不 import。
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?: () => void }) {
@@ -36,11 +41,10 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 	/** "收起了 且 收起形态是迷你栏"才渲染图标栏;hidden 模式下收起就是整条宽度归零 */
 	const rail = collapsed && mode === "rail";
 
-	// 菜单树按权限过滤:未接权限服务时 = 全量 NAV_NODES(见 nav-permissions.tsx)
-	const nodes = useVisibleNavNodes();
+	const nodes = useNavNodes();
 
-	// 当前路径命中的分组链(同样按权限过滤)—— 决定初始展开哪些分支
-	const trail = useVisibleNavTrail(pathname);
+	// 当前路径命中的分组链 —— 决定初始展开哪些分支
+	const trail = useNavTrail(pathname);
 	const trailIds = useMemo(() => trail.map((n) => n.path ?? n.name), [trail]);
 
 	// 默认折叠:只展开当前路径所在分支。
@@ -79,6 +83,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 				collapsed ? (mode === "rail" ? "w-[60px]" : "w-0 border-r-0") : "w-60",
 			)}
 		>
+			{/* 品牌标题区:独立组件(见文件头 ④)。收起成迷你栏时只留品牌图标 */}
+			<SidebarHeader compact={rail} title="管理后台" subtitle="TanStack Start 模板" />
+
 			<nav
 				className={cn(
 					"relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden",
@@ -105,7 +112,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 						type="button"
 						onClick={onExpand}
 						aria-label="展开侧边栏"
-						className="mx-auto flex size-7 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-(--af-raise-2) transition-colors duration-150 hover:border-primary hover:text-primary"
+						className="mx-auto flex size-7 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-raise-2 transition-colors duration-150 hover:border-primary hover:text-primary"
 					>
 						<ChevronRight className="size-3.5" />
 					</button>
@@ -124,7 +131,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
  */
 function useSidebarCollapseMode(): SidebarCollapseMode {
 	const trpc = useTRPC();
-	const { data } = useQuery(trpc.config.byKey.queryOptions({ key: SIDEBAR_MODE_CONFIG_KEY }));
+	const { data } = useQuery(trpc.para.byKey.queryOptions({ key: SIDEBAR_MODE_CONFIG_KEY }));
 	return parseSidebarCollapseMode(data?.value);
 }
 
@@ -151,7 +158,7 @@ function NavItem({
 				<span className="text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
 					{node.name}
 				</span>
-				<span className="h-px flex-1 bg-gradient-to-r from-[color:var(--border)] to-transparent" />
+				<span className="h-px flex-1 bg-gradient-to-r from-border to-transparent" />
 			</div>
 		);
 	}
@@ -170,9 +177,7 @@ function NavItem({
 					aria-expanded={open}
 					className={cn(
 						"group/nav relative flex w-full items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[13px] font-medium",
-						selfSelected
-							? "bg-[color:var(--af-blue-soft)] text-primary"
-							: "text-foreground hover:bg-[color:var(--af-hover)] hover:text-foreground",
+						selfSelected ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
 						"transition-[color,background-color] duration-150 ease-brand",
 					)}
 				>
@@ -216,9 +221,7 @@ function NavItem({
 				// 未选中 = 深色文字,hover 只换底色 —— hover **不**变蓝,蓝色只属于"被选中"。
 				"group/nav relative flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium",
 				"transition-[color,background-color] duration-150 ease-brand",
-				active
-					? "bg-[color:var(--af-blue-soft)] text-primary"
-					: "text-foreground hover:bg-[color:var(--af-hover)] hover:text-foreground",
+				active ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
 			)}
 		>
 			<Icon
@@ -292,9 +295,10 @@ function RailItem({ node, pathname }: { node: NavNode; pathname: string }) {
 			aria-current={own ? "page" : undefined}
 			className={cn(
 				"flex size-9 shrink-0 items-center justify-center rounded-xl transition-[color,background-color,box-shadow] duration-150 ease-brand",
-				active
-					? "bg-primary text-primary-foreground shadow-(--shadow-glow)"
-					: "text-muted-foreground hover:bg-[color:var(--af-hover)] hover:text-foreground",
+				// 选中态与展开态**共用同一套底色**:浅蓝底 + 主色图标。
+				// 这里曾经是实心主色块(`bg-primary` + 反白 + glow)—— 一收起,整条栏的主色面积
+				// 就和展开态判若两物(展开态只有淡淡一层浅蓝)。用户要的正是"统一成不折叠的背景色"。
+				active ? "bg-brand-soft text-primary" : "text-muted-foreground hover:bg-hover hover:text-foreground",
 			)}
 		>
 			<Icon className="size-4" />

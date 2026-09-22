@@ -5,7 +5,7 @@ import { boolean, index, int, mysqlTable, text, timestamp, uniqueIndex, varchar 
  *
  * 分两组,口径不同,不要混:
  *
- *  1. **系统设置三表**:`src/db/data-base-schema.ts` 定义 `sys_menu` / `sys_dict` / `sys_config`,
+ *  1. **系统设置五表**:`src/db/data-base-schema.ts` 定义 `sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`,
  *     只声明「读写的形状」、**不进迁移**(库里已存在,进了会 1050 报错)。
  *     本文件(下面这份)才是迁移管辖的范围。
  *

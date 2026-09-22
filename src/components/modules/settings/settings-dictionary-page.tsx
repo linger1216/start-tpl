@@ -52,12 +52,13 @@ export function SettingsDictionaryPage() {
 	const [formError, setFormError] = useState<string | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<SettingsDictRow | null>(null);
 
+	/** 写完数据后让列表重新拉一次(⚠️ 调用处必须带括号,漏了就是"await 一个函数引用",什么都不会发生) */
 	const invalidate = () => queryClient.invalidateQueries(trpc.dict.pathFilter());
 
 	const createMutation = useMutation(
 		trpc.dict.create.mutationOptions({
 			onSuccess: async () => {
-				await invalidate;
+				await invalidate();
 				setForm(null);
 				toast.success("已创建字典");
 			},
@@ -67,7 +68,7 @@ export function SettingsDictionaryPage() {
 	const updateMutation = useMutation(
 		trpc.dict.update.mutationOptions({
 			onSuccess: async () => {
-				await invalidate;
+				await invalidate();
 				// 规则表单的「写入档案」下拉也读这个字典,顺手让它失效(revalidate 一次)
 				await queryClient.invalidateQueries(trpc.dict.pathFilter());
 				setForm(null);
@@ -79,7 +80,7 @@ export function SettingsDictionaryPage() {
 	const deleteMutation = useMutation(
 		trpc.dict.delete.mutationOptions({
 			onSuccess: async () => {
-				await invalidate;
+				await invalidate();
 				setDeleteTarget(null);
 				toast.success("已删除字典");
 			},
@@ -95,7 +96,7 @@ export function SettingsDictionaryPage() {
 		const key = keyword.trim().toLowerCase();
 		if (!key) return rows;
 		return rows.filter((row) =>
-			[row.name, row.id, row.remark ?? "", ...row.items.flatMap((item) => [item.label, item.value])].some((text) =>
+			[row.name, row.code, row.remark ?? "", ...row.items.flatMap((item) => [item.label, item.value])].some((text) =>
 				text.toLowerCase().includes(key),
 			),
 		);
@@ -157,7 +158,7 @@ export function SettingsDictionaryPage() {
 			},
 			onToggle: async (row) => {
 				updateMutation.mutate({
-					id: row.id,
+					code: row.code,
 					name: row.name,
 					remark: row.remark ?? "",
 					items: row.items,
@@ -181,11 +182,11 @@ export function SettingsDictionaryPage() {
 		const payload = { name: values.name.trim(), remark: values.remark.trim(), items, status: values.status };
 		if (!payload.name) return setFormError("请填写字典名称");
 		if (form?.editing) {
-			updateMutation.mutate({ ...payload, id: form.editing.id });
+			updateMutation.mutate({ ...payload, code: form.editing.code });
 			return;
 		}
-		if (!values.id.trim()) return setFormError("请填写字典编码");
-		createMutation.mutate({ ...payload, id: values.id.trim() });
+		if (!values.code.trim()) return setFormError("请填写字典编码");
+		createMutation.mutate({ ...payload, code: values.code.trim() });
 	}
 
 	return (
@@ -237,7 +238,7 @@ export function SettingsDictionaryPage() {
 					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
 						<SettingsDictionaryTable
 							rows={pageRows}
-							busyId={deleteMutation.isPending ? (deleteMutation.variables?.id ?? null) : null}
+							busyId={deleteMutation.isPending ? (deleteMutation.variables?.code ?? null) : null}
 							callbacks={callbacks}
 						/>
 					</TableLoadingShell>
@@ -284,7 +285,7 @@ export function SettingsDictionaryPage() {
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"
 				onConfirm={() => {
-					if (deleteTarget) deleteMutation.mutate({ id: deleteTarget.id });
+					if (deleteTarget) deleteMutation.mutate({ code: deleteTarget.code });
 				}}
 			/>
 		</div>

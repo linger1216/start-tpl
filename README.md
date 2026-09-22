@@ -2,7 +2,7 @@
 
 一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、47 个 UI 原语、23 个跨域展示件、CRUD 套件,以及 tRPC + Drizzle + Better Auth 的完整接线。
 
-模板里**只保留一个真实业务模块**(系统设置),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:7 个展示页逐个给出说明、真实渲染的例子和用法代码,改了组件页面立刻反映,文档不会过期。
+模板里**只保留一个真实业务模块**(系统设置),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
 
 技术栈:React 19 · TanStack Start / Router / Query / Form / Table **v9** · tRPC **v11** · Drizzle ORM + MySQL · Better Auth · Tailwind CSS **v4** · Biome · Vite 8 · TypeScript 6
 
@@ -20,7 +20,7 @@ pnpm dev                       # http://localhost:3000
 
 `pnpm dev` 固定监听 **3000** 端口,并通过 `NODE_OPTIONS=--import ./instrument.server.mjs` 预加载服务端 Sentry 初始化。未配置 `VITE_SENTRY_DSN` 时会打印一条 `VITE_SENTRY_DSN is not defined. Sentry is not running.`,属于正常提示。
 
-> **只想看组件、不想连库?** 打开 `/showcase/*` 即可 —— 那 7 页不依赖数据库。
+> **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
 > `/settings` 的菜单 / 字段 / 参数三页是**真读库**的,没配 `DATABASE_URL` 会落到错误边界。
 
 ---
@@ -30,7 +30,7 @@ pnpm dev                       # http://localhost:3000
 | 入口 | 内容 |
 | --- | --- |
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
-| **组件展示** `/showcase/*` | ★ 组件活文档,7 页:基础 / 表单 / 表格 / 数据展示 / 布局 / 反馈 / 组合块 |
+| **UI 组件示例** | ★ 就在工作台 `/` 页里:43 个原语的最小可用例子 + 台账表格实战示例 |
 | **框架能力** `/demo/*` | 9 个可运行样例:tRPC、Query、表单、表格、Drizzle、Auth、Store、Sentry |
 | **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,7 个页面:4 页真实数据 + 3 页待实现占位 |
 
@@ -48,16 +48,14 @@ src/
 │   │   ├── route.tsx             # 后台外壳:NavPermissionsProvider + SidebarProvider + 菜单预取
 │   │   ├── index.tsx             # 工作台
 │   │   ├── blank.tsx             # 空白页占位(StubPage)
-│   │   ├── showcase/             # 组件展示台(7 页;派生新项目时可整目录删)
 │   │   ├── demo/                 # 框架能力样例(9 页;同上)
 │   │   └── settings/             # 系统设置(7 页;真实业务,派生时从这里改)
 │   ├── api.trpc.$.tsx            # tRPC 请求入口 /api/trpc/*
 │   └── api/auth/$.ts             # Better Auth 请求入口 /api/auth/*
 ├── components/
-│   ├── ui/                       # 45 个叶子原语(shadcn 风格 + 自研组合控件)
-│   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 / nav-tone.ts(色相映射),以及 showcase.tsx(展示台骨架)
+│   ├── ui/                       # 44 个叶子原语(shadcn 风格 + 自研组合控件)
+│   ├── layout/                   # 后台外壳:sidebar / sidebar-header / topbar / 面包屑 / 页头 / 空态 / 占位页 + nav-config / nav-menu / nav-data
 │   ├── modules/shared/           # 23 个领域无关展示件(表格套件 / 工具栏 / 图表 / 导入 / 树 / 标签…)
-│   ├── modules/showcase/         # 7 个展示页(纯文档,无业务)
 │   ├── modules/workbench/        # 工作台
 │   └── modules/settings/         # 系统设置 7 个页面
 ├── lib/
@@ -68,14 +66,15 @@ src/
 │   ├── excel.ts                  # Excel 列类型 + 唯一写盘点 writeSheet / cellText
 │   ├── mock-table.ts             # 内存表(增删改 + 批量替换),演示期的"假后端"
 │   ├── menu-detail-path.ts       # 参数化菜单路径约定(path 里嵌记录 id)
-│   ├── sys-config.ts             # 系统参数读写 + 默认值 + 类型校验
-│   ├── ids.ts / time.ts / format.ts / multi-value.ts / db-errors.ts / logger.ts
+│   ├── sys-para.ts               # 系统参数读写 + 默认值
+│   ├── para-spec.ts              # 参数类型码 / 校验(客户端可 import)
+│   ├── ids.ts / time.ts / format.ts / multi-value.ts / logger.ts
 │   └── utils.ts                  # cn()
 ├── store/use-query-params.ts     # createQueryParamsStore —— 列表页查询参数状态工厂
 ├── db/
 │   ├── index.ts                  # drizzle(mysql2) 实例,导出 db
 │   ├── schema.ts                 # 迁移管辖的表:Better Auth 四表 + todos 示例
-│   └── data-base-schema.ts       # 不走迁移的 sys_menu / sys_dict / sys_config 三表
+│   └── data-base-schema.ts       # 不走迁移的五张系统表(sys_menu / sys_dict / sys_para / sys_tag / sys_tag_relation)
 ├── integrations/
 │   ├── trpc/                     # init.ts / router.ts / react.ts + routers/{menu,dict,config}
 │   └── tanstack-query/           # root-provider.tsx(getContext + TRPCProvider)
@@ -100,7 +99,7 @@ src/
 
 `shared/` 里的东西**共享版式、不共享字段** —— 列定义、行类型、增删改写操作逐页手写。这是刻意的:**不做声明式驱动的通用 CRUD**,因为那类抽象在字段一多、校验一复杂时就开始打架。
 
-每个展示件的用途、props 与真实例子都在对应的展示页上(`/showcase/*`),不用翻源码。
+每个展示件的用途、props 与真实例子都在工作台 `/` 的 UI 示例里,不用翻源码。
 
 ---
 
@@ -151,11 +150,11 @@ src/
 | 描边 | `--hue-X-line` | 细边框 / 分隔 |
 | 反白前景 | `--hue-X-on` | 压在实体块上的文字(深色模式自动翻转) |
 
-> **色相 → 类名的映射只有一份**:`src/components/layout/nav-tone.ts`。
-> 加色相要改四处(`styles.css` 的 `:root` / `.dark` / `@theme inline` + `NAV_TONES` + `nav-tone.ts`)。
+> **色相 → 类名的映射只有一份**:`src/styles.css` 的 `@theme inline`(`--color-hue-X` 一族)。
+> 加色相改三处(`:root` / `.dark` / `@theme inline`)—— 漏了第三步工具类不会生成,且不会报错。
 > **Tailwind 只扫描字面量类名**,不能写 `bg-hue-${tone}-soft` —— 所有按色相取类名的地方必须查那张表。
 
-`BadgeList` / `JsonCell` 的配色同理:默认 `color="brand"`,色板全部取自语义 token;
+`BadgeList`(表格多值单元格与标签的统一渲染件)的配色同理:默认 `color="brand"`,色板全部取自语义 token;
 `rainbow` / `ocean` / `forest` / `sunset` / `lavender` / `stone` 是**分类色板**,
 定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES` —— 已换成上面的点缀色 token(原先用 Tailwind 默认的
 `*-100 / *-700`,彩度 25%–40%,铺一屏标签会显得"亮、吵")。**改那一处 = 全站标签 / 筛选 / 徽章配色一次性统一。**
@@ -189,7 +188,9 @@ src/
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit | 迁移与可视化 |
 | `pnpm db:seed:menus` | `tsx scripts/seed-menus.ts` | 把 `NAV_NODES` 写进 `sys_menu`(只补不覆盖) |
 | `pnpm db:seed:dicts` | `tsx scripts/seed-dicts.ts` | 示例字典种子(只补不覆盖) |
-| `pnpm db:seed:configs` | `tsx scripts/seed-configs.ts` | 把 `CONFIG_DEFAULTS` 写进 `sys_config`(只补不覆盖) |
+| `pnpm db:create` | `tsx scripts/create-system-tables.ts` | 建五张系统设置表(幂等 `create table if not exists`,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:sync:meta` | `tsx scripts/sync-table-meta.ts` | 只对齐列注释与索引名(老库升级用,幂等) |
+| `pnpm db:seed:paras` | `tsx scripts/seed-paras.ts` | 把 `PARA_DEFAULTS` 写进 `sys_para`(只补不覆盖) |
 
 `typecheck` + `check` + `generate-routes` 是最重要的三条自检命令。注意 `check` / `lint` / `format` 都带 `--write`。
 
@@ -235,7 +236,7 @@ pnpm build && pnpm start
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
 | `src/db/schema.ts` | Better Auth 四表(`user` / `session` / `account` / `verification`)+ `todos` 示例表 | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
-| `src/db/data-base-schema.ts` | `sys_menu` / `sys_dict` / `sys_config` | **不进迁移**:只在这里声明"读写的形状",DDL 由建表脚本维护 |
+| `src/db/data-base-schema.ts` | `sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation` | **不进迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护 |
 
 为什么不合成一个文件:若把系统三表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
 
@@ -343,7 +344,7 @@ function UsersPage() {
 | `invalidate.ts` | `invalidateAll` | 按 tRPC 命名空间前缀失效该命名空间下所有 query |
 | `table-helpers.ts` | `useDebouncedValue`、`usePersistentColumnSizing`、`useRefresh` | 搜索防抖、列宽拖拽并持久化、刷新按钮跳过缓存 |
 
-配套展示件在 `src/components/modules/shared/`:`DataTable` / `ReadonlyTable` / `LedgerToolbar` / `FilterChipBar` / `ColumnVisibilityMenu` / `PaginationControl` / `ExcelImportDialog` / `StatCards` / `IconPicker`。**先看 `/showcase/table` 与 `/showcase/blocks` 两页的活例子**,它们就是拼装说明书。
+配套展示件在 `src/components/modules/shared/`:`DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell` / `TextCell` / `SortableTree`(菜单与标签两页共用的可拖拽树) / `LedgerToolbar` / `FilterChipBar` / `PaginationControl` / `StatCards` / `TagBadges` / `FormKit` / `IconPicker` / `ExcelImportDialog`。**先看工作台里那张「台账表格(完整业务页骨架)」**,它就是拼装说明书。
 
 典型组装顺序:
 
@@ -378,11 +379,11 @@ function UsersPage() {
    import { DataTable, selectColumn, actionsColumn } from "#/components/modules/shared/table-kit";
    ```
 
-   `/showcase/table` 的「完整列表样例」就是可直接照抄的骨架。
+   工作台的「台账表格(完整业务页骨架)」就是可直接照抄的骨架。
 
 6. **Excel**(可选)—— 用 `useCrudExcel`,传 `fetchAll` / `exportRow` / `importFields` / `coerceRow` / `importMutation`,拿 `handleExport` 与 `importDialogProps`。
 
-**诚实提示**:`useAppTable` 已被 `/demo/table` 与 `/showcase/table` 真实使用;`useCrudMutations` / `useCrudExcel` / `createQueryParamsStore` 目前仍只有定义、没有调用方 —— 文件头注释是它们最准确的用法文档。完整清单见下节。
+**诚实提示**:`useAppTable` 已被 `/demo/table`、工作台台账示例与系统设置各页真实使用;`lib/ids.ts` 的 `formatCode` / `nextIdByTime` 与 `hooks/use-dict.ts` 目前只有定义、没有调用方 —— 文件头注释是它们最准确的用法文档。完整清单见下节。
 
 ---
 
@@ -396,15 +397,14 @@ function UsersPage() {
 | zod 片段 | `lib/validators/common.ts` | 复用校验片段 |
 | 查询参数 store | `store/use-query-params.ts` | 列表页「草稿 → 提交」的参数状态工厂 |
 | 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`;改 `ID_PREFIX` 换成自己的前缀 |
-| DB 错误归一 | `lib/db-errors.ts` | MySQL 唯一键 / 外键错误的可读化 |
 | 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(维护入口是「字段管理」页) |
-| 列可见性持久化 | `shared/use-column-visibility.ts` | 列显示与顺序存 `sys_config`(需要数据库) |
+| 列可见性持久化 | `shared/use-column-visibility.ts` | 列显示与顺序存 `sys_para`(需要数据库) |
+| 表单版式套件 | `shared/form-kit.tsx` | 0 调用方,做表单页时先看它 |
 | 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | 原先三个授权弹窗(用户 / 角色 / 用户组)共用;那三页改成占位页后暂无调用方 |
 | mock 数据原语 | `mocks/shared.ts` | `pick` / `idOf` / `phone` / `personName` / 固定基准日等**确定性**构造器(禁 `Math.random()`) |
 | 部门树示例 | `mocks/dicts.ts` | 示例单位 / 部门树 + `deptName` / `deptSelectOptions` 派生函数;做组织架构类页面时可直接复用 |
-| 5 个 ui 原语 | `ui/{popover,command,context-menu,menubar,sheet}.tsx` | 已在 `/showcase/ui` 的「其他可用原语」里点名 |
 
-**约定**:新增可复用件时,**要么给它一个真实调用方,要么在 `/showcase/*` 展示,要么登记进上表** —— 三者都不做,它会被下一轮清理当成死代码删掉。
+**约定**:新增可复用件时,**要么给它一个真实调用方,要么在工作台 UI 示例里展示,要么登记进上表** —— 三者都不做,它会被下一轮清理当成死代码删掉。
 
 ---
 
@@ -420,7 +420,7 @@ function UsersPage() {
 | 标签管理 | `/settings/tags` | `mocks/tags.ts` | 主表 + 子表条目弹窗 |
 | 菜单管理 | `/settings/menus` | **`sys_menu` 表** | 可排序树 + 右侧编辑表单(改完即时生效) |
 | 字段管理 | `/settings/dictionary` | **`sys_dict` 表** | 字典 CRUD + 条目编辑 |
-| 参数管理 | `/settings/parameters` | **`sys_config` 表** | 按类型校验的参数表单 |
+| 参数管理 | `/settings/parameters` | **`sys_para` 表** | 按类型码(整数 / 开关 / 文本 / JSON)校验的参数表单;详情 / 编辑 / 删除 |
 
 后四页走**真库 / 真接口**;标签管理走内存 mock(演示"数据源可替换":刷新回到种子)。
 用户 / 用户组 / 角色三页**故意不摆假数据**:它们曾经跑一份 791 行的内存 mock,看上去能增删改查、
@@ -442,8 +442,7 @@ function UsersPage() {
 模板自带的三个"展示用"入口,新业务上线前可整块删掉:
 
 ```text
-src/components/modules/showcase/     +  src/routes/(main)/showcase/
-src/components/layout/showcase.tsx   # 展示台骨架(ShowcasePage / ShowcaseItem / PropTable…)
+src/components/modules/workbench/    # 工作台:入口页 + UI 示例(ui-gallery / ui-gallery-table / workbench-tagging)
 src/routes/(main)/demo/              # 框架能力样例页
 src/hooks/demo.form-context.ts  +  src/hooks/demo.form.tsx
 src/lib/demo-store.ts
@@ -499,7 +498,7 @@ pnpm check
 | **被抽出来但没人用的件** | `op-result` / `sheet-parse-options` / `file-dropzone` / `use-column-visibility` / `stat-kit` / `table-resize-handle` / `TagFieldInput` 抽完就没了调用方,也没进展示页 | 全部补进 `/showcase/*`(看不见 = 不存在) |
 | **重复实现** | 三个授权弹窗各自手写「标题 + 计数 + 搜索 + 全选/清空 + 权限树」;而 `PermissionPicker` 早就是这块的封装 | 三处改用 `PermissionPicker`,顺手去掉 `keyword` state 与 `visibleIds` 派生 |
 | **重复实现** | `lib/time.ts`(0 引用)与 `lib/format.ts` 各有一套日期格式化 | 日期函数只留 `lib/time.ts`,`format.ts` 只管值 / JSON 归一 |
-| **正面冲突的 ui 原语** | `ui/sidebar`(与 `layout/sidebar` + `SidebarProvider` 同名冲突)、`ui/pagination`(与 `shared/pagination-control` 重复)、`hooks/use-mobile`(只服务前者) | 三件一起删;其余通用但未用到的原语在 `/showcase/ui` 的「其他可用原语」里点名 |
+| **正面冲突的 ui 原语** | `ui/sidebar`(与 `layout/sidebar` + `SidebarProvider` 同名冲突)、`ui/pagination`(与 `shared/pagination-control` 重复)、`hooks/use-mobile`(只服务前者) | 三件一起删;其余通用原语在工作台的 UI 示例里点名 |
 | **死导出** | `NAV_PERMISSION_POINTS` / `NAV_PERMISSION_IDS` / `findNavTrail` / `findNavNode` / `flattenNavNodes` / `TruncateCell` / `moveWithinSiblings` / `countMultiValueHits` / `SHEET_DROPZONE_PROPS` / `UI_PRIMITIVE_COUNT` | 删除;另有 `visiblePermissionIds*` / `menuIconOf` / `trpcClient` 等只在本文件内用到的,收回模块内部 |
 | **业务语汇残留** | `需求清单 #NN` / `应标点` / `浦锦街道` / 各业务域名词散在 25+ 个文件(含可见 UI 文案) | 全部泛化;`mocks/shared.ts` 从 299 行收到 91 行(只留真正被用到的 9 个原语) |
 | **功能性 bug** | 角色种子的权限点匹配式还写着已删的域名(`re:enterprise\|visit\|works` 等),而权限树已从新 `NAV_NODES` 派生 → **6 个角色匹配到 0 个权限点**(页面显示 0 项,且不报错) | 重写 8 个角色 / 8 个用户组的匹配式对齐新菜单,并加注释提醒「改菜单要回来核对」。(那批角色 / 用户组种子随后已在「用户 / 用户组 / 角色三页去掉 mock」一轮**整体删除**) |

@@ -12,23 +12,21 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
-import { CONFIG_TYPE_META, type ConfigType, validateConfigValue } from "#/lib/config-spec";
+import { PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
 export type ParameterFormPayload = {
 	key: string;
 	value: string;
-	type?: ConfigType;
+	type?: ParaType;
 	group?: string;
 	remark?: string;
 };
 
-const TYPES: ConfigType[] = ["string", "int", "bool", "json", "array", "map"];
-
 /**
  * 参数表单 —— 同时服务「修改」(key 锁定,只改值)与「新增」(key / 类型 / 分组 / 说明都能填)。
  * 类型在保存前就校验(路由里再校验一次,双保险);
- * json / array / map 三类用多行文本框录入(JSON 文本),其余用单行输入框。
+ * 类型码与 `sys_para.para_type` 一致(1 int / 2 bool / 3 string / 4 json),JSON 类用多行文本框。
  */
 export function SettingsParametersForm({
 	row,
@@ -47,7 +45,7 @@ export function SettingsParametersForm({
 }) {
 	const [key, setKey] = useState("");
 	const [value, setValue] = useState("");
-	const [type, setType] = useState<ConfigType>("string");
+	const [type, setType] = useState<ParaType>(PARA_TYPE.STRING);
 	const [group, setGroup] = useState("");
 	const [remark, setRemark] = useState("");
 
@@ -56,7 +54,7 @@ export function SettingsParametersForm({
 		if (creating) {
 			setKey("");
 			setValue("");
-			setType("string");
+			setType(PARA_TYPE.STRING);
 			setGroup("");
 			setRemark("");
 		} else if (row) {
@@ -68,9 +66,9 @@ export function SettingsParametersForm({
 		}
 	}, [open, creating, row]);
 
-	const effectiveType = creating ? type : (row?.type ?? "string");
-	const problem = validateConfigValue(effectiveType, value);
-	const isJsonLike = effectiveType === "json" || effectiveType === "array" || effectiveType === "map";
+	const effectiveType = creating ? type : (row?.type ?? PARA_TYPE.STRING);
+	const problem = validateParaValue(effectiveType, value);
+	const isJsonLike = effectiveType === PARA_TYPE.JSON;
 
 	function handleSubmit() {
 		if (problem) return;
@@ -99,15 +97,11 @@ export function SettingsParametersForm({
 
 				<div className="space-y-3">
 					{!creating ? (
-						<p className="rounded-lg bg-[color:var(--secondary)] px-3 py-2 text-[12px] text-muted-foreground">
+						// 只展示表里真有的东西:说明(remark)+ 类型码(para_type)。
+						// 「默认值」是代码内置值、不是表里的列,已从这里去掉(见 data-base-schema.ts)。
+						<p className="rounded-lg bg-secondary px-3 py-2 text-[12px] text-muted-foreground">
 							{row?.remark}
-							<span className="ml-1">
-								(类型 {CONFIG_TYPE_META[effectiveType].label},默认值{" "}
-								<span translate="no" className="font-mono">
-									{row?.defaultValue}
-								</span>
-								)
-							</span>
+							<span className="ml-1">(类型 {PARA_TYPE_META[effectiveType].label})</span>
 						</p>
 					) : null}
 
@@ -131,14 +125,14 @@ export function SettingsParametersForm({
 								<Label htmlFor="cfg-type" className="text-[12px]">
 									类型
 								</Label>
-								<Select value={type} onValueChange={(next) => setType(next as ConfigType)}>
+								<Select value={String(type)} onValueChange={(next) => setType(Number(next) as ParaType)}>
 									<SelectTrigger id="cfg-type" size="sm" className="w-full">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										{TYPES.map((t) => (
-											<SelectItem key={t} value={t}>
-												{CONFIG_TYPE_META[t].label}
+										{PARA_TYPES.map((t) => (
+											<SelectItem key={t} value={String(t)}>
+												{PARA_TYPE_META[t].label}
 											</SelectItem>
 										))}
 									</SelectContent>
@@ -158,9 +152,7 @@ export function SettingsParametersForm({
 								translate="no"
 								spellCheck={false}
 								rows={5}
-								placeholder={
-									effectiveType === "array" ? '["a","b"]' : effectiveType === "map" ? '{"k":"v"}' : '{"a":1}'
-								}
+								placeholder={'{"a":1} 或 ["a","b"]'}
 								className={`font-mono text-[12px] ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
@@ -177,7 +169,7 @@ export function SettingsParametersForm({
 						{problem ? (
 							<p className="text-[11.5px] text-destructive">{problem}</p>
 						) : (
-							<p className="text-[11.5px] text-muted-foreground">{CONFIG_TYPE_META[effectiveType].hint}</p>
+							<p className="text-[11.5px] text-muted-foreground">{PARA_TYPE_META[effectiveType].hint}</p>
 						)}
 					</div>
 

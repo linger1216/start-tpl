@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { newId } from "#/lib/ids";
 
 /**
  * 系统设置 ▸ 菜单管理(编排壳)—— **左侧树 + 右侧详情**,菜单改完直接生效。
@@ -26,6 +27,16 @@ import { toApiError } from "#/lib/api/error";
  * 2. **直接编辑**:名称 / 路径 / 图标 / 是否显示,显式保存(带「未保存」徒标);
  * 3. **增删**:新增同级 / 子菜单;删除时有子菜单会被拒(先删子级,避免误删整枝)。
  */
+/**
+ * 新建菜单时的临时路径。
+ *
+ * 表定义里 `path` 是 **not null + 唯一** —— 没有"还没有路径"的中间态,所以新建时必须先给一个
+ * 唯一占位路径,用户在右侧表单里改成真路由。用 nanoid 后缀保证不撞已有路径。
+ */
+function draftPath(): string {
+	return `/new-menu-${newId().slice(0, 6)}`;
+}
+
 export function SettingsMenusPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -55,7 +66,7 @@ export function SettingsMenusPage() {
 	const updateMutation = useMutation(
 		trpc.menu.update.mutationOptions({
 			onSuccess: async (row) => {
-				await invalidate;
+				await invalidate();
 				setValues(menuFormValues({ ...(byId.get(row.id) as MenuTreeNode), ...row }));
 				toast.success(`已保存「${row.name}」`);
 			},
@@ -66,7 +77,7 @@ export function SettingsMenusPage() {
 	const reorderMutation = useMutation(
 		trpc.menu.reorder.mutationOptions({
 			onSuccess: async (outcome) => {
-				await invalidate;
+				await invalidate();
 				if (outcome.updated > 0) toast.success("已调整顺序");
 			},
 			onError: (error) => toast.error(toApiError(error).message),
@@ -76,7 +87,7 @@ export function SettingsMenusPage() {
 	const createMutation = useMutation(
 		trpc.menu.create.mutationOptions({
 			onSuccess: async (row) => {
-				await invalidate;
+				await invalidate();
 				setSelectedId(row.id);
 				setValues({ name: row.name, path: row.path ?? "", icon: row.icon, visible: row.visible !== 0 });
 				toast.success(`已新增「${row.name}」,改完记得保存`);
@@ -88,7 +99,7 @@ export function SettingsMenusPage() {
 	const deleteMutation = useMutation(
 		trpc.menu.delete.mutationOptions({
 			onSuccess: async () => {
-				await invalidate;
+				await invalidate();
 				setDeleteOpen(false);
 				setSelectedId(null);
 				setValues(null);
@@ -173,7 +184,7 @@ export function SettingsMenusPage() {
 									createMutation.mutate({
 										parentId: null,
 										name: "新菜单",
-										path: null,
+										path: draftPath(),
 										icon: "file-text",
 										visible: true,
 									})
@@ -188,20 +199,14 @@ export function SettingsMenusPage() {
 							拖拽行可调序(仅限同级:上半插入到目标前,下半插入到目标后);拖到别的层级会显示禁止态。选中某行后也可用 ↑ / ↓
 							键在同级内移动。
 						</p>
-						{/*
- 限高 + 内部滚动:菜单有 75 行,不限高的话页面会被树撑得很长 ——
- 点最下面那个菜单时,右侧「菜单详情」已经滚到屏幕外,还得再滑回去看。
- 限高后两列始终一屏可见;`scrollbar-gutter: stable` 让滚动条出现/消失时宽度不跳。
- */}
-						<div className="max-h-[62vh] overflow-y-auto pr-1 [scrollbar-gutter:stable]">
-							<SettingsMenusTree
-								tree={tree}
-								selectedId={selectedId}
-								dragDisabled={dirty || reorderMutation.isPending}
-								onSelect={selectNode}
-								onReorder={handleReorder}
-							/>
-						</div>
+						{/* 限高与内部滚动由 `shared/sortable-tree.tsx` 统一提供 */}
+						<SettingsMenusTree
+							tree={tree}
+							selectedId={selectedId}
+							dragDisabled={dirty || reorderMutation.isPending}
+							onSelect={selectNode}
+							onReorder={handleReorder}
+						/>
 					</CardContent>
 				</Card>
 
@@ -234,7 +239,7 @@ export function SettingsMenusPage() {
 								createMutation.mutate({
 									parentId: selected.id,
 									name: "新菜单",
-									path: null,
+									path: draftPath(),
 									icon: "file-text",
 									visible: true,
 								})
@@ -243,7 +248,7 @@ export function SettingsMenusPage() {
 								createMutation.mutate({
 									parentId: selected?.parentId ?? null,
 									name: "新菜单",
-									path: null,
+									path: draftPath(),
 									icon: "file-text",
 									visible: true,
 								})

@@ -74,7 +74,7 @@ export function FilterChipBar({
 	return (
 		<section
 			aria-label="快速筛选"
-			className={cn("rounded-xl border border-border bg-card px-3.5 py-3 shadow-(--af-raise-1)", className)}
+			className={cn("rounded-xl border border-border bg-card px-3.5 py-3 shadow-raise-1", className)}
 		>
 			<div className="mb-2.5 flex items-center justify-between gap-3">
 				<div className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
@@ -116,10 +116,7 @@ export function FilterChipBar({
 											className={cn(
 												"inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-[color,background-color,border-color,box-shadow] duration-150",
 												on
-													? cn(
-															"border-transparent font-medium shadow-[0_1px_2px_rgba(15,48,106,0.08)]",
-															activeChipClass(group.tone, index),
-														)
+													? cn("border-transparent font-medium shadow-soft", activeChipClass(group.tone, index))
 													: "border-border bg-background text-muted-foreground hover:border-hue-blue-line hover:bg-secondary hover:text-foreground",
 											)}
 										>

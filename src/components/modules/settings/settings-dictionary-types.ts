@@ -1,6 +1,7 @@
-/** 字段管理页用到的字典行(`sys_dict` 的一行) */
+/** 字段管理页用到的字典行(`sys_dict` 的一行)—— `id` 是 nanoid 主键,业务一律用 `code` */
 export type SettingsDictRow = {
 	id: string;
+	code: string;
 	name: string;
 	items: Array<{ label: string; value: string }>;
 	remark: string | null;
@@ -9,8 +10,8 @@ export type SettingsDictRow = {
 
 /** 编辑弹窗的表单值 */
 export type DictFormValues = {
-	/** 新建时必填;编辑时不可改(它是主键,也是规则里引用的编码) */
-	id: string;
+	/** 字典编码(业务键):新建时必填;编辑时不可改(规则里按它引用) */
+	code: string;
 	name: string;
 	remark: string;
 	status: boolean;
@@ -18,12 +19,12 @@ export type DictFormValues = {
 };
 
 export function emptyDictForm(): DictFormValues {
-	return { id: "", name: "", remark: "", status: true, items: [{ label: "", value: "" }] };
+	return { code: "", name: "", remark: "", status: true, items: [{ label: "", value: "" }] };
 }
 
 export function dictToForm(row: SettingsDictRow): DictFormValues {
 	return {
-		id: row.id,
+		code: row.code,
 		name: row.name,
 		remark: row.remark ?? "",
 		status: row.status === 1,

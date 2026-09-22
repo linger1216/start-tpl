@@ -94,7 +94,7 @@ export function SettingsDictionaryForm({
 						</Label>
 						<Input
 							id="dict-id"
-							value={values.id}
+							value={values.code}
 							readOnly={Boolean(editing)}
 							aria-readonly={editing ? "true" : undefined}
 							translate="no"
@@ -105,7 +105,7 @@ export function SettingsDictionaryForm({
 									? "h-8 cursor-default bg-muted/40 font-mono text-[12.5px] text-muted-foreground"
 									: "h-8 font-mono text-[12.5px]"
 							}
-							onChange={(event) => onChange({ ...values, id: event.target.value })}
+							onChange={(event) => onChange({ ...values, code: event.target.value })}
 						/>
 						<p className="text-[11.5px] text-muted-foreground">
 							{editing

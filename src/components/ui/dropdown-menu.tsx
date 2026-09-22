@@ -45,21 +45,52 @@ function DropdownMenuContent({
 	);
 }
 
-function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
-	return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
+/**
+ * 分组。Base UI 的 `Menu.GroupLabel` **必须在 Group / RadioGroup 内部**才有 context
+ * (否则运行时抛 "MenuGroupContext is missing")。所以:
+ *  - 想给分组加标题 → 传 `label`(本组件负责把它放进 GroupLabel);
+ *  - 只是想插一行小标题 → 用 `DropdownMenuLabel`(下面那个,普通 div,不依赖分组)。
+ */
+function DropdownMenuGroup({
+	className,
+	label,
+	children,
+	...props
+}: MenuPrimitive.Group.Props & { label?: React.ReactNode }) {
+	return (
+		<MenuPrimitive.Group data-slot="dropdown-menu-group" className={className} {...props}>
+			{label ? (
+				<MenuPrimitive.GroupLabel
+					data-slot="dropdown-menu-group-label"
+					className="px-1.5 py-1 text-xs font-medium text-muted-foreground"
+				>
+					{label}
+				</MenuPrimitive.GroupLabel>
+			) : null}
+			{children}
+		</MenuPrimitive.Group>
+	);
 }
 
+/**
+ * 菜单里的一行小标题(如「操作」「危险区」)。
+ *
+ * **刻意不是 `Menu.GroupLabel`**:Base UI 的 GroupLabel 依赖 `Menu.Group` 的 context,
+ * 单独放在 Content 里会直接报错(实测:`MenuGroupContext is missing ...`)。
+ * 但 shadcn 的 API 形态就是「Label 直接放进 Content」,所以这里退化成普通 div ——
+ * 视觉一致,且放哪里都不炸。需要真正的 ARIA 分组标题时,改用 `<DropdownMenuGroup label="…">`。
+ */
 function DropdownMenuLabel({
 	className,
 	inset,
 	...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<"div"> & {
 	inset?: boolean;
 }) {
 	return (
-		<MenuPrimitive.GroupLabel
+		<div
 			data-slot="dropdown-menu-label"
-			data-inset={inset}
+			data-inset={inset ? "" : undefined}
 			className={cn("px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7", className)}
 			{...props}
 		/>

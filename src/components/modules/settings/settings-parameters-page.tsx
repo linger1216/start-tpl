@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersCleanup } from "#/components/modules/settings/settings-parameters-cleanup";
+import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
 import {
 	type ParameterFormPayload,
 	SettingsParametersForm,
@@ -36,18 +37,19 @@ export function SettingsParametersPage() {
 	const queryClient = useQueryClient();
 	const [keyword, setKeyword] = useState("");
 	const [editing, setEditing] = useState<ParameterRow | null>(null);
+	const [viewing, setViewing] = useState<ParameterRow | null>(null);
 	const [creating, setCreating] = useState(false);
 	const [pendingDelete, setPendingDelete] = useState<ParameterRow | null>(null);
 
 	const formOpen = editing !== null || creating;
 
-	const listQuery = useQuery({ ...trpc.config.list.queryOptions(), placeholderData: keepPreviousData });
+	const listQuery = useQuery({ ...trpc.para.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as ParameterRow[];
 
 	const updateMutation = useMutation(
-		trpc.config.update.mutationOptions({
+		trpc.para.update.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.config.pathFilter());
+				await queryClient.invalidateQueries(trpc.para.pathFilter());
 				setEditing(null);
 				toast.success(`已保存 ${outcome.key}`, { description: `新值:${outcome.value};下一趟任务生效。` });
 			},
@@ -56,9 +58,9 @@ export function SettingsParametersPage() {
 	);
 
 	const createMutation = useMutation(
-		trpc.config.create.mutationOptions({
+		trpc.para.create.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.config.pathFilter());
+				await queryClient.invalidateQueries(trpc.para.pathFilter());
 				setCreating(false);
 				toast.success(`已新增参数 ${outcome.key}`, { description: "下一趟任务生效。" });
 			},
@@ -67,9 +69,9 @@ export function SettingsParametersPage() {
 	);
 
 	const deleteMutation = useMutation(
-		trpc.config.delete.mutationOptions({
+		trpc.para.delete.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.config.pathFilter());
+				await queryClient.invalidateQueries(trpc.para.pathFilter());
 				setPendingDelete(null);
 				toast.success(`已删除 ${outcome.key}`);
 			},
@@ -104,18 +106,18 @@ export function SettingsParametersPage() {
 				key: "total",
 				label: "参数总数",
 				value: rows.length,
-				description: "代码内置 + 库里覆盖",
+				description: "库里的参数行 + 代码内置默认",
 				Icon: SlidersHorizontal,
-				tone: "bg-[color:var(--hue-blue-soft)] text-[color:var(--hue-blue-fg)]",
+				tone: "bg-hue-blue-soft text-hue-blue-fg",
 				unit: "条",
 			},
 			{
-				key: "changed",
-				label: "已改过",
-				value: rows.filter((row) => row.overridden).length,
-				description: "被改过、不再是默认值的",
+				key: "editable",
+				label: "可编辑",
+				value: rows.filter((row) => row.editable).length,
+				description: "editable = 1,界面上能改",
 				Icon: Cog,
-				tone: "bg-[color:var(--hue-amber-soft)] text-[color:var(--hue-amber-fg)]",
+				tone: "bg-hue-amber-soft text-hue-amber-fg",
 				unit: "条",
 			},
 			{
@@ -124,7 +126,7 @@ export function SettingsParametersPage() {
 				value: rows.find((row) => row.key === "sync.enabled")?.value === "true" ? "已开启" : "已关闭",
 				description: "默认关闭:先手动跑通再打开",
 				Icon: Timer,
-				tone: "bg-[color:var(--hue-teal-soft)] text-[color:var(--hue-teal-fg)]",
+				tone: "bg-hue-teal-soft text-hue-teal-fg",
 			},
 		],
 		[rows],
@@ -174,6 +176,7 @@ export function SettingsParametersPage() {
 					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
 						<SettingsParametersTable
 							rows={filtered}
+							onView={setViewing}
 							onEdit={(row) => {
 								setCreating(false);
 								setEditing(row);
@@ -196,6 +199,19 @@ export function SettingsParametersPage() {
 					}
 				}}
 				onSubmit={handleSubmit}
+			/>
+
+			<SettingsParametersDetail
+				row={viewing}
+				open={viewing !== null}
+				onOpenChange={(next) => {
+					if (!next) setViewing(null);
+				}}
+				onEdit={(row) => {
+					setViewing(null);
+					setCreating(false);
+					setEditing(row);
+				}}
 			/>
 
 			<ConfirmDialog

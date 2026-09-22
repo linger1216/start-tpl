@@ -1,16 +1,8 @@
-import { addYears, startOfMonth, startOfYear, subDays } from "date-fns";
-import { zhCN } from "date-fns/locale";
-import {
-	CalendarIcon,
-	ChevronLeft as ChevronLeftIcon,
-	ChevronRight as ChevronRightIcon,
-	ChevronsLeft as ChevronsLeftIcon,
-	ChevronsRight as ChevronsRightIcon,
-} from "lucide-react";
+import { startOfMonth, startOfYear, subDays } from "date-fns";
+import { CalendarIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useDayPicker } from "react-day-picker";
 import { createPortal } from "react-dom";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
 import { cn } from "#/lib/utils";
 
@@ -72,80 +64,10 @@ const PRESETS: { label: string; get: () => { from: Date; to: Date } }[] = [
 ];
 
 /**
- * 自定义导航条:在「上一月 / 下一月」箭头两侧,再各加一个「上一年 / 下一年」按钮
- * (Chevrons 双箭头),满足一次性切换一整年的诉求。基于 react-day-picker 的
- * useDayPicker() 上下文调用 goToMonth 实现,复用日历既有的 ghost 按钮样式。
- */
-function RangeYearNav({ className }: { className?: string }) {
-	const { goToMonth, months, previousMonth, nextMonth, dayPickerProps } = useDayPicker();
-	const base = months[0]?.date ?? new Date();
-	const startMonth = dayPickerProps.startMonth;
-	const endMonth = dayPickerProps.endMonth;
-	const prevYear = startOfMonth(addYears(base, -1));
-	const nextYear = startOfMonth(addYears(base, 1));
-	const prevYearDisabled = startMonth ? prevYear < startMonth : false;
-	const nextYearDisabled = endMonth ? nextYear > endMonth : false;
-
-	// 按钮用 size-5(20px)而非 cell-size(28px):4 个导航按钮 + 2 个下拉标题需共处于
-	// 一个约 196px 的月份行内,缩小按钮可腾出空间避免「月/年」下拉标题被挤到换行。
-	const btn = "size-5 p-0 disabled:pointer-events-none disabled:opacity-50";
-
-	return (
-		<div
-			className={cn(
-				"absolute inset-x-0 top-0 flex h-(--cell-size) w-full items-center justify-between gap-0.5",
-				className,
-			)}
-		>
-			<div className="flex h-full items-center gap-0.5">
-				<button
-					type="button"
-					aria-label="上一年"
-					disabled={prevYearDisabled}
-					onClick={() => goToMonth(prevYear)}
-					className={cn(buttonVariants({ variant: "ghost" }), btn)}
-				>
-					<ChevronsLeftIcon className="size-4" />
-				</button>
-				<button
-					type="button"
-					aria-label="上一月"
-					disabled={!previousMonth}
-					onClick={() => previousMonth && goToMonth(previousMonth)}
-					className={cn(buttonVariants({ variant: "ghost" }), btn)}
-				>
-					<ChevronLeftIcon className="size-4" />
-				</button>
-			</div>
-			<div className="flex h-full items-center gap-0.5">
-				<button
-					type="button"
-					aria-label="下一月"
-					disabled={!nextMonth}
-					onClick={() => nextMonth && goToMonth(nextMonth)}
-					className={cn(buttonVariants({ variant: "ghost" }), btn)}
-				>
-					<ChevronRightIcon className="size-4" />
-				</button>
-				<button
-					type="button"
-					aria-label="下一年"
-					disabled={nextYearDisabled}
-					onClick={() => goToMonth(nextYear)}
-					className={cn(buttonVariants({ variant: "ghost" }), btn)}
-				>
-					<ChevronsRightIcon className="size-4" />
-				</button>
-			</div>
-		</div>
-	);
-}
-
-/**
  * 日期范围选择器(开始 + 结束 在一个控件内,日历「日期视角」)。
  *
- * - 年份切换:react-day-picker 原生 `captionLayout="dropdown-buttons"` + `startMonth`/`endMonth`
- *   实现「年 + 月」下拉导航(社区最佳实践,无需额外依赖)。
+ * - 年份切换:交给 `Calendar` 的默认导航条(上一年 / 上一月 / 下一月 / 下一年)+「年 + 月」下拉,
+ *   本组件不自己实现 —— 单月日历与区间选择器共用同一份,风格才一致。
  * - 快捷范围:左侧预设列(今天 / 近7天 / 近30天 / 本月 / 本年),点击即回填。
  *
  * 浮层用 createPortal 渲染到 <body> + fixed 定位,坐标来自 trigger 的
@@ -217,10 +139,8 @@ export function DateRangePicker({
 
 	const selected = value.from || value.to ? { from: parse(value.from), to: parse(value.to) } : undefined;
 
-	// 下拉年份范围:当前年前后各留余量,覆盖历史诉件数据
+	// 只用于「默认展示哪个月」;下拉可选年份范围由 Calendar 的默认值给(见 calendar.tsx)
 	const now = new Date();
-	const startMonth = new Date(now.getFullYear() - 10, 0, 1);
-	const endMonth = new Date(now.getFullYear() + 1, 11, 31);
 
 	function applyPreset(get: () => { from: Date; to: Date }) {
 		const { from, to } = get();
@@ -279,26 +199,17 @@ export function DateRangePicker({
 
 							{/* 右侧日历 + 操作 */}
 							<div className="flex flex-col">
+								{/*
+								 * 这里**不再重复传** locale / captionLayout / startMonth / endMonth /
+								 * Nav / classNames —— 全部是 `Calendar` 的默认值(四箭头年月导航、中文、
+								 * 年+月下拉)。风格统一靠"只留一份默认值"实现:哪天要调日历长相,
+								 * 改 calendar.tsx 一处,单月日历与区间选择器一起变。
+								 */}
 								<Calendar
 									mode="range"
 									numberOfMonths={2}
-									captionLayout="dropdown"
-									startMonth={startMonth}
-									endMonth={endMonth}
-									locale={zhCN}
 									selected={selected}
 									defaultMonth={selected?.from ?? startOfMonth(now)}
-									components={{ Nav: RangeYearNav }}
-									classNames={{
-										// 导航按钮缩为 size-5(20px):左右各 2 个 + 间距 ≈ 42px,
-										// 故内边距用 *1.6(≈45px)清出按钮区,中部留给「月/年」下拉,
-										// 避免标题因空间不足换行(之前 *2 把中部挤到 < 下拉所需宽度)。
-										month_caption:
-											"flex h-(--cell-size) w-full items-center justify-center px-[calc(var(--cell-size)*1.6)]",
-										// 两个下拉标题不收缩,杜绝被挤成换行/截断
-										dropdowns:
-											"flex h-(--cell-size) w-full flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-sm font-medium [&>*]:shrink-0",
-									}}
 									onSelect={(range) => {
 										onChange({
 											from: range?.from ? toISO(range.from) : undefined,
