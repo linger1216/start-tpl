@@ -77,6 +77,20 @@ export function SettingsDepartmentsForm({
 	const [addUserId, setAddUserId] = useState("");
 	const [addRoleId, setAddRoleId] = useState("");
 
+	/**
+	 * 三个下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
+	 *
+	 * ⚠️ `items` 不能省:Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),
+	 * 它只在 `resolveSelectedLabel(value, items, …)` 里查这个 prop;没有 `items` 就兜底成
+	 * `stringifyAsLabel(value)` = **原始 id**,触发器就会把 nanoid 画出来。
+	 */
+	const parentItems = [
+		{ value: "__root__", label: "(顶级部门)" },
+		...parentOptions.map((option) => ({ value: option.id, label: option.label })),
+	];
+	const userItems = userOptions.map((option) => ({ value: option.id, label: option.name || option.email }));
+	const roleItems = roleOptions.map((option) => ({ value: option.id, label: option.name }));
+
 	if (!node) {
 		return (
 			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border text-[13px] text-muted-foreground">
@@ -108,6 +122,7 @@ export function SettingsDepartmentsForm({
 			<div className="space-y-1">
 				<Label className="text-[12px]">上级部门</Label>
 				<Select
+					items={parentItems}
 					value={values.parentId ?? "__root__"}
 					onValueChange={(next) => onChange({ ...values, parentId: next === "__root__" ? null : next })}
 				>
@@ -115,10 +130,9 @@ export function SettingsDepartmentsForm({
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value="__root__">(顶级部门)</SelectItem>
-						{parentOptions.map((option) => (
-							<SelectItem key={option.id} value={option.id}>
-								{option.label}
+						{parentItems.map((item) => (
+							<SelectItem key={item.value} value={item.value}>
+								{item.label}
 							</SelectItem>
 						))}
 					</SelectContent>
@@ -172,26 +186,26 @@ export function SettingsDepartmentsForm({
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">
-					<Select value={addUserId} onValueChange={(next) => setAddUserId(next ?? "")}>
+					<Select items={userItems} value={addUserId} onValueChange={(next) => setAddUserId(next ?? "")}>
 						<SelectTrigger className="h-8 min-w-40 flex-1 text-[12.5px]" aria-label="选用户">
 							<SelectValue placeholder="选用户…" />
 						</SelectTrigger>
 						<SelectContent>
-							{userOptions.map((option) => (
-								<SelectItem key={option.id} value={option.id}>
-									{option.name || option.email}
+							{userItems.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
-					<Select value={addRoleId} onValueChange={(next) => setAddRoleId(next ?? "")}>
+					<Select items={roleItems} value={addRoleId} onValueChange={(next) => setAddRoleId(next ?? "")}>
 						<SelectTrigger className="h-8 min-w-32 flex-1 text-[12.5px]" aria-label="选角色">
 							<SelectValue placeholder="选角色…" />
 						</SelectTrigger>
 						<SelectContent>
-							{roleOptions.map((option) => (
-								<SelectItem key={option.id} value={option.id}>
-									{option.name}
+							{roleItems.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
 								</SelectItem>
 							))}
 						</SelectContent>

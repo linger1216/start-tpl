@@ -67,6 +67,14 @@ export function SettingsMenusForm({
 	/** 参数化菜单(path = <前缀>/<记录 id>)→ 关联的记录 id(仅展示用,这里不改) */
 	const detailRecordId = recordIdFromMenuDetailPath(node?.path);
 
+	/**
+	 * 类型下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
+	 *
+	 * ⚠️ `items` 不能省:Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),
+	 * 没有 `items` 时触发器兜底画**原始 value**(实测这里画的是 `"2"` 而不是"菜单")。
+	 */
+	const typeItems = MENU_TYPES.map((code) => ({ value: String(code), label: MENU_TYPE_META[code].label }));
+
 	// 选中节点变了 → 让浏览器把输入框内部状态跟着重置(受控值来自 props,这里只是保持表单"干净")
 	const [key, setKey] = useState(node?.id ?? "");
 	useEffect(() => {
@@ -103,14 +111,18 @@ export function SettingsMenusForm({
 
 			<div className="space-y-1">
 				<Label className="text-[12px]">类型</Label>
-				<Select value={String(values.type)} onValueChange={(next) => onChange({ ...values, type: asMenuType(next) })}>
+				<Select
+					items={typeItems}
+					value={String(values.type)}
+					onValueChange={(next) => onChange({ ...values, type: asMenuType(next) })}
+				>
 					<SelectTrigger className="h-8 text-[13px]" aria-label="菜单类型">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
-						{MENU_TYPES.map((code) => (
-							<SelectItem key={code} value={String(code)}>
-								{MENU_TYPE_META[code].label}
+						{typeItems.map((item) => (
+							<SelectItem key={item.value} value={item.value}>
+								{item.label}
 							</SelectItem>
 						))}
 					</SelectContent>

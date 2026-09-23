@@ -49,6 +49,14 @@ export function SettingsParametersForm({
 	const [group, setGroup] = useState("");
 	const [remark, setRemark] = useState("");
 
+	/**
+	 * 类型下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
+	 *
+	 * ⚠️ `items` 不能省:Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),
+	 * 没有 `items` 时触发器兜底画**原始 value**(实测这里画的是 `"3"` 而不是"文本")。
+	 */
+	const typeItems = PARA_TYPES.map((code) => ({ value: String(code), label: PARA_TYPE_META[code].label }));
+
 	useEffect(() => {
 		if (!open) return;
 		if (creating) {
@@ -125,14 +133,18 @@ export function SettingsParametersForm({
 								<Label htmlFor="cfg-type" className="text-[12px]">
 									类型
 								</Label>
-								<Select value={String(type)} onValueChange={(next) => setType(Number(next) as ParaType)}>
+								<Select
+									items={typeItems}
+									value={String(type)}
+									onValueChange={(next) => setType(Number(next) as ParaType)}
+								>
 									<SelectTrigger id="cfg-type" size="sm" className="w-full">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										{PARA_TYPES.map((t) => (
-											<SelectItem key={t} value={String(t)}>
-												{PARA_TYPE_META[t].label}
+										{typeItems.map((item) => (
+											<SelectItem key={item.value} value={item.value}>
+												{item.label}
 											</SelectItem>
 										))}
 									</SelectContent>

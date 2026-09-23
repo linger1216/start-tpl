@@ -464,6 +464,22 @@ pnpm check:legacy   # 一秒诊断:当前 Node 进程能不能用 DES-CFB(legacy
   - 拿不准就看它 `extends` 的 `BaseUIComponentProps<...>` / `XxxProps` 的 `.d.ts`(在 `node_modules/.pnpm/@base-ui+react@*/…` 下),别按 Radix 的记忆写。
 - **事件方法漏括号是「哑巴 bug」,拖拽尤其致命**:`event.preventDefault`(无括号)是一个空表达式 —— 不报错、不 lint、编译也能过,但它**什么也没做**。HTML5 拖放的规则是「`dragover` 里调了 `preventDefault()`,`drop` 才会触发」,所以漏这一对括号的症状就是"拖了半天没反应"。`settings-menus-tree.tsx` 踩过这个坑(同目录的 `settings-tags-tree.tsx` 是正确参照)。改事件处理时对一眼括号数。
 - **TanStack Table v9 的行模型必须写成「具名 slot + 调用」**:`tableFeatures({ sortedRowModel: createSortedRowModel() })`。写成 `createSortedRowModel`(无 key、未调用)属于**不会报错的错误**:类型照样通过,但 `getSortedRowModel()` / `getPaginationRowModel()` 实际不存在,症状是**页码算得对(显示"共 4 页")却把全部行都渲染出来**。`src/lib/table.ts` 已按正确写法修复并实测验证,不要改回去。
+- **卡片的悬浮反馈是「1px 边框刷成亮蓝」**(`ui/card.tsx`:`hover:border-primary`)。**别给 `<Card>` 传 `hover:border-border` / `hover:shadow-none`** —— 那是当年为了压住 3px 蓝环留的,现在会把悬浮态整个顶掉,症状是"页面上怎么悬浮都不变蓝"(7 个设置页踩过,已删)。
+- **改 `ui/card.tsx` 前先看外部依赖**:它的 `tone`(顶部 2px 强调色线)牵着 `styles.css` 的 `.tone-topline` + `--tone-color` **和 5 处 `<Card tone={...}>` 调用**(工作台的模块色相入口卡)。只删 prop 不清调用 = `typecheck` 直接报 `tone does not exist`。
+- **`<Select>` 要显示中文标签,必须在**根上**传 `items`**。Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),它只在 `resolveSelectedLabel(value, items, itemToStringLabel)` 里查**根上的 `items` prop**;没有 `items` 就兜底 `stringifyAsLabel(value)` = **原始 id / code**。实测症状:部门页"上级部门"画成 `kqVdwADB7eMB7LKSBrxpn`、菜单页"类型"画成 `2`、工作台 Select 示范格画成 `b`。
+  官方 `SelectRoot.d.ts` 原话:*"Data structure of the items rendered in the select popup. **When specified, `<Select.Value>` renders the label of the selected item instead of the raw value.**"*
+  **写法**:把选项提成一个 `{ value, label }[]`,**根上 `items={列表}` + 子元素 `<SelectItem>` 用同一份**(顺带修好 typeahead —— `items` 也是"浮层关闭时打字跳选项"的数据源):
+  ```tsx
+  const roleItems = roles.map((r) => ({ value: r.id, label: r.name }));
+  <Select items={roleItems} value={roleId} onValueChange={...}>
+    <SelectTrigger><SelectValue placeholder="选角色…" /></SelectTrigger>
+    <SelectContent>
+      {roleItems.map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+    </SelectContent>
+  </Select>
+  ```
+  兜底(不想提数组时):`<SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>` 也能显示 —— 但那是绕开库的写法,别当默认。`shared/search-select.tsx`(自带 `selected?.label`)没有这个问题。
+
 - **设计 token 只有一套**:`src/styles.css` 只保留语义 token 与 `@theme inline` 映射,色值与字体全部由 `DESIGN.md` 决定(映射见上文"设计系统")。
 - **主题只有一套**:顶栏切换按钮(`components/layout/topbar.tsx`)与 `__root.tsx` 的首屏引导脚本共用 `src/lib/constants.ts` 的 `THEME_STORAGE_KEY`,无存储值时都回落到系统偏好。改主题必须同时改这两处的读取逻辑。
 - **`__root.tsx` 不渲染任何页面外壳**,只有 HTML 骨架、主题引导脚本与 devtools;页面外壳统一在 `(main)/route.tsx`。它另外配置了 `notFoundComponent`(用 `EmptyState`),不要删掉。

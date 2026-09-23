@@ -17,11 +17,13 @@
  */
 
 import { useStore } from "@tanstack/react-store";
+import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
+import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { ActionButton } from "#/components/ui/action-button";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
@@ -116,6 +118,39 @@ import { formatLocalDate, formatLocalDateTime, formatLocalMinute } from "#/lib/t
 import { cn } from "#/lib/utils";
 
 /** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
+/**
+ * `StatCards` 示例数据 —— 三种口径 + 三种色相,顺带展示 `unit` / `description` 的落位。
+ * `Icon` 必须是 lucide 图标(`StatItem.Icon` 的类型是 `LucideIcon`)。
+ */
+const DEMO_STATS: StatItem[] = [
+	{
+		key: "users",
+		label: "用户总数",
+		value: 128,
+		unit: "人",
+		Icon: Users,
+		tone: "bg-hue-blue-soft text-hue-blue-fg",
+		description: "账号由登录服务管理",
+	},
+	{
+		key: "depts",
+		label: "部门数",
+		value: 12,
+		unit: "个",
+		Icon: Building2,
+		tone: "bg-hue-violet-soft text-hue-violet-fg",
+	},
+	{
+		key: "roles",
+		label: "角色数",
+		value: 4,
+		unit: "个",
+		Icon: KeyRound,
+		tone: "bg-hue-teal-soft text-hue-teal-fg",
+		description: "全局定义",
+	},
+];
+
 function Cell({
 	name,
 	hint,
@@ -228,7 +263,15 @@ export function UiGallery() {
 					<RateSlider value={rateVal} onChange={setRateVal} label="满意度" />
 				</Cell>
 				<Cell name="Select" hint="下拉选择(可分组)">
-					<Select value={selectVal} onValueChange={(v) => setSelectVal(v ?? "")}>
+					{/* ⚠️ 根上必须给 `items`:Base UI 不会从 <SelectItem> 收集 label,没有它就显示原始 value("b" 而不是"选项 B") */}
+					<Select
+						items={[
+							{ value: "a", label: "选项 A" },
+							{ value: "b", label: "选项 B" },
+						]}
+						value={selectVal}
+						onValueChange={(v) => setSelectVal(v ?? "")}
+					>
 						<SelectTrigger className="w-32">
 							<SelectValue />
 						</SelectTrigger>
@@ -304,6 +347,14 @@ export function UiGallery() {
 				</Cell>
 				<Cell name="Skeleton" hint="骨架块">
 					<Skeleton className="h-4 w-24" />
+				</Cell>
+				<Cell name="StatCards" hint="指标条 —— 同一个 items,两种 variant:strip 横向分隔条(默认)/ cards 独立小卡" wide>
+					<p className="text-[11px] text-muted-foreground">variant="strip"(默认)—— 一条横向分隔,适合作页面顶部指标条</p>
+					<StatCards items={DEMO_STATS} />
+					<p className="pt-2 text-[11px] text-muted-foreground">
+						variant="cards" —— 各自独立的小卡片,适合作网格里的指标区
+					</p>
+					<StatCards variant="cards" items={DEMO_STATS} />
 				</Cell>
 				<Cell name="StatCardsSkeleton" hint="指标卡骨架">
 					<StatCardsSkeleton />

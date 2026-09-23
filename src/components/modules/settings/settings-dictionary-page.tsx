@@ -209,7 +209,7 @@ export function SettingsDictionaryPage() {
 
 			<StatCards items={stats} />
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4 hover:border-border hover:shadow-none">
+			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Library className="size-4 text-muted-foreground" />

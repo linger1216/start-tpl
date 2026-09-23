@@ -58,6 +58,15 @@ export function SettingsUsersGrantsDialog({
 	const used = new Set(effective.map((row) => row.departmentId));
 	const freeDepartments = departments.filter((dept) => !used.has(dept.id));
 
+	/**
+	 * 两个下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
+	 *
+	 * ⚠️ `items` 不能省:Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),
+	 * 没有 `items` 时触发器兜底画**原始 value**(实测角色那格画的是 `4OfXCtie…` 这种 nanoid)。
+	 */
+	const roleItems = roles.map((role) => ({ value: role.id, label: role.name }));
+	const departmentItems = freeDepartments.map((dept) => ({ value: dept.id, label: dept.name }));
+
 	const saveMutation = useMutation(
 		trpc.user.setAssignments.mutationOptions({
 			onSuccess: async () => {
@@ -92,6 +101,7 @@ export function SettingsUsersGrantsDialog({
 										{departments.find((dept) => dept.id === row.departmentId)?.name ?? "(部门已删)"}
 									</span>
 									<Select
+										items={roleItems}
 										value={row.roleId}
 										onValueChange={(next) =>
 											setRows(
@@ -105,9 +115,9 @@ export function SettingsUsersGrantsDialog({
 											<SelectValue placeholder="选角色…" />
 										</SelectTrigger>
 										<SelectContent>
-											{roles.map((role) => (
-												<SelectItem key={role.id} value={role.id}>
-													{role.name}
+											{roleItems.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
 												</SelectItem>
 											))}
 										</SelectContent>
@@ -125,6 +135,7 @@ export function SettingsUsersGrantsDialog({
 					)}
 
 					<Select
+						items={departmentItems}
 						value=""
 						onValueChange={(next) => {
 							if (!next) return;
@@ -135,14 +146,14 @@ export function SettingsUsersGrantsDialog({
 							<SelectValue placeholder="＋ 加一个部门…" />
 						</SelectTrigger>
 						<SelectContent>
-							{freeDepartments.length === 0 ? (
+							{departmentItems.length === 0 ? (
 								<SelectItem value="__none__" disabled>
 									所有部门都已分配
 								</SelectItem>
 							) : (
-								freeDepartments.map((dept) => (
-									<SelectItem key={dept.id} value={dept.id}>
-										{dept.name}
+								departmentItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
 									</SelectItem>
 								))
 							)}

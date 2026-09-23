@@ -173,7 +173,7 @@ export function SettingsMenusPage() {
 			/>
 
 			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
+				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader className="flex-row items-center justify-between gap-2">
 						<CardTitle className="flex items-center gap-2">
 							<FolderTree className="size-4 text-muted-foreground" />
@@ -233,7 +233,7 @@ export function SettingsMenusPage() {
 				</Card>
 
 				{/* 宽屏吸顶:万一页面还是需要滚动,详情也不会跑到视野外 */}
-				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
+				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader>
 						<CardTitle className="text-[14px]">菜单详情</CardTitle>
 					</CardHeader>

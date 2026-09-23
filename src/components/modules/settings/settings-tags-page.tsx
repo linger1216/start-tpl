@@ -195,7 +195,7 @@ export function SettingsTagsPage() {
 
 			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
 				{/* 左:标签树 */}
-				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
+				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
 						<CardTitle className="flex items-center gap-2">
 							<FolderTree className="size-4 text-muted-foreground" />
@@ -230,7 +230,7 @@ export function SettingsTagsPage() {
 				</Card>
 
 				{/* 右:选中节点详情(宽屏吸顶:与「菜单详情」同一口径,页面需要滚动时详情也不会跑出视野) */}
-				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
+				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
 						<CardTitle className="flex items-center gap-2">
 							<TagsIcon className="size-4 text-muted-foreground" />

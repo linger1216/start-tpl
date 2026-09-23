@@ -3,14 +3,17 @@ import type * as React from "react";
 import { cn } from "#/lib/utils";
 
 /**
- * 卡片 —— 有边界、有静置阴影,**悬停把边框刷成主色并加 3px 蓝环**。
+ * 卡片 —— 静置是 1px `border-border` 的浅灰边界,**悬停时这条 1px 边框刷成亮蓝色**(品牌蓝 `primary`)。
  *
- * 悬停态(按用户偏好保留,不要改成"只抬阴影"):
- *  边框转 `primary` + `box-shadow: 0 0 0 3px var(--af-blue-ring)`(即 3px 蓝环)。
- *  这让卡片在列表 / 台账里"被点亮"得很明确,但只在 hover 时出现,不会像常驻描边那样喧宾夺主。
+ * 按用户偏好保留"边框刷蓝"这个悬浮反馈(不要改成"只抬阴影"),换成 1px 边框而不是 3px 蓝环:
+ * 同样是一眼能看出"鼠标在这张卡上",但不会因为每张卡都闪一圈光晕而吵。
  *
- * 提供 `interactive`(整卡可点)与 `tone`(顶部 2px 强调色线)两个可选口子 ——
- * 需要强调的卡片用 tone 传一个色值(如 `"var(--hue-violet)"`),不必自己拼渐变。
+ * ⚠️ **调用点不要再传 `hover:border-border` / `hover:shadow-none`**:那样会把这里的悬浮态顶掉,
+ * 症状是"页面上怎么悬浮都不变蓝"(7 个设置页踩过 —— 当年为了压住 3px 蓝环留的,现已删)。
+ *
+ * 另有两个可选口子:`interactive`(整卡可点)与 `tone`(顶部 2px 强调色线,走 `.tone-topline` +
+ * `--tone-color`,如 `tone="var(--hue-violet)"`)—— 后者是"一级模块各认一色"的一环(工作台入口卡在用),
+ * 别顺手删:删了这里,`styles.css` 的 `.tone-topline` 与 5 处调用会一起失效。
  */
 function Card({
 	className,
@@ -20,7 +23,7 @@ function Card({
 	...props
 }: React.ComponentProps<"div"> & {
 	size?: "default" | "sm";
-	/** 整卡可点击时传 true:hover 抬得更明显,并且给出手型光标 */
+	/** 整卡可点击时传 true:给出手型光标 */
 	interactive?: boolean;
 	/** 顶部 2px 强调色线,传一个 CSS 颜色值(如 `"var(--hue-violet)"`) */
 	tone?: string;
@@ -33,11 +36,9 @@ function Card({
 			style={tone ? ({ "--tone-color": tone } as React.CSSProperties) : undefined}
 			className={cn(
 				"group/card relative flex flex-col gap-5 overflow-hidden rounded-xl border border-border bg-card text-card-foreground",
-				// 静置:1px 描边 + 极浅一层。
-				"shadow-(--af-raise-1)",
 				"transition-[border-color,box-shadow] duration-200 ease-brand",
-				// 悬停:边框刷主色 + 3px 蓝环(用户偏好,保留)
-				"hover:border-primary hover:shadow-[0_0_0_3px_var(--af-blue-ring)]",
+				// 悬浮:1px 边框 → 亮蓝(`--primary` = 品牌蓝 #1b61c9,亮色主题下最深的一抹蓝,就是它)
+				"hover:border-primary",
 				interactive && "cursor-pointer",
 				tone && "tone-topline",
 				"data-[size=sm]:rounded-lg",
