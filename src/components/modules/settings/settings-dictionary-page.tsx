@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Library, ListChecks, Plus, ToggleLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsDictionaryForm } from "#/components/modules/settings/settings-dictionary-form";
 import {
@@ -190,7 +190,7 @@ export function SettingsDictionaryPage() {
 	}
 
 	return (
-		<div className="space-y-4">
+		<PageFrame>
 			<PageHeader
 				title="字典管理"
 				description="系统设置 ▸ 字典管理:维护全系统共用的字典表 `sys_dict` —— 一个字典一行,字典项是「显示名(label)+ 取值(value)」。档案类型(治理规则的「写入档案」)就存在这里,改完立即生效。"
@@ -201,7 +201,7 @@ export function SettingsDictionaryPage() {
 						</Badge>
 						<Button size="sm" onClick={openCreate}>
 							<Plus className="size-3.5" />
-							新建字典
+							新增字典
 						</Button>
 					</>
 				}
@@ -209,7 +209,7 @@ export function SettingsDictionaryPage() {
 
 			<StatCards items={stats} />
 
-			<Card className="gap-4 hover:border-border hover:shadow-none">
+			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4 hover:border-border hover:shadow-none">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Library className="size-4 text-muted-foreground" />
@@ -226,7 +226,7 @@ export function SettingsDictionaryPage() {
 						</Badge>
 					</div>
 				</CardHeader>
-				<CardContent className="space-y-3">
+				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 					<LedgerToolbar
 						search={keyword}
 						onSearchChange={(value) => {
@@ -235,7 +235,7 @@ export function SettingsDictionaryPage() {
 						}}
 						searchPlaceholder="搜索字典名 / 编码 / 字典项…"
 					/>
-					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
+					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
 						<SettingsDictionaryTable
 							rows={pageRows}
 							busyId={deleteMutation.isPending ? (deleteMutation.variables?.code ?? null) : null}
@@ -288,6 +288,6 @@ export function SettingsDictionaryPage() {
 					if (deleteTarget) deleteMutation.mutate({ code: deleteTarget.code });
 				}}
 			/>
-		</div>
+		</PageFrame>
 	);
 }

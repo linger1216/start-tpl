@@ -1,8 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderTree, Plus, Tags as TagsIcon, Trash2 } from "lucide-react";
+import { FolderTree, Plus, Tags as TagsIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsTagsFormDialog, type TagFormValues } from "#/components/modules/settings/settings-tags-form-dialog";
 import {
@@ -12,6 +12,7 @@ import {
 	type TagRow,
 } from "#/components/modules/settings/settings-tags-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
+import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
@@ -173,20 +174,15 @@ export function SettingsTagsPage() {
 	}
 
 	return (
-		<div className="space-y-4">
+		<PageFrame>
 			<PageHeader
 				title="标签管理"
 				description="系统设置 ▸ 标签管理:维护标签体系(维度 → 标签的树)。每个节点有名称 / 取值 / 含义;树支持新增子节点、删除、同级拖拽排序。数据持久化在 sys_tag 表,改完立即生效。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={listQuery.isFetching}
-							onClick={() => void listQuery.refetch()}
-						>
+						<ActionButton disabled={listQuery.isFetching} onClick={() => void listQuery.refetch()}>
 							刷新
-						</Button>
+						</ActionButton>
 						<Button size="sm" onClick={() => openCreate(null)}>
 							<Plus className="size-3.5" />
 							新增维度
@@ -197,9 +193,9 @@ export function SettingsTagsPage() {
 
 			<StatCards items={stats} />
 
-			<div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
 				{/* 左:标签树 */}
-				<Card className="gap-3 hover:border-border hover:shadow-none">
+				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
 					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
 						<CardTitle className="flex items-center gap-2">
 							<FolderTree className="size-4 text-muted-foreground" />
@@ -209,7 +205,7 @@ export function SettingsTagsPage() {
 							{rows.length} 个节点
 						</Badge>
 					</CardHeader>
-					<CardContent className="min-h-[20rem]">
+					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
 						{rows.length === 0 ? (
 							<div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
 								<FolderTree className="size-8 opacity-40" />
@@ -234,14 +230,14 @@ export function SettingsTagsPage() {
 				</Card>
 
 				{/* 右:选中节点详情(宽屏吸顶:与「菜单详情」同一口径,页面需要滚动时详情也不会跑出视野) */}
-				<Card className="gap-3 self-start hover:border-border hover:shadow-none lg:sticky lg:top-20">
+				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
 					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
 						<CardTitle className="flex items-center gap-2">
 							<TagsIcon className="size-4 text-muted-foreground" />
 							节点详情
 						</CardTitle>
 					</CardHeader>
-					<CardContent>
+					<CardContent className="min-h-0 flex-1 overflow-y-auto">
 						{!selected ? (
 							<div className="flex h-48 flex-col items-center justify-center gap-1 text-center text-muted-foreground">
 								<TagsIcon className="size-8 opacity-40" />
@@ -262,21 +258,11 @@ export function SettingsTagsPage() {
 										) : null}
 									</div>
 									<div className="flex shrink-0 items-center gap-1">
-										<Button size="xs" variant="outline" onClick={() => openCreate(selected)}>
-											<Plus className="size-3" />
-											子节点
-										</Button>
-										<Button size="xs" variant="outline" onClick={() => openEdit(selected)}>
-											编辑
-										</Button>
-										<Button
-											size="xs"
-											variant="outline"
-											className="text-muted-foreground hover:text-destructive"
-											onClick={() => setPendingDelete(selected)}
-										>
-											<Trash2 className="size-3" />
-										</Button>
+										<ActionButton onClick={() => openCreate(selected)}>新增子节点</ActionButton>
+										<ActionButton onClick={() => openEdit(selected)}>编辑</ActionButton>
+										<ActionButton tone="danger" onClick={() => setPendingDelete(selected)}>
+											删除
+										</ActionButton>
 									</div>
 								</div>
 
@@ -329,7 +315,7 @@ export function SettingsTagsPage() {
 				}
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ id: pendingDelete.id })}
 			/>
-		</div>
+		</PageFrame>
 	);
 }
 

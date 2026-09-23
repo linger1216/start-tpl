@@ -1,12 +1,19 @@
-// 系统设置 ▸ 用户管理 —— 待实现(数据源未接入,不摆假数据)
+// 系统设置 ▸ 用户管理(只读账号台账 + 部门/角色授权)
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsStubPage } from "#/components/modules/settings/settings-stub-page";
+import { SettingsUsersPage } from "#/components/modules/settings/settings-users-page";
 
 export const Route = createFileRoute("/(main)/settings/users")({
+	/**
+	 * 预取这一页要用到的数据 —— 与「参数 / 字典管理」同一口径:SSR 首帧直出,
+	 * 不先闪一下空表再填。（`用户台账 + 授权对话框要用的部门/角色`）
+	 */
+	loader: async ({ context }) => {
+		await Promise.all([
+			context.queryClient.ensureQueryData(context.trpc.user.list.queryOptions()),
+			context.queryClient.ensureQueryData(context.trpc.department.tree.queryOptions()),
+			context.queryClient.ensureQueryData(context.trpc.role.list.queryOptions()),
+		]);
+	},
 	component: SettingsUsersPage,
 });
-
-function SettingsUsersPage() {
-	return <SettingsStubPage title="用户管理" summary="用户台账 + 单用户授权 / 批量授权;接上真实用户接口后重建。" />;
-}

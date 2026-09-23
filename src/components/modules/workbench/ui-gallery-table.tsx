@@ -1,4 +1,4 @@
-import { Download, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -7,6 +7,7 @@ import { PaginationControl } from "#/components/modules/shared/pagination-contro
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { actionsColumn, DataTable, selectColumn } from "#/components/modules/shared/table-kit";
 import { TagBadges } from "#/components/modules/shared/tag-badges";
+import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -227,18 +228,10 @@ export function UiGalleryTable() {
 						/>
 					</div>
 					<div className="flex items-center gap-2">
-						<Button variant="outline" size="sm" onClick={() => toast.success("已刷新", { description: "示例数据" })}>
-							<RefreshCw className="size-3.5" />
-							刷新
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}
-						>
-							<Download className="size-3.5" />
+						<ActionButton onClick={() => toast.success("已刷新", { description: "示例数据" })}>刷新</ActionButton>
+						<ActionButton onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}>
 							导出
-						</Button>
+						</ActionButton>
 						<Button size="sm" onClick={() => toast.info("新增", { description: "示例:这里打开表单弹窗" })}>
 							<Plus className="size-3.5" />
 							新增
@@ -261,17 +254,11 @@ export function UiGalleryTable() {
 							</span>
 						</span>
 						<div className="flex items-center gap-2">
-							<button
-								type="button"
-								onClick={clear}
-								className="cursor-pointer text-[12px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-							>
-								清空选择
-							</button>
-							<Button variant="destructive" size="sm" onClick={() => setPendingDelete(true)}>
-								<Trash2 className="size-3.5" />
+							{/* 这里原来是个手写的原生按钮 —— 统一走 ActionButton(同一套文字按钮样式) */}
+							<ActionButton onClick={clear}>清空选择</ActionButton>
+							<ActionButton tone="danger" onClick={() => setPendingDelete(true)}>
 								批量删除
-							</Button>
+							</ActionButton>
 						</div>
 					</div>
 				) : null}

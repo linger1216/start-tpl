@@ -96,6 +96,62 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_verification_identifier" on ${S}."sys_verification" ("identifier")`,
 
+	// ── 权限四表(部门 / 角色;形状见 src/db/data-base-schema.ts)──
+	`create table if not exists ${S}."sys_department" (
+		"id" varchar(32) not null,
+		"parent_id" varchar(32),
+		"name" varchar(64) not null,
+		"sort" int default 0 not null,
+		"status" tinyint default 1 not null,
+		"remark" varchar(255),
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id")
+	)`,
+	`create index if not exists "idx_sys_department_parent" on ${S}."sys_department" ("parent_id")`,
+
+	`create table if not exists ${S}."sys_role" (
+		"id" varchar(32) not null,
+		"code" varchar(64) not null,
+		"name" varchar(32) not null,
+		"sort" int default 0 not null,
+		"status" tinyint default 1 not null,
+		"remark" varchar(255),
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id"),
+		constraint "uk_sys_role_code" unique ("code")
+	)`,
+
+	`create table if not exists ${S}."sys_department_member" (
+		"id" varchar(32) not null,
+		"department_id" varchar(32) not null,
+		"user_id" varchar(32) not null,
+		"role_id" varchar(32) not null,
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id"),
+		constraint "uk_sys_dm_unique" unique ("department_id", "user_id"),
+		constraint "fk_sys_dm_department" foreign key ("department_id") references ${S}."sys_department" ("id") on delete cascade,
+		constraint "fk_sys_dm_user" foreign key ("user_id") references ${S}."sys_user" ("id") on delete cascade,
+		constraint "fk_sys_dm_role" foreign key ("role_id") references ${S}."sys_role" ("id")
+	)`,
+	`create index if not exists "idx_sys_dm_user" on ${S}."sys_department_member" ("user_id")`,
+	`create index if not exists "idx_sys_dm_role" on ${S}."sys_department_member" ("role_id")`,
+
+	`create table if not exists ${S}."sys_role_menu" (
+		"id" varchar(32) not null,
+		"role_id" varchar(32) not null,
+		"menu_id" varchar(32) not null,
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id"),
+		constraint "uk_sys_role_menu" unique ("role_id", "menu_id"),
+		constraint "fk_sys_role_menu_role" foreign key ("role_id") references ${S}."sys_role" ("id") on delete cascade,
+		constraint "fk_sys_role_menu_menu" foreign key ("menu_id") references ${S}."sys_menu" ("id") on delete cascade
+	)`,
+	`create index if not exists "idx_sys_role_menu_menu" on ${S}."sys_role_menu" ("menu_id")`,
+
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (
 		"id" int identity(1,1) not null,
@@ -140,6 +196,28 @@ async function main() {
 		} catch (e) {
 			failed += 1;
 			console.log(`✗ 失败:${sql.replace(/\s+/g, " ").slice(0, 60)}\n    ${(e as Error).message?.slice(0, 120).replace(/\n/g, " ")}`);
+		}
+	}
+
+	// ── 老库补列:`create table if not exists` 不会给已存在的表加列,新增列要在这里登记(幂等)──
+	const columnUpgrades: Array<{ table: string; column: string; ddl: string }> = [
+		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
+		{ table: "sys_menu", column: "perm", ddl: "varchar(64)" },
+	];
+	for (const upgrade of columnUpgrades) {
+		const cols = await q(
+			`select COLUMN_NAME as c from SYS.ALL_TAB_COLUMNS where OWNER='${SCHEMA}' and TABLE_NAME='${upgrade.table}'`,
+		);
+		if (cols.some((row) => String(row.C ?? row.c).toLowerCase() === upgrade.column)) {
+			console.log(`· ${upgrade.table}.${upgrade.column} 已存在,跳过`);
+			continue;
+		}
+		try {
+			await run(`alter table ${S}."${upgrade.table}" add column "${upgrade.column}" ${upgrade.ddl}`);
+			console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}(注释由 pnpm db:sync:meta 对齐)`);
+		} catch (e) {
+			failed += 1;
+			console.log(`✗ ${upgrade.table} 补列失败:${(e as Error).message?.slice(0, 90).replace(/\n/g, " ")}`);
 		}
 	}
 

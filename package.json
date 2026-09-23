@@ -35,6 +35,7 @@
     "db:seed:dicts": "dotenv -e .env.local -- tsx scripts/seed-dicts.ts",
     "db:seed:paras": "dotenv -e .env.local -- tsx scripts/seed-paras.ts",
     "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts",
+    "db:seed:rbac": "dotenv -e .env.local -- tsx scripts/seed-rbac.ts",
     "check:legacy": "node scripts/check-legacy.mjs",
     "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts"
   },

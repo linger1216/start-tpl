@@ -23,6 +23,7 @@ import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
+import { ActionButton } from "#/components/ui/action-button";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
@@ -312,7 +313,20 @@ export function UiGallery() {
 				</Cell>
 			</Group>
 
-			<Group title="按钮与动作" desc="按钮的变体 / 尺寸 / 组合,以及需要防误触的「长按执行」。">
+			<Group title="按钮与动作" desc="按钮的变体 / 尺寸 / 组合、行内操作按钮,以及需要防误触的「长按执行」。">
+				<Cell name="ActionButton" hint="操作按钮:纯文字 + hover 下划线(表格行内 / 工具条 / 详情卡里那些小动作)" wide>
+					<div className="flex flex-wrap items-center gap-4">
+						<ActionButton>详情</ActionButton>
+						<ActionButton>编辑</ActionButton>
+						<ActionButton tone="danger">删除</ActionButton>
+						<ActionButton disabled>停用(已禁用)</ActionButton>
+					</div>
+					<p className="text-[11.5px] text-muted-foreground">
+						与上面 <code className="font-mono">Button</code> 的分工:这些位置**空间很窄**(一行要并排 3~5 个),
+						所以不要图标、悬停才出下划线。主操作与对话框动作(新增 / 保存 / 确定)仍用{" "}
+						<code className="font-mono">Button</code>。
+					</p>
+				</Cell>
 				<Cell name="Button" hint="变体">
 					<Button size="sm">默认</Button>
 					<Button size="sm" variant="outline">

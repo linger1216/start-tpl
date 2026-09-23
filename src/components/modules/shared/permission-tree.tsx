@@ -1,8 +1,8 @@
 import { KeyRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 
@@ -166,12 +166,8 @@ export function PermissionPicker({
 					placeholder={placeholder}
 					className="h-7 w-56"
 				/>
-				<Button variant="outline" size="sm" onClick={() => onToggle(visibleIds, true)}>
-					全选当前
-				</Button>
-				<Button variant="outline" size="sm" onClick={() => onToggle(visibleIds, false)}>
-					清空当前
-				</Button>
+				<ActionButton onClick={() => onToggle(visibleIds, true)}>全选当前</ActionButton>
+				<ActionButton onClick={() => onToggle(visibleIds, false)}>清空当前</ActionButton>
 			</div>
 			<div className="mt-2 space-y-3 overflow-y-auto rounded-xl border border-border p-3" style={{ maxHeight }}>
 				<PermissionTree nodes={nodes} keyword={keyword} selected={selected} onToggle={onToggle} />

@@ -40,6 +40,10 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_session: "登录会话(每个设备 / 浏览器一行;user_id 级联删除)",
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
 	sys_verification: "验证码 / 一次性令牌(邮箱验证、改密、二次验证都用它)",
+	sys_department: "部门树(数据权限的边界;角色归属在 sys_department_member 上)",
+	sys_role: "角色(全局定义 —— 不随部门数增长,分配时带部门)",
+	sys_department_member: "部门成员(谁在哪个部门、是什么角色;这里是权限并集的来源)",
+	sys_role_menu: "角色 → 菜单/按钮授权(一条表同时表达「菜单可见」与「按钮可用」)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 };
 
@@ -58,6 +62,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_menu", column: "sort", comment: "同级排序,越小越靠前" },
 	{ table: "sys_menu", column: "visible", comment: "1 显示 / 0 隐藏(隐藏的分组连带子树一起不显示)" },
 	{ table: "sys_menu", column: "status", comment: "1 启用 / 0 停用(当前代码没读它)" },
+	{ table: "sys_menu", column: "type", comment: "1 目录 / 2 菜单 / 3 按钮(按钮只是权限点,不进侧边栏)" },
+	{ table: "sys_menu", column: "perm", comment: "权限标识,如 sys:role:write;前端 useHasPerm() 认它" },
 	{ table: "sys_menu", column: "create_time", comment: "创建时间" },
 	{ table: "sys_menu", column: "update_time", comment: "更新时间" },
 	// sys_dict
@@ -134,6 +140,37 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_verification", column: "expires_at", comment: "过期时间" },
 	{ table: "sys_verification", column: "created_at", comment: "创建时间(better-auth 口径)" },
 	{ table: "sys_verification", column: "updated_at", comment: "更新时间(better-auth 口径)" },
+	// sys_department
+	{ table: "sys_department", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_department", column: "parent_id", comment: "上级部门 id;null = 顶级" },
+	{ table: "sys_department", column: "name", comment: "部门名" },
+	{ table: "sys_department", column: "sort", comment: "同级排序,越小越靠前" },
+	{ table: "sys_department", column: "status", comment: "1 启用 / 0 停用" },
+	{ table: "sys_department", column: "remark", comment: "备注" },
+	{ table: "sys_department", column: "create_time", comment: "创建时间" },
+	{ table: "sys_department", column: "update_time", comment: "更新时间" },
+	// sys_role
+	{ table: "sys_role", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_role", column: "code", comment: "角色标识(业务键),如 sys_admin —— 程序里认它" },
+	{ table: "sys_role", column: "name", comment: "角色名(中文)" },
+	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
+	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
+	{ table: "sys_role", column: "remark", comment: "说明" },
+	{ table: "sys_role", column: "create_time", comment: "创建时间" },
+	{ table: "sys_role", column: "update_time", comment: "更新时间" },
+	// sys_department_member
+	{ table: "sys_department_member", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_department_member", column: "department_id", comment: "部门 id → sys_department.id(级联删除)" },
+	{ table: "sys_department_member", column: "user_id", comment: "用户 id → sys_user.id(级联删除)" },
+	{ table: "sys_department_member", column: "role_id", comment: "角色 id → sys_role.id(还有人用着就不让删)" },
+	{ table: "sys_department_member", column: "create_time", comment: "创建时间" },
+	{ table: "sys_department_member", column: "update_time", comment: "更新时间" },
+	// sys_role_menu
+	{ table: "sys_role_menu", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_role_menu", column: "role_id", comment: "角色 id → sys_role.id(级联删除)" },
+	{ table: "sys_role_menu", column: "menu_id", comment: "菜单/按钮 id → sys_menu.id(级联删除)" },
+	{ table: "sys_role_menu", column: "create_time", comment: "创建时间" },
+	{ table: "sys_role_menu", column: "update_time", comment: "更新时间" },
 	// todos(示例表)
 	{ table: "todos", column: "id", comment: "主键(自增;示例表)" },
 	{ table: "todos", column: "title", comment: "待办标题" },

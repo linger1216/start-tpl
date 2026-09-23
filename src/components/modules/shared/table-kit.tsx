@@ -1,7 +1,7 @@
-import { ArrowDown, ArrowUp, ChevronsUpDown, Eye, Loader2, SquarePen, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button } from "#/components/ui/button";
+import { ActionButton } from "#/components/ui/action-button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import type { MockRow } from "#/lib/mock-table";
@@ -143,13 +143,23 @@ export function selectColumn<TRow extends MockRow>({
 	});
 }
 
-/** 行操作列:详情(只读弹窗)/ 编辑 / 删除;回调由编排壳闭包注入,不传的按钮就不渲染 */
+/**
+ * 行操作列:**详情 / 编辑 / 删除** —— 纯文字操作按钮(`ActionButton`),不带图标。
+ *
+ * 回调由编排壳闭包注入,**不传的那一项就不渲染**。
+ *
+ * ⚠️ `size` 默认 132(不是原来的 96):文字比图标占地方,三个两字标签 + 间距大概这么宽;
+ * 只传一两个回调时可以自己调小。宽度给不够,操作列会换行把行高撑开 —— 那正是"操作按钮空间小"的由来。
+ */
 export function actionsColumn<TRow extends MockRow>({
+	extra,
 	onView,
 	onEdit,
 	onDelete,
-	size = 96,
+	size = 132,
 }: {
+	/** 页面特有的额外动作(渲染在 详情/编辑/删除 **之前**),如角色的「菜单权限」、用户的「授权」 */
+	extra?: (row: TRow) => ReactNode;
 	onView?: (row: TRow) => void;
 	onEdit?: (row: TRow) => void;
 	onDelete?: (row: TRow) => void;
@@ -160,27 +170,14 @@ export function actionsColumn<TRow extends MockRow>({
 		size,
 		header: "操作",
 		cell: ({ row }) => (
-			<div className="flex items-center gap-0.5">
-				{onView ? (
-					<Button variant="ghost" size="icon-sm" aria-label="详情" onClick={() => onView(row.original)}>
-						<Eye className="size-3.5" />
-					</Button>
-				) : null}
-				{onEdit ? (
-					<Button variant="ghost" size="icon-sm" aria-label="编辑" onClick={() => onEdit(row.original)}>
-						<SquarePen className="size-3.5" />
-					</Button>
-				) : null}
+			<div className="flex items-center gap-3">
+				{extra?.(row.original)}
+				{onView ? <ActionButton onClick={() => onView(row.original)}>详情</ActionButton> : null}
+				{onEdit ? <ActionButton onClick={() => onEdit(row.original)}>编辑</ActionButton> : null}
 				{onDelete ? (
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						aria-label="删除"
-						className="text-destructive"
-						onClick={() => onDelete(row.original)}
-					>
-						<Trash2 className="size-3.5" />
-					</Button>
+					<ActionButton tone="danger" onClick={() => onDelete(row.original)}>
+						删除
+					</ActionButton>
 				) : null}
 			</div>
 		),
@@ -218,20 +215,44 @@ export function TableLoadingShell({
 	busy,
 	label = "读取中…",
 	minHeight = 220,
+	fill = false,
 	className,
 	children,
 }: {
 	/** 正在请求(含换页 / 改搜索词);有旧数据时会保留旧行,只叠指示器 */
 	busy: boolean;
 	label?: string;
-	/** 预留高度:避免空结果把页面拽短 */
+	/** 预留高度:避免空结果把页面拽短(视口太矮时也靠它兜底成整页滚动) */
 	minHeight?: number;
+	/**
+	 * `true` = **占满父级剩下的高度,表格在里面滚**(表头粘住)。
+	 * 父级必须给得出确定高度(典型:`Card` + `CardContent` 都带 `min-h-0 flex-1`)。
+	 * 不传就是老行为:内容多高就多高,由整页滚动。
+	 */
+	fill?: boolean;
 	className?: string;
 	children: ReactNode;
 }) {
 	return (
-		<div className={cn("relative", className)} style={{ minHeight }} aria-busy={busy}>
-			<div className={busy ? "opacity-60" : undefined}>{children}</div>
+		<div
+			className={cn("relative", fill && "flex min-h-0 flex-1 flex-col", className)}
+			style={{ minHeight }}
+			aria-busy={busy}
+		>
+			<div
+				className={cn(
+					busy && "opacity-60",
+					/*
+					 * `fill` 下**纵向滚动交给表格自己的容器**(`ui/table.tsx` 的 `[data-slot=table-container]`)。
+					 * 不让这一层滚,是因为它一旦是滚动容器,表头的 `sticky` 会被**更近的**容器抢走 ——
+					 * 表应该是相对"真正滚动的那个盒子"粘住。实测踩过:表头 position:sticky 但滚动时照样跑掉。
+					 */
+					fill &&
+						"min-h-0 flex-1 overflow-hidden [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:overflow-y-auto",
+				)}
+			>
+				{children}
+			</div>
 			{busy ? (
 				<div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
 					<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/95 px-2.5 py-1 text-[12px] text-muted-foreground shadow-sm">

@@ -8,20 +8,27 @@ import { buildNavTree } from "./nav-menu";
 /**
  * **导航数据层** —— 侧边栏 / 面包屑 / 模块概览共用的两个只读 hook。
  *
- * 只有一个数据源:`sys_menu` 表(`trpc.menu.list`);表为空就退回静态 `NAV_NODES`。
- * 兜底这条是刻意的:菜单表是可以被人清空的配置表,清空了也只是"回到代码里那份菜单",
- * 而不是白屏。SSR 期间由 `(main)/route.tsx` 的 loader 预取,首屏直出就是库里的菜单。
+ * 只有一个数据源:`trpc.menu.mine` —— **已经按当前用户的角色并集过滤过**(部门 → 角色 → 授权,
+ * 见 `lib/rbac.ts`)。服务端那三种返回要区别对待:
+ *  - `rows === []`  → 菜单表本身是空的(权限体系未启用)→ 退回静态 `NAV_NODES`,
+ *    这是刻意的兜底:菜单表是可以被人清空的配置表,清空了也只是"回到代码里那份菜单",而不是白屏;
+ *  - `rows === null`→ 权限体系已启用、但这个人没有可见菜单(或认不到人)→ **就是空**,
+ *    绝不能回落静态菜单(回落 = 把全部菜单漏给他);
+ *  - 有数据 → 正常拼树。
  *
- * 为什么没有"按权限过滤"这一层:模板当前没有权限服务,任何过滤都只会返回原样 ——
- * 那属于"看起来预留了扩展点、实际是空转"。真接权限时,在这里加一个入参即可,
- * 不必提前把签名铺开(踩过的坑见 AGENTS.md「伪扩展点」)。
+ * SSR 期间由 `(main)/route.tsx` 的 loader 预取,首屏直出就是过滤后的菜单 ——
+ * 所以 `menu.mine` 必须在**服务端那次请求里也带上浏览器 cookie**(见 `root-provider.tsx`),
+ * 否则首帧认不到人、菜单会先全亮再收窄。
  */
 export function useNavNodes(): NavNode[] {
 	const trpc = useTRPC();
-	const query = useQuery(trpc.menu.list.queryOptions());
+	const query = useQuery(trpc.menu.mine.queryOptions());
 	return useMemo(() => {
-		const rows = query.data ?? [];
-		return rows.length > 0 ? buildNavTree(rows) : NAV_NODES;
+		const data = query.data;
+		// 还没拿到(理论上只在请求失败时出现):宁可空也不要漏出静态全量菜单
+		if (!data) return [];
+		if (data.rows === null) return [];
+		return data.rows.length > 0 ? buildNavTree(data.rows) : NAV_NODES;
 	}, [query.data]);
 }
 

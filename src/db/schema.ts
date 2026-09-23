@@ -19,7 +19,7 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *    `create_time` / `update_time`;两批表不互相引用。
  *
  * ⚠️ **RBAC 五表(`role` / `permission` / `user_role` / `role_permission` / `user_permission`)已下线**:
- * 本轮不做 RBAC,后期再加;前端「用户管理 / 用户组管理 / 角色管理」三页现在只是**待实现占位页**
+ * RBAC 已实装,表在 `data-base-schema.ts`(部门 / 角色 / 成员 / 角色→菜单),不在这个文件里
  * (原先那份内存 mock 已整体删除,不摆假数据)。
  */
 
@@ -28,7 +28,7 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
 // `role` / `permission` / `user_role` / `role_permission` / `user_permission` 五张表**已删除**:
 // 本轮不做 RBAC,后期再加。原有的种子脚本 `scripts/seed-permissions.ts` 一并删除。
 //
-// **前端页面状态**:「系统设置 ▸ 用户管理 / 用户组管理 / 角色管理」三页现在是**待实现占位页** ——
+// **前端页面状态**:系统设置七页全部接真实数据(用户 / 部门 / 角色三页在 `data-base-schema.ts` 的那批表上)——
 // 原先撑着它们的 `src/mocks/settings.ts`(纯内存 mock)已整体删除,页面不再摆假数据。
 // 后期真做 RBAC 时,把定义加回这里 + 重建种子脚本 + 把这三页接到真实接口即可。
 

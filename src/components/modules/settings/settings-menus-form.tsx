@@ -1,13 +1,16 @@
-import { Save, Trash2, Undo2 } from "lucide-react";
+import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { IconPicker } from "#/components/modules/shared/icon-picker";
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
+import { asMenuType, MENU_TYPE_META, MENU_TYPES, type MenuType } from "#/lib/menu-spec";
 
 /** 详情表单的值 */
 export type MenuFormValues = {
@@ -15,10 +18,21 @@ export type MenuFormValues = {
 	path: string;
 	icon: string | null;
 	visible: boolean;
+	/** 1 目录 / 2 菜单 / 3 按钮 */
+	type: MenuType;
+	/** 权限标识;按钮必填 */
+	perm: string;
 };
 
 export function menuFormValues(node: MenuTreeNode): MenuFormValues {
-	return { name: node.name, path: node.path ?? "", icon: node.icon, visible: node.visible !== 0 };
+	return {
+		name: node.name,
+		path: node.path ?? "",
+		icon: node.icon,
+		visible: node.visible !== 0,
+		type: asMenuType(node.type),
+		perm: node.perm ?? "",
+	};
 }
 
 /**
@@ -87,6 +101,37 @@ export function SettingsMenusForm({
 				/>
 			</div>
 
+			<div className="space-y-1">
+				<Label className="text-[12px]">类型</Label>
+				<Select value={String(values.type)} onValueChange={(next) => onChange({ ...values, type: asMenuType(next) })}>
+					<SelectTrigger className="h-8 text-[13px]" aria-label="菜单类型">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{MENU_TYPES.map((code) => (
+							<SelectItem key={code} value={String(code)}>
+								{MENU_TYPE_META[code].label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+				<p className="text-[11.5px] text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
+			</div>
+
+			<div className="space-y-1">
+				<Label className="text-[12px]">权限标识</Label>
+				<Input
+					value={values.perm}
+					aria-label="权限标识"
+					placeholder="如 sys:role:write"
+					className="h-8 font-mono text-[12.5px]"
+					onChange={(event) => onChange({ ...values, perm: event.target.value })}
+				/>
+				<p className="text-[11.5px] text-muted-foreground">
+					前端 <code className="font-mono">useHasPerm()</code> 认它;按钮必须有,目录 / 菜单可空。
+				</p>
+			</div>
+
 			{detailRecordId ? (
 				<div className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-[11.5px] text-muted-foreground">
 					这是<span className="mx-0.5 font-medium text-primary">参数化菜单</span>:点它会打开记录
@@ -129,23 +174,21 @@ export function SettingsMenusForm({
 					<Save className="size-3.5" />
 					{pending ? "保存中…" : "保存"}
 				</Button>
-				<Button variant="outline" size="sm" disabled={pending || !dirty} onClick={onReset}>
-					<Undo2 className="size-3.5" />
+				<ActionButton disabled={pending || !dirty} onClick={onReset}>
 					还原
-				</Button>
+				</ActionButton>
 			</div>
 
 			<div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-				<Button variant="outline" size="sm" disabled={pending} onClick={onAddSibling}>
+				<ActionButton disabled={pending} onClick={onAddSibling}>
 					新增同级
-				</Button>
-				<Button variant="outline" size="sm" disabled={pending} onClick={onAddChild}>
+				</ActionButton>
+				<ActionButton disabled={pending} onClick={onAddChild}>
 					新增子菜单
-				</Button>
-				<Button variant="outline" size="sm" className="text-destructive" disabled={pending} onClick={onDelete}>
-					<Trash2 className="size-3.5" />
+				</ActionButton>
+				<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
 					删除
-				</Button>
+				</ActionButton>
 			</div>
 		</div>
 	);

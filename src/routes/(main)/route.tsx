@@ -50,7 +50,9 @@ export const Route = createFileRoute("/(main)")({
 	 */
 	loader: async ({ context }) => {
 		await Promise.all([
-			context.queryClient.ensureQueryData(context.trpc.menu.list.queryOptions()),
+			// ⚠️ 必须是 `mine` 而不是 `list`:侧边栏渲染的是"当前用户能看的菜单"。
+			// 这条请求由**服务端**发起,所以要靠 root-provider 的自定义 fetch 把 cookie 带过去。
+			context.queryClient.ensureQueryData(context.trpc.menu.mine.queryOptions()),
 			context.queryClient
 				.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: SIDEBAR_MODE_CONFIG_KEY }))
 				.catch(() => undefined),

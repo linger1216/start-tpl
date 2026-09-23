@@ -1,6 +1,5 @@
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { PARA_TYPE, PARA_TYPE_META, type ParaType } from "#/lib/para-spec";
 
@@ -60,89 +59,68 @@ export function SettingsParametersTable({
 	onDelete: (row: ParameterRow) => void;
 }) {
 	return (
-		<div className="overflow-x-auto">
-			<Table>
-				<TableHeader>
+		<Table>
+			<TableHeader>
+				<TableRow>
+					<TableHead className="min-w-[14rem]">参数名</TableHead>
+					<TableHead className="min-w-[8rem]">分组</TableHead>
+					<TableHead className="min-w-[12rem]">当前值</TableHead>
+					<TableHead className="min-w-[6rem]">类型</TableHead>
+					<TableHead className="min-w-[22rem]">说明</TableHead>
+					<TableHead className="min-w-[13rem]">操作</TableHead>
+				</TableRow>
+			</TableHeader>
+			<TableBody>
+				{rows.length === 0 ? (
 					<TableRow>
-						<TableHead className="min-w-[14rem]">参数名</TableHead>
-						<TableHead className="min-w-[8rem]">分组</TableHead>
-						<TableHead className="min-w-[12rem]">当前值</TableHead>
-						<TableHead className="min-w-[6rem]">类型</TableHead>
-						<TableHead className="min-w-[22rem]">说明</TableHead>
-						<TableHead className="min-w-[13rem]">操作</TableHead>
+						<TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+							没有参数。跑一次 <span translate="no">pnpm db:seed:paras</span> 会把内置参数落到库里。
+						</TableCell>
 					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{rows.length === 0 ? (
-						<TableRow>
-							<TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-								没有参数。跑一次 <span translate="no">pnpm db:seed:paras</span> 会把内置参数落到库里。
+				) : (
+					rows.map((row) => (
+						<TableRow key={row.key} className="group/row transition-colors duration-150 hover:bg-hover">
+							<TableCell translate="no" className="font-mono text-[12px] text-foreground">
+								{row.key}
+							</TableCell>
+							<TableCell>
+								<Badge variant="secondary" className="text-[11.5px]">
+									{row.group}
+								</Badge>
+							</TableCell>
+							<TableCell
+								translate="no"
+								title={previewValue(row)}
+								className="max-w-[16rem] truncate font-mono text-[12.5px] font-medium text-foreground"
+							>
+								{previewValue(row)}
+							</TableCell>
+							<TableCell>
+								<Badge className={`text-[11px] ${TYPE_TONE[row.type]}`}>{PARA_TYPE_META[row.type].label}</Badge>
+							</TableCell>
+							<TableCell className="text-[12px] text-muted-foreground">{row.remark}</TableCell>
+							<TableCell>
+								<div className="flex items-center gap-3">
+									<ActionButton aria-label={`查看参数 ${row.key} 详情`} onClick={() => onView(row)}>
+										详情
+									</ActionButton>
+									<ActionButton disabled={!row.editable} aria-label={`编辑参数 ${row.key}`} onClick={() => onEdit(row)}>
+										编辑
+									</ActionButton>
+									<ActionButton
+										tone="danger"
+										disabled={!row.editable}
+										aria-label={`删除参数 ${row.key}`}
+										onClick={() => onDelete(row)}
+									>
+										删除
+									</ActionButton>
+								</div>
 							</TableCell>
 						</TableRow>
-					) : (
-						rows.map((row) => (
-							<TableRow key={row.key} className="group/row transition-colors duration-150 hover:bg-hover">
-								<TableCell translate="no" className="font-mono text-[12px] text-foreground">
-									{row.key}
-								</TableCell>
-								<TableCell>
-									<Badge variant="secondary" className="text-[11.5px]">
-										{row.group}
-									</Badge>
-								</TableCell>
-								<TableCell
-									translate="no"
-									title={previewValue(row)}
-									className="max-w-[16rem] truncate font-mono text-[12.5px] font-medium text-foreground"
-								>
-									{previewValue(row)}
-								</TableCell>
-								<TableCell>
-									<Badge className={`text-[11px] ${TYPE_TONE[row.type]}`}>{PARA_TYPE_META[row.type].label}</Badge>
-								</TableCell>
-								<TableCell className="text-[12px] text-muted-foreground">{row.remark}</TableCell>
-								<TableCell>
-									<div className="flex items-center gap-1">
-										<Button
-											variant="outline"
-											size="xs"
-											aria-label={`查看参数 ${row.key} 详情`}
-											className="text-muted-foreground hover:text-foreground"
-											onClick={() => onView(row)}
-										>
-											<Eye className="size-3" />
-											详情
-										</Button>
-										<Button
-											variant="outline"
-											size="xs"
-											disabled={!row.editable}
-											aria-label={`编辑参数 ${row.key}`}
-											className="text-muted-foreground hover:text-foreground"
-											onClick={() => onEdit(row)}
-										>
-											<Pencil className="size-3" />
-											编辑
-										</Button>
-										<Button
-											variant="outline"
-											size="xs"
-											disabled={!row.editable}
-											aria-label={`删除参数 ${row.key}`}
-											// 与「详情 / 编辑」一致地给出文字标签:只放图标时,这行操作要 hover 才知道是什么
-											className="text-muted-foreground transition-colors duration-150 hover:border-destructive/40 hover:text-destructive"
-											onClick={() => onDelete(row)}
-										>
-											<Trash2 className="size-3" />
-											删除
-										</Button>
-									</div>
-								</TableCell>
-							</TableRow>
-						))
-					)}
-				</TableBody>
-			</Table>
-		</div>
+					))
+				)}
+			</TableBody>
+		</Table>
 	);
 }

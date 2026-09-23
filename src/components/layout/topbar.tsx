@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { Bell, ChevronRight, LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -67,13 +68,16 @@ function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
 	return out;
 }
 
-/** 当前页面是否在档案/数据相关路径下 —— 用于决定主 CTA 文案。 */
+/**
+ * 顶栏的主 CTA 文案(**纯装饰**,模板里没有绑定动作)。
+ *
+ * 只列本项目真实存在的页面 —— 原来还有 `/archive/cases` 与 `/visit` 两条,
+ * 那两个路由在本模板里根本不存在,是派生前的残留,已删。
+ */
 function primaryCtaLabel(pathname: string): { label: string; icon: "plus" | "check" } | null {
-	if (pathname.startsWith("/archive/cases")) return { label: "新建案件", icon: "plus" };
 	if (pathname.startsWith("/settings/users")) return { label: "新增用户", icon: "plus" };
 	if (pathname.startsWith("/settings/roles")) return { label: "新增角色", icon: "plus" };
-	if (pathname.startsWith("/settings/groups")) return { label: "新增分组", icon: "plus" };
-	if (pathname.startsWith("/visit")) return { label: "新建巡查", icon: "plus" };
+	if (pathname.startsWith("/settings/departments")) return { label: "新增部门", icon: "plus" };
 	return null;
 }
 
@@ -82,6 +86,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 	const nodes = useNavNodes();
 	const crumbs = useMemo(() => buildCrumbs(nodes, pathname), [nodes, pathname]);
 	const router = useRouter();
+	const queryClient = useQueryClient();
 	const [theme, setTheme] = useState<ThemeMode>("light");
 	const cta = primaryCtaLabel(pathname);
 
@@ -113,7 +118,10 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 			toast.error(e instanceof Error ? e.message : "退出失败,请重试");
 			return;
 		}
-		// 会话已清。先 invalidate 把当前路由的数据/守卫结果作废,再**明确跳**登录页 ——
+		// 会话已清。**清空 query 缓存**:菜单(`menu.mine`)与权限是"认人"的,
+		// 键里不带用户 —— 不清的话换个人登录会命中上一个人的缓存(以前 `menu.list` 是公开数据,所以不需要)。
+		queryClient.clear();
+		// 先 invalidate 把当前路由的数据/守卫结果作废,再**明确跳**登录页 ——
 		// 不依赖"守卫因为 invalidate 而抛出重定向"这条路(那条依赖路由内部行为,不好保证)。
 		await router.invalidate();
 		await router.navigate({ to: "/login", replace: true });

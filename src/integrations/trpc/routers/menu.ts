@@ -4,7 +4,8 @@
  *
  * | procedure | 类型 | 作用 |
  * | --- | --- | --- |
- * | `list` | query | 全部菜单行(按 `sort`,再按名称);树在前端由 `buildNavTree` 拼 |
+ * | `list` | query | **全部**菜单行(按 `sort`,再按名称)—— 「菜单管理」页用,含按钮 |
+ * | `mine` | query | **当前用户的可见菜单 + 权限标识**(部门 → 角色 → 授权取并集,见 `lib/rbac.ts`)|
  * | `update` | mutation | 改一个节点的名称 / 路径 / 图标 / 上下线(`path` 冲突回 `CONFLICT`) |
  * | `reorder` | mutation | **同级**重排:传入父节点 + 该父下的完整 id 顺序,逐行写 `sort` |
  * | `create` | mutation | 新增(父节点 + 名称,可选路径 / 图标);排序追加到同级末尾 |
@@ -20,8 +21,11 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysMenu } from "#/db/data-base-schema";
+import { getCurrentUserId } from "#/lib/current-user";
 import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
+import { asMenuType } from "#/lib/menu-spec";
+import { effectiveMenusFor } from "#/lib/rbac";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
@@ -34,6 +38,8 @@ function toMenuRow(row: typeof sysMenu.$inferSelect) {
 		icon: row.icon ?? null,
 		sort: Number(row.sort ?? 0),
 		visible: Number(row.visible ?? 1),
+		type: asMenuType(row.type),
+		perm: row.perm ?? null,
 	};
 }
 
@@ -68,6 +74,17 @@ export const menuRouter = createTRPCRouter({
 		return rows.map(toMenuRow);
 	}),
 
+	/**
+	 * 当前用户真正能看见的菜单 + 能用的权限标识。
+	 *
+	 * 与 `list` 的区别:`list` 是"库里有什么"(给管理员改菜单用),`mine` 是"这个人能看什么"。
+	 * 只认会话 —— userId 从请求 cookie 里取(`lib/current-user.ts`)。
+	 */
+	mine: publicProcedure.query(async () => {
+		const { rows, perms } = await effectiveMenusFor(await getCurrentUserId());
+		return { rows: rows === null ? null : rows.map(toMenuRow), perms };
+	}),
+
 	update: publicProcedure
 		.input(
 			z.object({
@@ -76,6 +93,10 @@ export const menuRouter = createTRPCRouter({
 				path: z.string().max(128).nullable(),
 				icon: z.string().max(32).nullable(),
 				visible: z.boolean(),
+				/** 1 目录 / 2 菜单 / 3 按钮 */
+				type: z.number().int().min(1).max(3).default(2),
+				/** 权限标识(按钮必填);空串一律当没填 */
+				perm: z.string().max(64).nullable(),
 			}),
 		)
 		.mutation(async ({ input }) => {
@@ -91,6 +112,8 @@ export const menuRouter = createTRPCRouter({
 					path,
 					icon: input.icon || null,
 					visible: input.visible ? 1 : 0,
+					type: input.type,
+					perm: input.perm?.trim() || null,
 					// 显式写 update_time:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP,靠应用补齐
 					update_time: new Date(),
 				})
@@ -143,6 +166,9 @@ export const menuRouter = createTRPCRouter({
 				path: z.string().min(1, "路径不能为空").max(128),
 				icon: z.string().max(32).nullable(),
 				visible: z.boolean().default(true),
+				/** 1 目录 / 2 菜单 / 3 按钮;默认菜单,老调用点不用改 */
+				type: z.number().int().min(1).max(3).default(2),
+				perm: z.string().max(64).nullable().default(null),
 			}),
 		)
 		.mutation(async ({ input }) => {
@@ -168,6 +194,8 @@ export const menuRouter = createTRPCRouter({
 				icon: input.icon || null,
 				sort,
 				visible: input.visible ? 1 : 0,
+				type: input.type,
+				perm: input.perm?.trim() || null,
 			});
 			return toMenuRow(await getMenuRow(id));
 		}),

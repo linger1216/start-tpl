@@ -1,8 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cog, Plus, RefreshCw, SlidersHorizontal, Timer } from "lucide-react";
+import { Cog, Plus, SlidersHorizontal, Timer } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersCleanup } from "#/components/modules/settings/settings-parameters-cleanup";
 import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
@@ -14,6 +14,7 @@ import { type ParameterRow, SettingsParametersTable } from "#/components/modules
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { TableLoadingShell } from "#/components/modules/shared/table-kit";
+import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
@@ -133,16 +134,15 @@ export function SettingsParametersPage() {
 	);
 
 	return (
-		<div className="space-y-4">
+		<PageFrame>
 			<PageHeader
 				title="参数管理"
 				description="系统设置 ▸ 参数管理:raw 保留策略(软删 / 物理删)与对接同步开关都在这儿调。支持字符串 / 整数 / 开关 / JSON / 数组 / 映射六种类型,参数改了下一趟任务生效,不需要发版。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
-						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => void listQuery.refetch}>
-							<RefreshCw className={listQuery.isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
+						<ActionButton disabled={listQuery.isFetching} onClick={() => void listQuery.refetch()}>
 							刷新
-						</Button>
+						</ActionButton>
 						<Button
 							size="sm"
 							onClick={() => {
@@ -161,7 +161,7 @@ export function SettingsParametersPage() {
 
 			<SettingsParametersCleanup />
 
-			<Card className="gap-4 hover:border-border hover:shadow-none">
+			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4 hover:border-border hover:shadow-none">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<SlidersHorizontal className="size-4 text-muted-foreground" />
@@ -171,9 +171,9 @@ export function SettingsParametersPage() {
 						匹配 {filtered.length} 条
 					</Badge>
 				</CardHeader>
-				<CardContent className="space-y-3">
+				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 					<LedgerToolbar search={keyword} onSearchChange={setKeyword} searchPlaceholder="搜索参数名 / 分组 / 说明…" />
-					<TableLoadingShell busy={listQuery.isFetching} minHeight={240}>
+					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
 						<SettingsParametersTable
 							rows={filtered}
 							onView={setViewing}
@@ -223,6 +223,6 @@ export function SettingsParametersPage() {
 				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值,界面新建的参数会彻底消失。`}
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ key: pendingDelete.key })}
 			/>
-		</div>
+		</PageFrame>
 	);
 }

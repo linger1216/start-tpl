@@ -174,7 +174,71 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_verification_identifier\` (\`identifier\`)
 		)`,
 	},
-];
+	// ── 权限四表(部门 / 角色;形状与理由见 src/db/data-base-schema.ts)──────────
+	{
+		name: "sys_department",
+		ddl: `create table if not exists \`sys_department\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '上级部门 id;null = 顶级',
+			\`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '部门名',
+			\`sort\` int not null default 0 comment '同级排序,越小越靠前',
+			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '备注',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			key \`idx_sys_department_parent\` (\`parent_id\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门树'`,
+	},
+	{
+		name: "sys_role",
+		ddl: `create table if not exists \`sys_role\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`code\` varchar(64) collate utf8mb4_unicode_ci not null comment '角色标识(业务键),如 sys_admin',
+			\`name\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色名(中文)',
+			\`sort\` int not null default 0 comment '排序,越小越靠前',
+			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '说明',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_role_code\` (\`code\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;部门归属在 sys_department_member 上)'`,
+	},
+	{
+		name: "sys_department_member",
+		ddl: `create table if not exists \`sys_department_member\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '部门 id → sys_department.id(级联删除)',
+			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '用户 id → sys_user.id(级联删除)',
+			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(还有人用着就不让删)',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_dm_unique\` (\`department_id\`, \`user_id\`),
+			key \`idx_sys_dm_user\` (\`user_id\`),
+			key \`idx_sys_dm_role\` (\`role_id\`),
+			constraint \`fk_sys_dm_department\` foreign key (\`department_id\`) references \`sys_department\` (\`id\`) on delete cascade,
+			constraint \`fk_sys_dm_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade,
+			constraint \`fk_sys_dm_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(一人在一个部门只有一个角色)'`,
+	},
+	{
+		name: "sys_role_menu",
+		ddl: `create table if not exists \`sys_role_menu\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(级联删除)',
+			\`menu_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '菜单/按钮 id → sys_menu.id(级联删除)',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_role_menu\` (\`role_id\`, \`menu_id\`),
+			key \`idx_sys_role_menu_menu\` (\`menu_id\`),
+			constraint \`fk_sys_role_menu_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`) on delete cascade,
+			constraint \`fk_sys_role_menu_menu\` foreign key (\`menu_id\`) references \`sys_menu\` (\`id\`) on delete cascade
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色 → 菜单/按钮授权(同时表达「菜单可见」与「按钮可用」)'`,
+	},
+];;
 
 const before = new Set(
 	((await db.execute(sql`show tables`))[0] as unknown as Array<Record<string, unknown>>).map((row) =>
@@ -186,6 +250,38 @@ for (const table of TABLES) {
 	await db.execute(sql.raw(table.ddl));
 	const created = !before.has(table.name);
 	console.log(`${created ? "✓ 新建" : "· 已存在"} ${table.name}`);
+}
+
+/**
+ * **老库补列** —— `create table if not exists` **不会**给已存在的表加列。
+ * 往 `data-base-schema.ts` 加列之后,必须在这里登记一条,老库(以及已经有了 sys_session 的环境)才能跟上。
+ * 幂等:列已存在就跳过。
+ */
+const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
+	{
+		table: "sys_menu",
+		column: "type",
+		ddl: "tinyint not null default 2 comment '1 目录 / 2 菜单 / 3 按钮(按钮只是权限点,不进侧边栏)'",
+	},
+	{
+		table: "sys_menu",
+		column: "perm",
+		ddl: "varchar(64) collate utf8mb4_unicode_ci default null comment '权限标识,如 sys:role:write;前端 useHasPerm() 认它'",
+	},
+];
+
+for (const upgrade of COLUMN_UPGRADES) {
+	const cols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = ${upgrade.table}`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (cols.some((row) => row.name === upgrade.column)) {
+		console.log(`· ${upgrade.table}.${upgrade.column} 已存在,跳过`);
+		continue;
+	}
+	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add column \`${upgrade.column}\` ${upgrade.ddl}`));
+	console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}`);
 }
 
 // 建完表再对齐一次列注释 / 索引名:老库通常是在更早的 DDL 下建的,注释里会留着旧列名

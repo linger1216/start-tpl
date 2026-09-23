@@ -131,10 +131,10 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"真实业务示例:标签(树)、菜单(树 + 驱动侧边栏)、字典、参数四个模块——数据都走真实接口 / 数据库,演示「列表 + 表单 + 详情 + 树形排序」的骨架。用户 / 用户组 / 角色三页**尚未接入数据源**,是「待实现」占位页(原先的 mock 已删除)。",
+			"七个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
-			{ name: "用户组管理", path: "/settings/groups", icon: "contact" },
+			{ name: "部门管理", path: "/settings/departments", icon: "contact" },
 			{ name: "角色管理", path: "/settings/roles", icon: "key-round" },
 			{ name: "标签管理", path: "/settings/tags", icon: "tags" },
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },

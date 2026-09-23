@@ -1,7 +1,7 @@
-import { Search, Trash2, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button } from "#/components/ui/button";
+import { ActionButton } from "#/components/ui/action-button";
 import { Input } from "#/components/ui/input";
 import { cn } from "#/lib/utils";
 
@@ -72,13 +72,10 @@ export function LedgerToolbar({
 						<span className="flex h-8 items-center rounded-lg bg-primary/5 px-2.5 text-[12.5px] whitespace-nowrap text-foreground">
 							已选 <span className="px-1 font-medium tabular-nums">{selectedCount}</span> {selectionUnit}
 						</span>
-						<Button variant="ghost" size="sm" onClick={onClearSelection}>
-							取消选择
-						</Button>
-						<Button variant="outline" size="sm" className="text-destructive" onClick={onBulkDelete}>
-							<Trash2 className="size-3.5" />
+						<ActionButton onClick={onClearSelection}>取消选择</ActionButton>
+						<ActionButton tone="danger" onClick={onBulkDelete}>
 							批量删除
-						</Button>
+						</ActionButton>
 					</>
 				) : (
 					actions

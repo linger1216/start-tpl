@@ -1,3 +1,4 @@
+import { MENU_TYPE } from "#/lib/menu-spec";
 import { NAV_ICON_MAP, type NavIcon, type NavNode } from "./nav-config";
 
 /**
@@ -7,6 +8,7 @@ import { NAV_ICON_MAP, type NavIcon, type NavNode } from "./nav-config";
  * 模块概览已经在用的 `NavNode[]` —— 所以渲染层一行不用改,换的是数据来源。
  *
  * 三条容错(菜单是**人手工在库里维护**的,不能假设数据永远干净):
+ *  0. **按钮(`type = 3`)不进导航** —— 它是权限点,不是页面(授权树里才看得见它);
  *  1. `visible = 0` 的节点**连同其子树**一起不出现(下线一个分组 = 整块下线);
  *  2. `icon` 认不出来(拼错 / 用了未登记的图标名)→ 退回默认图标,不让整棵树挂掉;
  *  3. `parentId` 指向一个不存在的节点(父被删了)→ 当一级菜单处理;数据成环也不会无限递归。
@@ -21,6 +23,10 @@ export type MenuRow = {
 	icon: string | null;
 	sort: number;
 	visible: number;
+	/** 1 目录 / 2 菜单 / 3 按钮 */
+	type: number;
+	/** 权限标识(只有按钮一定有) */
+	perm: string | null;
 };
 
 /** icon 认不出来时的兜底图标 */
@@ -38,7 +44,7 @@ export function menuIconOf(icon: string | null | undefined): NavIcon {
  * 排序:同级按 `sort` 升序(相同再按名称),不依赖数据库返回顺序。
  */
 export function buildNavTree(rows: readonly MenuRow[]): NavNode[] {
-	const visibleRows = rows.filter((row) => Number(row.visible) !== 0);
+	const visibleRows = rows.filter((row) => Number(row.visible) !== 0 && Number(row.type) !== MENU_TYPE.BUTTON);
 	const byParent = new Map<string, MenuRow[]>();
 	for (const row of visibleRows) {
 		const key = row.parentId ?? "";

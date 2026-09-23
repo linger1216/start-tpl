@@ -35,6 +35,7 @@ export function SortableTree<T extends SortableTreeNode>({
 	onSelect,
 	onReorder,
 	renderRow,
+	renderActions,
 }: {
 	nodes: T[];
 	selectedId: string | null;
@@ -46,6 +47,15 @@ export function SortableTree<T extends SortableTreeNode>({
 	onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
 	/** 每行的业务内容(渲染在折叠控件之后) */
 	renderRow: (node: T) => ReactNode;
+	/**
+	 * 行上的快捷操作(新增子节点 / 编辑 / 删除 …)**渲染在行尾**。
+	 *
+	 * 三条约定由组件统一负责,调用方不用再各写一遍:
+	 *  1. **悬停 / 键盘聚焦才显形**(`group-hover` + `focus-within`)—— 树是窄列,常显会一直和名称抢宽;
+	 *  2. 容器带 `data-row-actions` 标记,**行的选中事件会跳过它** —— 不然点"删除"会顺带把这一行选中(标签树踩过);
+	 *  3. 与 `renderRow` 的标签同级,所以标签要 `flex-1 truncate`(各树的 renderRow 里已经是这么写的)。
+	 */
+	renderActions?: (node: T) => ReactNode;
 }) {
 	const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 	const [dragId, setDragId] = useState<string | null>(null);
@@ -120,6 +130,8 @@ export function SortableTree<T extends SortableTreeNode>({
 						aria-expanded={hasChildren ? !isCollapsed : undefined}
 						tabIndex={0}
 						onKeyDown={(event) => {
+							// 焦点在行尾操作按钮上时,回车交给那个按钮(别顺手把整行选中了)
+							if ((event.target as HTMLElement).closest("[data-row-actions]")) return;
 							if (event.key === "Enter" || event.key === " ") {
 								event.preventDefault();
 								onSelect(node);
@@ -140,7 +152,11 @@ export function SortableTree<T extends SortableTreeNode>({
 							dragDisabled ? "cursor-default" : "cursor-grab",
 						)}
 						style={{ paddingLeft: 6 + node.depth * 18 }}
-						onClick={() => onSelect(node)}
+						onClick={(event) => {
+							// 行尾操作区里的点击不算"选中这一行"(那些按钮各自处理自己的事)
+							if ((event.target as HTMLElement).closest("[data-row-actions]")) return;
+							onSelect(node);
+						}}
 					>
 						{/* 放下位置提示线 */}
 						{hint?.allowed ? (
@@ -176,6 +192,15 @@ export function SortableTree<T extends SortableTreeNode>({
 						</span>
 
 						{renderRow(node)}
+
+						{renderActions ? (
+							<div
+								data-row-actions=""
+								className="flex shrink-0 items-center gap-2.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+							>
+								{renderActions(node)}
+							</div>
+						) : null}
 					</div>
 					{/* 子节点是**行的兄弟**,不是行的子元素:缩进由每行自己的 paddingLeft 负责,
 					    嵌进行里会让它们继承行的 padding / 点击态 */}
@@ -186,14 +211,14 @@ export function SortableTree<T extends SortableTreeNode>({
 
 	return (
 		/*
-		 * 限高 + 内部滚动:**树可以很长,页面不能被它撑长**。
-		 * 不限高时,点最下面那个节点,右侧详情已经滚到屏幕外,得再滑回去看 ——
-		 * 限高后左右两列始终一屏可见,树在里面自己滚。
+		 * 占满父级剩下的高度 + 内部滚动:**树可以很长,页面不能被它撑长,也不该矮成一条**。
+		 * 原来是写死 `max-h-[62vh]`:数据少时树只有半屏高、和数据多的页面高矮不一 ——
+		 * 现在改成"吃掉父级给的高度"(父级是 `CardContent` 的 `min-h-0 flex-1`),由页面统一高度。
 		 * `scrollbar-gutter: stable` 让滚动条出现 / 消失时行宽不跳(树是窄列,跳一下很明显)。
 		 *
 		 * 收在这里而不是各页面各包一层:原来只有菜单页包了,标签页漏了,于是标签一多就复发同一个问题。
 		 */
-		<div className="max-h-[62vh] overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+		<div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
 			<div role="tree" aria-label={ariaLabel} className="space-y-0.5">
 				{renderNodes(nodes)}
 			</div>

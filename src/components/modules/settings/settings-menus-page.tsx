@@ -3,6 +3,7 @@ import { FolderTree, ListChecks } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { buildMenuTree, type MenuTreeNode } from "#/components/layout/nav-menu";
+import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import {
 	type MenuFormValues,
@@ -17,6 +18,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
+import { asMenuType, MENU_TYPE } from "#/lib/menu-spec";
 
 /**
  * 系统设置 ▸ 菜单管理(编排壳)—— **左侧树 + 右侧详情**,菜单改完直接生效。
@@ -89,7 +91,14 @@ export function SettingsMenusPage() {
 			onSuccess: async (row) => {
 				await invalidate();
 				setSelectedId(row.id);
-				setValues({ name: row.name, path: row.path ?? "", icon: row.icon, visible: row.visible !== 0 });
+				setValues({
+					name: row.name,
+					path: row.path ?? "",
+					icon: row.icon,
+					visible: row.visible !== 0,
+					type: asMenuType(row.type),
+					perm: row.perm ?? "",
+				});
 				toast.success(`已新增「${row.name}」,改完记得保存`);
 			},
 			onError: (error) => toast.error(toApiError(error).message),
@@ -152,7 +161,7 @@ export function SettingsMenusPage() {
 	}
 
 	return (
-		<div className="space-y-4">
+		<PageFrame>
 			<PageHeader
 				title="菜单管理"
 				description="系统设置 ▸ 菜单管理:维护侧边栏菜单树。拖拽调整同级顺序、右侧直接改名称 / 路径 / 图标 / 显隐 —— 改完即时生效,无需发版。"
@@ -163,8 +172,8 @@ export function SettingsMenusPage() {
 				}
 			/>
 
-			<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-				<Card className="gap-3 hover:border-border hover:shadow-none">
+			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
 					<CardHeader className="flex-row items-center justify-between gap-2">
 						<CardTitle className="flex items-center gap-2">
 							<FolderTree className="size-4 text-muted-foreground" />
@@ -194,7 +203,7 @@ export function SettingsMenusPage() {
 							</Button>
 						</div>
 					</CardHeader>
-					<CardContent className="space-y-1">
+					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
 						<p className="text-[11.5px] text-muted-foreground">
 							拖拽行可调序(仅限同级:上半插入到目标前,下半插入到目标后);拖到别的层级会显示禁止态。选中某行后也可用 ↑ / ↓
 							键在同级内移动。
@@ -206,19 +215,32 @@ export function SettingsMenusPage() {
 							dragDisabled={dirty || reorderMutation.isPending}
 							onSelect={selectNode}
 							onReorder={handleReorder}
+							onAddChild={(node) =>
+								createMutation.mutate({
+									parentId: node.id,
+									name: "新菜单",
+									path: draftPath(),
+									icon: "file-text",
+									visible: true,
+								})
+							}
+							onDelete={(node) => {
+								selectNode(node);
+								setDeleteOpen(true);
+							}}
 						/>
 					</CardContent>
 				</Card>
 
 				{/* 宽屏吸顶:万一页面还是需要滚动,详情也不会跑到视野外 */}
-				<Card className="gap-3 self-start hover:border-border hover:shadow-none lg:sticky lg:top-20">
+				<Card className="flex min-h-0 flex-col gap-3 hover:border-border hover:shadow-none">
 					<CardHeader>
 						<CardTitle className="text-[14px]">菜单详情</CardTitle>
 					</CardHeader>
-					<CardContent>
+					<CardContent className="min-h-0 flex-1 overflow-y-auto">
 						<SettingsMenusForm
 							node={selected}
-							values={values ?? { name: "", path: "", icon: null, visible: true }}
+							values={values ?? { name: "", path: "", icon: null, visible: true, type: MENU_TYPE.MENU, perm: "" }}
 							dirty={dirty}
 							pending={updateMutation.isPending}
 							onChange={setValues}
@@ -230,6 +252,8 @@ export function SettingsMenusPage() {
 									path: values.path,
 									icon: values.icon,
 									visible: values.visible,
+									type: values.type,
+									perm: values.perm.trim() || null,
 								});
 							}}
 							onReset={() => selected && setValues(menuFormValues(selected))}
@@ -277,6 +301,6 @@ export function SettingsMenusPage() {
 					if (selected) deleteMutation.mutate({ id: selected.id });
 				}}
 			/>
-		</div>
+		</PageFrame>
 	);
 }

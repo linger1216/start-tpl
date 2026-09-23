@@ -83,20 +83,20 @@ const SETTINGS_PAGES = [
 	{
 		name: "用户管理",
 		path: "/settings/users",
-		source: null,
-		desc: "待实现占位页 —— 原 mock 已整体删除,接上真实接口后重建",
+		source: "sys_user",
+		desc: "账号台账读 Better Auth 的 sys_user(只读);这一页管的是授权 —— 谁在哪些部门、每个部门是什么角色",
 	},
 	{
-		name: "用户组管理",
-		path: "/settings/groups",
-		source: null,
-		desc: "待实现占位页(同上)",
+		name: "部门管理",
+		path: "/settings/departments",
+		source: "sys_department",
+		desc: "部门树 —— 数据权限的边界;成员与角色记在 sys_department_member 上(一人可跨多个部门)",
 	},
 	{
 		name: "角色管理",
 		path: "/settings/roles",
-		source: null,
-		desc: "待实现占位页(同上)",
+		source: "sys_role",
+		desc: "角色**全局定义**(不随部门复制)+ 权限点勾选;sys_role_menu 同时决定菜单可见与按钮可用",
 	},
 ];
 

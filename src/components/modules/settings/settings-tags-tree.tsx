@@ -1,6 +1,7 @@
 import { Folder, Plus, Tag, Trash2 } from "lucide-react";
 
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
+import { ActionIconButton } from "#/components/ui/action-button";
 
 /** 标签树节点(前端拼树后的形状) */
 export type TagNode = {
@@ -52,7 +53,9 @@ export type TagRow = {
 
 /**
  * 标签树 —— 交互(同级拖拽 / 折叠 / 选中 / 键盘)复用 `shared/sortable-tree.tsx`,
- * 这里只描述**这一行长什么样**:维度用文件夹图标、标签用 Tag 图标,右侧是「加子节点 / 删除」。
+ * 这里只描述**这一行长什么样**:维度用文件夹图标、标签用 Tag 图标;行尾操作(新增子节点 / 删除)
+ * 交给 `SortableTree` 的 `renderActions` —— **树行窄,那里用纯图标**(悬停才显形、点击不会选中该行)。
+ * 「编辑」不放在行上:点节点右侧就是编辑面板。
  */
 export function SettingsTagsTree({
 	tree,
@@ -91,29 +94,16 @@ export function SettingsTagsTree({
 					{node.value ? (
 						<span className="max-w-32 truncate font-mono text-[11px] text-muted-foreground/70">{node.value}</span>
 					) : null}
-
-					<button
-						type="button"
-						aria-label={`在「${node.label}」下新增子节点`}
-						className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity duration-150 hover:bg-primary/10 hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
-						onClick={(event) => {
-							event.stopPropagation();
-							onAddChild(node);
-						}}
-					>
+				</>
+			)}
+			renderActions={(node) => (
+				<>
+					<ActionIconButton label={`在「${node.label}」下新增子节点`} onClick={() => onAddChild(node)}>
 						<Plus className="size-3.5" />
-					</button>
-					<button
-						type="button"
-						aria-label={`删除「${node.label}」`}
-						className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity duration-150 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-						onClick={(event) => {
-							event.stopPropagation();
-							onDelete(node);
-						}}
-					>
+					</ActionIconButton>
+					<ActionIconButton tone="danger" label={`删除「${node.label}」`} onClick={() => onDelete(node)}>
 						<Trash2 className="size-3.5" />
-					</button>
+					</ActionIconButton>
 				</>
 			)}
 		/>

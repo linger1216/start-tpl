@@ -1,14 +1,17 @@
-import { EyeOff } from "lucide-react";
+import { EyeOff, Plus, Trash2 } from "lucide-react";
 
 import { NAV_ICON_MAP } from "#/components/layout/nav-config";
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
+import { ActionIconButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
+import { MENU_TYPE } from "#/lib/menu-spec";
 
 /**
  * 菜单树 —— 交互(拖拽 / 折叠 / 选中 / 键盘)全在 `shared/sortable-tree.tsx`,
- * 这里只负责**这一行长什么样**:图标 + 名称 + 参数化/隐藏徽章 + 路径。
+ * 这里只负责**这一行长什么样**:图标 + 名称 + 参数化/隐藏徽章 + 路径;
+ * 行尾操作(新增子菜单 / 编辑 / 删除)交给 `SortableTree` 的 `renderActions`,悬停才显形。
  *
  * 隐藏项(`visible = 0`)照常显示,只是带一个「隐藏」徽标 —— 管理页要能看见它们。
  */
@@ -18,6 +21,8 @@ export function SettingsMenusTree({
 	dragDisabled,
 	onSelect,
 	onReorder,
+	onAddChild,
+	onDelete,
 }: {
 	tree: MenuTreeNode[];
 	selectedId: string | null;
@@ -26,6 +31,12 @@ export function SettingsMenusTree({
 	onSelect: (node: MenuTreeNode) => void;
 	/** 把"拖动的节点"落到"目标节点"的前 / 后 */
 	onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
+	/**
+	 * 行尾快捷操作(悬停显形、不会顺带选中该行 —— 由 `SortableTree` 统一处理)。
+	 * **只有新增 / 删除**:点节点右侧就是编辑面板,行上再放一个「编辑」是冗余的。
+	 */
+	onAddChild: (node: MenuTreeNode) => void;
+	onDelete: (node: MenuTreeNode) => void;
 }) {
 	return (
 		<SortableTree
@@ -46,6 +57,14 @@ export function SettingsMenusTree({
 								参数化
 							</Badge>
 						) : null}
+						{Number(node.type) === MENU_TYPE.BUTTON ? (
+							<Badge variant="outline" className="px-1.5 text-[10.5px] text-hue-violet-fg">
+								按钮
+							</Badge>
+						) : null}
+						{Number(node.type) === MENU_TYPE.BUTTON && node.perm ? (
+							<span className="max-w-40 truncate font-mono text-[11px] text-muted-foreground/70">{node.perm}</span>
+						) : null}
 						{node.visible === 0 ? (
 							<Badge variant="outline" className="gap-1 px-1.5 text-[10.5px] text-muted-foreground">
 								<EyeOff className="size-3" />
@@ -60,6 +79,16 @@ export function SettingsMenusTree({
 					</>
 				);
 			}}
+			renderActions={(node) => (
+				<>
+					<ActionIconButton label={`在「${node.name}」下新增子菜单`} onClick={() => onAddChild(node)}>
+						<Plus className="size-3.5" />
+					</ActionIconButton>
+					<ActionIconButton tone="danger" label={`删除「${node.name}」`} onClick={() => onDelete(node)}>
+						<Trash2 className="size-3.5" />
+					</ActionIconButton>
+				</>
+			)}
 		/>
 	);
 }

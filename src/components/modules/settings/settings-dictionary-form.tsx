@@ -1,6 +1,6 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -68,7 +68,7 @@ export function SettingsDictionaryForm({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-h-[88vh] overflow-y-auto overscroll-contain sm:max-w-2xl">
 				<DialogHeader>
-					<DialogTitle className="text-balance">{editing ? `编辑字典 · ${values.name}` : "新建字典"}</DialogTitle>
+					<DialogTitle className="text-balance">{editing ? `编辑字典 · ${values.name}` : "新增字典"}</DialogTitle>
 					<DialogDescription>
 						字典是全系统共用的固定取值表(`sys_dict`):一个字典一行,字典项是 `label`(给人看)+ `value`(程序/落库用)。
 					</DialogDescription>
@@ -137,15 +137,9 @@ export function SettingsDictionaryForm({
 				<div className="space-y-2">
 					<div className="flex items-center justify-between gap-2">
 						<Label className="text-[12px]">字典项(顺序即下拉顺序)</Label>
-						<Button
-							type="button"
-							variant="outline"
-							size="xs"
-							onClick={() => onChange({ ...values, items: [...values.items, { label: "", value: "" }] })}
-						>
-							<Plus className="size-3" />
-							加一项
-						</Button>
+						<ActionButton onClick={() => onChange({ ...values, items: [...values.items, { label: "", value: "" }] })}>
+							新增字典项
+						</ActionButton>
 					</div>
 					<div className="space-y-1.5">
 						{values.items.map((item, index) => (
@@ -169,38 +163,27 @@ export function SettingsDictionaryForm({
 									className="h-8 w-44 font-mono text-[12.5px]"
 									onChange={(event) => setItem(index, { value: event.target.value })}
 								/>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-sm"
+								<ActionButton
 									aria-label={`第 ${index + 1} 项上移`}
 									disabled={index === 0}
-									className="size-7"
 									onClick={() => move(index, -1)}
 								>
-									<ArrowUp className="size-3.5" />
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-sm"
+									上移
+								</ActionButton>
+								<ActionButton
 									aria-label={`第 ${index + 1} 项下移`}
 									disabled={index === values.items.length - 1}
-									className="size-7"
 									onClick={() => move(index, 1)}
 								>
-									<ArrowDown className="size-3.5" />
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-sm"
+									下移
+								</ActionButton>
+								<ActionButton
 									aria-label={`删除第 ${index + 1} 项`}
-									className="size-7 text-destructive"
+									tone="danger"
 									onClick={() => onChange({ ...values, items: values.items.filter((_, i) => i !== index) })}
 								>
-									<Trash2 className="size-3.5" />
-								</Button>
+									删除
+								</ActionButton>
 							</div>
 						))}
 						{values.items.length === 0 ? (
@@ -225,7 +208,7 @@ export function SettingsDictionaryForm({
 						取消
 					</Button>
 					<Button disabled={pending} onClick={onSubmit}>
-						{pending ? "保存中…" : editing ? "保存修改" : "创建字典"}
+						{pending ? "保存中…" : editing ? "保存" : "创建"}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

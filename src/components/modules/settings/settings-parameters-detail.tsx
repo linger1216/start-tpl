@@ -93,7 +93,7 @@ export function SettingsParametersDetail({
 							onEdit(row);
 						}}
 					>
-						编辑这条
+						编辑
 					</Button>
 				</DialogFooter>
 			</DialogContent>

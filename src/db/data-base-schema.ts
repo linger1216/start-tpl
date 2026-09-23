@@ -72,6 +72,16 @@ export const sysMenu = mysqlTable(
 		 * 想表达"只是个分组、点了不跳页",给一个不指向任何路由的占位 path,不要留空。
 		 */
 		path: varchar("path", { length: 128 }).notNull(),
+		/**
+		 * 1 目录 / 2 菜单 / 3 按钮。
+		 *
+		 * 按钮不是导航 —— 它**只是权限点**(`perm` 才是程序认的键),侧边栏要把它排除掉
+		 * (`buildNavTree` 里那一条过滤),角色授权时它作为叶子出现在权限树里。
+		 * 现有行全是 2(菜单):加这一列不改变任何既有行为。
+		 */
+		type: tinyint("type").notNull().default(2),
+		/** 权限标识(如 `sys:role:write`);前端 `useHasPerm()` 认的就是它。按钮必填,目录/菜单可空 */
+		perm: varchar("perm", { length: 64 }),
 		/** 图标名(小写 kebab-case,与 `NAV_ICON_MAP` 的键一致);不认识的会退回默认图标 */
 		icon: varchar("icon", { length: 32 }),
 		/** 同级排序,越小越靠前 */
@@ -328,4 +338,110 @@ export const sysVerification = mysqlTable(
 		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
 	},
 	(table) => [index("idx_sys_verification_identifier").on(table.identifier)],
+);
+
+// ── 权限(部门 / 角色)────────────────────────────────────
+//
+// 模型(与 better-auth 的 organization **无关** —— 那套是"选中一个当前组织 + 租户隔离",
+// 这里是"同时属于多个部门 + 权限取并集",语义不同,所以走项目自己的 `sys_*` 表):
+//
+//   sys_department(树)                                    上海公司 / 武汉公司(可嵌套)
+//   sys_role(全局定义)                                     管理员 / 员工 / 开发 …  ← 不随部门数增长
+//   sys_department_member(user_id, department_id, role_id)  张三:上海=管理员、武汉=员工
+//   sys_role_menu(role_id, menu_id)                        角色能看见哪些菜单 / 能用哪些按钮
+//
+// 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
+// (上海管理员 / 武汉管理员 / …)。全局定义 + 分配时带部门,4 种角色在 100 个部门里也只有 4 行。
+//
+// **数据权限是下一轮**(`data_scope` 记在角色上,按「(部门, 角色) 逐对解析后取并集」)——
+// 现在**不加那一列**,因为没人读的列就是 AGENTS 里禁的「伪扩展点」。届时的形态:
+//   张三 → (上海, 管理员) → 全公司数据
+//        → (武汉, 员工)   → 仅本人数据          并集 = 全公司 ∪ 本人的武汉数据
+// 下面这张 `sys_department_member` 已经承载了将来做这件事所需的全部信息。
+
+/** 部门树(数据权限的边界;形状对齐 `sys_menu` / `sys_tag`) */
+export const sysDepartment = mysqlTable(
+	"sys_department",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		parent_id: varchar("parent_id", { length: 32 }),
+		name: varchar("name", { length: 64 }).notNull(),
+		sort: int("sort").notNull().default(0),
+		status: tinyint("status").notNull().default(1),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [index("idx_sys_department_parent").on(table.parent_id)],
+);
+
+/**
+ * 角色(全局定义)。
+ *
+ * ⚠️ **同级/同部门重名不靠唯一索引**:`unique(parent_id, name)` 这类约束在 MySQL 上
+ * 对 `parent_id is null`(顶级)不生效,是半吊子约束 —— 一律在 procedure 里查重。
+ */
+export const sysRole = mysqlTable(
+	"sys_role",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		code: varchar("code", { length: 64 }).notNull(),
+		name: varchar("name", { length: 32 }).notNull(),
+		sort: int("sort").notNull().default(0),
+		status: tinyint("status").notNull().default(1),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [uniqueIndex("uk_sys_role_code").on(table.code)],
+);
+
+/**
+ * 部门成员 —— "谁在哪个部门、是什么角色"。**这张表就是权限并集的来源**。
+ *
+ * `uk_sys_dm_unique(department_id, user_id)`:一个人在同一个部门只能有一个角色
+ * (两个列都 not null,所以这个唯一键是真实生效的)。`role_id` **不加 cascade**:
+ * 角色还有人用着就不该被删掉 —— procedure 先查引用数给友好报错,DB 的 restrict 当兜底。
+ */
+export const sysDepartmentMember = mysqlTable(
+	"sys_department_member",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		department_id: varchar("department_id", { length: 32 })
+			.notNull()
+			.references(() => sysDepartment.id, { onDelete: "cascade" }),
+		user_id: varchar("user_id", { length: 32 })
+			.notNull()
+			.references(() => sysUser.id, { onDelete: "cascade" }),
+		role_id: varchar("role_id", { length: 32 })
+			.notNull()
+			.references(() => sysRole.id),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
+		index("idx_sys_dm_user").on(table.user_id),
+		index("idx_sys_dm_role").on(table.role_id),
+	],
+);
+
+/** 角色 → 菜单/按钮授权(一条表同时表达「菜单可见」与「按钮可用」) */
+export const sysRoleMenu = mysqlTable(
+	"sys_role_menu",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		role_id: varchar("role_id", { length: 32 })
+			.notNull()
+			.references(() => sysRole.id, { onDelete: "cascade" }),
+		menu_id: varchar("menu_id", { length: 32 })
+			.notNull()
+			.references(() => sysMenu.id, { onDelete: "cascade" }),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_role_menu").on(table.role_id, table.menu_id),
+		index("idx_sys_role_menu_menu").on(table.menu_id),
+	],
 );
