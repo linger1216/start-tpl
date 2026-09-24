@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Tag as TagIcon, Trash2, X } from "lucide-react";
+import { Check, Tag as TagIcon, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { Badge } from "#/components/ui/badge";
+import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
@@ -153,24 +153,17 @@ export function WorkbenchTagging() {
 							) : current.length === 0 ? (
 								<p className="text-[12.5px] text-muted-foreground">还没贴标签 —— 从下面选一个加进来。</p>
 							) : (
-								<div className="flex flex-wrap gap-1.5">
-									{current.map((item) => (
-										<span
-											key={item.tagId}
-											className="inline-flex items-center gap-1 rounded-full bg-hue-teal-soft px-2 py-0.5 text-[12px] text-hue-teal-fg"
-										>
-											{item.label}
-											<button
-												type="button"
-												aria-label={`移除标签 ${item.label}`}
-												className="cursor-pointer rounded-full p-0.5 transition-colors hover:bg-hue-teal-line"
-												onClick={() => unlinkMutation.mutate({ tagId: item.tagId, objId, objType: DEMO_OBJ_TYPE })}
-											>
-												<X className="size-3" />
-											</button>
-										</span>
-									))}
-								</div>
+								// 可删除的标签也走 BadgeList(onRemove 自带 ×):不要用 span + 手写 button 拼一个"像徽章"的东西
+								<BadgeList
+									values={current.map((item) => item.label)}
+									layout="wrap"
+									color={["bg-hue-teal-soft text-hue-teal-fg"]}
+									onRemove={(index) => {
+										const item = current[index];
+										if (!item) return;
+										unlinkMutation.mutate({ tagId: item.tagId, objId, objType: DEMO_OBJ_TYPE });
+									}}
+								/>
 							)}
 						</div>
 

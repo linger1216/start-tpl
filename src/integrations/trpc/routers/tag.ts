@@ -43,6 +43,8 @@ function toTagRow(row: typeof sysTag.$inferSelect) {
 		value: row.value ?? null,
 		desc: row.desc ?? null,
 		sort: Number(row.sort ?? 0),
+		createTime: row.create_time ? row.create_time.toISOString() : null,
+		updateTime: row.update_time ? row.update_time.toISOString() : null,
 	};
 }
 

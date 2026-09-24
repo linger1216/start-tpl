@@ -26,6 +26,9 @@ const paraTypeSchema = z
 function toParaRow(key: string, row: typeof sysPara.$inferSelect | undefined) {
 	const fallback = PARA_DEFAULTS[key];
 	return {
+		// 与 sys_para 的十列一一对应(界面要能看全字段);`id` 是库里的无意义短串,
+		// 只在"这条参数已落库"时有值 —— 纯代码内置、还没写进库的参数是 null。
+		id: row?.id ?? null,
 		key,
 		value: row?.para_value ?? fallback?.value ?? "",
 		type: (row?.para_type ?? fallback?.type ?? 3) as ParaType,
@@ -33,6 +36,7 @@ function toParaRow(key: string, row: typeof sysPara.$inferSelect | undefined) {
 		remark: row?.remark ?? fallback?.remark ?? "",
 		editable: Number(row?.editable ?? 1) !== 0,
 		status: Number(row?.status ?? 1),
+		createdAt: row?.create_time ? row.create_time.toISOString() : null,
 		updatedAt: row?.update_time ? row.update_time.toISOString() : null,
 	};
 }
@@ -61,7 +65,17 @@ export const paraRouter = createTRPCRouter({
 
 	/** 改一个参数值(upsert);按声明类型校验,不接受乱七八糟的值 */
 	update: publicProcedure
-		.input(z.object({ key: z.string().min(1).max(64), value: z.string().max(PARA_VALUE_MAX) }))
+		.input(
+			z.object({
+				key: z.string().min(1).max(64),
+				value: z.string().max(PARA_VALUE_MAX),
+				/** 下面这几个都是「给了才改」—— 表单里填了别的字段,不能因为没传就把库里的值清掉 */
+				group: z.string().max(32).optional(),
+				remark: z.string().max(255).optional(),
+				status: z.number().int().min(0).max(1).optional(),
+				editable: z.number().int().min(0).max(1).optional(),
+			}),
+		)
 		.mutation(async ({ input }) => {
 			const fallback = PARA_DEFAULTS[input.key];
 			const [row] = await db.select().from(sysPara).where(eq(sysPara.para_key, input.key)).limit(1);
@@ -75,7 +89,14 @@ export const paraRouter = createTRPCRouter({
 			if (row) {
 				await db
 					.update(sysPara)
-					.set({ para_value: value, update_time: new Date() })
+					.set({
+						para_value: value,
+						...(input.group !== undefined ? { para_group: input.group } : {}),
+						...(input.remark !== undefined ? { remark: input.remark } : {}),
+						...(input.status !== undefined ? { status: input.status } : {}),
+						...(input.editable !== undefined ? { editable: input.editable } : {}),
+						update_time: new Date(),
+					})
 					.where(eq(sysPara.para_key, input.key));
 			} else {
 				await db.insert(sysPara).values({
@@ -103,6 +124,8 @@ export const paraRouter = createTRPCRouter({
 				/** 库里已存在的键沿用它的分组;新键可指定,缺省归到「其它」 */
 				group: z.string().max(32).optional(),
 				remark: z.string().max(255).optional(),
+				status: z.number().int().min(0).max(1).optional(),
+				editable: z.number().int().min(0).max(1).optional(),
 			}),
 		)
 		.mutation(async ({ input }) => {

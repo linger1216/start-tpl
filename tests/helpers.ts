@@ -12,6 +12,22 @@
  */
 import assert from "node:assert/strict";
 
+import { eq, inArray, lt } from "drizzle-orm";
+
+import {
+	sysAccount,
+	sysDept,
+	sysUserDept,
+	sysDict,
+	sysMenu,
+	sysPara,
+	sysRole,
+	sysRoleMenu,
+	sysSession,
+	sysTag,
+	sysUser,
+	sysUserRole,
+} from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -48,6 +64,137 @@ export async function closeDb(): Promise<void> {
 		return;
 	}
 	await db.$client.end();
+}
+
+/**
+ * 前缀判断**必须在 JS 里做**。
+ *
+ * ⚠️ 别写 `like(col, "__test__%")`:SQL 的 `LIKE` 里 **`_` 是单字符通配符**,
+ * 那个模式等于"任意 8 个字符开头",会命中**几乎所有值** —— 实测连演示账号
+ * `admin@example.com` 都被算作测试数据删掉过。查询只按时间筛,前缀用字面 `startsWith`。
+ */
+function startsWithPrefix(value: unknown): boolean {
+	return String(value ?? "").startsWith(TEST_PREFIX);
+}
+
+/**
+ * 兜底清扫:删掉**上一次跑残留**的 `__test__*` 数据。
+ *
+ * 为什么要有它:`after()` 只在用例正常跑完时执行 —— 文件**加载就失败**(import 报错、建表语句挂掉)
+ * 或进程被杀时它根本不会被调用,数据就留在库里了。实测漏过一次:14 个测试用户 + 12 个角色 +
+ * 2 个部门 + 14 个菜单,而残留会让后续用例的断言变飘(比如"列表里第一行"变成了测试用户)。
+ *
+ * **并行安全**:只删**超过 30 分钟**的。`node --test` 按文件并行跑,同一次运行建的数据只有几秒大,
+ * 另一个文件不可能误删它;而"上一次残留"必然早就超龄。要更保守就调大 `olderThanMinutes`。
+ */
+export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
+	const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+	let removed = 0;
+
+	// ── 用户(先清引用它的会话 / 登录方式 / 角色分配 / 部门成员)──
+	const staleUsers = (
+		await db.select({ id: sysUser.id, email: sysUser.email }).from(sysUser).where(lt(sysUser.createdAt, cutoff))
+	).filter((row) => startsWithPrefix(row.email));
+	if (staleUsers.length > 0) {
+		const ids = staleUsers.map((row) => row.id);
+		await db.delete(sysSession).where(inArray(sysSession.userId, ids));
+		await db.delete(sysAccount).where(inArray(sysAccount.userId, ids));
+		await db.delete(sysUserRole).where(inArray(sysUserRole.user_id, ids));
+		await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, ids));
+		await db.delete(sysUser).where(inArray(sysUser.id, ids));
+		removed += ids.length;
+	}
+
+	// ── 角色(先清授权与分配:两张表的外键都是 restrict)──
+	const staleRoles = (
+		await db.select({ id: sysRole.id, code: sysRole.code }).from(sysRole).where(lt(sysRole.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.code));
+	if (staleRoles.length > 0) {
+		const ids = staleRoles.map((row) => row.id);
+		await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, ids));
+		await db.delete(sysUserRole).where(inArray(sysUserRole.role_id, ids));
+		await db.delete(sysRole).where(inArray(sysRole.id, ids));
+		removed += ids.length;
+	}
+
+	// ── 菜单(同样要先清授权行)──
+	const staleMenus = (
+		await db.select({ id: sysMenu.id, name: sysMenu.name }).from(sysMenu).where(lt(sysMenu.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.name));
+	if (staleMenus.length > 0) {
+		const ids = staleMenus.map((row) => row.id);
+		await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.menu_id, ids));
+		await db.delete(sysMenu).where(inArray(sysMenu.id, ids));
+		removed += ids.length;
+	}
+
+	// ── 部门(带子节点,从深到浅删)──
+	const staleDepts = (
+		await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).where(lt(sysDept.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.name));
+	if (staleDepts.length > 0) {
+		const all = await db.select({ id: sysDept.id, parentId: sysDept.parent_id }).from(sysDept);
+		const doomed = new Set(staleDepts.map((row) => row.id));
+		let grew = true;
+		while (grew) {
+			grew = false;
+			for (const row of all) {
+				if (row.parentId && doomed.has(row.parentId) && !doomed.has(row.id)) {
+					doomed.add(row.id);
+					grew = true;
+				}
+			}
+		}
+		const list = [...doomed];
+		await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, list));
+		for (let i = list.length - 1; i >= 0; i -= 1) {
+			await db.delete(sysDept).where(eq(sysDept.id, list[i] as string));
+		}
+		removed += list.length;
+	}
+
+	// ── 三张「配置类」表(键 / 编码带前缀,清理它们没有引用问题)──
+	const staleParas = (
+		await db.select({ key: sysPara.para_key }).from(sysPara).where(lt(sysPara.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.key));
+	if (staleParas.length > 0) {
+		await db.delete(sysPara).where(inArray(sysPara.para_key, staleParas.map((row) => row.key)));
+		removed += staleParas.length;
+	}
+
+	const staleDicts = (
+		await db
+			.select({ code: sysDict.code, name: sysDict.name })
+			.from(sysDict)
+			.where(lt(sysDict.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.name));
+	if (staleDicts.length > 0) {
+		await db.delete(sysDict).where(inArray(sysDict.code, staleDicts.map((row) => row.code)));
+		removed += staleDicts.length;
+	}
+
+	const staleTags = (
+		await db.select({ id: sysTag.id, label: sysTag.label }).from(sysTag).where(lt(sysTag.create_time, cutoff))
+	).filter((row) => startsWithPrefix(row.label));
+	if (staleTags.length > 0) {
+		await db.delete(sysTag).where(inArray(sysTag.id, staleTags.map((row) => row.id)));
+		removed += staleTags.length;
+	}
+
+	return removed;
+}
+
+/**
+ * 每个测试文件 import 本文件时**自动**跑一次兜底清扫(见上)。
+ *
+ * 放在顶层 await 而不是 `before()` 里:单个文件的 `before()` 在**加载失败**时同样不会执行 ——
+ * 而那正是残留的来源。失败不阻断测试(打一行警告就继续),否则清扫自己会成为新的"全挂"原因。
+ */
+try {
+	const swept = await sweepStaleTestData();
+	if (swept > 0) console.warn(`[tests] 兜底清扫:删掉了上次残留的 ${swept} 行测试数据`);
+} catch (error) {
+	console.warn(`[tests] 兜底清扫跳过:${(error as Error).message}`);
 }
 
 /** 断言 promise 以 tRPC 错误拒绝,并包含给定文案片段 */

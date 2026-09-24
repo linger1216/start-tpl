@@ -31,7 +31,7 @@ pnpm dev                       # http://localhost:3000
 | --- | --- |
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
 | **UI 组件示例** | ★ 就在工作台 `/` 页里:43 个原语的最小可用例子 + 台账表格实战示例 |
-| **框架能力** `/demo/*` | 9 个可运行样例:tRPC、Query、表单、表格、Drizzle、Auth、Store、Sentry |
+| **框架能力** `/demo/*` | 7 个可运行样例:tRPC、Query、表单、表格、Drizzle、Auth、Store |
 | **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,7 个页面:4 页真实数据 + 3 页待实现占位 |
 
 菜单树是**库 + 兜底**双源:`sys_menu` 表有数据时以表为准,为空则退回 `src/components/layout/nav-config.ts` 的 `NAV_NODES`。改 `NAV_NODES` 后侧边栏、面包屑、模块概览、工作台四处会一起变。
@@ -383,7 +383,7 @@ function UsersPage() {
 
 6. **Excel**(可选)—— 用 `useCrudExcel`,传 `fetchAll` / `exportRow` / `importFields` / `coerceRow` / `importMutation`,拿 `handleExport` 与 `importDialogProps`。
 
-**诚实提示**:`useAppTable` 已被 `/demo/table`、工作台台账示例与系统设置各页真实使用;`lib/ids.ts` 的 `formatCode` / `nextIdByTime` 与 `hooks/use-dict.ts` 目前只有定义、没有调用方 —— 文件头注释是它们最准确的用法文档。完整清单见下节。
+**诚实提示**:`useAppTable` 已被 `/demo/table`、工作台台账示例与系统设置各页真实使用;`lib/ids.ts` 的 `formatCode` 与 `hooks/use-dict.ts` 目前只有定义、没有调用方 —— 文件头注释是它们最准确的用法文档。完整清单见下节。
 
 ---
 
@@ -399,7 +399,6 @@ function UsersPage() {
 | 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`;改 `ID_PREFIX` 换成自己的前缀 |
 | 字典读取钩子 | `hooks/use-dict.ts` | 页面消费 `sys_dict` 的统一入口(维护入口是「字段管理」页) |
 | 列可见性持久化 | `shared/use-column-visibility.ts` | 列显示与顺序存 `sys_para`(需要数据库) |
-| 表单版式套件 | `shared/form-kit.tsx` | 0 调用方,做表单页时先看它 |
 | 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | 原先三个授权弹窗(用户 / 角色 / 用户组)共用;那三页改成占位页后暂无调用方 |
 | mock 数据原语 | `mocks/shared.ts` | `pick` / `idOf` / `phone` / `personName` / 固定基准日等**确定性**构造器(禁 `Math.random()`) |
 | 部门树示例 | `mocks/dicts.ts` | 示例单位 / 部门树 + `deptName` / `deptSelectOptions` 派生函数;做组织架构类页面时可直接复用 |
@@ -451,7 +450,7 @@ src/lib/demo-store.ts
 **顺序很重要**,删完记得处理连带:
 
 1. `src/routes/__root.tsx`:去掉 devtools `plugins` 数组里与 demo 相关的项(本模板当前只有 Router 与 Query 两项,无需改动)
-2. **保留一处 `@tanstack/react-start` 的引用** —— 容易踩的坑:`server: { handlers }` 这个路由选项的类型来自 `@tanstack/react-start` 的模块增强,而全项目只有 `demo/sentry.testing.tsx` 与 `demo/drizzle.tsx` 引用了它。删掉 demo 后 `src/routes/api/auth/$.ts` 与 `src/routes/api.trpc.$.tsx` 会开始报 `'server' does not exist in type ...`。在 `src/router.tsx` 顶部补一行 `import "@tanstack/react-start";` 即可
+2. **`@tanstack/react-start` 的类型增强不用管** —— `(main)/route.tsx` 与 `integrations/tanstack-query/root-provider.tsx` 都引用了它,删掉整个 demo 目录也不会让 `server: { handlers }` 报 `'server' does not exist in type ...`
 3. `src/components/layout/nav-config.ts`:把 `NAV_NODES` 里「组件展示 / 框架能力」两枝删掉
 4. `src/components/layout/topbar.tsx`:改标题与 `username` 占位常量
 5. `src/lib/constants.ts`:把 `THEME_STORAGE_KEY` 改成自己的名字 —— 多个项目都用 `localhost:3000` 时同源共用 localStorage,主题会互相串
@@ -487,7 +486,7 @@ pnpm check
 
 **删除**:12 个业务域目录(约 500 个文件)、80 条业务路由、29 个业务 lib、27 个业务 mocks、6 个业务 tRPC 路由、18 个业务脚本。`trpc/router.ts` 从 9 个命名空间收窄到 3 个(menu / dict / config)+ `todos` 示例。
 
-**保留**:系统设置模块(7 页 = **4 页真实数据 + 3 页「待实现」占位**,含 `mocks/tags.ts` 的 17 个标签维度 —— 那是「标签管理」页的业务示例数据)、框架能力样例(9 页)、完整组件层、CRUD 套件、Better Auth、Drizzle、tRPC、Sentry、设计系统。
+**保留**:系统设置模块(**7 页全部接真实数据**)、框架能力样例(7 页)、组件层、CRUD 套件、Better Auth、Drizzle、tRPC、设计系统。
 
 ### 第二轮:遗留与封装审计
 

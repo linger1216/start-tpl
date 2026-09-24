@@ -1,4 +1,5 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
+import type { MockRow } from "./table";
 
 /**
  * 设计阶段的「假后端」:一份内存表,提供增 / 删 / 改 / 批量替换。
@@ -10,7 +11,6 @@ import { create, type StoreApi, type UseBoundStore } from "zustand";
  *
  * 注意:行必须有稳定主键 `id`(表格选中 / 编辑 / 删除都靠它)。
  */
-export type MockRow = { id: string } & Record<string, unknown>;
 
 /** 校验用:字段值一律以字符串进入表单,提交时再按 kind 转换 */
 export type MockDraft = Record<string, unknown>;

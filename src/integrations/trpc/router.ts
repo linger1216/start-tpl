@@ -34,7 +34,7 @@ export const trpcRouter = createTRPCRouter({
 	para: paraRouter,
 	/** 系统设置 ▸ 标签管理 —— 读写 `sys_tag`(自关联树) */
 	tag: tagRouter,
-	/** 系统设置 ▸ 部门管理 —— 读写 `sys_department`(自关联树)+ 成员/角色分配 */
+	/** 系统设置 ▸ 部门管理 —— 读写 `sys_dept`(自关联树)+ 成员/角色分配 */
 	department: departmentRouter,
 	/** 系统设置 ▸ 角色管理 —— 读写 `sys_role` + `sys_role_menu`(菜单/按钮授权) */
 	role: roleRouter,

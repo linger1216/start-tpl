@@ -17,6 +17,7 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 
@@ -169,7 +170,16 @@ export function SettingsTagsPage() {
 			.sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
 		const idx = siblings.findIndex((s) => s.id === targetId);
 		const insertAt = position === "before" ? idx : idx + 1;
-		siblings.splice(insertAt, 0, { id: draggedId, parentId: newParentId, label: "", value: null, desc: null, sort: 0 });
+		siblings.splice(insertAt, 0, {
+			id: draggedId,
+			parentId: newParentId,
+			label: "",
+			value: null,
+			desc: null,
+			sort: 0,
+			createTime: null,
+			updateTime: null,
+		});
 		moveMutation.mutate({ id: draggedId, newParentId, orderedSiblingIds: siblings.map((s) => s.id) });
 	}
 
@@ -180,10 +190,8 @@ export function SettingsTagsPage() {
 				description="系统设置 ▸ 标签管理:维护标签体系(维度 → 标签的树)。每个节点有名称 / 取值 / 含义;树支持新增子节点、删除、同级拖拽排序。数据持久化在 sys_tag 表,改完立即生效。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
-						<ActionButton disabled={listQuery.isFetching} onClick={() => void listQuery.refetch()}>
-							刷新
-						</ActionButton>
-						<Button size="sm" onClick={() => openCreate(null)}>
+						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+						<Button size="sm" disabled={createMutation.isPending} onClick={() => openCreate(null)}>
 							<Plus className="size-3.5" />
 							新增维度
 						</Button>
@@ -196,24 +204,17 @@ export function SettingsTagsPage() {
 			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
 				{/* 左:标签树 */}
 				<Card className="flex min-h-0 flex-col gap-3">
-					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
+					<CardHeader className="flex-row items-center justify-between gap-2">
 						<CardTitle className="flex items-center gap-2">
 							<FolderTree className="size-4 text-muted-foreground" />
 							标签树
 						</CardTitle>
-						<Badge variant="outline" className="tabular-nums">
-							{rows.length} 个节点
-						</Badge>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
 						{rows.length === 0 ? (
 							<div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
 								<FolderTree className="size-8 opacity-40" />
-								<p className="text-[13px]">还没有标签,先新增一个维度(标签分类)。</p>
-								<Button size="sm" variant="outline" onClick={() => openCreate(null)}>
-									<Plus className="size-3.5" />
-									新增维度
-								</Button>
+								<p className="text-[13px]">还没有标签,点右上角新增一个维度。</p>
 							</div>
 						) : (
 							<SettingsTagsTree
@@ -297,6 +298,9 @@ export function SettingsTagsPage() {
 				mode={formMode}
 				parentLabel={formParentLabel}
 				initial={formInitial}
+				meta={
+					formMode === "edit" && selected ? { createdAt: selected.createTime, updatedAt: selected.updateTime } : null
+				}
 				pending={createMutation.isPending || updateMutation.isPending}
 				onOpenChange={setFormOpen}
 				onSubmit={handleFormSubmit}

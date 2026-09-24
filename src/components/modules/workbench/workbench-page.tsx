@@ -21,6 +21,7 @@ import {
 import { NAV_ICON_MAP, type NavIcon, type NavNode } from "#/components/layout/nav-config";
 import { useNavNodes } from "#/components/layout/nav-data";
 import { PageHeader } from "#/components/layout/page-header";
+import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { cn } from "#/lib/utils";
 import { UiGallery } from "./ui-gallery";
@@ -89,8 +90,8 @@ const SETTINGS_PAGES = [
 	{
 		name: "部门管理",
 		path: "/settings/departments",
-		source: "sys_department",
-		desc: "部门树 —— 数据权限的边界;成员与角色记在 sys_department_member 上(一人可跨多个部门)",
+		source: "sys_dept",
+		desc: "部门树 —— 数据权限的边界;成员与角色记在 sys_user_dept 上(一人可跨多个部门)",
 	},
 	{
 		name: "角色管理",
@@ -236,13 +237,13 @@ export function WorkbenchPage() {
 									<div className="flex items-center justify-between gap-2">
 										<span className="truncate font-medium text-foreground">{page.name}</span>
 										{page.source ? (
-											<span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+											<Badge variant="secondary" className="shrink-0 px-1.5 font-mono text-[10.5px]">
 												{page.source}
-											</span>
+											</Badge>
 										) : (
-											<span className="shrink-0 rounded-md bg-hue-amber-soft px-1.5 py-0.5 text-[10.5px] text-hue-amber-fg">
+											<Badge className="shrink-0 bg-hue-amber-soft px-1.5 text-[10.5px] text-hue-amber-fg">
 												待实现
-											</span>
+											</Badge>
 										)}
 									</div>
 									<p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{page.desc}</p>

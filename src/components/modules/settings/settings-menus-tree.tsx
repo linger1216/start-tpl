@@ -5,6 +5,7 @@ import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
+import { useTreePrefs } from "#/hooks/use-tree-prefs";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { MENU_TYPE } from "#/lib/menu-spec";
 
@@ -38,12 +39,19 @@ export function SettingsMenusTree({
 	onAddChild: (node: MenuTreeNode) => void;
 	onDelete: (node: MenuTreeNode) => void;
 }) {
+	/** 展开态记在参数管理的 `page.tree` 里,下次打开还是这套 */
+	const { initialExpandedIds, persist: persistTree } = useTreePrefs("settings.menus");
+
 	return (
 		<SortableTree
+			initialExpandedIds={initialExpandedIds}
+			onExpandedChange={persistTree}
 			nodes={tree}
 			selectedId={selectedId}
 			dragDisabled={dragDisabled}
 			ariaLabel="菜单树"
+			searchPlaceholder="搜索菜单名 / 路径 / 权限…"
+			searchText={(node) => `${node.name} ${node.path ?? ""} ${node.perm ?? ""}`}
 			onSelect={onSelect}
 			onReorder={onReorder}
 			renderRow={(node) => {

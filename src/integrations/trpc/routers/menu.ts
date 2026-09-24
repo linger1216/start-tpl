@@ -25,7 +25,7 @@ import { getCurrentUserId } from "#/lib/current-user";
 import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType } from "#/lib/menu-spec";
-import { effectiveMenusFor } from "#/lib/rbac";
+import { effectiveMenusFor, PERM_FORMAT } from "#/lib/rbac";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
@@ -40,6 +40,8 @@ function toMenuRow(row: typeof sysMenu.$inferSelect) {
 		visible: Number(row.visible ?? 1),
 		type: asMenuType(row.type),
 		perm: row.perm ?? null,
+		createTime: row.create_time ? row.create_time.toISOString() : null,
+		updateTime: row.update_time ? row.update_time.toISOString() : null,
 	};
 }
 
@@ -68,6 +70,21 @@ async function assertPathFree(path: string | null, selfId?: string) {
 	throw new TRPCError({ code: "CONFLICT", message: `路径「${path}」已被菜单「${rows[0]?.name}」占用` });
 }
 
+/**
+ * 权限标识字段:**空串 / null = 没填**;填了就必须是 `域:资源:动作`(三段小写,整段可用 `*` 通配)。
+ *
+ * 为什么必须有这道校验:通配符(`sys:*:*` / `*:*:*`)是按"段"匹配的 —— 如果库里能存进
+ * `sys:role`(两段)或半截通配 `sys:ro*`,匹配规则就永远命不中,症状是"勾了却没权限"很难查。
+ * 域允许长出新的(派生项目加模块),受控的是**形状**。
+ */
+const permField = z
+	.string()
+	.max(64)
+	.nullable()
+	.refine((value) => !value || value.trim() === "" || PERM_FORMAT.test(value.trim()), {
+		message: "权限标识要写成 域:资源:动作(三段小写;某一段想通配就整段写 *)",
+	});
+
 export const menuRouter = createTRPCRouter({
 	list: publicProcedure.query(async () => {
 		const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
@@ -95,8 +112,8 @@ export const menuRouter = createTRPCRouter({
 				visible: z.boolean(),
 				/** 1 目录 / 2 菜单 / 3 按钮 */
 				type: z.number().int().min(1).max(3).default(2),
-				/** 权限标识(按钮必填);空串一律当没填 */
-				perm: z.string().max(64).nullable(),
+				/** 权限标识(按钮必填);空串一律当没填。格式见 `permField` */
+				perm: permField,
 			}),
 		)
 		.mutation(async ({ input }) => {
@@ -168,7 +185,7 @@ export const menuRouter = createTRPCRouter({
 				visible: z.boolean().default(true),
 				/** 1 目录 / 2 菜单 / 3 按钮;默认菜单,老调用点不用改 */
 				type: z.number().int().min(1).max(3).default(2),
-				perm: z.string().max(64).nullable().default(null),
+				perm: permField.default(null),
 			}),
 		)
 		.mutation(async ({ input }) => {

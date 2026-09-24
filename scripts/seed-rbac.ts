@@ -21,17 +21,26 @@ import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
-	sysDepartment,
-	sysDepartmentMember,
+	sysDept,
+	sysUserDept,
 	sysMenu,
 	sysRole,
 	sysRoleMenu,
 	sysUser,
+	sysUserRole,
 } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
 import { newId } from "../src/lib/ids.ts";
-import { MENU_TYPE } from "../src/lib/menu-spec.ts";
+import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
+
+/**
+ * ⚠️ **只用于首次初始化演示数据,不要拿它去"修"数据。**
+ *
+ * 它是"只补不覆盖"(缺角色 / 缺成员才补),所以**跑一遍就会把人手工改过的演示账号补回原样** ——
+ * 而那属于覆盖用户的决定。库里出现和你上次看到的不一致时,先判断是谁改的;判据是
+ * **只清自己造的东西**(`__test__*` / `__probe__*`),其余只报告、别动手(见 AGENTS「已知陷阱」首条)。
+ */
 
 /** 演示账号(密码与开发账号一致,方便来回切着看) */
 const DEMO_EMAIL = "zhangsan@example.com";
@@ -39,23 +48,23 @@ const DEMO_PASSWORD = "Passw0rd123";
 /** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
 const ADMIN_EMAIL = "admin@example.com";
 
-const created = { dept: 0, role: 0, member: 0, grant: 0, menu: 0, user: 0 };
+const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
 
 // ── 部门 ──────────────────────────────────────────────────────────
 async function upsertDepartment(name: string, parentId: string | null, sort: number): Promise<string> {
 	const [existing] = await db
-		.select({ id: sysDepartment.id })
-		.from(sysDepartment)
+		.select({ id: sysDept.id })
+		.from(sysDept)
 		.where(
 			and(
-				eq(sysDepartment.name, name),
-				parentId === null ? sql`${sysDepartment.parent_id} is null` : eq(sysDepartment.parent_id, parentId),
+				eq(sysDept.name, name),
+				parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId),
 			),
 		)
 		.limit(1);
 	if (existing) return existing.id;
 	const id = newId();
-	await db.insert(sysDepartment).values({
+	await db.insert(sysDept).values({
 		id,
 		parent_id: parentId,
 		name,
@@ -101,6 +110,27 @@ async function upsertButton(parentId: string, name: string, perm: string, sort: 
 }
 
 // ── 授权(只在"这个角色还一条授权都没有"时写入 = 只补不覆盖)────────
+// ── 隐藏分组(只用来承载"运维"这类权限点:visible = 0,不进侧边栏)──────
+async function upsertHiddenGroup(name: string, path: string, sort: number): Promise<string> {
+	const [existing] = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.path, path)).limit(1);
+	if (existing) return existing.id;
+	const id = newId();
+	await db.insert(sysMenu).values({
+		id,
+		parent_id: null,
+		name,
+		path,
+		icon: null,
+		sort,
+		visible: 0,
+		status: 1,
+		type: MENU_TYPE.DIR,
+		perm: null,
+	});
+	created.menu += 1;
+	return id;
+}
+
 async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise<void> {
 	const existing = await db.select({ id: sysRoleMenu.id }).from(sysRoleMenu).where(eq(sysRoleMenu.role_id, roleId));
 	if (existing.length > 0) return;
@@ -112,29 +142,50 @@ async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise
 }
 
 // ── 成员(已存在就不动 —— 你在界面上换过的角色不会被覆盖)────────────
-async function assignIfAbsent(departmentId: string, userId: string, roleId: string, label: string): Promise<void> {
+/** 把人加进部门(组织架构;**角色不在这张表上**)—— 已存在就不动 */
+async function addMemberIfAbsent(departmentId: string, userId: string, label: string): Promise<void> {
 	const [existing] = await db
-		.select({ id: sysDepartmentMember.id })
-		.from(sysDepartmentMember)
-		.where(and(eq(sysDepartmentMember.department_id, departmentId), eq(sysDepartmentMember.user_id, userId)))
+		.select({ id: sysUserDept.id })
+		.from(sysUserDept)
+		.where(and(eq(sysUserDept.department_id, departmentId), eq(sysUserDept.user_id, userId)))
 		.limit(1);
 	if (existing) {
-		console.log(`  · ${label} 已有分配,不动`);
+		console.log(`  · ${label} 已是部门成员,不动`);
 		return;
 	}
-	await db.insert(sysDepartmentMember).values({
+	await db.insert(sysUserDept).values({
 		id: newId(),
 		department_id: departmentId,
+		user_id: userId,
+		create_time: new Date(),
+		update_time: new Date(),
+	});
+	created.member += 1;
+	console.log(`  + ${label}(部门成员)`);
+}
+
+/** 分配**全局角色**(userId × roleId)—— 已存在就不动 */
+async function assignRoleIfAbsent(userId: string, roleId: string, label: string): Promise<void> {
+	const [existing] = await db
+		.select({ id: sysUserRole.id })
+		.from(sysUserRole)
+		.where(and(eq(sysUserRole.user_id, userId), eq(sysUserRole.role_id, roleId)))
+		.limit(1);
+	if (existing) {
+		console.log(`  · ${label} 已有这个角色,不动`);
+		return;
+	}
+	await db.insert(sysUserRole).values({
+		id: newId(),
 		user_id: userId,
 		role_id: roleId,
 		create_time: new Date(),
 		update_time: new Date(),
 	});
-	created.member += 1;
-	console.log(`  + ${label}`);
+	created.assign += 1;
+	console.log(`  + ${label}(角色)`);
 }
 
-/** 演示账号:用 BA 自己的接口建(密码会被正确地 scrypt 哈希);已存在就跳过 */
 async function ensureDemoUser(): Promise<string | null> {
 	const [existing] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, DEMO_EMAIL)).limit(1);
 	if (existing) return existing.id;
@@ -167,7 +218,6 @@ async function main() {
 	console.log(`  系统管理员 / 部门主管 / 普通员工;本次新增 ${created.role} 个`);
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
-	// 先取一次菜单只是为了找到「角色管理」这个父节点;按钮建好之后还要**重新读一次** ——
 	// 否则下面"给系统管理员全部授权"的那份清单会漏掉刚建的两个按钮(实测踩过)。
 	const seeded = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 	const byPath = new Map(seeded.map((row) => [row.path, row]));
@@ -178,10 +228,18 @@ async function main() {
 	}
 	console.log(`  sys:role:add / sys:role:remove;本次新增 ${created.menu} 个`);
 
+	console.log("── 运维权限点(隐藏分组,type = 3)──");
+	// 这一组 visible = 0:不进侧边栏,只在菜单管理 / 角色授权树里可见。
+	// `*:*:*` 是**通配模式**(逐段匹配,见 lib/rbac.ts):授权它 = 全部权限点,**含以后新增的**。
+	const opsGroupId = await upsertHiddenGroup("运维工具", "#ops", 99);
+	const superPermId = await upsertButton(opsGroupId, "全部权限(通配)", "*:*:*", 1);
+	await upsertButton(opsGroupId, "切换用户(运维)", IMPERSONATE_PERM, 2);
+	console.log(`  *:*:* / ${IMPERSONATE_PERM};本次新增 ${created.menu} 个`);
+
 	console.log("── 授权(只在角色还没有任何授权时写入)→ 权限体系从此启用 ──");
-	// ⚠️ 重新读一次 —— 这次要**包含刚建的两个按钮**(否则管理员的"全部授权"漏按钮)
-	const menus = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
-	await grantIfEmpty(adminRole, menus.map((row) => row.id));
+	// 系统管理员:**一条 `*:*:*` 就够** —— 通配模式在读取时展开(见 lib/rbac.ts),
+	// 所以"全部菜单 + 全部按钮 + **以后新增的**"都自动在内,不用每加一个菜单就回来补勾。
+	await grantIfEmpty(adminRole, [superPermId]);
 
 	// 部门主管:**只给菜单、不给按钮** —— 这样切到演示账号能直接看到
 	// 「页面进得去,但页里的新增 / 删除按钮不可见」(按钮级可见性)
@@ -196,15 +254,20 @@ async function main() {
 
 	console.log(`  本次写入 ${created.grant} 条授权行(已配过的角色不动)`);
 
-	console.log("── 成员 ──");
+	console.log("── 部门成员 + 全局角色 ──");
 	const [admin] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, ADMIN_EMAIL)).limit(1);
-	if (admin) await assignIfAbsent(shanghai, admin.id, adminRole, `${ADMIN_EMAIL} → 上海公司 = 系统管理员`);
+	if (admin) {
+		await addMemberIfAbsent(shanghai, admin.id, `${ADMIN_EMAIL} → 上海公司`);
+		await assignRoleIfAbsent(admin.id, adminRole, `${ADMIN_EMAIL} → 系统管理员`);
+	}
 
 	// `ensureDemoUser` 返回的是 **用户 id 字符串**(不是行对象)
 	const demoUserId = await ensureDemoUser();
 	if (demoUserId) {
-		await assignIfAbsent(shanghai, demoUserId, managerRole, `${DEMO_EMAIL} → 上海公司 = 部门主管`);
-		await assignIfAbsent(wuhan, demoUserId, staffRole, `${DEMO_EMAIL} → 武汉公司 = 普通员工`);
+		await addMemberIfAbsent(shanghai, demoUserId, `${DEMO_EMAIL} → 上海公司`);
+		await addMemberIfAbsent(wuhan, demoUserId, `${DEMO_EMAIL} → 武汉公司`);
+		await assignRoleIfAbsent(demoUserId, managerRole, `${DEMO_EMAIL} → 部门主管`);
+		await assignRoleIfAbsent(demoUserId, staffRole, `${DEMO_EMAIL} → 普通员工`);
 	}
 
 	// ── 收尾:把两个账号的实际可见菜单算出来,一眼能看出"并集" ──
@@ -223,7 +286,7 @@ async function main() {
 		if (names) console.log(`      ${names.join("、")}`);
 	}
 	console.log(
-		`\n✓ 种子完成:部门 +${created.dept} / 角色 +${created.role} / 菜单 +${created.menu} / 授权 +${created.grant} / 成员 +${created.member} / 账号 +${created.user}`,
+		`\n✓ 种子完成:部门 +${created.dept} / 角色 +${created.role} / 菜单 +${created.menu} / 授权 +${created.grant} / 部门成员 +${created.member} / 角色分配 +${created.assign} / 账号 +${created.user}`,
 	);
 	if (created.grant > 0) {
 		console.log(

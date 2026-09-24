@@ -40,7 +40,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`update_time\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
 			primary key (\`id\`),
 			unique key \`uk_sys_menu_path\` (\`path\`),
-			key \`idx_sys_menu_parent\` (\`parent_id\`)
+			key \`idx_sys_menu_parent_sort\` (\`parent_id\`, \`sort\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '菜单'`,
 	},
 	{
@@ -87,7 +87,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
-			key \`idx_sys_tag_parent\` (\`parent_id\`)
+			key \`idx_sys_tag_parent_sort\` (\`parent_id\`, \`sort\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '标签体系(维度 → 标签 两级)'`,
 	},
 	{
@@ -176,8 +176,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	},
 	// ── 权限四表(部门 / 角色;形状与理由见 src/db/data-base-schema.ts)──────────
 	{
-		name: "sys_department",
-		ddl: `create table if not exists \`sys_department\` (
+		name: "sys_dept",
+		ddl: `create table if not exists \`sys_dept\` (
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
 			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '上级部门 id;null = 顶级',
 			\`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '部门名',
@@ -187,7 +187,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
-			key \`idx_sys_department_parent\` (\`parent_id\`)
+			key \`idx_sys_department_parent_sort\` (\`parent_id\`, \`sort\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门树'`,
 	},
 	{
@@ -203,25 +203,38 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_role_code\` (\`code\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;部门归属在 sys_department_member 上)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 sys_user_role)'`,
 	},
 	{
-		name: "sys_department_member",
-		ddl: `create table if not exists \`sys_department_member\` (
+		name: "sys_user_dept",
+		ddl: `create table if not exists \`sys_user_dept\` (
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '部门 id → sys_department.id(级联删除)',
+			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '部门 id → sys_dept.id(级联删除)',
 			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '用户 id → sys_user.id(级联删除)',
-			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(还有人用着就不让删)',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_dm_unique\` (\`department_id\`, \`user_id\`),
 			key \`idx_sys_dm_user\` (\`user_id\`),
-			key \`idx_sys_dm_role\` (\`role_id\`),
-			constraint \`fk_sys_dm_department\` foreign key (\`department_id\`) references \`sys_department\` (\`id\`) on delete cascade,
-			constraint \`fk_sys_dm_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade,
-			constraint \`fk_sys_dm_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(一人在一个部门只有一个角色)'`,
+			constraint \`fk_sys_dm_department\` foreign key (\`department_id\`) references \`sys_dept\` (\`id\`) on delete cascade,
+			constraint \`fk_sys_dm_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(谁在哪个部门;角色是全局的,见 sys_user_role)'`,
+	},
+	{
+		name: "sys_user_role",
+		ddl: `create table if not exists \`sys_user_role\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '用户 id → sys_user.id(级联删除)',
+			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(还有人用着就不让删)',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_ur_unique\` (\`user_id\`, \`role_id\`),
+			key \`idx_sys_ur_user\` (\`user_id\`),
+			key \`idx_sys_ur_role\` (\`role_id\`),
+			constraint \`fk_sys_ur_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade,
+			constraint \`fk_sys_ur_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '用户 → 角色(全局;权限取这些角色授权的并集)'`,
 	},
 	{
 		name: "sys_role_menu",
@@ -250,6 +263,35 @@ for (const table of TABLES) {
 	await db.execute(sql.raw(table.ddl));
 	const created = !before.has(table.name);
 	console.log(`${created ? "✓ 新建" : "· 已存在"} ${table.name}`);
+}
+
+/**
+ * **老库改表名** —— `create table if not exists` 只认新名字,**老库里还叫旧名的表它管不着**:
+ * 结果就是老库"没这张表"被当成新库重新建一份,新表空着、旧表的数据没人读。
+ * 表改名时在这里登记一条,幂等(新名已存在就跳过)。
+ */
+const TABLE_RENAMES: Array<{ from: string; to: string }> = [
+	{ from: "sys_department", to: "sys_dept" },
+	{ from: "sys_department_member", to: "sys_user_dept" },
+];
+
+for (const rename of TABLE_RENAMES) {
+	const present = (
+		await db.execute(
+			sql`select table_name as name from information_schema.tables where table_schema = database()`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	const names = new Set(present.map((row) => row.name));
+	if (!names.has(rename.from)) {
+		console.log(`· ${rename.from} 不存在(已是新名或新库),跳过`);
+		continue;
+	}
+	if (names.has(rename.to)) {
+		console.log(`· ${rename.from} 与 ${rename.to} 同时存在 —— 不自动合并,请人工确认后处理`);
+		continue;
+	}
+	await db.execute(sql.raw(`rename table \`${rename.from}\` to \`${rename.to}\``));
+	console.log(`✓ 表改名 ${rename.from} → ${rename.to}`);
 }
 
 /**
@@ -282,6 +324,41 @@ for (const upgrade of COLUMN_UPGRADES) {
 	}
 	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add column \`${upgrade.column}\` ${upgrade.ddl}`));
 	console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}`);
+}
+
+/**
+ * **老库删列** —— 列被合并 / 废弃时要在这里登记一条。不登记的话老库里那列会一直留着:
+ * 它多半是 `not null` 而新代码不再写它,**下一次插入就会违反非空约束**(静默失败最烦人)。
+ * 幂等:列不存在就跳过。MySQL 上一列若还挂在某个外键下,必须先删外键再删列。
+ */
+const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }> = [
+	{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+];
+
+for (const drop of COLUMN_DROPS) {
+	const cols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = ${drop.table}`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (!cols.some((row) => row.name === drop.column)) {
+		console.log(`· ${drop.table}.${drop.column} 不存在,跳过`);
+		continue;
+	}
+	if (drop.constraint) {
+		const fks = (
+			await db.execute(
+				sql`select constraint_name as name from information_schema.table_constraints
+					where table_schema = database() and table_name = ${drop.table} and constraint_type = 'FOREIGN KEY'`,
+			)
+		)[0] as unknown as Array<{ name: string }>;
+		if (fks.some((row) => row.name === drop.constraint)) {
+			await db.execute(sql.raw(`alter table \`${drop.table}\` drop foreign key \`${drop.constraint}\``));
+			console.log(`· ${drop.table} 先删外键 ${drop.constraint}`);
+		}
+	}
+	await db.execute(sql.raw(`alter table \`${drop.table}\` drop column \`${drop.column}\``));
+	console.log(`✓ ${drop.table} 删列 ${drop.column}`);
 }
 
 // 建完表再对齐一次列注释 / 索引名:老库通常是在更早的 DDL 下建的,注释里会留着旧列名

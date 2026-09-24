@@ -14,14 +14,11 @@ import { fieldContext, formContext, useFieldContext, useFormContext } from "./de
 /**
  * `useAppForm` —— 把内置 UI 原语注册进 TanStack Form 的字段 / 表单组件库。
  *
- * 区别于 `modules/shared/form-kit.tsx`:
- *  - form-kit 用 `createFormHookContexts` + `createFormHook` 把它做成**全站唯一**的 form 实例,
- *    字段组件直接挂在 form.AppField 上;
- *  - 本文件是**框架能力 demo** 用的独立一组 —— 演示 `createFormHook` 的注册流程本身,
- *    与 form-kit 共存互不干扰(两个 `useAppForm` 名字相同但属于不同的注册实例)。
+ * 这是**框架能力 demo** 专用的一组 —— 演示 `createFormHook` 的注册流程本身。
+ * 业务页的表单没走它:设置模块那 7 个表单字段都很少(3~5 个),手写 `<Label> + <Input>` 更直接,
+ * 也少一层 field-context 的间接。
  *
  * 字段组件刻意简化:label / 错误提示走模板自带的 `<Label>` / `<Input>`,不挂业务校验。
- * 真业务里的表单走 form-kit(见 components/modules/shared/form-kit.tsx)。
  */
 
 function FieldShell({

@@ -1,14 +1,29 @@
 import { actionsColumn } from "#/components/modules/shared/table-kit";
-import { ActionButton } from "#/components/ui/action-button";
+import { Badge } from "#/components/ui/badge";
+import { BadgeList } from "#/components/ui/badge-list";
 import { createAppColumnHelper } from "#/lib/table";
+import { formatLocalMinute } from "#/lib/time";
 
-/** 用户台账的一行(tRPC `user.list` 出参) */
+/**
+ * 用户台账的一行(tRPC `user.list` 出参)—— **与 `sys_user` 的列一一对应**,
+ * 外加三个派生字段:部门(来自 `sys_user_dept`)、角色名与角色 id(来自 `sys_user_role`)。
+ */
 export type UserRow = {
 	id: string;
 	name: string;
 	email: string;
-	/** 这个人的部门 / 角色分配(一人可跨多个部门) */
-	assignments: Array<{ departmentName: string; roleName: string }>;
+	emailVerified: boolean;
+	image: string | null;
+	createdAt: string | null;
+	updatedAt: string | null;
+	/** 这个人属于哪些部门(组织架构)—— 派生自 `sys_user_dept` */
+	departmentNames: string[];
+	/** 部门 id —— 编辑弹窗里的部门多选框要按 id 回填 */
+	departmentIds: string[];
+	/** 这个人的角色名(全局)—— 派生自 `sys_user_role` */
+	roleNames: string[];
+	/** 角色 id,与 `roleNames` 同序 —— 编辑弹窗里的角色多选框按 id 回填 */
+	roleIds: string[];
 };
 
 const columnHelper = createAppColumnHelper<UserRow>();
@@ -16,9 +31,22 @@ const columnHelper = createAppColumnHelper<UserRow>();
 /**
  * 用户台账的列定义 —— 版式对齐参数 / 角色的台账页。
  *
- * 「部门 / 角色」列直接把分配铺出来:不用点进去就能看出谁还没授权(那才是权限体系里最该被发现的状态)。
+ * **列 = `sys_user` 的全部列**(账号字段归 Better Auth,这里是只读镜像),
+ * 嫌挤就点工具条里的「列」把不要的收起来。
+ *
+ * 「部门」与「角色」是**两个**派生列:前者是组织架构,后者是全局角色(与部门无关),
+ * 混在一列里会让人以为"角色挂在部门上"。
  */
-export function userColumns({ onGrants }: { onGrants: (row: UserRow) => void }) {
+export function userColumns({
+	onView,
+	onEdit,
+	onDelete,
+}: {
+	onView: (row: UserRow) => void;
+	onEdit: (row: UserRow) => void;
+	/** 删除账号(危险操作,由页面弹确认框) */
+	onDelete: (row: UserRow) => void;
+}) {
 	return columnHelper.columns([
 		columnHelper.accessor("name", {
 			header: "姓名",
@@ -29,35 +57,73 @@ export function userColumns({ onGrants }: { onGrants: (row: UserRow) => void }) 
 		columnHelper.accessor("email", {
 			header: "邮箱",
 			sortFn: "text",
-			size: 240,
+			size: 220,
 			cell: (ctx) => <span className="text-[12.5px] text-muted-foreground">{ctx.getValue()}</span>,
 		}),
-		columnHelper.accessor("assignments", {
-			header: "部门 / 角色",
-			size: 320,
+		columnHelper.accessor("departmentNames", {
+			header: "部门",
+			size: 200,
 			cell: (ctx) => {
 				const list = ctx.getValue();
-				if (list.length === 0) {
-					return <span className="text-[12px] text-warn-fg">未分配(看不到任何菜单)</span>;
-				}
-				return (
-					<span className="flex flex-wrap gap-1">
-						{list.map((item) => (
-							<span
-								key={`${item.departmentName}-${item.roleName}`}
-								className="rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-[11.5px] text-muted-foreground"
-							>
-								{item.departmentName} · {item.roleName}
-							</span>
-						))}
-					</span>
-				);
+				// 多值一律走 BadgeList —— 别自己拿 span 拼一个"长得像徽章"的东西:
+				// 那样字号 / 圆角 / 配色会各写各的,和详情页 / 别处的徽章对不上。
+				if (list.length === 0) return <span className="text-[12px] text-muted-foreground">未加入部门</span>;
+				return <BadgeList values={list} layout="wrap" color="stable" />;
 			},
 		}),
-		actionsColumn<UserRow>({
-			size: 90,
-			// 用户只有这一个动作:给他分配部门与角色
-			extra: (row) => <ActionButton onClick={() => onGrants(row)}>授权</ActionButton>,
+		columnHelper.accessor("roleNames", {
+			header: "角色",
+			size: 200,
+			cell: (ctx) => {
+				const list = ctx.getValue();
+				if (list.length === 0) return <span className="text-[12px] text-warn-fg">未分配(看不到任何菜单)</span>;
+				return <BadgeList values={list} layout="wrap" color="stable" />;
+			},
 		}),
+		columnHelper.accessor("emailVerified", {
+			header: "邮箱已验证",
+			size: 100,
+			cell: (ctx) => (
+				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-[11px]">
+					{ctx.getValue() ? "已验证" : "未验证"}
+				</Badge>
+			),
+		}),
+		columnHelper.accessor("image", {
+			header: "头像",
+			size: 180,
+			cell: (ctx) => (
+				<span
+					className="line-clamp-1 max-w-44 font-mono text-[11px] text-muted-foreground/70"
+					title={ctx.getValue() ?? ""}
+				>
+					{ctx.getValue() || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("createdAt", {
+			header: "创建时间",
+			size: 140,
+			cell: (ctx) => (
+				<span className="text-[12px] text-muted-foreground tabular-nums">
+					{formatLocalMinute(ctx.getValue()) || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("updatedAt", {
+			header: "更新时间",
+			size: 140,
+			cell: (ctx) => (
+				<span className="text-[12px] text-muted-foreground tabular-nums">
+					{formatLocalMinute(ctx.getValue()) || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("id", {
+			header: "ID",
+			size: 200,
+			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+		}),
+		actionsColumn<UserRow>({ size: 160, onView, onEdit, onDelete }),
 	]);
 }

@@ -1,6 +1,7 @@
-import { Tabs as TabsPrimitive } from "radix-ui";
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { createContext, useContext } from "react";
 
+import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 
 /**
@@ -22,9 +23,10 @@ import { cn } from "#/lib/utils";
  * 实现要点:
  *  - variant 由 `<Tabs>` 经 context 下发,子件自己取 —— 调用方只写 `<Tabs variant="segmented">…`;
  *  - ⚠️ 类名**必须是字面量**:Tailwind 只扫描源码文本,`${variant}` 拼出来的类名不会生成 CSS。
- *    所以下面两张表里存的是**完整的、带 `data-[state=active]:` 前缀的**字面量,不做二次拼接。
+ *    所以下面两张表里存的是**完整的、带 `data-active:` 前缀的**字面量,不做二次拼接。
  *
- * 跑 `pnpm dlx shadcn@latest add tabs` 会覆盖本文件,覆盖后请按本文件重做。
+ * 基于 **Base UI 的 Tabs**(与 `ui/` 下其余原语同一套库):选中态是 `data-active`。
+ * `pnpm dlx shadcn@latest add tabs` 会覆盖本文件(而且会换回 Radix 口径),覆盖后请按本文件重做。
  */
 
 export const TABS_VARIANTS = ["underline", "segmented", "pill", "card"] as const;
@@ -54,24 +56,22 @@ const TRIGGER_BASE: Record<TabVariant, string> = {
 	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 };
 
-/** 每种形态的选中态 —— 全部写成带 `data-[state=active]:` 前缀的字面量(见文件头) */
+/** 每种形态的选中态 —— 全部写成带 `data-active:` 前缀的字面量(见文件头) */
 const TRIGGER_ACTIVE: Record<TabVariant, string> = {
-	underline: "data-[state=active]:font-semibold data-[state=active]:text-foreground",
+	underline: "data-active:font-semibold data-active:text-foreground",
 	segmented:
-		"data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-(--af-raise-1)",
-	pill: "data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-(--shadow-glow)",
-	card: "data-[state=active]:border-[color:var(--border)] data-[state=active]:bg-background data-[state=active]:font-semibold data-[state=active]:text-foreground",
+		"data-active:bg-background data-active:font-semibold data-active:text-foreground data-active:shadow-(--af-raise-1)",
+	pill: "data-active:border-primary data-active:bg-primary data-active:font-semibold data-active:text-primary-foreground data-active:shadow-(--shadow-glow)",
+	card: "data-active:border-[color:var(--border)] data-active:bg-background data-active:font-semibold data-active:text-foreground",
 };
 
 /** 计数胶囊的选中态(同样必须是字面量) */
 const COUNT_ACTIVE: Record<TabVariant, string> = {
-	underline:
-		"group-data-[state=active]/tabs-trigger:bg-hue-blue-soft group-data-[state=active]/tabs-trigger:text-hue-blue-fg",
-	segmented:
-		"group-data-[state=active]/tabs-trigger:bg-hue-blue-soft group-data-[state=active]/tabs-trigger:text-hue-blue-fg",
+	underline: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
+	segmented: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
 	// 压在实心主色上:用反白前景的 20% 做底,不要在调用点硬编码 white
-	pill: "group-data-[state=active]/tabs-trigger:bg-primary-foreground/20 group-data-[state=active]/tabs-trigger:text-primary-foreground",
-	card: "group-data-[state=active]/tabs-trigger:bg-hue-blue-soft group-data-[state=active]/tabs-trigger:text-hue-blue-fg",
+	pill: "group-data-[active]/tabs-trigger:bg-primary-foreground/20 group-data-[active]/tabs-trigger:text-primary-foreground",
+	card: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
 };
 
 export function Tabs({
@@ -85,7 +85,7 @@ export function Tabs({
 			<TabsPrimitive.Root
 				data-slot="tabs"
 				data-variant={variant}
-				className={cn("group/tabs flex flex-col gap-4", className)}
+				className={cn("flex flex-col gap-4", className)}
 				{...props}
 			>
 				{children}
@@ -111,27 +111,29 @@ export function TabsTrigger({
 	count,
 	children,
 	...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger> & {
+}: React.ComponentProps<typeof TabsPrimitive.Tab> & {
 	/** 页签上的计数(如「关联记录 12」)—— 传了才渲染;全站计数样式只在这里定义 */
 	count?: number;
 }) {
 	const variant = useContext(TabVariantContext);
 	return (
-		<TabsPrimitive.Trigger
+		<TabsPrimitive.Tab
 			data-slot="tabs-trigger"
 			className={cn(TRIGGER_BASE[variant], TRIGGER_ACTIVE[variant], className)}
 			{...props}
 		>
 			{children}
 			{typeof count === "number" ? (
-				<span
+				// 计数是显示值 → 用 Badge(尺寸 / 配色照旧靠 className 覆盖)
+				<Badge
+					variant="secondary"
 					className={cn(
-						"inline-flex h-[1.125rem] min-w-[1.25rem] items-center justify-center rounded-full bg-[color:var(--muted)] px-1.5 text-[10.5px] font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
+						"h-[1.125rem] min-w-[1.25rem] rounded-full bg-muted px-1.5 text-[10.5px] font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
 						COUNT_ACTIVE[variant],
 					)}
 				>
 					{count}
-				</span>
+				</Badge>
 			) : null}
 
 			{/* 下划线形态专属:双层 2px 下划线(浅灰 hover 提示线 + 蓝色选中线) */}
@@ -139,11 +141,11 @@ export function TabsTrigger({
 				<>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-[color:var(--border)] opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[state=active]/tabs-trigger:opacity-0"
+						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-[color:var(--border)] opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
 					/>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-[state=active]/tabs-trigger:bg-hue-blue group-data-[state=active]/tabs-trigger:opacity-100 group-data-[state=active]/tabs-trigger:shadow-[0_2px_6px_-1px_var(--af-blue-ring)]"
+						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-[active]/tabs-trigger:bg-hue-blue group-data-[active]/tabs-trigger:opacity-100 group-data-[active]/tabs-trigger:shadow-[0_2px_6px_-1px_var(--af-blue-ring)]"
 					/>
 				</>
 			) : null}
@@ -152,17 +154,17 @@ export function TabsTrigger({
 			{variant === "card" ? (
 				<span
 					aria-hidden
-					className="pointer-events-none absolute inset-x-0 -bottom-px hidden h-px bg-background group-data-[state=active]/tabs-trigger:block"
+					className="pointer-events-none absolute inset-x-0 -bottom-px hidden h-px bg-background group-data-[active]/tabs-trigger:block"
 				/>
 			) : null}
-		</TabsPrimitive.Trigger>
+		</TabsPrimitive.Tab>
 	);
 }
 
-export function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
+export function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Panel>) {
 	const variant = useContext(TabVariantContext);
 	return (
-		<TabsPrimitive.Content
+		<TabsPrimitive.Panel
 			data-slot="tabs-content"
 			data-variant={variant}
 			className={cn("flex-1 outline-none", variant === "card" && "pt-3", className)}

@@ -1,5 +1,5 @@
 /**
- * 部门路由 —— 读写 `sys_department`(自关联树)+ `sys_department_member`(成员/角色)。
+ * 部门路由 —— 读写 `sys_dept`(自关联树)+ `sys_user_dept`(成员/角色)。
  *
  * | procedure | 类型 | 作用 |
  * | --- | --- | --- |
@@ -17,16 +17,16 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
-import { sysDepartment, sysDepartmentMember, sysRole, sysUser } from "#/db/data-base-schema";
+import { sysDept, sysRole, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 /** 库行 → 接口出参 */
-function toDepartmentRow(row: typeof sysDepartment.$inferSelect) {
+function toDepartmentRow(row: typeof sysDept.$inferSelect) {
 	return {
 		id: row.id,
 		parentId: row.parent_id ?? null,
@@ -34,11 +34,13 @@ function toDepartmentRow(row: typeof sysDepartment.$inferSelect) {
 		sort: Number(row.sort ?? 0),
 		status: Number(row.status ?? 1),
 		remark: row.remark ?? null,
+		createTime: row.create_time ? row.create_time.toISOString() : null,
+		updateTime: row.update_time ? row.update_time.toISOString() : null,
 	};
 }
 
 async function getDepartmentRow(id: string) {
-	const [row] = await db.select().from(sysDepartment).where(eq(sysDepartment.id, id)).limit(1);
+	const [row] = await db.select().from(sysDept).where(eq(sysDept.id, id)).limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个部门不存在(可能已被删除)" });
 	return row;
 }
@@ -51,9 +53,9 @@ async function getDepartmentRow(id: string) {
  */
 async function assertNameFree(parentId: string | null, name: string, selfId?: string) {
 	const siblings = await db
-		.select({ id: sysDepartment.id, name: sysDepartment.name })
-		.from(sysDepartment)
-		.where(parentId === null ? sql`${sysDepartment.parent_id} is null` : eq(sysDepartment.parent_id, parentId));
+		.select({ id: sysDept.id, name: sysDept.name })
+		.from(sysDept)
+		.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
 	const clash = siblings.find((row) => row.name === name && row.id !== selfId);
 	if (clash) throw new TRPCError({ code: "CONFLICT", message: `同一级下已经有叫「${name}」的部门了` });
 }
@@ -62,7 +64,7 @@ async function assertNameFree(parentId: string | null, name: string, selfId?: st
 async function assertNotDescendant(id: string, parentId: string | null) {
 	if (!parentId) return;
 	if (parentId === id) throw new TRPCError({ code: "BAD_REQUEST", message: "不能把部门挂到它自己下面" });
-	const rows = await db.select({ id: sysDepartment.id, parentId: sysDepartment.parent_id }).from(sysDepartment);
+	const rows = await db.select({ id: sysDept.id, parentId: sysDept.parent_id }).from(sysDept);
 	const parentOf = new Map(rows.map((row) => [row.id, row.parentId ?? null]));
 	let cursor: string | null = parentId;
 	const seen = new Set<string>();
@@ -76,15 +78,15 @@ async function assertNotDescendant(id: string, parentId: string | null) {
 /** 同级末尾的 sort */
 async function nextSort(parentId: string | null) {
 	const siblings = await db
-		.select({ sort: sysDepartment.sort })
-		.from(sysDepartment)
-		.where(parentId === null ? sql`${sysDepartment.parent_id} is null` : eq(sysDepartment.parent_id, parentId));
+		.select({ sort: sysDept.sort })
+		.from(sysDept)
+		.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
 	return siblings.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
 }
 
 export const departmentRouter = createTRPCRouter({
 	tree: publicProcedure.query(async () => {
-		const rows = await db.select().from(sysDepartment).orderBy(asc(sysDepartment.sort), asc(sysDepartment.name));
+		const rows = await db.select().from(sysDept).orderBy(asc(sysDept.sort), asc(sysDept.name));
 		return rows.map(toDepartmentRow);
 	}),
 
@@ -102,7 +104,7 @@ export const departmentRouter = createTRPCRouter({
 			const name = input.name.trim();
 			await assertNameFree(parentId, name);
 			const id = newId();
-			await db.insert(sysDepartment).values({
+			await db.insert(sysDept).values({
 				id,
 				parent_id: parentId,
 				name,
@@ -135,7 +137,7 @@ export const departmentRouter = createTRPCRouter({
 			const name = input.name.trim();
 			await assertNameFree(parentId, name, input.id);
 			await db
-				.update(sysDepartment)
+				.update(sysDept)
 				.set({
 					name,
 					parent_id: parentId,
@@ -144,7 +146,7 @@ export const departmentRouter = createTRPCRouter({
 					// 显式写 update_time:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP
 					update_time: new Date(),
 				})
-				.where(eq(sysDepartment.id, input.id));
+				.where(eq(sysDept.id, input.id));
 			return toDepartmentRow(await getDepartmentRow(input.id));
 		}),
 
@@ -157,9 +159,9 @@ export const departmentRouter = createTRPCRouter({
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
 			const siblings = await db
-				.select({ id: sysDepartment.id })
-				.from(sysDepartment)
-				.where(parentId === null ? sql`${sysDepartment.parent_id} is null` : eq(sysDepartment.parent_id, parentId));
+				.select({ id: sysDept.id })
+				.from(sysDept)
+				.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
 			const siblingIds = new Set(siblings.map((row) => row.id));
 			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
 			if (unknown.length > 0) {
@@ -173,7 +175,7 @@ export const departmentRouter = createTRPCRouter({
 			}
 			await db.transaction(async (tx) => {
 				for (const [index, id] of input.orderedIds.entries()) {
-					await tx.update(sysDepartment).set({ sort: index, update_time: new Date() }).where(eq(sysDepartment.id, id));
+					await tx.update(sysDept).set({ sort: index, update_time: new Date() }).where(eq(sysDept.id, id));
 				}
 			});
 			return { updated: input.orderedIds.length };
@@ -181,10 +183,7 @@ export const departmentRouter = createTRPCRouter({
 
 	remove: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const row = await getDepartmentRow(input.id);
-		const children = await db
-			.select({ id: sysDepartment.id })
-			.from(sysDepartment)
-			.where(eq(sysDepartment.parent_id, input.id));
+		const children = await db.select({ id: sysDept.id }).from(sysDept).where(eq(sysDept.parent_id, input.id));
 		if (children.length > 0) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
@@ -192,75 +191,82 @@ export const departmentRouter = createTRPCRouter({
 			});
 		}
 		const members = await db
-			.select({ id: sysDepartmentMember.id })
-			.from(sysDepartmentMember)
-			.where(eq(sysDepartmentMember.department_id, input.id));
+			.select({ id: sysUserDept.id })
+			.from(sysUserDept)
+			.where(eq(sysUserDept.department_id, input.id));
 		if (members.length > 0) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
 				message: `「${row.name}」里还有 ${members.length} 个成员,请先把人移出去`,
 			});
 		}
-		await db.delete(sysDepartment).where(eq(sysDepartment.id, input.id));
+		await db.delete(sysDept).where(eq(sysDept.id, input.id));
 		return { success: true };
 	}),
 
-	/** 某部门的成员(带用户与角色名;一个部门里一人一条) */
+	/** 某部门的成员(一个部门里一人一条)。角色是**全局**的,顺带带出来只读展示。 */
 	members: publicProcedure.input(z.object({ departmentId: z.string().min(1) })).query(async ({ input }) => {
 		const rows = await db
 			.select({
-				id: sysDepartmentMember.id,
-				userId: sysDepartmentMember.user_id,
-				roleId: sysDepartmentMember.role_id,
+				id: sysUserDept.id,
+				userId: sysUserDept.user_id,
 				userName: sysUser.name,
 				userEmail: sysUser.email,
-				roleName: sysRole.name,
 			})
-			.from(sysDepartmentMember)
-			.innerJoin(sysUser, eq(sysUser.id, sysDepartmentMember.user_id))
-			.innerJoin(sysRole, eq(sysRole.id, sysDepartmentMember.role_id))
-			.where(eq(sysDepartmentMember.department_id, input.departmentId))
+			.from(sysUserDept)
+			.innerJoin(sysUser, eq(sysUser.id, sysUserDept.user_id))
+			.where(eq(sysUserDept.department_id, input.departmentId))
 			.orderBy(asc(sysUser.name));
-		return rows.map((row) => ({ ...row, userName: row.userName ?? "", userEmail: row.userEmail ?? "" }));
+
+		const userIds = rows.map((row) => row.userId);
+		const roleRows = userIds.length
+			? await db
+					.select({ userId: sysUserRole.user_id, roleName: sysRole.name })
+					.from(sysUserRole)
+					.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id))
+					.where(inArray(sysUserRole.user_id, userIds))
+			: [];
+		const rolesOf = new Map<string, string[]>();
+		for (const row of roleRows) {
+			const list = rolesOf.get(row.userId) ?? [];
+			list.push(row.roleName);
+			rolesOf.set(row.userId, list);
+		}
+		return rows.map((row) => ({
+			...row,
+			userName: row.userName ?? "",
+			userEmail: row.userEmail ?? "",
+			roleNames: rolesOf.get(row.userId) ?? [],
+		}));
 	}),
 
 	/**
-	 * 加人 / 改这个人在这个部门的角色。
+	 * 把人加进这个部门(幂等)。
 	 *
-	 * 用"先查再插/改"而不是 `on duplicate key update`:那是 MySQL 方言,达梦不认
-	 * (同一个 procedure 要跑在两个库上,SQL 必须两个都吃)。
+	 * **角色不在这里管** —— 角色是全局的,在「系统设置 ▸ 用户管理」里分配。
+	 * 用"先查再插"而不是 `on duplicate key update`:那是 MySQL 方言,达梦不认。
 	 */
-	setMemberRole: publicProcedure
-		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1), roleId: z.string().min(1) }))
+	addMember: publicProcedure
+		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await getDepartmentRow(input.departmentId);
-			const [role] = await db.select().from(sysRole).where(eq(sysRole.id, input.roleId)).limit(1);
-			if (!role) throw new TRPCError({ code: "NOT_FOUND", message: "这个角色不存在(可能已被删除)" });
 			const [user] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.id, input.userId)).limit(1);
 			if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "这个用户不存在" });
 
 			const [existing] = await db
-				.select({ id: sysDepartmentMember.id })
-				.from(sysDepartmentMember)
-				.where(
-					and(eq(sysDepartmentMember.department_id, input.departmentId), eq(sysDepartmentMember.user_id, input.userId)),
-				)
+				.select({ id: sysUserDept.id })
+				.from(sysUserDept)
+				.where(and(eq(sysUserDept.department_id, input.departmentId), eq(sysUserDept.user_id, input.userId)))
 				.limit(1);
-			if (existing) {
-				await db
-					.update(sysDepartmentMember)
-					.set({ role_id: input.roleId, update_time: new Date() })
-					.where(eq(sysDepartmentMember.id, existing.id));
-			} else {
-				await db.insert(sysDepartmentMember).values({
-					id: newId(),
-					department_id: input.departmentId,
-					user_id: input.userId,
-					role_id: input.roleId,
-					create_time: new Date(),
-					update_time: new Date(),
-				});
-			}
+			if (existing) return { success: true };
+
+			await db.insert(sysUserDept).values({
+				id: newId(),
+				department_id: input.departmentId,
+				user_id: input.userId,
+				create_time: new Date(),
+				update_time: new Date(),
+			});
 			return { success: true };
 		}),
 
@@ -268,10 +274,8 @@ export const departmentRouter = createTRPCRouter({
 		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await db
-				.delete(sysDepartmentMember)
-				.where(
-					and(eq(sysDepartmentMember.department_id, input.departmentId), eq(sysDepartmentMember.user_id, input.userId)),
-				);
+				.delete(sysUserDept)
+				.where(and(eq(sysUserDept.department_id, input.departmentId), eq(sysUserDept.user_id, input.userId)));
 			return { success: true };
 		}),
 });

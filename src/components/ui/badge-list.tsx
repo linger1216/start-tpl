@@ -135,7 +135,7 @@ export function BadgeList({
 	color?: BadgeColor;
 }) {
 	if (values.length === 0) {
-		return <span className="text-muted-foreground">{emptyPlaceholder ?? PLACEHOLDER_EMPTY}</span>;
+		return <span className="text-muted-foreground truncate text-[11px]">{emptyPlaceholder ?? PLACEHOLDER_EMPTY}</span>;
 	}
 
 	// "stable"(旧名 "random"):按 values 稳定哈希选一套彩色主题,色板内按 i % len 循环。

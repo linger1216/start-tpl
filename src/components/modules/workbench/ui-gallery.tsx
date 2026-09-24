@@ -11,7 +11,7 @@
  *  - 新增/删除 `ui/` / `shared/` / `lib/` 下的封装时,**同步在这里加减一格**,否则又会退回"孤儿组件";
  *  - 表格那种"一格里塞不下"的例子不挤进网格 —— 给它自己的整宽卡片(见 `UiGalleryTable`)。
  *  - **分层展示**:能独立渲染的就真跑(拖拽 / 勾选 / 校验都点得动);满足不了下面任一条的只给
- *    「签名 + 指路」卡 —— ① 需要 TanStack Form 的 field context(`shared/form-kit`);
+ *    「签名 + 指路」卡 —— ① 需要 TanStack Form 的 field context(见 `/demo/form.simple`);
  *    ② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 全量 lucide;`shared/excel-*` → xlsx);
  *    ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。
  */
@@ -20,7 +20,9 @@ import { useStore } from "@tanstack/react-store";
 import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
+import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -43,9 +45,7 @@ import { Calendar } from "#/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "#/components/ui/collapsible";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "#/components/ui/command";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "#/components/ui/context-menu";
 import { DateRangePicker } from "#/components/ui/date-range-picker";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -72,10 +72,9 @@ import { HoldButton } from "#/components/ui/hold-button";
 import { Input } from "#/components/ui/input";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Label } from "#/components/ui/label";
-import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from "#/components/ui/menubar";
 import { NumField } from "#/components/ui/num-field";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
-import { RateSlider } from "#/components/ui/rate-slider";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { Reveal } from "#/components/ui/reveal";
 import { ScoreText } from "#/components/ui/score-text";
 import { SearchSelect } from "#/components/ui/search-select";
@@ -91,7 +90,7 @@ import {
 import { Separator } from "#/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "#/components/ui/sheet";
 import { Skeleton, StatCardsSkeleton, TableSkeleton } from "#/components/ui/skeleton";
-import { Slider } from "#/components/ui/slider";
+import { RateSlider, Slider } from "#/components/ui/slider";
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { Table, TableHead, TableHeader, TableRow } from "#/components/ui/table";
@@ -111,9 +110,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/comp
 import { store as demoStore, selectFullName } from "#/lib/demo-store";
 import { formatJson, normalizeValue, orEmpty } from "#/lib/format";
 import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
-import { createMockTable, type MockRow } from "#/lib/mock-table";
+import { createMockTable } from "#/lib/mock-table";
 import { joinMultiValue, splitMultiValue } from "#/lib/multi-value";
 import { asParaType, PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
+import type { MockRow } from "#/lib/table";
 import { formatLocalDate, formatLocalDateTime, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -378,6 +378,16 @@ export function UiGallery() {
 						<code className="font-mono">Button</code>。
 					</p>
 				</Cell>
+				<Cell name="RefreshButton" hint="刷新:纯图标,全站统一一个样子(busy 时转起来并禁用)">
+					<div className="flex items-center gap-3">
+						<RefreshButton onClick={() => toast.success("已刷新")} />
+						<RefreshButton busy onClick={() => toast.success("已刷新")} />
+						<span className="text-[11px] text-muted-foreground">← 左:静置;右:busy(转起来、禁用)</span>
+					</div>
+					<p className="text-[11.5px] text-muted-foreground">
+						每个页面页头都有它。**别再手写带文字的刷新按钮**,也别在别的页面用第二个图标 —— 统一走这一件。
+					</p>
+				</Cell>
 				<Cell name="Button" hint="变体">
 					<Button size="sm">默认</Button>
 					<Button size="sm" variant="outline">
@@ -508,7 +518,7 @@ export function UiGallery() {
 						</Tooltip>
 					</TooltipProvider>
 				</Cell>
-				<Cell name="DropdownMenu" hint="下拉菜单(分组 + 快捷键 + 危险项)">
+				<Cell name="DropdownMenu" hint="下拉菜单(分组 + 快捷键 + 危险项)—— 右键菜单 / 顶部菜单栏也用它组合">
 					<DropdownMenu>
 						<DropdownMenuTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>
 							菜单
@@ -544,40 +554,6 @@ export function UiGallery() {
 							</BreadcrumbItem>
 						</BreadcrumbList>
 					</Breadcrumb>
-				</Cell>
-				<Cell name="ContextMenu" hint="右键菜单">
-					<ContextMenu>
-						<ContextMenuTrigger className="flex h-9 w-28 items-center justify-center rounded-lg border border-dashed border-border text-[12px] text-muted-foreground">
-							右键我
-						</ContextMenuTrigger>
-						<ContextMenuContent>
-							<ContextMenuItem>编辑</ContextMenuItem>
-							<ContextMenuItem>删除</ContextMenuItem>
-						</ContextMenuContent>
-					</ContextMenu>
-				</Cell>
-				<Cell name="Command" hint="命令面板(cmdk)">
-					<Command className="w-48 border border-border">
-						<CommandInput placeholder="搜索" />
-						<CommandList>
-							<CommandEmpty>无结果</CommandEmpty>
-							<CommandGroup>
-								<CommandItem>新建</CommandItem>
-								<CommandItem>打开</CommandItem>
-							</CommandGroup>
-						</CommandList>
-					</Command>
-				</Cell>
-				<Cell name="Menubar" hint="顶部菜单栏">
-					<Menubar>
-						<MenubarMenu>
-							<MenubarTrigger>文件</MenubarTrigger>
-							<MenubarContent>
-								<MenubarItem>新建</MenubarItem>
-								<MenubarItem>打开</MenubarItem>
-							</MenubarContent>
-						</MenubarMenu>
-					</Menubar>
 				</Cell>
 				{TABS_VARIANTS.map((variant: TabVariant) => (
 					<Cell key={variant} name={`Tabs · ${TAB_VARIANT_META[variant].label}`} hint={TAB_VARIANT_META[variant].hint}>
@@ -703,6 +679,9 @@ const DEMO_PERMISSIONS: PermissionNode[] = [
 const demoMockTable = createMockTable<MockRow>([{ id: "ENT-0001", title: "示例记录", status: "未读" }], "ENT");
 
 function ModuleGallery() {
+	const [pickedIds, setPickedIds] = useState<string[]>(["d2", "d4"]);
+
+	const [detailDemo, setDetailDemo] = useState(false);
 	const [tree, setTree] = useState(DEMO_TREE);
 	const [treeSelected, setTreeSelected] = useState<string | null>("tag-a1");
 	const [permSelected, setPermSelected] = useState<string[]>(["sys:menu"]);
@@ -718,10 +697,76 @@ function ModuleGallery() {
 
 	return (
 		<div className="space-y-4">
+			<Cell name="DetailDialog / DetailMeta" hint="台账页的只读「详情」弹窗外壳(点开看)">
+				<Button size="sm" variant="outline" onClick={() => setDetailDemo(true)}>
+					打开详情
+				</Button>
+				{/* 约定:控制类字段(启停 / 类型 / 验证)放标题旁的 badge —— 全站同一个位置;
+				    创建 / 更新时间固定在最底一行(DetailMeta),详情与编辑页共用同一形态 */}
+				<DetailDialog
+					open={detailDemo}
+					onOpenChange={setDetailDemo}
+					title="示例详情 · 参数管理"
+					description="raw.retention.soft_days"
+					badge={
+						<>
+							<Badge variant="secondary">整数</Badge>
+							<Badge variant="secondary">启用</Badge>
+						</>
+					}
+					onEdit={() => setDetailDemo(false)}
+					meta={{ createdAt: "2026-09-21T09:12:00", updatedAt: "2026-09-23T14:05:00" }}
+				>
+					{/* 字段**内联**写(不用 fields 数组封装):哪一行要特殊渲染就地决定 ——
+					    需要 form context / 重依赖的件才给签名卡,这里两种情况都没有,所以真跑 */}
+					<div className="flex flex-col gap-0">
+						<DetailRow label="ID">
+							<span className="font-mono text-[12px]">V1StGXR8Z5jdHi6B</span>
+						</DetailRow>
+						<DetailRow label="分组">留存策略</DetailRow>
+						<DetailRow label="当前值">
+							<span className="tabular-nums">365</span>
+						</DetailRow>
+						<DetailRow label="说明">
+							<span className="text-[13px]">软删除数据保留多少天</span>
+						</DetailRow>
+					</div>
+					{/* 多值字段(部门 / 角色那种)用徽章列表,别拼成一串顿号分隔的文本 */}
+					<div className="space-y-1.5">
+						<div className="text-[12px] font-medium text-muted-foreground">角色(全局)</div>
+						<BadgeList values={["系统管理员", "部门主管", "普通员工"]} layout="wrap" color="stable" />
+					</div>
+				</DetailDialog>
+			</Cell>
 			<Group
 				title="通用交互件(shared)"
 				desc="在多个 ui 原语之上组装、带交互的领域无关件。能独立渲染的真跑;要 form context 或会拖进重依赖的只给签名卡。"
 			>
+				<Cell
+					name="MultiSelect"
+					hint="多选框:搜索优先;搜索行尾可挂动作(trailing)、列表可撑满剩余高度(fill);几千个选项也不会把 DOM 撑爆"
+				>
+					{/* 真实场景:用户编辑里的「角色」「部门」两个框(角色平铺、部门 3691 个还带重名) */}
+					<div className="w-full max-w-md">
+						<MultiSelect
+							options={[
+								{ value: "d1", label: "上海公司" },
+								{ value: "d2", label: "财务部", hint: "上海公司" },
+								{ value: "d3", label: "技术部", hint: "上海公司" },
+								{ value: "d4", label: "财务部", hint: "武汉公司" },
+								{ value: "d5", label: "武汉公司" },
+							]}
+							value={pickedIds}
+							onChange={setPickedIds}
+							placeholder="搜索部门名…"
+							trailing={
+								<Button size="sm" variant="outline" disabled={pickedIds.length === 0}>
+									加入 {pickedIds.length} 个
+								</Button>
+							}
+						/>
+					</div>
+				</Cell>
 				<Cell name="SortableTree" hint="拖拽排序 + 折叠 + 选中 + 键盘上下移(菜单 / 标签管理两页共用)">
 					<div className="h-44 overflow-hidden rounded-lg border border-border bg-card p-2">
 						<SortableTree
@@ -777,7 +822,7 @@ function ModuleGallery() {
 					/>
 				</Cell>
 
-				<Cell name="IconPicker / ExcelImportDialog / form-kit" hint="这三件这里只给签名 —— 理由见下" wide>
+				<Cell name="IconPicker / ExcelImportDialog" hint="这两件这里只给签名 —— 理由见下" wide>
 					<div className="space-y-2 text-[12.5px]">
 						<div>
 							<code className="font-mono text-foreground">shared/icon-picker</code> ·{" "}
@@ -795,22 +840,8 @@ function ModuleGallery() {
 							<p className="text-muted-foreground">
 								它依赖 <code className="font-mono">xlsx</code>(体积大)+ 必须配{" "}
 								<code className="font-mono">lib/excel</code> 的<code className="font-mono"> readSheetTable</code>
-								。实活用法见「参数管理 / 标签管理」页的导入导出。
-							</p>
-						</div>
-						<div>
-							<code className="font-mono text-foreground">shared/form-kit</code> ·{" "}
-							<code className="font-mono">
-								FieldRow / TextField / TextAreaField / SelectField / TagField / NumberField / SubmitButton / FormSection
-							</code>
-							<p className="text-muted-foreground">
-								每个字段用 <code className="font-mono">useFieldContext()</code> 读值 ——{" "}
-								<b>必须在 TanStack Form 的 field context 里</b>
-								才能渲染(单独放会直接抛错)。可运行示例在{" "}
-								<a className="text-primary hover:underline" href="/demo/form.simple">
-									/demo/form.simple
-								</a>
-								。
+								。**业务页目前还没接** —— 这一组是库级能力(`lib/excel` + `shared/ledger-excel` +
+								`shared/excel-import`),接入方式就是上面那几个 props。
 							</p>
 						</div>
 					</div>
@@ -1028,7 +1059,7 @@ function ModuleGallery() {
 						<li>
 							<code className="font-mono text-foreground">shared/filter-chips</code> ·{" "}
 							<code className="font-mono">pagination-control</code> · <code className="font-mono">stat-cards</code> ·{" "}
-							<code className="font-mono">table-kit</code> · <code className="font-mono">tag-badges</code> ——
+							<code className="font-mono">table-kit</code> · <code className="font-mono">badge-list</code> ——
 							这五个已经在上面那张「台账表格(完整业务页骨架)」里带着用了一遍,不重复放。
 						</li>
 					</ul>

@@ -3,6 +3,7 @@
  *
  * 用法(回车提交 = 常见 TagInput 交互):
  *   <TagInput value={entries} onChange={setEntries} max={20} />
+ *   <TagInput value={entries} onChange={setEntries} suggestions={["管理员", "员工"]} />
  *
  * 交互:
  *  - 输入后回车 / 失焦 / 点 + → 加入列表(去空 / 去重),清空输入框
@@ -70,6 +71,7 @@ export function TagInput({
 	onChange,
 	max = 20,
 	placeholder = "输入后回车添加",
+	suggestions,
 	disabled,
 	enableCopy,
 	copySeparator = ",",
@@ -78,6 +80,12 @@ export function TagInput({
 	onChange: (next: TagEntry[]) => void;
 	max?: number;
 	placeholder?: string;
+	/**
+	 * 可选项 —— 给了就在已选标签下面渲染一排「+ 值」,点一下即添加(已添加的不再出现)。
+	 * 用途:值来自**固定清单**时(如角色名),省得使用者照着别处敲;组件本身仍然允许自由输入,
+	 * 「输入了清单外的值」由调用方自己校验(组件不替业务做判断)。
+	 */
+	suggestions?: readonly string[];
 	disabled?: boolean;
 	/** 启用"复制"按钮:把当前所有值以指定分隔符(默认逗号)拼成字符串复制到剪贴板 */
 	enableCopy?: boolean;
@@ -183,6 +191,24 @@ export function TagInput({
 				justify="start"
 				onRemove={(i) => onChange(value.filter((_, idx) => idx !== i))}
 			/>
+			{suggestions && suggestions.filter((item) => !value.some((e) => e.value === item)).length > 0 ? (
+				<div className="flex flex-wrap items-center gap-1.5">
+					<span className="text-[11.5px] text-muted-foreground">可选:</span>
+					{suggestions
+						.filter((item) => !value.some((e) => e.value === item))
+						.map((item) => (
+							<button
+								key={item}
+								type="button"
+								disabled={isDisabled || remaining === 0}
+								onClick={() => onChange(dedupEntries([...value, { value: item }]))}
+								className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11.5px] text-muted-foreground transition-colors enabled:hover:border-primary enabled:hover:text-foreground disabled:opacity-50"
+							>
+								+ {item}
+							</button>
+						))}
+				</div>
+			) : null}
 		</div>
 	);
 }

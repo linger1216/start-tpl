@@ -1,4 +1,7 @@
-/** 字段管理页用到的字典行(`sys_dict` 的一行)—— `id` 是 nanoid 主键,业务一律用 `code` */
+/**
+ * 字段管理页用到的字典行(`sys_dict` 的一行)—— **与 `sys_dict` 的列一一对应**。
+ * `id` 是 nanoid 主键,业务一律用 `code`。
+ */
 export type SettingsDictRow = {
 	id: string;
 	code: string;
@@ -6,6 +9,8 @@ export type SettingsDictRow = {
 	items: Array<{ label: string; value: string }>;
 	remark: string | null;
 	status: number;
+	createTime: string | null;
+	updateTime: string | null;
 };
 
 /** 编辑弹窗的表单值 */

@@ -1,5 +1,5 @@
 /**
- * 部门 API(`sys_department` + `sys_department_member`)—— 集成测试。
+ * 部门 API(`sys_dept` + `sys_user_dept`)—— 集成测试。
  *
  * 覆盖:建树 / 同级重名拦截 / **不能挂到自己的后代下**(成环)/ 有子部门或有成员时不让删 /
  * 一人在同一部门只有一条记录(改角色是 upsert)/ 同级重排的名单校验。
@@ -15,13 +15,12 @@ import { after, test } from "node:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import { sysDepartment, sysDepartmentMember, sysRole, sysUser } from "../src/db/data-base-schema.ts";
+import { sysDept, sysUserDept, sysUser } from "../src/db/data-base-schema.ts";
 import { newId } from "../src/lib/ids.ts";
 import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const deptIds: string[] = [];
-const roleIds: string[] = [];
 const userIds: string[] = [];
 
 /** 造一个只在库里存在、用于挂成员的用户(直接插 `sys_user`:这里只需要一个合法的外键目标) */
@@ -36,17 +35,11 @@ async function makeUser(label: string): Promise<string> {
 	return id;
 }
 
-async function makeRole(label: string): Promise<string> {
-	const row = await caller.role.create({ code: `${TEST_PREFIX}${label}_${SUFFIX}`, name: `${TEST_PREFIX}${label}` });
-	roleIds.push(row.id);
-	return row.id;
-}
 
 after(async () => {
-	if (deptIds.length > 0) await db.delete(sysDepartmentMember).where(inArray(sysDepartmentMember.department_id, deptIds));
-	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
+	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
 	// 部门按"子 → 父"的顺序删(外键约束)
-	for (const id of [...deptIds].reverse()) await db.delete(sysDepartment).where(eq(sysDepartment.id, id));
+	for (const id of [...deptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, id));
 	if (userIds.length > 0) await db.delete(sysUser).where(inArray(sysUser.id, userIds));
 });
 
@@ -89,29 +82,25 @@ test("部门:有子部门时不让删", async () => {
 	await assertRejects(() => caller.department.remove({ id: parent.id }), "还有 1 个子部门");
 });
 
-test("部门成员:一人在同一部门只有一条记录,改角色是 upsert", async () => {
+test("部门成员:同一部门不重复加入(addMember 幂等);一人可跨部门", async () => {
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}成员部_${SUFFIX}` });
 	deptIds.push(dept.id);
 	const user = await makeUser("member");
-	const roleA = await makeRole("角色A");
-	const roleB = await makeRole("角色B");
 
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: roleA });
+	await caller.department.addMember({ departmentId: dept.id, userId: user });
 	const first = await caller.department.members({ departmentId: dept.id });
 	assert.equal(first.length, 1, "第一次加入 → 一条");
-	assert.equal(first[0]?.roleId, roleA);
 	assert.ok(first[0]?.userName, "应带出用户姓名");
+	assert.deepEqual(first[0]?.roleNames, [], "角色是全局的,加成员时不带角色");
 
-	// 同一个部门换角色 → 仍然只有一条(靠 uk_sys_dm_unique 的 upsert 路径)
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: roleB });
-	const second = await caller.department.members({ departmentId: dept.id });
-	assert.equal(second.length, 1, "换角色不该多出一条");
-	assert.equal(second[0]?.roleId, roleB, "角色已换成 B");
+	// 重复加入 → 仍然只有一条(靠 uk_sys_dm_unique)
+	await caller.department.addMember({ departmentId: dept.id, userId: user });
+	assert.equal((await caller.department.members({ departmentId: dept.id })).length, 1, "重复加入不该多出一条");
 
 	// 一人可跨部门 —— 在另一个部门再挂一条,互不影响
 	const dept2 = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}成员部2_${SUFFIX}` });
 	deptIds.push(dept2.id);
-	await caller.department.setMemberRole({ departmentId: dept2.id, userId: user, roleId: roleA });
+	await caller.department.addMember({ departmentId: dept2.id, userId: user });
 	assert.equal((await caller.department.members({ departmentId: dept2.id })).length, 1, "另一个部门里也能有一条");
 	assert.equal((await caller.department.members({ departmentId: dept.id })).length, 1, "原部门那条还在");
 });
@@ -119,8 +108,7 @@ test("部门成员:一人在同一部门只有一条记录,改角色是 upsert",
 test("部门:有成员时不让删;成员移出后可以删", async () => {
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}待删_${SUFFIX}` });
 	const user = await makeUser("todelete");
-	const role = await makeRole("待删角色");
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: role });
+	await caller.department.addMember({ departmentId: dept.id, userId: user });
 
 	await assertRejects(() => caller.department.remove({ id: dept.id }), "还有 1 个成员");
 

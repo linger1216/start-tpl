@@ -51,8 +51,8 @@ test("新增 → 列表里能看到,并且回的都是表里真有的列", async
 	// 出参不含「来源 / 默认值」这类表里没有的派生字段(踩过:界面上出现过库中不存在的列)
 	assert.deepEqual(
 		Object.keys(row).sort(),
-		["editable", "group", "key", "remark", "status", "type", "updatedAt", "value"],
-		"para.list 的出参字段应与 sys_para 的列一一对应",
+		["createdAt", "editable", "group", "id", "key", "remark", "status", "type", "updatedAt", "value"],
+		"para.list 的出参字段应与 sys_para 的十列一一对应",
 	);
 });
 

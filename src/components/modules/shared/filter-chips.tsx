@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Check, Filter, X } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Badge } from "#/components/ui/badge";
 import { BADGE_THEMES } from "#/components/ui/badge-list";
 import { cn } from "#/lib/utils";
 
@@ -123,14 +124,16 @@ export function FilterChipBar({
 											{on ? <Check className="size-3" /> : null}
 											{option.value}
 											{typeof option.count === "number" ? (
-												<span
+												// 计数也是显示值 → 用 Badge,别手拼小药丸(两态配色靠 className 覆盖)
+												<Badge
+													variant="secondary"
 													className={cn(
-														"ml-0.5 rounded-full px-1.5 text-[10.5px] tabular-nums",
-														on ? "bg-black/10" : "bg-muted text-muted-foreground",
+														"ml-0.5 h-4 px-1.5 text-[10.5px] tabular-nums",
+														on && "bg-black/10 text-inherit",
 													)}
 												>
 													{option.count}
-												</span>
+												</Badge>
 											) : null}
 										</button>
 									);

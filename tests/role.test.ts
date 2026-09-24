@@ -19,10 +19,18 @@ import { after, test } from "node:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import { sysDepartment, sysDepartmentMember, sysMenu, sysRole, sysRoleMenu, sysUser } from "../src/db/data-base-schema.ts";
+import {
+	sysDept,
+	sysUserDept,
+	sysMenu,
+	sysRole,
+	sysRoleMenu,
+	sysUser,
+	sysUserRole,
+} from "../src/db/data-base-schema.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
-import { effectiveMenusFor } from "../src/lib/rbac.ts";
+import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
 import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
@@ -38,11 +46,6 @@ async function makeUser(label: string): Promise<string> {
 	return id;
 }
 
-async function makeDept(label: string) {
-	const row = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}${label}_${SUFFIX}` });
-	deptIds.push(row.id);
-	return row;
-}
 
 /** 直接插一条测试菜单(菜单表是"人手工维护的配置表",这里造父子与按钮节点) */
 async function makeMenu(label: string, parentId: string | null, type: number, perm: string | null): Promise<string> {
@@ -63,10 +66,12 @@ async function makeMenu(label: string, parentId: string | null, type: number, pe
 }
 
 after(async () => {
+	// 先清「谁有哪些角色」再删角色 —— 否则 fk_sys_ur_role 会拦住(角色还有人用着就不让删)
+	if (roleIds.length > 0) await db.delete(sysUserRole).where(inArray(sysUserRole.role_id, roleIds));
 	if (roleIds.length > 0) await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, roleIds));
-	if (deptIds.length > 0) await db.delete(sysDepartmentMember).where(inArray(sysDepartmentMember.department_id, deptIds));
+	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
 	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
-	for (const id of [...deptIds].reverse()) await db.delete(sysDepartment).where(eq(sysDepartment.id, id));
+	for (const id of [...deptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, id));
 	if (menuIds.length > 0) await db.delete(sysMenu).where(inArray(sysMenu.id, menuIds));
 	if (userIds.length > 0) await db.delete(sysUser).where(inArray(sysUser.id, userIds));
 });
@@ -95,31 +100,48 @@ test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角�
 	assert.deepEqual(effective.perms, [], "已启用 + 无角色 → perms = [](不是 null —— 那个代表'放行')");
 });
 
+/**
+ * 把角色分配给某个用户 —— 走真实的 `user.update`(角色是全局的,与部门无关)。
+ * 用 API 而不是直接 insert `sys_user_role`,这样测试同时覆盖了"保存角色"这条路径。
+ */
+async function assignRoles(userId: string, roleIdList: string[]): Promise<void> {
+	const row = (await caller.user.list()).find((item) => item.id === userId);
+	assert.ok(row, "用户应该存在");
+	// 角色与部门都是**覆盖式**:只想改角色,就得把当前部门原样传回去(不传会清掉)
+	await caller.user.update({
+		id: userId,
+		name: row.name,
+		email: row.email,
+		image: row.image ?? "",
+		emailVerified: row.emailVerified,
+		roleIds: roleIdList,
+		departmentIds: row.departmentIds,
+	});
+}
+
 test("角色:code 唯一,list 带成员数", async () => {
 	const code = `${TEST_PREFIX}role_${SUFFIX}`;
 	const role = await caller.role.create({ code, name: `${TEST_PREFIX}管理员` });
 	roleIds.push(role.id);
 	await assertRejects(() => caller.role.create({ code, name: "重复" }), "已被角色");
 
-	const dept = await makeDept("rolelist");
 	const user = await makeUser("rolelist");
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: role.id });
+	await assignRoles(user, [role.id]);
 
 	const listed = (await caller.role.list()).find((row) => row.id === role.id);
-	assert.equal(listed?.memberCount, 1, "list 应该把这个角色的成员数带出来");
+	assert.equal(listed?.memberCount, 1, "list 应该把这个角色分配给了几个用户带出来");
 });
 
-test("角色:被部门成员引用时不让删", async () => {
+test("角色:被用户引用时不让删", async () => {
 	const role = await caller.role.create({ code: `${TEST_PREFIX}used_${SUFFIX}`, name: `${TEST_PREFIX}在用` });
 	roleIds.push(role.id);
-	const dept = await makeDept("usedrole");
 	const user = await makeUser("usedrole");
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: role.id });
+	await assignRoles(user, [role.id]);
 
-	await assertRejects(() => caller.role.remove({ id: role.id }), "部门成员在用");
+	await assertRejects(() => caller.role.remove({ id: role.id }), "个用户在用");
 
-	// 把人挪走 → 就能删了
-	await caller.department.removeMember({ departmentId: dept.id, userId: user });
+	// 把角色从他的角色里去掉 → 就能删了
+	await assignRoles(user, []);
 	assert.equal((await caller.role.remove({ id: role.id })).success, true);
 });
 
@@ -140,7 +162,7 @@ test("角色授权:只勾子节点 → 自动补全祖先(否则侧边栏那一�
 	assert.deepEqual(await caller.role.menuIds({ roleId: role.id }), [parent], "再保存是覆盖,不是累加");
 });
 
-test("权限并集:两个部门两个角色 → 菜单与权限都取并集", async () => {
+test("权限并集:一个人有多个角色 → 菜单与权限都取并集", async () => {
 	const roleA = await caller.role.create({ code: `${TEST_PREFIX}unionA_${SUFFIX}`, name: `${TEST_PREFIX}上海管理员` });
 	const roleB = await caller.role.create({ code: `${TEST_PREFIX}unionB_${SUFFIX}`, name: `${TEST_PREFIX}武汉员工` });
 	roleIds.push(roleA.id, roleB.id);
@@ -150,42 +172,35 @@ test("权限并集:两个部门两个角色 → 菜单与权限都取并集", as
 	await caller.role.setMenus({ roleId: roleA.id, menuIds: [menuA] });
 	await caller.role.setMenus({ roleId: roleB.id, menuIds: [menuB] });
 
-	const deptA = await makeDept("上海");
-	const deptB = await makeDept("武汉");
 	const user = await makeUser("zhangsan");
-	await caller.department.setMemberRole({ departmentId: deptA.id, userId: user, roleId: roleA.id });
-	await caller.department.setMemberRole({ departmentId: deptB.id, userId: user, roleId: roleB.id });
+	await assignRoles(user, [roleA.id, roleB.id]);
 
 	const effective = await effectiveMenusFor(user);
 	assert.ok(effective.rows, "应有一份可见菜单");
 	const visible = effective.rows.map((row) => row.id);
-	assert.ok(visible.includes(menuA), "上海那份在(第一个部门的角色)");
-	assert.ok(visible.includes(menuB), "武汉那份也在(第二个部门的角色)—— 这就是并集");
+	assert.ok(visible.includes(menuA), "第一个角色的授权在");
+	assert.ok(visible.includes(menuB), "第二个角色的授权也在 —— 这就是并集");
 	assert.ok(effective.perms?.includes("test:shanghai") && effective.perms?.includes("test:wuhan"), "权限标识也是并集");
 });
 
-test("停用的角色 / 停用的部门不贡献权限", async () => {
+test("停用的角色不贡献权限", async () => {
 	const role = await caller.role.create({ code: `${TEST_PREFIX}off_${SUFFIX}`, name: `${TEST_PREFIX}停用角色` });
 	roleIds.push(role.id);
 	const menu = await makeMenu("停用测试菜单", null, MENU_TYPE.MENU, "test:off");
 	await caller.role.setMenus({ roleId: role.id, menuIds: [menu] });
 
-	const dept = await makeDept("停用部");
 	const user = await makeUser("offuser");
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: role.id });
+	await assignRoles(user, [role.id]);
 
-	// 角色先停用
+	// 角色停用 → 权限跟着没了(注意:部门停用已经不影响权限了 —— 角色是全局的)
 	await caller.role.update({ id: role.id, code: role.code, name: role.name, status: false, remark: null });
 	const afterRoleOff = await effectiveMenusFor(user);
 	assert.equal(afterRoleOff.rows, null, "角色停用 → 这个人没有可见菜单");
 
-	// 角色恢复、部门停用
+	// 角色恢复 → 权限回来
 	await caller.role.update({ id: role.id, code: role.code, name: role.name, status: true, remark: null });
-	const deptRow = (await caller.department.tree()).find((row) => row.id === dept.id);
-	assert.ok(deptRow);
-	await caller.department.update({ id: dept.id, name: deptRow.name, parentId: null, status: false, remark: null });
-	const afterDeptOff = await effectiveMenusFor(user);
-	assert.equal(afterDeptOff.rows, null, "部门停用 → 这个部门不贡献权限");
+	const backOn = await effectiveMenusFor(user);
+	assert.ok(backOn.rows?.some((row) => row.id === menu), "角色恢复 → 菜单跟着回来");
 });
 
 test("按钮(type = 3):不进可见菜单,但它的 perm 进权限集合", async () => {
@@ -195,15 +210,113 @@ test("按钮(type = 3):不进可见菜单,但它的 perm 进权限集合", async
 	const button = await makeMenu("删除按钮", menu, MENU_TYPE.BUTTON, "test:page:delete");
 	await caller.role.setMenus({ roleId: role.id, menuIds: [button] });
 
-	const dept = await makeDept("按钮部");
 	const user = await makeUser("btnuser");
-	await caller.department.setMemberRole({ departmentId: dept.id, userId: user, roleId: role.id });
+	await assignRoles(user, [role.id]);
 
 	const effective = await effectiveMenusFor(user);
 	const visible = (effective.rows ?? []).map((row) => row.id);
 	assert.ok(visible.includes(menu), "按钮所在的菜单可见");
 	assert.ok(!visible.includes(button), "**按钮本身不进导航**");
 	assert.ok(effective.perms?.includes("test:page:delete"), "但它的 perm 进了权限集合(前端 useHasPerm 认它)");
+});
+
+// ── 权限模式(逐段通配)──────────────────────────────────────────
+
+test("权限模式:逐段比较,而且只认**整段** `*`", () => {
+	assert.equal(permMatches("*:*:*", "test:page:delete"), true, "全通配");
+	assert.equal(permMatches("test:*:*", "test:page:delete"), true, "域内全通配");
+	assert.equal(permMatches("test:page:*", "test:page:delete"), true, "资源内全通配");
+	assert.equal(permMatches("test:page:delete", "test:page:delete"), true, "不带通配就按相等比");
+	assert.equal(permMatches("other:*:*", "test:page:delete"), false, "域不同 → 不匹配");
+	assert.equal(permMatches("test:page", "test:page:delete"), false, "**段数不同 → 永远不匹配**(所以要挡两段)");
+	assert.equal(permMatches("test:pa*", "test:page:delete"), false, "不支持半截通配");
+
+	assert.equal(PERM_FORMAT.test("test:page:delete"), true);
+	assert.equal(PERM_FORMAT.test("*:*:*"), true);
+	assert.equal(PERM_FORMAT.test("test:page"), false, "两段");
+	assert.equal(PERM_FORMAT.test("Test:page:delete"), false, "大写");
+	assert.equal(PERM_FORMAT.test("test:pa*:delete"), false, "半截通配");
+});
+
+test("权限标识的形状在接口层被挡住(两段 / 大写 / 半截通配都存不进去)", async () => {
+	const base = {
+		parentId: null,
+		name: `${TEST_PREFIX}形状_${SUFFIX}`,
+		icon: null,
+		visible: true,
+		type: MENU_TYPE.BUTTON,
+	};
+	await assertRejects(
+		() => caller.menu.create({ ...base, path: `${TEST_PREFIX}shape1_${SUFFIX}`, perm: "test:thing" }),
+		"域:资源:动作",
+	);
+	await assertRejects(
+		() => caller.menu.create({ ...base, path: `${TEST_PREFIX}shape2_${SUFFIX}`, perm: "Test:thing:read" }),
+		"域:资源:动作",
+	);
+	await assertRejects(
+		() => caller.menu.create({ ...base, path: `${TEST_PREFIX}shape3_${SUFFIX}`, perm: "test:th*:read" }),
+		"域:资源:动作",
+	);
+	// 合法的通配可以建
+	const ok = await caller.menu.create({ ...base, path: `${TEST_PREFIX}shape4_${SUFFIX}`, perm: "*:*:*" });
+	menuIds.push(ok.id);
+});
+
+test("通配授权:一条 `test:thing:*` = 该资源下全部权限,而且**以后新增的自动包含**", async () => {
+	const role = await caller.role.create({ code: `${TEST_PREFIX}wild_${SUFFIX}`, name: `${TEST_PREFIX}通配角色` });
+	roleIds.push(role.id);
+
+	const read = await makeMenu("通配读", null, MENU_TYPE.BUTTON, "test:thing:read");
+	const other = await makeMenu("通配别的资源", null, MENU_TYPE.BUTTON, "test:other:read");
+	const pattern = await makeMenu("通配模式", null, MENU_TYPE.BUTTON, "test:thing:*");
+	// 只授**模式**这一条
+	await caller.role.setMenus({ roleId: role.id, menuIds: [pattern] });
+
+	const user = await makeUser("wilduser");
+	await assignRoles(user, [role.id]);
+
+	const before = await effectiveMenusFor(user);
+	assert.ok(read && other, "夹具存在");
+	assert.ok(before.perms?.includes("test:thing:read"), "模式覆盖了同资源下的具体权限");
+	assert.ok(before.perms?.includes("test:thing:*"), "模式本身也留在集合里(界面据此显示「全部权限」)");
+	assert.ok(!before.perms?.includes("test:other:read"), "**跨资源不越界** —— 这就是逐段匹配的意义");
+
+	// 授完之后**再新增**一条同资源的权限点 → 不用回来重新授权,自动就有
+	const write = await makeMenu("通配写", null, MENU_TYPE.BUTTON, "test:thing:write");
+	const after = await effectiveMenusFor(user);
+	assert.ok(write, "夹具存在");
+	assert.ok(after.perms?.includes("test:thing:write"), "新增的权限点自动被覆盖(读的时候展开,不是写死)");
+	assert.ok(!after.perms?.includes("test:other:read"), "仍然不越界");
+});
+
+test("角色的用户:加人幂等 / 列表带出部门 / 能移出", async () => {
+	const role = await caller.role.create({ code: `${TEST_PREFIX}ru_${SUFFIX}`, name: `${TEST_PREFIX}角色用户` });
+	roleIds.push(role.id);
+	const user = await makeUser("roleuser");
+	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}角色用户部门_${SUFFIX}` });
+	deptIds.push(dept.id);
+
+	// 加两次 → 只有一条(幂等,和部门加成员同一个约定)
+	await caller.role.addUser({ roleId: role.id, userId: user });
+	await caller.role.addUser({ roleId: role.id, userId: user });
+	let list = await caller.role.users({ roleId: role.id });
+	assert.equal(list.length, 1, "加两次只有一条(幂等)");
+	assert.equal(list[0]?.userId, user);
+
+	// 角色是全局的 → 列表要带出这个人的部门,否则光有姓名没法消歧
+	await caller.department.addMember({ departmentId: dept.id, userId: user });
+	list = await caller.role.users({ roleId: role.id });
+	assert.ok(list[0]?.departmentNames.includes(`${TEST_PREFIX}角色用户部门_${SUFFIX}`), "列表带出了他的部门");
+
+	// 不存在的用户 / 角色要报错,而不是静默写脏数据
+	await assertRejects(() => caller.role.addUser({ roleId: role.id, userId: "no_such_user" }), "这个用户不存在");
+	await assertRejects(() => caller.role.addUser({ roleId: "no_such_role", userId: user }), "这个角色不存在");
+
+	// 移出 → 空(再移一次也不报错)
+	await caller.role.removeUser({ roleId: role.id, userId: user });
+	await caller.role.removeUser({ roleId: role.id, userId: user });
+	assert.equal((await caller.role.users({ roleId: role.id })).length, 0, "移出之后列表空了");
 });
 
 after(async () => {

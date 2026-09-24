@@ -97,7 +97,7 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_sys_verification_identifier" on ${S}."sys_verification" ("identifier")`,
 
 	// ── 权限四表(部门 / 角色;形状见 src/db/data-base-schema.ts)──
-	`create table if not exists ${S}."sys_department" (
+	`create table if not exists ${S}."sys_dept" (
 		"id" varchar(32) not null,
 		"parent_id" varchar(32),
 		"name" varchar(64) not null,
@@ -108,7 +108,7 @@ const STATEMENTS: string[] = [
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id")
 	)`,
-	`create index if not exists "idx_sys_department_parent" on ${S}."sys_department" ("parent_id")`,
+	`create index if not exists "idx_sys_department_parent_sort" on ${S}."sys_dept" ("parent_id", "sort")`,
 
 	`create table if not exists ${S}."sys_role" (
 		"id" varchar(32) not null,
@@ -123,21 +123,32 @@ const STATEMENTS: string[] = [
 		constraint "uk_sys_role_code" unique ("code")
 	)`,
 
-	`create table if not exists ${S}."sys_department_member" (
+	`create table if not exists ${S}."sys_user_dept" (
 		"id" varchar(32) not null,
 		"department_id" varchar(32) not null,
+		"user_id" varchar(32) not null,
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id"),
+		constraint "uk_sys_dm_unique" unique ("department_id", "user_id"),
+		constraint "fk_sys_dm_department" foreign key ("department_id") references ${S}."sys_dept" ("id") on delete cascade,
+		constraint "fk_sys_dm_user" foreign key ("user_id") references ${S}."sys_user" ("id") on delete cascade
+	)`,
+	`create index if not exists "idx_sys_dm_user" on ${S}."sys_user_dept" ("user_id")`,
+
+	`create table if not exists ${S}."sys_user_role" (
+		"id" varchar(32) not null,
 		"user_id" varchar(32) not null,
 		"role_id" varchar(32) not null,
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
-		constraint "uk_sys_dm_unique" unique ("department_id", "user_id"),
-		constraint "fk_sys_dm_department" foreign key ("department_id") references ${S}."sys_department" ("id") on delete cascade,
-		constraint "fk_sys_dm_user" foreign key ("user_id") references ${S}."sys_user" ("id") on delete cascade,
-		constraint "fk_sys_dm_role" foreign key ("role_id") references ${S}."sys_role" ("id")
+		constraint "uk_sys_ur_unique" unique ("user_id", "role_id"),
+		constraint "fk_sys_ur_user" foreign key ("user_id") references ${S}."sys_user" ("id") on delete cascade,
+		constraint "fk_sys_ur_role" foreign key ("role_id") references ${S}."sys_role" ("id")
 	)`,
-	`create index if not exists "idx_sys_dm_user" on ${S}."sys_department_member" ("user_id")`,
-	`create index if not exists "idx_sys_dm_role" on ${S}."sys_department_member" ("role_id")`,
+	`create index if not exists "idx_sys_ur_user" on ${S}."sys_user_role" ("user_id")`,
+	`create index if not exists "idx_sys_ur_role" on ${S}."sys_user_role" ("role_id")`,
 
 	`create table if not exists ${S}."sys_role_menu" (
 		"id" varchar(32) not null,
@@ -199,6 +210,44 @@ async function main() {
 		}
 	}
 
+	// ── 老库改表名:表改名后老库里还叫旧名,`create table if not exists` 只会当"没这张表"重开一张 ──
+	const tableRenames: Array<{ from: string; to: string }> = [
+		{ from: "sys_department", to: "sys_dept" },
+		{ from: "sys_department_member", to: "sys_user_dept" },
+	];
+	let renamed = 0;
+	const existingTables = new Set(
+		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) => String(r.TABLE_NAME).toLowerCase()),
+	);
+	for (const rename of tableRenames) {
+		if (!existingTables.has(rename.from)) {
+			console.log(`· ${rename.from} 不存在(已是新名或新库),跳过`);
+			continue;
+		}
+		if (existingTables.has(rename.to)) {
+			console.log(`· ${rename.from} 与 ${rename.to} 同时存在 —— 不自动合并,请人工确认后处理`);
+			continue;
+		}
+		try {
+			await run(`alter table ${S}."${rename.from}" rename to "${rename.to}"`);
+			renamed += 1;
+			console.log(`✓ 表改名 ${rename.from} → ${rename.to}`);
+		} catch (e) {
+			failed += 1;
+			console.log(`✗ ${rename.from} 表改名失败:${(e as Error).message?.slice(0, 90).replace(/\n/g, " ")}`);
+		}
+	}
+	// 改过表名就必须清计划缓存:达梦的**全局计划缓存**里还留着按旧表名编译的计划,
+	// 否则后续参数化语句会报 `[-7009] Object is modified`(实测踩过 —— 报错看着像表不存在,其实是计划失效)。
+	if (renamed > 0) {
+		try {
+			await run("call sp_clear_plan_cache()");
+			console.log("✓ 已清达梦计划缓存(表名变了,旧计划不能再用了)");
+		} catch (e) {
+			console.log(`· 计划缓存未清(不影响建表):${(e as Error).message?.slice(0, 70).replace(/\n/g, " ")}`);
+		}
+	}
+
 	// ── 老库补列:`create table if not exists` 不会给已存在的表加列,新增列要在这里登记(幂等)──
 	const columnUpgrades: Array<{ table: string; column: string; ddl: string }> = [
 		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
@@ -218,6 +267,31 @@ async function main() {
 		} catch (e) {
 			failed += 1;
 			console.log(`✗ ${upgrade.table} 补列失败:${(e as Error).message?.slice(0, 90).replace(/\n/g, " ")}`);
+		}
+	}
+
+	// ── 老库删列:列被合并 / 废弃时在这里登记(幂等;删列前先删挂在它上面的外键)──
+	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
+		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+	];
+	for (const drop of columnDrops) {
+		const cols = await q(
+			`select COLUMN_NAME as c from SYS.ALL_TAB_COLUMNS where OWNER='${SCHEMA}' and TABLE_NAME='${drop.table}'`,
+		);
+		if (!cols.some((row) => String(row.C ?? row.c).toLowerCase() === drop.column)) {
+			console.log(`· ${drop.table}.${drop.column} 不存在,跳过`);
+			continue;
+		}
+		try {
+			if (drop.constraint) {
+				await run(`alter table ${S}."${drop.table}" drop constraint "${drop.constraint}"`);
+				console.log(`· ${drop.table} 先删外键 ${drop.constraint}`);
+			}
+			await run(`alter table ${S}."${drop.table}" drop column "${drop.column}"`);
+			console.log(`✓ ${drop.table} 删列 ${drop.column}`);
+		} catch (e) {
+			failed += 1;
+			console.log(`✗ ${drop.table} 删列失败:${(e as Error).message?.slice(0, 90).replace(/\n/g, " ")}`);
 		}
 	}
 

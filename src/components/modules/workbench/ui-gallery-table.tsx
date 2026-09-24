@@ -1,17 +1,18 @@
 import { Download, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ActiveFilterPills, FilterChipBar } from "#/components/modules/shared/filter-chips";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { actionsColumn, DataTable, selectColumn } from "#/components/modules/shared/table-kit";
-import { TagBadges } from "#/components/modules/shared/tag-badges";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
+import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { Input } from "#/components/ui/input";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { createAppColumnHelper, useAppTable, useRowSelection } from "#/lib/table";
 
 /**
@@ -102,7 +103,7 @@ export function UiGalleryTable() {
 				columnHelper.accessor("tags", {
 					header: "分类标签",
 					size: 180,
-					cell: (ctx) => <TagBadges tags={ctx.getValue()} />,
+					cell: (ctx) => <BadgeList values={ctx.getValue()} layout="wrap" color="stable" />,
 				}),
 				columnHelper.accessor("owner", { header: "负责人", size: 100 }),
 				columnHelper.accessor("amount", {
@@ -215,30 +216,29 @@ export function UiGalleryTable() {
 				}}
 			/>
 
-			<section className="rounded-xl border border-border bg-card shadow-raise-1">
-				{/* 工具条:左搜索、右操作组(与表格分开一行,不要塞进同一个 flex) */}
-				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-3.5 py-3">
-					<div className="relative">
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							value={keyword}
-							onChange={(event) => setKeyword(event.target.value)}
-							placeholder="搜索编号 / 名称 / 负责人 / 标签…"
-							className="h-8 w-72 pl-8"
-						/>
-					</div>
-					<div className="flex items-center gap-2">
-						<ActionButton onClick={() => toast.success("已刷新", { description: "示例数据" })}>刷新</ActionButton>
-						<ActionButton onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}>
-							导出
-						</ActionButton>
-						<Button size="sm" onClick={() => toast.info("新增", { description: "示例:这里打开表单弹窗" })}>
-							<Plus className="size-3.5" />
-							新增
-						</Button>
-					</div>
+			{/* 工具条:左搜索、右操作组 —— **在卡片外面**,搜索不该被卡片边框圈起来 */}
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="relative">
+					<Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						value={keyword}
+						onChange={(event) => setKeyword(event.target.value)}
+						placeholder="搜索编号 / 名称 / 负责人 / 标签…"
+						className="h-8 w-72 pl-8"
+					/>
 				</div>
+				<div className="flex items-center gap-2">
+					<RefreshButton onClick={() => toast.success("已刷新", { description: "示例数据" })} />
+					<ColumnToggle table={table} />
+					<ActionButton onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}>导出</ActionButton>
+					<Button size="sm" onClick={() => toast.info("新增", { description: "示例:这里打开表单弹窗" })}>
+						<Plus className="size-3.5" />
+						新增
+					</Button>
+				</div>
+			</div>
 
+			<section className="rounded-xl border border-border bg-card shadow-raise-1">
 				{/* 批量操作条:只在选中时出现,并且长在表格正上方(动作与选择对象挨着) */}
 				{selected.size > 0 ? (
 					<div className="flex items-center justify-between gap-3 border-b border-border bg-brand-faint px-3.5 py-2">

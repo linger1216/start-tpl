@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { DetailMeta, type DetailMetaInfo } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -25,6 +26,7 @@ export function SettingsTagsFormDialog({
 	parentLabel,
 	initial,
 	pending,
+	meta,
 	onOpenChange,
 	onSubmit,
 }: {
@@ -33,6 +35,8 @@ export function SettingsTagsFormDialog({
 	parentLabel?: string | null;
 	initial?: TagFormValues | null;
 	pending?: boolean;
+	/** 创建 / 更新时间(编辑模式由页面传;新建为 null,不渲染那一行) */
+	meta?: DetailMetaInfo | null;
 	onOpenChange: (next: boolean) => void;
 	onSubmit: (values: TagFormValues) => void;
 }) {
@@ -111,6 +115,7 @@ export function SettingsTagsFormDialog({
 					</div>
 				</div>
 
+				<DetailMeta meta={meta} />
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消

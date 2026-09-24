@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -11,6 +12,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
@@ -21,6 +23,10 @@ export type ParameterFormPayload = {
 	type?: ParaType;
 	group?: string;
 	remark?: string;
+	/** 1 启用 / 0 停用(表里的 `status`,列表有这一列) */
+	status?: number;
+	/** 1 允许在界面修改 / 0 锁定(表里的 `editable`) */
+	editable?: number;
 };
 
 /**
@@ -48,6 +54,8 @@ export function SettingsParametersForm({
 	const [type, setType] = useState<ParaType>(PARA_TYPE.STRING);
 	const [group, setGroup] = useState("");
 	const [remark, setRemark] = useState("");
+	const [status, setStatus] = useState(true);
+	const [editable, setEditable] = useState(true);
 
 	/**
 	 * 类型下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
@@ -65,12 +73,16 @@ export function SettingsParametersForm({
 			setType(PARA_TYPE.STRING);
 			setGroup("");
 			setRemark("");
+			setStatus(true);
+			setEditable(true);
 		} else if (row) {
 			setKey(row.key);
 			setValue(row.value);
 			setType(row.type);
 			setGroup(row.group);
 			setRemark(row.remark);
+			setStatus(row.status === 1);
+			setEditable(row.editable);
 		}
 	}, [open, creating, row]);
 
@@ -88,8 +100,17 @@ export function SettingsParametersForm({
 						type,
 						group: group.trim() || undefined,
 						remark: remark.trim() || undefined,
+						status: status ? 1 : 0,
+						editable: editable ? 1 : 0,
 					}
-				: { key: row?.key ?? key.trim(), value: value.trim() },
+				: {
+						key: row?.key ?? key.trim(),
+						value: value.trim(),
+						group: group.trim(),
+						remark: remark.trim(),
+						status: status ? 1 : 0,
+						editable: editable ? 1 : 0,
+					},
 		);
 	}
 
@@ -98,24 +119,24 @@ export function SettingsParametersForm({
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>{creating ? "新增参数" : "修改参数"}</DialogTitle>
-					<DialogDescription translate="no" className="font-mono text-[12px]">
+					<DialogDescription translate="no" className="min-w-0 font-mono text-[12px]">
 						{creating ? "新建一个系统参数" : (row?.key ?? "")}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="space-y-3">
+				<div className="min-w-0 space-y-3">
 					{!creating ? (
 						// 只展示表里真有的东西:说明(remark)+ 类型码(para_type)。
 						// 「默认值」是代码内置值、不是表里的列,已从这里去掉(见 data-base-schema.ts)。
-						<p className="rounded-lg bg-secondary px-3 py-2 text-[12px] text-muted-foreground">
+						<p className="rounded-lg bg-secondary min-w-0 whitespace-pre-wrap break-words px-3 py-2 text-[12px] text-muted-foreground">
 							{row?.remark}
 							<span className="ml-1">(类型 {PARA_TYPE_META[effectiveType].label})</span>
 						</p>
 					) : null}
 
 					{creating ? (
-						<div className="grid grid-cols-2 gap-3">
-							<div className="space-y-1.5">
+						<div className="grid min-w-0 grid-cols-2 gap-3">
+							<div className="min-w-0 space-y-1.5">
 								<Label htmlFor="cfg-key" className="text-[12px]">
 									参数名
 								</Label>
@@ -129,7 +150,7 @@ export function SettingsParametersForm({
 									onChange={(event) => setKey(event.target.value)}
 								/>
 							</div>
-							<div className="space-y-1.5">
+							<div className="min-w-0 space-y-1.5">
 								<Label htmlFor="cfg-type" className="text-[12px]">
 									类型
 								</Label>
@@ -153,7 +174,7 @@ export function SettingsParametersForm({
 						</div>
 					) : null}
 
-					<div className="space-y-1.5">
+					<div className="min-w-0 space-y-1.5">
 						<Label htmlFor="cfg-value" className="text-[12px]">
 							参数值
 						</Label>
@@ -165,7 +186,7 @@ export function SettingsParametersForm({
 								spellCheck={false}
 								rows={5}
 								placeholder={'{"a":1} 或 ["a","b"]'}
-								className={`font-mono text-[12px] ${problem ? "border-destructive/60" : ""}`}
+								className={`min-w-0 break-all font-mono text-[12px] ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
 						) : (
@@ -185,36 +206,51 @@ export function SettingsParametersForm({
 						)}
 					</div>
 
-					{creating ? (
-						<>
-							<div className="space-y-1.5">
-								<Label htmlFor="cfg-group" className="text-[12px]">
-									分组
-								</Label>
-								<Input
-									id="cfg-group"
-									value={group}
-									placeholder="如 业务配置(可空)"
-									className="text-[12px]"
-									onChange={(event) => setGroup(event.target.value)}
-								/>
+					<div className="min-w-0 space-y-1.5">
+						<Label htmlFor="cfg-group" className="text-[12px]">
+							分组
+						</Label>
+						<Input
+							id="cfg-group"
+							value={group}
+							placeholder="如 业务配置(可空)"
+							className="text-[12px]"
+							onChange={(event) => setGroup(event.target.value)}
+						/>
+					</div>
+					<div className="min-w-0 space-y-1.5">
+						<Label htmlFor="cfg-remark" className="text-[12px]">
+							说明
+						</Label>
+						<Input
+							id="cfg-remark"
+							value={remark}
+							placeholder="给人看的参数说明"
+							className="text-[12px]"
+							onChange={(event) => setRemark(event.target.value)}
+						/>
+					</div>
+
+					{/* 状态 / 可编辑是这个表的真实列(列表里都有),所以表单里也要能改 */}
+					<div className="grid gap-2 sm:grid-cols-2">
+						<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+							<div>
+								<div className="text-[12.5px]">启用</div>
+								<p className="text-[11.5px] text-muted-foreground">停用只是标记,代码不读它</p>
 							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor="cfg-remark" className="text-[12px]">
-									说明
-								</Label>
-								<Input
-									id="cfg-remark"
-									value={remark}
-									placeholder="给人看的参数说明"
-									className="text-[12px]"
-									onChange={(event) => setRemark(event.target.value)}
-								/>
+							<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
+						</div>
+						<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+							<div>
+								<div className="text-[12.5px]">允许修改</div>
+								<p className="text-[11.5px] text-muted-foreground">关掉即锁定(界面不可改 / 不可删)</p>
 							</div>
-						</>
-					) : null}
+							<Switch aria-label="允许修改" checked={editable} onCheckedChange={setEditable} />
+						</div>
+					</div>
 				</div>
 
+				{row ? <DetailMeta meta={{ createdAt: row.createdAt, updatedAt: row.updatedAt }} /> : null}
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消

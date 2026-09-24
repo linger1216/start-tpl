@@ -2,6 +2,7 @@ import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
+import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { IconPicker } from "#/components/modules/shared/icon-picker";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
@@ -180,6 +181,8 @@ export function SettingsMenusForm({
 					onCheckedChange={(next) => onChange({ ...values, visible: next })}
 				/>
 			</div>
+
+			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
 
 			<div className="flex flex-wrap items-center gap-2 pt-1">
 				<Button size="sm" disabled={pending || !dirty} onClick={onSave}>

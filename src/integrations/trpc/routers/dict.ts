@@ -46,6 +46,8 @@ function toDictRow(row: typeof sysDict.$inferSelect) {
 		items: row.items ?? [],
 		remark: row.remark ?? null,
 		status: Number(row.status ?? 1),
+		createTime: row.create_time ? row.create_time.toISOString() : null,
+		updateTime: row.update_time ? row.update_time.toISOString() : null,
 	};
 }
 

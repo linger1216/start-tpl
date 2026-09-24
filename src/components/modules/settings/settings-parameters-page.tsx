@@ -10,17 +10,21 @@ import {
 	type ParameterFormPayload,
 	SettingsParametersForm,
 } from "#/components/modules/settings/settings-parameters-form";
-import { type ParameterRow, SettingsParametersTable } from "#/components/modules/settings/settings-parameters-table";
+import { type ParameterRow, parameterColumns } from "#/components/modules/settings/settings-parameters-table";
+import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
+import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { ActionButton } from "#/components/ui/action-button";
+import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { RefreshButton } from "#/components/ui/refresh-button";
+import { useColumnPrefs } from "#/hooks/use-column-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { useAppTable } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 参数管理 —— 运维口径不写死在代码里。
@@ -89,9 +93,19 @@ export function SettingsParametersPage() {
 				type: payload.type,
 				group: payload.group,
 				remark: payload.remark,
+				status: payload.status,
+				editable: payload.editable,
 			});
 		} else if (payload.key) {
-			updateMutation.mutate({ key: payload.key, value: payload.value });
+			// 编辑时把表单里的字段**全带上** —— 以前这里只传 value,分组/说明在界面上填了却不落库
+			updateMutation.mutate({
+				key: payload.key,
+				value: payload.value,
+				group: payload.group,
+				remark: payload.remark,
+				status: payload.status,
+				editable: payload.editable,
+			});
 		}
 	}
 
@@ -100,6 +114,30 @@ export function SettingsParametersPage() {
 		if (!key) return rows;
 		return rows.filter((row) => `${row.key} ${row.group} ${row.remark}`.includes(key));
 	}, [rows, keyword]);
+
+	const columns = useMemo(
+		() =>
+			parameterColumns({
+				onView: setViewing,
+				onEdit: (row) => {
+					setCreating(false);
+					setEditing(row);
+				},
+				onDelete: setPendingDelete,
+			}),
+		[],
+	);
+
+	const table = useAppTable({
+		columns,
+		data: filtered,
+		// 行标识用 `para_key`(`sys_para.id` 是库里的无意义短串,且"纯代码内置"的参数压根没落库)
+		getRowId: (row) => row.key,
+		initialState: { pagination: { pageIndex: 0, pageSize: 20 } },
+	});
+	const { pageIndex, pageSize } = table.state.pagination;
+	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
+	const { persist: persistColumns } = useColumnPrefs("settings.parameters", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -140,9 +178,7 @@ export function SettingsParametersPage() {
 				description="系统设置 ▸ 参数管理:raw 保留策略(软删 / 物理删)与对接同步开关都在这儿调。支持字符串 / 整数 / 开关 / JSON / 数组 / 映射六种类型,参数改了下一趟任务生效,不需要发版。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
-						<ActionButton disabled={listQuery.isFetching} onClick={() => void listQuery.refetch()}>
-							刷新
-						</ActionButton>
+						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
 						<Button
 							size="sm"
 							onClick={() => {
@@ -161,6 +197,13 @@ export function SettingsParametersPage() {
 
 			<SettingsParametersCleanup />
 
+			<LedgerToolbar
+				search={keyword}
+				onSearchChange={setKeyword}
+				searchPlaceholder="搜索参数名 / 分组 / 说明…"
+				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+			/>
+
 			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
@@ -172,18 +215,18 @@ export function SettingsParametersPage() {
 					</Badge>
 				</CardHeader>
 				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<LedgerToolbar search={keyword} onSearchChange={setKeyword} searchPlaceholder="搜索参数名 / 分组 / 说明…" />
 					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<SettingsParametersTable
-							rows={filtered}
-							onView={setViewing}
-							onEdit={(row) => {
-								setCreating(false);
-								setEditing(row);
-							}}
-							onDelete={setPendingDelete}
-						/>
+						<DataTable table={table} emptyText="没有符合条件的参数" />
 					</TableLoadingShell>
+					<div className="shrink-0 border-t border-border pt-1">
+						<PaginationControl
+							page={pageIndex + 1}
+							pageSize={pageSize}
+							total={table.getFilteredRowModel().rows.length}
+							onPageChange={(next) => table.setPageIndex(next - 1)}
+							onPageSizeChange={(next) => table.setPageSize(next)}
+						/>
+					</div>
 				</CardContent>
 			</Card>
 

@@ -1,11 +1,11 @@
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-
 import { ActionButton } from "#/components/ui/action-button";
+import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
-import type { MockRow } from "#/lib/mock-table";
 import { splitMultiValue } from "#/lib/multi-value";
+import type { MockRow } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
 import { cn } from "#/lib/utils";
 
@@ -43,7 +43,8 @@ export function DataTable<TRow extends MockRow>({
 	/** 每行的附加 class(典型用法:选中行高亮)。拿到原始行数据,由调用方自己算 */
 	rowClassName?: (row: TRow) => string | undefined;
 }) {
-	const colSpan = table.getAllLeafColumns().length;
+	// 空态那一行要跨**可见**列 —— 用 getAllLeafColumns 会把隐藏列也算进去,跨列多一格
+	const colSpan = table.getVisibleLeafColumns().length;
 	const rows = table.getRowModel().rows;
 	const noFilteredResult = table.getFilteredRowModel().rows.length === 0;
 
@@ -74,7 +75,12 @@ export function DataTable<TRow extends MockRow>({
 					</TableRow>
 				))}
 			</TableHeader>
-			<TableBody>
+			{/*
+			 * key 跟着"这一页的行 id"变化 → 换页 / 换每页条数时 tbody 重挂载,
+			 * `.stagger` 的逐行浮入动画就会重新播一遍(否则 React 复用 tr、动画只播一次)。
+			 * 只在**行集合真的变了**时换 key,同一页内点排序不会整块重放。
+			 */}
+			<TableBody key={rows.map((row) => row.id).join("|")} className="stagger">
 				{rows.length === 0 ? (
 					<TableRow>
 						<TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">
@@ -84,7 +90,12 @@ export function DataTable<TRow extends MockRow>({
 				) : (
 					rows.map((row) => (
 						<TableRow key={row.id} className={rowClassName?.(row.original)}>
-							{row.getAllCells().map((cell) => (
+							{/*
+							 * ⚠️ 必须是 `getVisibleCells()`:表头走 `getHeaderGroups()` 自己会跳过隐藏列,
+							 * 而 `getAllCells()` 会把**隐藏列的 cell 也渲染出来** —— 症状就是"取消勾选某列,
+							 * 表头没了、数据和它的单元格还在"(只是被挤到后面,看起来像错位)。
+							 */}
+							{row.getVisibleCells().map((cell) => (
 								<TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
 									<table.FlexRender cell={cell} />
 								</TableCell>
@@ -119,6 +130,8 @@ export function selectColumn<TRow extends MockRow>({
 	return createAppColumnHelper<TRow>().display({
 		id: "__select",
 		size,
+		// 勾选列不给隐藏 —— 列开关里出现"隐藏勾选框"没有意义
+		enableHiding: false,
 		header: (ctx) => {
 			const pageIds = ctx.table.getRowModel().rows.map((row) => String(row.original.id));
 			const allOn = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
@@ -156,6 +169,7 @@ export function actionsColumn<TRow extends MockRow>({
 	onView,
 	onEdit,
 	onDelete,
+	disabled,
 	size = 132,
 }: {
 	/** 页面特有的额外动作(渲染在 详情/编辑/删除 **之前**),如角色的「菜单权限」、用户的「授权」 */
@@ -163,19 +177,30 @@ export function actionsColumn<TRow extends MockRow>({
 	onView?: (row: TRow) => void;
 	onEdit?: (row: TRow) => void;
 	onDelete?: (row: TRow) => void;
+	/**
+	 * 逐行判断「编辑 / 删除」是否可用(返回 true 则置灰)。不传 = 都可用。
+	 * 典型用法:参数管理里 `editable = 0` 的代码内置参数只能看不能改。
+	 */
+	disabled?: (row: TRow) => boolean;
 	size?: number;
 }) {
 	return createAppColumnHelper<TRow>().display({
 		id: "__actions",
 		size,
+		// 操作列不给隐藏 —— 藏掉它整张表就只能看不能动
+		enableHiding: false,
 		header: "操作",
 		cell: ({ row }) => (
 			<div className="flex items-center gap-3">
 				{extra?.(row.original)}
 				{onView ? <ActionButton onClick={() => onView(row.original)}>详情</ActionButton> : null}
-				{onEdit ? <ActionButton onClick={() => onEdit(row.original)}>编辑</ActionButton> : null}
+				{onEdit ? (
+					<ActionButton disabled={disabled?.(row.original)} onClick={() => onEdit(row.original)}>
+						编辑
+					</ActionButton>
+				) : null}
 				{onDelete ? (
-					<ActionButton tone="danger" onClick={() => onDelete(row.original)}>
+					<ActionButton disabled={disabled?.(row.original)} tone="danger" onClick={() => onDelete(row.original)}>
 						删除
 					</ActionButton>
 				) : null}
@@ -255,10 +280,13 @@ export function TableLoadingShell({
 			</div>
 			{busy ? (
 				<div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-					<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/95 px-2.5 py-1 text-[12px] text-muted-foreground shadow-sm">
+					<Badge
+						variant="outline"
+						className="h-7 gap-1.5 bg-background/95 px-2.5 text-[12px] text-muted-foreground shadow-sm"
+					>
 						<Loader2 className="size-3.5 animate-spin" />
 						{label}
-					</span>
+					</Badge>
 				</div>
 			) : null}
 		</div>

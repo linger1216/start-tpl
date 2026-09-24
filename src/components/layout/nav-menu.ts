@@ -27,6 +27,9 @@ export type MenuRow = {
 	type: number;
 	/** 权限标识(只有按钮一定有) */
 	perm: string | null;
+	/** 创建 / 更新时间(ISO 字符串;「编辑」面板底部统一展示) */
+	createTime: string | null;
+	updateTime: string | null;
 };
 
 /** icon 认不出来时的兜底图标 */

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 
 export type StatItem = {
@@ -122,15 +123,17 @@ function StatCell({
 						{description ? <span className="ml-1 opacity-70">· {description}</span> : null}
 					</span>
 					{delta && trend ? (
-						<span
+						// 增减百分比是显示值 → 用 Badge(形状照旧靠 className 覆盖)
+						<Badge
+							variant="secondary"
 							className={cn(
-								"shrink-0 rounded-md px-1 py-px text-[10.5px] font-medium tabular-nums",
+								"h-4 shrink-0 rounded-md px-1 py-px text-[10.5px] font-medium tabular-nums",
 								trendColor,
 								trendBg,
 							)}
 						>
 							{delta}
-						</span>
+						</Badge>
 					) : null}
 				</div>
 			</div>

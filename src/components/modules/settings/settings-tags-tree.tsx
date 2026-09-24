@@ -2,15 +2,10 @@ import { Folder, Plus, Tag, Trash2 } from "lucide-react";
 
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
+import { useTreePrefs } from "#/hooks/use-tree-prefs";
 
-/** 标签树节点(前端拼树后的形状) */
-export type TagNode = {
-	id: string;
-	parentId: string | null;
-	label: string;
-	value: string | null;
-	desc: string | null;
-	sort: number;
+/** 标签树节点(前端拼树后的形状)—— 行字段 + 树特有字段(与部门树同构,别再逐字段抄一遍) */
+export type TagNode = TagRow & {
 	depth: number;
 	children: TagNode[];
 };
@@ -26,16 +21,7 @@ export function buildTagTree(rows: readonly TagRow[]): TagNode[] {
 	}
 	const make = (row: TagRow, depth: number): TagNode => {
 		const kids = (byParent.get(row.id) ?? []).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
-		return {
-			id: row.id,
-			parentId: row.parentId,
-			label: row.label,
-			value: row.value,
-			desc: row.desc,
-			sort: row.sort,
-			depth,
-			children: kids.map((kid) => make(kid, depth + 1)),
-		};
+		return { ...row, depth, children: kids.map((kid) => make(kid, depth + 1)) };
 	};
 	const roots = (byParent.get(null) ?? []).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
 	return roots.map((root) => make(root, 0));
@@ -49,6 +35,9 @@ export type TagRow = {
 	value: string | null;
 	desc: string | null;
 	sort: number;
+	/** 创建 / 更新时间(ISO 字符串;编辑面板底部统一展示) */
+	createTime: string | null;
+	updateTime: string | null;
 };
 
 /**
@@ -75,12 +64,19 @@ export function SettingsTagsTree({
 	/** 把"拖动的节点"落到"目标节点"的前 / 后(同级) */
 	onMove: (draggedId: string, targetId: string, position: "before" | "after") => void;
 }) {
+	/** 展开态记在参数管理的 `page.tree` 里,下次打开还是这套 */
+	const { initialExpandedIds, persist: persistTree } = useTreePrefs("settings.tags");
+
 	return (
 		<SortableTree
+			initialExpandedIds={initialExpandedIds}
+			onExpandedChange={persistTree}
 			nodes={tree}
 			selectedId={selectedId}
 			dragDisabled={dragDisabled}
 			ariaLabel="标签树"
+			searchPlaceholder="搜索标签名 / 取值…"
+			searchText={(node) => `${node.label} ${node.value ?? ""}`}
 			onSelect={onSelect}
 			onReorder={onMove}
 			renderRow={(node) => (

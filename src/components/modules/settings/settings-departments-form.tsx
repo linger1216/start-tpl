@@ -1,16 +1,18 @@
 import { Save } from "lucide-react";
-import { useState } from "react";
 
 import type { DeptTreeNode } from "#/components/modules/settings/settings-departments-tree";
+import { DetailMeta } from "#/components/modules/shared/detail-dialog";
+import { MemberZone } from "#/components/modules/shared/member-zone";
+import { DetailRow } from "#/components/ui/detail-row";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 
-/** 详情表单的值 */
+/** 详情表单的值(`parentId` 不在这里改,但保存时要原样带回去 —— 接口是整行覆盖) */
 export type DeptFormValues = {
 	name: string;
 	parentId: string | null;
@@ -25,82 +27,77 @@ export function deptFormValues(node: DeptTreeNode): DeptFormValues {
 type DeptMemberRow = {
 	id: string;
 	userId: string;
-	/** 成员当前的角色 id(members 接口返回;界面靠 roleName 展示,id 供"行内改角色"这类需求) */
-	roleId: string;
 	userName: string;
 	userEmail: string;
-	roleName: string;
+	/** 成员的角色名(全局角色,**只读展示** —— 分配在「用户管理」里做) */
+	roleNames: string[];
 };
 
 /**
- * 右侧「部门详情」—— 改名称 / 上级 / 启停 / 备注,并在同一张卡里管**这个部门的成员**。
+ * 右侧「部门详情」—— 面板分成**两个职责明确的区**,不要混在一起:
  *
- * 成员放在这里而不是单独一个页面:授权最常见的动作就是"这个部门加个人、给他一个角色",
- * 分两个页面会让人来回跳。
+ * ```
+ * 字段区  名称 / 启停 / 备注  →  [保存] [还原]              (改了要保存)
+ * ─────────────────────────────────────────────────
+ * 成员区  加人 / 移出          →  即时生效,不用保存          (点一下就落库)
+ * ```
+ *
+ * 为什么必须分开:以前「保存」那一行夹在字段和成员中间,而成员是**即时生效**的 ——
+ * 视觉上像是在说"保存会把成员一起存",于是用户会去点一个根本不需要点的按钮。
+ * 现在:**保存只属于字段区**(放在字段的最下面),成员区用分隔线 + 自己的说明划清界限,
+ * 删除这种记录级危险动作挪到字段区最右,**离保存远远的**。
+ *
+ * **成员选择器是"搜索优先 + 可多选"**(`shared/multi-select`):用户上百上千时,
+ * 一个普通下拉既搜不了、又会把上千条一次性塞进浮层。这里只渲染前 50 条 + 关键词过滤,
+ * 选中的显示成可删标签,一次提交多人。
+ *
+ * 上级部门**不在这个面板里改**(用户要求去掉):树本身支持同级拖拽排序;换上级走
+ * 「用户管理」不需要,而"移动节点"这个动作还没做 —— 见 AGENTS 的树那节。
  */
 export function SettingsDepartmentsForm({
 	node,
 	values,
 	dirty,
 	pending,
-	parentOptions,
 	members,
-	roleOptions,
 	userOptions,
 	membersLoading,
+	membersPending,
 	onChange,
 	onSave,
 	onReset,
 	onDelete,
-	onAddChild,
-	onAddMember,
+	onAddMembers,
 	onRemoveMember,
 }: {
 	node: DeptTreeNode | null;
 	values: DeptFormValues;
 	dirty: boolean;
 	pending: boolean;
-	/** 可选的上级部门(已排除自己与自己的后代) */
-	parentOptions: Array<{ id: string; label: string }>;
 	members: DeptMemberRow[];
-	roleOptions: Array<{ id: string; name: string }>;
 	userOptions: Array<{ id: string; name: string; email: string }>;
 	membersLoading: boolean;
+	/** 加人 / 移出进行中(与字段区的 `pending` 分开 —— 两个区的忙碌状态互不相干) */
+	membersPending: boolean;
 	onChange: (next: DeptFormValues) => void;
 	onSave: () => void;
 	onReset: () => void;
 	onDelete: () => void;
-	onAddChild: () => void;
-	onAddMember: (userId: string, roleId: string) => void;
+	/** 一次可以加多个(内部逐条幂等提交) */
+	onAddMembers: (userIds: string[]) => void;
 	onRemoveMember: (userId: string) => void;
 }) {
-	const [addUserId, setAddUserId] = useState("");
-	const [addRoleId, setAddRoleId] = useState("");
-
-	/**
-	 * 三个下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
-	 *
-	 * ⚠️ `items` 不能省:Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),
-	 * 它只在 `resolveSelectedLabel(value, items, …)` 里查这个 prop;没有 `items` 就兜底成
-	 * `stringifyAsLabel(value)` = **原始 id**,触发器就会把 nanoid 画出来。
-	 */
-	const parentItems = [
-		{ value: "__root__", label: "(顶级部门)" },
-		...parentOptions.map((option) => ({ value: option.id, label: option.label })),
-	];
-	const userItems = userOptions.map((option) => ({ value: option.id, label: option.name || option.email }));
-	const roleItems = roleOptions.map((option) => ({ value: option.id, label: option.name }));
-
 	if (!node) {
 		return (
-			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border text-[13px] text-muted-foreground">
-				左侧选一个部门,这里改它的名称 / 上级,并管理成员
+			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-[13px] text-muted-foreground">
+				左侧选一个部门,这里改它的名称 / 启停 / 备注,并管理成员
 			</div>
 		);
 	}
 
 	return (
-		<div className="space-y-3">
+		<div className="flex h-full min-h-0 flex-col gap-4">
+			{/* 标题:这一行只说明"现在改的是哪个部门",不放任何动作 */}
 			<div className="flex items-center justify-between gap-2">
 				<div className="min-w-0">
 					<div className="truncate text-[13.5px] font-medium text-foreground">{node.name}</div>
@@ -109,141 +106,89 @@ export function SettingsDepartmentsForm({
 				{dirty ? <span className="shrink-0 text-[11.5px] text-warn-fg">未保存</span> : null}
 			</div>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">部门名</Label>
-				<Input
-					value={values.name}
-					aria-label="部门名"
-					className="h-8 text-[13px]"
-					onChange={(event) => onChange({ ...values, name: event.target.value })}
-				/>
-			</div>
+			{/* 两个 tab:字段(要保存)/ 用户(即时生效)—— 形态与用户编辑、角色编辑一致(card) */}
+			<Tabs variant="card" defaultValue="basic" className="flex min-h-0 flex-1 flex-col">
+				<TabsList className="shrink-0">
+					<TabsTrigger value="basic">基本信息</TabsTrigger>
+					<TabsTrigger value="members" count={members.length}>
+						用户
+					</TabsTrigger>
+				</TabsList>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">上级部门</Label>
-				<Select
-					items={parentItems}
-					value={values.parentId ?? "__root__"}
-					onValueChange={(next) => onChange({ ...values, parentId: next === "__root__" ? null : next })}
-				>
-					<SelectTrigger className="h-8 text-[13px]" aria-label="上级部门">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						{parentItems.map((item) => (
-							<SelectItem key={item.value} value={item.value}>
-								{item.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			</div>
+				<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
+					<div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+						{/* ── 区 1:字段(要保存)──────────────────────────────── */}
+						<div className="space-y-3">
+							<DetailRow label="部门名">
+								<Input
+									value={values.name}
+									aria-label="部门名"
+									className="h-8 text-[13px]"
+									onChange={(event) => onChange({ ...values, name: event.target.value })}
+								/>
+							</DetailRow>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">备注</Label>
-				<Textarea
-					value={values.remark}
-					aria-label="备注"
-					rows={2}
-					className="text-[12.5px]"
-					onChange={(event) => onChange({ ...values, remark: event.target.value })}
-				/>
-			</div>
+							<DetailRow label="备注">
+								<Textarea
+									value={values.remark}
+									aria-label="备注"
+									rows={2}
+									className="text-[12.5px]"
+									onChange={(event) => onChange({ ...values, remark: event.target.value })}
+								/>
+							</DetailRow>
 
-			<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
-				<div>
-					<div className="text-[12.5px]">启用</div>
-					<p className="text-[11.5px] text-muted-foreground">停用的部门不参与权限计算(成员还在,只是不生效)</p>
-				</div>
-				<Switch
-					aria-label="启用"
-					checked={values.status}
-					onCheckedChange={(next) => onChange({ ...values, status: next })}
-				/>
-			</div>
-
-			<div className="flex flex-wrap items-center gap-2 pt-1">
-				<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
-					<Save className="size-3.5" />
-					{pending ? "保存中…" : "保存"}
-				</Button>
-				<ActionButton disabled={pending || !dirty} onClick={onReset}>
-					还原
-				</ActionButton>
-				<ActionButton disabled={pending} onClick={onAddChild}>
-					新增子部门
-				</ActionButton>
-				<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
-					删除
-				</ActionButton>
-			</div>
-
-			{/* ── 成员:谁在这个部门、是什么角色 ───────────────────────── */}
-			<div className="space-y-2 border-t border-border pt-3">
-				<div className="flex items-center justify-between">
-					<div className="text-[13px] font-medium">成员({members.length})</div>
-					<span className="text-[11.5px] text-muted-foreground">一个人在同一个部门只有一个角色</span>
-				</div>
-
-				<div className="flex flex-wrap items-center gap-2">
-					<Select items={userItems} value={addUserId} onValueChange={(next) => setAddUserId(next ?? "")}>
-						<SelectTrigger className="h-8 min-w-40 flex-1 text-[12.5px]" aria-label="选用户">
-							<SelectValue placeholder="选用户…" />
-						</SelectTrigger>
-						<SelectContent>
-							{userItems.map((item) => (
-								<SelectItem key={item.value} value={item.value}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<Select items={roleItems} value={addRoleId} onValueChange={(next) => setAddRoleId(next ?? "")}>
-						<SelectTrigger className="h-8 min-w-32 flex-1 text-[12.5px]" aria-label="选角色">
-							<SelectValue placeholder="选角色…" />
-						</SelectTrigger>
-						<SelectContent>
-							{roleItems.map((item) => (
-								<SelectItem key={item.value} value={item.value}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-					<ActionButton
-						disabled={pending || !addUserId || !addRoleId}
-						onClick={() => {
-							onAddMember(addUserId, addRoleId);
-							setAddUserId("");
-							setAddRoleId("");
-						}}
-					>
-						加入
-					</ActionButton>
-				</div>
-
-				{membersLoading ? (
-					<p className="text-[12px] text-muted-foreground">加载中…</p>
-				) : members.length === 0 ? (
-					<p className="text-[12px] text-muted-foreground">这个部门还没有人</p>
-				) : (
-					<ul className="space-y-1">
-						{members.map((member) => (
-							<li
-								key={member.id}
-								className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5"
-							>
-								<div className="min-w-0">
-									<span className="truncate text-[12.5px]">{member.userName || member.userEmail}</span>
-									<span className="ml-2 text-[11.5px] text-muted-foreground">{member.roleName}</span>
+							<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
+								<div>
+									<div className="text-[12.5px]">启用</div>
+									<p className="text-[11.5px] text-muted-foreground">停用的部门不参与权限计算(成员还在,只是不生效)</p>
 								</div>
-								<ActionButton tone="danger" disabled={pending} onClick={() => onRemoveMember(member.userId)}>
-									移出
-								</ActionButton>
-							</li>
-						))}
-					</ul>
-				)}
+								<Switch
+									aria-label="启用"
+									checked={values.status}
+									onCheckedChange={(next) => onChange({ ...values, status: next })}
+								/>
+							</div>
+						</div>
+
+						{/* 字段区的动作:保存 / 还原在左,删除这种"记录级"危险动作推到最右、离保存远一点 */}
+					</div>
+					<div className="flex shrink-0 items-center justify-end gap-2 pt-3">
+						<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
+							<Save className="size-3.5" />
+							{pending ? "保存中…" : "保存"}
+						</Button>
+						<ActionButton disabled={pending || !dirty} onClick={onReset}>
+							还原
+						</ActionButton>
+						<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
+							删除
+						</ActionButton>
+					</div>
+				</TabsContent>
+
+				<TabsContent value="members" className="flex min-h-0 flex-1 flex-col">
+					<div className="flex min-h-0 flex-1 flex-col">
+						{/* ── 区 2:成员(即时生效,不用保存)──────────────────── */}
+						<MemberZone
+							title="成员"
+							emptyText="这个部门还没有人"
+							members={members}
+							userOptions={userOptions}
+							loading={membersLoading}
+							pending={membersPending}
+							badgeValues={(member) => member.roleNames}
+							badgeEmpty="未分配角色"
+							onAddMembers={onAddMembers}
+							onRemoveMember={onRemoveMember}
+						/>
+					</div>
+				</TabsContent>
+			</Tabs>
+
+			{/* 页脚只放时间行(每个 tab 自己的动作在 tab 底部) */}
+			<div className="shrink-0">
+				{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
 			</div>
 		</div>
 	);

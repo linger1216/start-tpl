@@ -15,7 +15,7 @@ function Avatar({
 			data-slot="avatar"
 			data-size={size}
 			className={cn(
-				"group/avatar relative flex size-8 shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten",
+				"relative flex size-8 shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten",
 				className,
 			)}
 			{...props}
@@ -66,10 +66,7 @@ function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
 			data-slot="avatar-group"
-			className={cn(
-				"group/avatar-group flex -space-x-2 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background",
-				className,
-			)}
+			className={cn("flex -space-x-2 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background", className)}
 			{...props}
 		/>
 	);

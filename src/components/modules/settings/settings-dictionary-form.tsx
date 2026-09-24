@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-
+import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import {
@@ -14,7 +14,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { useStableKeys } from "#/hooks/use-stable-keys";
-import type { DictFormValues } from "./settings-dictionary-types";
+import type { DictFormValues, SettingsDictRow } from "./settings-dictionary-types";
 
 /**
  * 字典编辑弹窗 —— 字典本身(名称 / 编码 / 说明 / 启停)+ **字典项表**。
@@ -34,8 +34,8 @@ export function SettingsDictionaryForm({
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
-	/** 传 null = 新建 */
-	editing: { id: string } | null;
+	/** 传 null = 新建;编辑时整行都传进来(底部要显示创建 / 更新时间) */
+	editing: SettingsDictRow | null;
 	values: DictFormValues;
 	onChange: (next: DictFormValues) => void;
 	pending: boolean;
@@ -203,6 +203,7 @@ export function SettingsDictionaryForm({
 					</p>
 				) : null}
 
+				{editing ? <DetailMeta meta={{ createdAt: editing.createTime, updatedAt: editing.updateTime }} /> : null}
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消

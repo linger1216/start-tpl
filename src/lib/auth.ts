@@ -4,6 +4,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 import { db } from "#/db";
 import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base-schema";
+import { userSwitchPlugin } from "#/lib/auth-debug";
 
 /**
  * Better Auth 服务端实例 —— 认证的唯一入口。
@@ -47,5 +48,6 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 	},
-	plugins: [tanstackStartCookies()],
+	// `userSwitchPlugin` = 运维用的「切换用户」端点(见 lib/auth-debug.ts 的注释:为什么必须是插件)
+	plugins: [tanstackStartCookies(), userSwitchPlugin()],
 });

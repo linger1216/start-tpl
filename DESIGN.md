@@ -572,3 +572,26 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
   }
 </style>
 ```
+
+---
+
+## token 细则(原 `AGENTS.md` 的「设计系统」段,内容一字未改)
+
+视觉规范是 **`DESIGN.md`**(Inspired by Airtable),实现落在 `src/styles.css` 的 token 层。
+
+- **改视觉只改 token**,不要在组件里写死 hex 或逐个改色值。
+- 品牌色映射:`#1b61c9`(Airtable Blue)→ `--primary` / `--ring`;`#181d26` → `--foreground`;`#ffffff` → `--background`;`#f8fafc` → `--card` / `--muted` / `--secondary` / `--accent`;`#333333` → `--muted-foreground`;`#e0e2e6` → `--border` / `--input`;`#006400` → `--success`。
+- **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相四个角色 —— 实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`,外加反白前景 `--hue-X-on`(浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
+  - 色相 → 类名的映射**只有一份**:`src/styles.css` 的 `@theme inline`(`--color-hue-X` / `-fg` / `-soft` / `-line` / `-on`)。加色相改三处:①`:root` ②`.dark` ③`@theme inline` —— 漏了第 ③ 步,`bg-hue-X-soft` 这类工具类不会生成(Tailwind 扫不到、也不报错)。
+  - 同理,`--af-*` 那套中性/品牌 token 也在 `@theme inline` 里映射成了标准工具类(`bg-hover` / `bg-brand-soft` / `border-border-strong` / `shadow-card` / `shadow-raise-1` …)。**组件里不要再写 `bg-[color:var(--af-hover)]` 这种任意值** —— 又长又容易拼错 var 名,拼错了整条规则静默失效。
+  - **Tailwind 只扫描源码里的字面量类名**,不能写 `bg-hue-${tone}-soft` 这种拼接 —— 扫描不到就不会生成 CSS。所有按色相取类名的地方必须查表。
+  - 告警语义仍然只走 `--success` / `--warn` / `--danger`,`emerald` ≠ `success`。一屏内出现的色相不超过 4 个。
+- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` 的彩色主题(`rainbow` / `ocean` / …,定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES`)**已改为读点缀色 token**(原先用的是 Tailwind 默认 `*-100/*-700`,约 25%–40% 彩度,太亮)。改那一处 = 全站分类色统一。默认值仍是规范内的 `brand` 主题。
+- **不要在渲染期用 `Math.random()`**:会造成 SSR 水合不一致,而且每次重渲染都变值。需要"看起来随机"的效果时,用基于 `useId()` 或数据本身的稳定哈希(`BadgeList` 的 `stable` 就是这么做的)。
+- **不要覆盖 Tailwind 的 `--radius-*` 命名空间。** 它的默认阶就是 `DESIGN.md` §5 要的:`rounded-lg` 8px、`rounded-xl` 12px(按钮)、`rounded-2xl` 16px(小卡片)、`rounded-3xl` 24px(区块)。覆盖会让所有组件圆角一起漂移。
+- 字体在 `@theme inline` 的 `--font-sans` / `--font-heading`(Haas / Haas Groot Disp,fallback 到系统栈,**fallback 必须保留**)。换字体只改这两行。
+- 字距在 `@layer base`:正文 `0.08px`、标题负向、按钮与 label `0.02em`、全大写 `0.08em`。组件里的 `tracking-*` 会覆盖 base。
+- 阴影用工具类 `shadow-card` / `shadow-soft` / `shadow-glow`,**不要写厚重纯黑阴影**(实现变量叫 `--elev-*`、和 Tailwind 的 `--shadow-*` 命名空间避开;映射在 `@theme inline`)。
+  **抬升三档 `shadow-raise-1|2|3`(静置 / 悬停 / 浮起)**。hover **只换档位**(可加边框加深),不做位移 —— 三档同族颜色,切换才不跳。
+- 动效用 `--ease-brand` + `--t-fast|base|slow`(120 / 180 / 260ms)。**先查 `DESIGN.md` §7.1 的「现成动效原语」表**,不要每次现搓 keyframes;表里没有的才自己写,并保证 `prefers-reduced-motion` 下复位(全局媒体查询已兜底,但别用 `transform` 表达"必须保持的位置")。
+- `.dark` 是品牌色经 `color-mix` 推导的对偶值;`DESIGN.md` 只规定浅色,加新 token 时记得同时补 `.dark`。

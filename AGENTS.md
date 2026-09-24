@@ -21,7 +21,7 @@ Before editing files for a substantial task:
 | --- | --- | --- |
 | 工作台 | `routes/(main)/index.tsx` + `components/modules/workbench/` | 模板入口页 |
 | 组件示例 | 工作台 `/` 的 `components/modules/workbench/`(`ui-gallery.tsx` + `ui-gallery-table.tsx` + `workbench-tagging.tsx`) | ★ **三样都在这一页验收**:44 个 `ui/` 原语(`Button` 的变体与 `ActionButton` 都有格子)、`shared/` 的通用交互件(SortableTree / PermissionPicker / LedgerToolbar / …)、`lib/` 的通用工具(time / ids / format / mock-table / …),再加表格与打标签两组实战示例。**改封装后这里就是验收现场** |
-| 框架能力 | `routes/(main)/demo/` | 9 个可运行样例:tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry |
+| 框架能力 | `routes/(main)/demo/` | 7 个可运行样例:tRPC / Query / Form / Table / Drizzle / Auth / Store(可整目录删除) |
 | 系统设置 | `routes/(main)/settings/` + `components/modules/settings/` | ★ 唯一保留的真实业务:**7 页全部接真实数据**(用户 / 部门 / 角色 / 标签 / 菜单 / 字典 / 参数)——其中部门 · 角色 · 用户三页就是一套完整的 **RBAC 骨架**(见「数据库 ▸ 权限模型」) |
 
 新增可复用组件时,**顺手在工作台的 UI 示例里加一格** —— 这一层是模板的核心资产,没有展示就等于没有。
@@ -75,11 +75,11 @@ pnpm db:seed:dicts    # 示例字典种子(幂等)
 pnpm db:seed:paras    # 把 PARA_DEFAULTS 写进 sys_para(幂等)
 pnpm db:seed:rbac     # RBAC 演示数据:部门 / 角色 / 按钮权限点 / 授权 / 两个演示账号(幂等)
 pnpm test             # 直调 tRPC procedure 的集成测试(需要 .env.local 指向的库)
-pnpm db:create        # 建系统表十三张(设置五 + 认证四 + 权限四,幂等;建完顺带对齐列注释 / 索引名)
+pnpm db:create        # 建系统表十四张(设置五 + 认证四 + 权限五,幂等;建完顺带对齐列注释 / 索引名)
 pnpm db:sync:meta     # 对齐**表注释 / 列注释 / 索引名**(MySQL 与达梦都支持,幂等)
 pnpm db:dm:smoke      # 达梦连通性冒烟:drizzle 走 select/insert/update/delete/transaction
 pnpm db:dm:defaults   # 给达梦表补默认值(达梦建表没带 DEFAULT 时必跑,幂等)
-pnpm db:dm:create-ba  # 给达梦建认证四表 + 权限四表 + todos(幂等;注:设置五表在达梦上仍无产出脚本,见陷阱)
+pnpm db:dm:create-ba  # 给达梦建认证四表 + 权限五表 + todos(幂等;注:设置五表在达梦上仍无产出脚本,见陷阱)
 pnpm db:dm:poc        # 达梦底层验证:直连 dmdb,逐条验 SQL 翻译(反引号/占位符/inArray)
 pnpm check:legacy     # 诊断:当前 Node 能否用 DES-CFB(连达梦挂住不报错时先跑它)
 ```
@@ -108,37 +108,75 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 
 ## 设计系统(必读)
 
-视觉规范是 **`DESIGN.md`**(Inspired by Airtable),实现落在 `src/styles.css` 的 token 层。
+视觉规范是 **`DESIGN.md`**(Inspired by Airtable),token 落在 `src/styles.css` —— **两处都别绕过**。
 
-- **改视觉只改 token**,不要在组件里写死 hex 或逐个改色值。
-- 品牌色映射:`#1b61c9`(Airtable Blue)→ `--primary` / `--ring`;`#181d26` → `--foreground`;`#ffffff` → `--background`;`#f8fafc` → `--card` / `--muted` / `--secondary` / `--accent`;`#333333` → `--muted-foreground`;`#e0e2e6` → `--border` / `--input`;`#006400` → `--success`。
-- **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相四个角色 —— 实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`,外加反白前景 `--hue-X-on`(浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
-  - 色相 → 类名的映射**只有一份**:`src/styles.css` 的 `@theme inline`(`--color-hue-X` / `-fg` / `-soft` / `-line` / `-on`)。加色相改三处:①`:root` ②`.dark` ③`@theme inline` —— 漏了第 ③ 步,`bg-hue-X-soft` 这类工具类不会生成(Tailwind 扫不到、也不报错)。
-  - 同理,`--af-*` 那套中性/品牌 token 也在 `@theme inline` 里映射成了标准工具类(`bg-hover` / `bg-brand-soft` / `border-border-strong` / `shadow-card` / `shadow-raise-1` …)。**组件里不要再写 `bg-[color:var(--af-hover)]` 这种任意值** —— 又长又容易拼错 var 名,拼错了整条规则静默失效。
-  - **Tailwind 只扫描源码里的字面量类名**,不能写 `bg-hue-${tone}-soft` 这种拼接 —— 扫描不到就不会生成 CSS。所有按色相取类名的地方必须查表。
-  - 告警语义仍然只走 `--success` / `--warn` / `--danger`,`emerald` ≠ `success`。一屏内出现的色相不超过 4 个。
-- `--warn-*` / `--danger-*` / `--destructive` / `--chart-1..5` 是**规范之外的功能色**(规范只定义 7 个品牌色),不要把它们当品牌色扩散使用。`BadgeList` 的彩色主题(`rainbow` / `ocean` / …,定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES`)**已改为读点缀色 token**(原先用的是 Tailwind 默认 `*-100/*-700`,约 25%–40% 彩度,太亮)。改那一处 = 全站分类色统一。默认值仍是规范内的 `brand` 主题。
-- **不要在渲染期用 `Math.random()`**:会造成 SSR 水合不一致,而且每次重渲染都变值。需要"看起来随机"的效果时,用基于 `useId()` 或数据本身的稳定哈希(`BadgeList` 的 `stable` 就是这么做的)。
-- **不要覆盖 Tailwind 的 `--radius-*` 命名空间。** 它的默认阶就是 `DESIGN.md` §5 要的:`rounded-lg` 8px、`rounded-xl` 12px(按钮)、`rounded-2xl` 16px(小卡片)、`rounded-3xl` 24px(区块)。覆盖会让所有组件圆角一起漂移。
-- 字体在 `@theme inline` 的 `--font-sans` / `--font-heading`(Haas / Haas Groot Disp,fallback 到系统栈,**fallback 必须保留**)。换字体只改这两行。
-- 字距在 `@layer base`:正文 `0.08px`、标题负向、按钮与 label `0.02em`、全大写 `0.08em`。组件里的 `tracking-*` 会覆盖 base。
-- 阴影用工具类 `shadow-card` / `shadow-soft` / `shadow-glow`,**不要写厚重纯黑阴影**(实现变量叫 `--elev-*`、和 Tailwind 的 `--shadow-*` 命名空间避开;映射在 `@theme inline`)。
-  **抬升三档 `shadow-raise-1|2|3`(静置 / 悬停 / 浮起)**。hover **只换档位**(可加边框加深),不做位移 —— 三档同族颜色,切换才不跳。
-- 动效用 `--ease-brand` + `--t-fast|base|slow`(120 / 180 / 260ms)。**先查 `DESIGN.md` §7.1 的「现成动效原语」表**,不要每次现搓 keyframes;表里没有的才自己写,并保证 `prefers-reduced-motion` 下复位(全局媒体查询已兜底,但别用 `transform` 表达"必须保持的位置")。
-- `.dark` 是品牌色经 `color-mix` 推导的对偶值;`DESIGN.md` 只规定浅色,加新 token 时记得同时补 `.dark`。
+- **改视觉只改 token** ✓:不写死 hex ✓,也不写 `bg-[color:var(--af-hover)]` 这种任意值 ✓(var 名拼错会**静默失效** ✓)。
+- **不要覆盖 Tailwind 的 `--radius-*` 命名空间** ✓(默认阶就是 `DESIGN.md` §5 要的 ✓)。
+- **不要在渲染期用 `Math.random()`** ✓(SSR 水合不一致 ✓);要「看起来随机」用 `useId()` 或数据的稳定哈希 ✓。
+- **告警语义只走 `--success` / `--warn` / `--danger`** ✓(`emerald` ≠ `success` ✓);一屏色相不超过 4 个 ✓。
+- **色相 → 类名的映射只有一份**(`styles.css` 的 `@theme inline` ✓):加色相改**三处**(`:root` / `.dark` / `@theme inline` ✓)——
+  **漏了第三处不报错、类名静默不生成** ✓,这是最容易踩的一条 ✓;**Tailwind 只扫字面量类名** ✓,不能拼接 ✓。
+- **动效**先查 `DESIGN.md` §7.1 的现成原语 ✓;**阴影**用 `shadow-card|soft|glow` + 抬升三档 `shadow-raise-1|2|3`(hover 只换档位 ✓)。
 
+色相表 / `@theme inline` 全量映射 / 字体字距 / 阴影变量 → **`DESIGN.md` 末尾的「token 细则」** ✓。
+### 同类页面必须同形(加 / 改通用功能前先读这一条)
+
+**这是约定,不是建议**:同一个动作在全站只能有**一种形态**,而且**同类页面必须都长出来**。
+所以"改一个通用功能"≠"改被点名的那一个" —— 得把同类页面一起扫一遍。反过来也成立:
+做不出第二处的"独一份"设计,要么推广、要么删掉。
+
+已经收成"一处真源"的**版式骨架**(改之前先看对应章节):
+
+| 位置 | 形态 | 章节 |
+| --- | --- | --- |
+| 页头右侧 | **信息徽章 → 刷新(纯图标)→ 新增(图标 + 文字)**,顺序固定 | 本节 ▸ 刷新 / 台账布局 |
+| 工具条(卡片外) | 搜索框 + 右端操作组(刷新 / **列** / 导出 / 新增);**搜索不放进卡片** | 台账布局 |
+| 表格字段 | **表结构有几列就显示几列**,收放交给工具条的「列」开关(`ColumnToggle`) | 台账布局 |
+| 表格行内 / 工具条 | **纯文字**操作按钮(悬停出下划线),不带图标 | 按钮分两族 |
+| 树的行尾 | **纯图标**,悬停才显形 | 树 |
+| 卡片边界 | 静止 1px `border-border`,悬停刷成亮蓝 | 卡片(已知陷阱) |
+| 列表页高度 | 占满主区,内容在卡片里滚 | 高度 |
+
+**动手时按这个顺序自检**(都是真实踩过的):① 先找同类页面的**现有实现**,别新写第二种;
+② 数一遍"同类页面是不是都有" —— 一次性实测抓到过:7 个设置页里 **3 个整个漏了刷新**(字典 / 菜单 / 部门)、
+4 个台账页的「新增」**1 个没图标**(角色)、顶栏还挂着一条**没有 `onClick` 的装饰性「新增用户」**;
+③ 改完**全站 grep 一遍**同类处,别只改被点名的那一个。
+
+### 禁止薄封装(改/加组件前先读这一条)
+
+**只为了转发而存在的组件一律不许加** —— 项目已有过一次:`TagBadges` 的全部内容就是
+`return <BadgeList values={[...tags]} layout="wrap" color="stable" />;`,于是同一个东西有了两个名字,
+别人搜 `BadgeList` 搜不到用它的地方、读 `TagBadges` 还得跳进去才知道是哪个组件。**已删,调用点直接写 `BadgeList`。**
+
+判定:**把这一层删掉,调用点能不能直接写出来?** 能 → 就是薄封装,删。
+- ✗ 只换名字 / 只预设几个 prop 的转发:`TagBadges`、`export const X = Y`、`export { A as B }`、barrel `index.ts`;
+- ✗ 只透传 props:`function X(props) { return <Y {...props} /> }`;
+- ✓ **保留**的是"删掉之后调用点会重复一段**结构**或**逻辑**"的件:`DetailRow`(标签 + 值的栅格形态)、
+  `RefreshButton`(busy 转圈 + 全站统一刷新入口)、`TextCell`(占位符 + 截断)、`ScoreText`(分档配色)、
+  `PageFrame`(flex 高度链)—— 它们不是"另一个组件的别名",而是本来就**没有**的形态。
+
+改完顺手自查一遍(三种形态都要扫):
+```bash
+grep -rnE "^export const [A-Z][A-Za-z]* = [A-Z][A-Za-z]*;" src/     # 别名赋值
+grep -rn "^export \* from" src/                                    # 整模块转发
+grep -rn "return <[A-Z][A-Za-z]* {\.\.\.props}" src/              # props 透传
+```
 ### 按钮分两族(改按钮前先读这一条)
 
 | 族 | 用在哪 | 长什么样 |
 | --- | --- | --- |
 | `ui/button.tsx` 的 `Button` | **主操作**与对话框动作(新增 / 保存 / 提交 / 导入 / 确定 / 取消 / 关闭),以及外壳图标按钮(通知 / 主题 / 侧边栏 / 分页箭头) | 有底色或描边、可带图标;图标在这些位置是识别线索(保存配对勾、新增配加号) |
-| **`ui/action-button.tsx` 的 `ActionButton`** | **操作按钮** —— 表格行内 / 工具条 / 详情卡/子项列表里那些"针对某条数据的小动作":详情 / 编辑 / 删除 / 启用停用 / 移出 / 上移下移 / 新增子项 / 批量删除 / 取消选择 / 全选清空 / 下载模板 / 刷新 | **纯文字、不带图标、悬停才出下划线**;窄位置上不挤不重 |
-| **`ui/action-button.tsx` 的 `ActionIconButton`** | **只给树的行尾**(一行还要放名称 / 徽章,宽度最紧的那一处) | **20px 纯图标 + 悬停变色底**;`label` 必填(同时给 `aria-label` 与 `title`)—— 图标按钮没有可见文字,不交代就只能靠悬浮猜 |
+| **`ui/action-button.tsx` 的 `ActionButton`** | **操作按钮** —— 表格行内 / 工具条 / 详情卡/子项列表里那些"针对某条数据的小动作":详情 / 编辑 / 删除 / 启用停用 / 移出 / 上移下移 / 新增子项 / 批量删除 / 取消选择 / 全选清空 / 下载模板 | **纯文字、不带图标、悬停才出下划线**;窄位置上不挤不重 |
+| **`ui/action-button.tsx` 的 `ActionIconButton`** | **只给树的窄位置** —— 行尾(还要放名称 / 徽章)与树顶部工具条(全部展开 / 折叠) | **20px 纯图标 + 悬停变色底**;`label` 必填(同时给 `aria-label` 与 `title`)—— 图标按钮没有可见文字,不交代就只能靠悬浮猜 |
 
 - **为什么要分开**:操作按钮所在的位置**空间很窄**(表格操作列一行要并排 3~5 个),图标 + 方框在那里又挤又重;
   统一成文字链接后"详情 / 编辑 / 删除"在每一页长得一模一样。
 - **文案口径**(同一件事不换名字):`详情` · `编辑` · `删除` · `启用` / `停用` · `移出` · `上移` / `下移` ·
-  `新增子节点` · `批量删除` · `取消选择` · `刷新`。新增类统一用**新增**(不要"新建"),删除类统一 `tone="danger"`。
+  `新增子节点` · `批量删除` · `取消选择`。新增类统一用**新增**(不要"新建"),删除类统一 `tone="danger"`。
+- **页面刷新统一用 `ui/refresh-button.tsx` 的 `RefreshButton`** —— **纯图标**(`RefreshCw`)、`size="icon-sm"`、
+  `aria-label`/`title` 都是「刷新」,`busy` 时**转圈 + 禁用**。**每个页面的页头都要有一个**(放在 `actions` 里:
+  信息徽章 → 刷新 → 主操作 CTA);页内卡片上的额外刷新入口(台账工具条)也用这一个。
+  ⚠️ 别手写带文字的「刷新」按钮、也别换第二个图标 —— 以前各页各写,结果字典 / 菜单 / 部门三页**整个漏掉了**。
 - `ActionButton` 的 `children` **类型上只收字符串** —— 想塞图标会先编译不过(要图标就该想想是不是该用 `Button`)。
 - 行操作列(`shared/table-kit.tsx` 的 `actionsColumn`)默认宽 **132**(文字比图标占地方;给窄了会换行把行高撑开)。
 
@@ -147,20 +185,65 @@ Biome 的 `files.includes` 只覆盖 `**/src/**/*`、`**/vite.config.ts`、`**/d
 设置模块的列表页(参数 / **角色 / 用户** / 字典 / 标签 / 菜单 / 部门)统一这一套,照抄 `settings-parameters-page.tsx`:
 
 ```
-PageHeader(标题 + 说明 + actions:刷新(ActionButton) + 新增xx(Button))
+PageHeader(标题 + 说明 + actions:刷新(RefreshButton) + 新增xx(Button))
 StatCards(3 张:总数 / 状态分布 / 关联计数)
+LedgerToolbar(搜索 + 右端「列」开关)   ← **在卡片外面**;筛选 chip 用 FilterChips
 Card(「xx 清单」+ 匹配 N 条 Badge)
   CardContent:
-    LedgerToolbar(搜索)             ← 搜索框;筛选 chip 用 FilterChips
     TableLoadingShell → DataTable   ← 表格与加载态;列定义放同目录 `-table.tsx`
     PaginationControl               ← **必须有分页**:行数长起来时不能一屏铺到底
-对话框(新增/编辑 `-form.tsx`、专用动作如「菜单权限 / 授权」)+ ConfirmDialog(删除)
+详情对话框(只读,`shared/detail-dialog` 的 `DetailDialog` + `DetailMeta`;**字段在页面里内联写**,多值字段用 `ui/badge-list` 的 `BadgeList`)+ 新增/编辑 `-form.tsx`
++ 专用动作对话框(如「菜单权限」)+ ConfirmDialog(删除)
 ```
 
 - **列表页的数据要在路由文件里预取**(`loader: ({ context }) => context.queryClient.ensureQueryData(...)`)——
   否则 SSR 只直出卡片壳、行要等 hydration 才出现(参数/字典页一直是这么做的,新页面容易漏)。
-- 行操作走 `shared/table-kit` 的 `actionsColumn`(`extra` 放页面特有动作,如「菜单权限」「授权」),
-  **别手写操作列**。
+- 行操作走 `shared/table-kit` 的 `actionsColumn`(`extra` 放页面特有动作,如「菜单权限」),
+  **别手写操作列**。逐行禁用(如"内置只读参数不能改")用 `disabled: (row) => boolean`。
+- **搜索框在卡片外面**:`LedgerToolbar` 是页面的一个平级子元素(夹在 `StatCards` 与主体 `Card` 之间),
+  **不要塞进 `CardContent`** —— 搜索被卡片边框圈起来会显得它属于卡片里的表格,而它其实是页面级筛选。
+- **表格列 = 对应表的全部列**,一个不少(排障 / 核对数据要能看全);不要替使用者判断"哪个字段不重要"。
+  嫌挤由使用者点工具条里的 **`ColumnToggle`**(`shared/column-toggle.tsx`)自己收 —— 它直接读
+  `table.getAllLeafColumns()`,所以**列定义加一列,开关自动多一项,不会漂移**。
+  `actionsColumn` / `selectColumn` 已标 `enableHiding: false`(藏掉操作列整张表就只能看不能动)。
+- **列开关支持拖动排序**,并且设置**存进参数管理**的 `page.columns`(`sys_para`,JSON 类型;结构
+  `{"<页面键>":{"order":[...],"hidden":[...]}}`),换机器 / 换浏览器跟着账号走。页面侧一行接上:
+  `const { persist } = useColumnPrefs("<页面键>", table)` → `<ColumnToggle table={table} onPersist={persist} />`
+  (`hooks/use-column-prefs.ts`)。`ColumnToggle` 自己不认识 tRPC —— 所以它能在工作台当纯展示件用。
+
+- **树的展开态**同理存参数管理的 **`page.tree`**(`hooks/use-tree-prefs.ts`):结构 `{"<页面键>":{"expanded":[...]}}`,
+  页面键与列偏好同一套(`settings.menus` / `settings.tags` / `settings.departments` …)。三棵树都接了:
+  `const { initialExpandedIds, persist: persistTree } = useTreePrefs("settings.menus")` →
+  `<SortableTree initialExpandedIds={initialExpandedIds} onExpandedChange={persistTree} />`。
+  **只记「已展开」的 id** —— 没设置过 = 全部折叠(与 `SortableTree` 的默认一致,不用反过来存"折叠集合")。
+  ⚠️ 两个坑:① hook 必须在**组件最外层**调用(部门树有个"空态 early return",塞进分支里会被 biome 判成条件调用 hook);
+  ② 实测时别点 `[role="treeitem"]` **整行** —— 那是"选中",不触发展开回调;要点行内 label 为「展开 / 折叠」的那个按钮。
+- ⚠️ **取消勾选某列必须让"表头 + 数据"一起消失**,这是 `DataTable` 的 `row.getVisibleCells()` 保证的。
+  踩过的坑:写成 `row.getAllCells()` 时**表头没了、数据还在**(表头走 `getHeaderGroups()` 自己会跳过隐藏列,
+  两边口径不一样)—— 症状很像"列错位",极难一眼看出。空态那一行的 `colSpan` 同理要用 `getVisibleColumns()`。
+- **显示"徽章样"的东西一律用组件,不许用 `span` 手拼**(`ui/badge` 的 `Badge` 管单值、`ui/badge-list` 的 `BadgeList` 管多值)。踩过的实例:用户表的「部门 / 角色」两列自己拼了
+  `rounded-md border bg-muted/60 px-1.5` 的 span —— 字号 / 圆角 / 配色各写各的,和详情页、别处的徽章全对不上。
+  判定标准是**"它在展示数据吗"**:展示数据(状态 / 类型 / 部门 / 角色 / 计数 / 待实现…)→ 组件;
+  **控件**(筛选 chip、面包屑链接、工具栏药丸)保持自己的形态 —— 它们要 hover / `aria-pressed` / 导航语义,
+  塞进 `Badge` 反而丢掉交互语义。
+  多值的可删除标签也用 `BadgeList` 的 `onRemove`(它自带 ×),别 span + 手写 button 拼。
+- **列定义里不许出现"库里没有的派生列"**(踩过:界面上出现过 `sys_para` 里不存在的字段);
+  派生展示列(如字典的「项数」= `items.length`)要显式用 `columnHelper.display` 并写清它不是表里的列。
+- **换页 / 换每页条数时要有动效**:`PaginationControl` 的每页条数是"选中态胶囊滑过去"
+  (`transform` 平移 + `transition`,位置用 `useLayoutEffect` 量 —— 4 个按钮不等宽,不能写死);
+  `DataTable` 的 `tbody` 带 `.stagger` 且 **key 跟这一页的行 id 走**,所以换页会重挂载、逐行浮入重放一遍。
+  ⚠️ key 用"行 id 拼起来"而不是 `pageIndex`:同一页内点排序不该整块重放。
+- **详情页的字段直接内联写**(`ui/detail-row` 的 `DetailRow` + 两列 grid),**没有 `fields={[...]}` 的声明式封装**:
+  很多字段要自定义渲染 —— 多值的部门 / 角色用 `BadgeList`、长 JSON 用 `<pre>`、字典项用可滚列表 ——
+  一旦包成"字段数组",每多一种特殊渲染就得给封装加参数,最后反而比内联难读。
+- **表单里的"选多个"用 `shared/multi-select`**(`<MultiSelect options value onChange />`):布局同 `TagInput` ——
+  **上面一排「已选」标签(点 × 删)**,下面是带勾选框的候选列表,未搜索时最多渲染 50 条
+  (部门有 3691 个,全渲染会把 DOM 撑爆 —— 与树那条是同一个教训)。
+  ⚠️ **勾选不许改变列表次序**(选中项不跳第一条):列表永远是 `options` 给的顺序 ——
+  以前写成"已选置顶",勾一下列表就跳,根本没法连点几个(用户明确要求去掉)。要确认选了哪些,看上面那排标签。
+  选项里的 `hint` 用来消歧(部门重名时填上级名字)。**别用 `<label>` 包 Checkbox**:Base UI 的 Checkbox 不是表单控件,
+  包了会被 a11y 规则拦下;行里唯一的控件就是 Checkbox,标签文字包一个 `tabIndex={-1}` 的按钮当鼠标帮手。
+- 表单字段多到会超高时,**字段区自己滚**(`max-h-[62vh] overflow-y-auto`),让页头 / 底部时间行 / 按钮留在原位。
 - 一个页面内「列表 + 详情」不要左右分栏 —— 详情走**对话框**(权限树那种高的,单独一个对话框,
   别和表单字段挤在一张里)。
 
@@ -173,11 +256,100 @@ Card(「xx 清单」+ 匹配 N 条 Badge)
   ① **悬停 / 键盘聚焦才显形**(树是窄列,常显会和名称抢宽);
   ② 容器带 `data-row-actions`,行的选中事件会跳过它(不然点"删除"顺带把行选中了 —— 标签树踩过);
   ③ 限高 + 内部滚动也在里面。
+- **拖拽把手每一行都要有**(不是"叶子才有"):曾经把手只在**叶子**行显示,有子节点的行在同一位置显示的是
+  **折叠箭头** —— 于是用户看到"有子节点的这几行没有把手",判断成**"这几行不能拖动"**。其实**能拖**
+  (行本身 `draggable`,同级前后都能落),缺的只是**可供性**。现在:折叠箭头归箭头(只有父节点有)、
+  **把手每一行都有**。教训 —— **一个动作在哪些行可用,可辨认的入口就得在哪些行出现**;
+  验证方式是要求"每一行 `[role=treeitem]` 里都有 `svg[class*=grip]`",别只看代码。
 - **行尾不放「编辑」**:点节点右侧就是编辑面板,再放一个「编辑」是冗余的(用户明确要求去掉)。
   树行的操作是**纯图标**(`ActionIconButton`),因为这一行还要放名称与徽章,宽度比表格操作列更紧。
 
-**别在页面里再手写一遍这三个行为**:加一棵新树 = 写 `renderRow`(名称 / 徽章等业务内容)+ `renderActions`
-(两个 `ActionIconButton`),再在路由里 `loader` 预取数据。
+### 三个编辑界面:tab 化(部门 / 角色 / 用户)
+
+**部门编辑**(右侧面板,不是对话框)、**角色编辑**、**用户编辑**统一改成 tab,形态一律 **`card`**
+(`DESIGN.md` §5.5:弹窗 / 抽屉里的分区)。tab 名与顺序:
+
+| 界面 | tab |
+| --- | --- |
+| 部门编辑 | 基本信息 / 用户 |
+| 角色编辑 | 基本信息 / 用户 / 菜单 |
+| 用户编辑 | 基本信息 / 部门 / 角色 |
+
+**尺寸固定(不然切 tab 会抖)**:
+
+- **宽度**:两个对话框都用 `sm:max-w-2xl`(672px)—— 同一个宽度,**不随新建 / 编辑变**(角色表单以前会切宽窄 ✗)。
+- **高度**:`DialogContent` 用 `flex h-[52vh] flex-col`(实测 494px;62vh 时短 tab 里会留 ~150px 空洞,52vh 后字段刚好占满);部门面板那边是"根 `flex h-full min-h-0 flex-col` +
+  撑满的 Card"(面板高度由栅格行决定)。**tab 之间内容多寡差很多(菜单树很高),不锁高度切 tab 就抖** ——
+  锁住之后**滚动条在 tab 内部**(每个 tab 的内容区是 `min-h-0 flex-1 overflow-y-auto`,动作行 `shrink-0` 钉在底部)。
+
+四条统一规矩(三处都照它走,别再各写一套):
+
+1. **动作跟着 tab 走**:每个 tab 底部一行,`[取消]` 与「该 tab 自己的动作」**一起靠右**(`justify-end gap-2`,
+   与对话框页脚的动作排布一致) ——
+   基本信息 `[保存]`、菜单 `[保存权限]`、用户 / 成员区**没有保存**(点一下立刻落库)。
+   **对话框页脚只放「创建于 … · 更新于 …」那一行**(`DetailMeta`),不再放按钮 ——
+   而且**没有时间可显示就整条不渲染**(新建时页脚是空的,白占 70px),有内容时用 `className="mt-0"` 收掉它默认的 20px 上边距。
+   部门是**面板**、没有"关闭"这个动作 → 那一行是 `[保存] [还原] [删除]`,**同样 `justify-end gap-2`**
+   (三处一个写法,别再给「删除」加 `flex-1` 占位去"推到最右");`还原` 就是面板版的「取消」,
+   不硬塞一个同义的按钮。
+2. **每个 tab 自己说清"要不要保存"**:用户 / 成员区是**点一下立刻落库**(`MemberZone` 里已经把那句话焊在标题旁);
+   角色的**菜单** tab 有它自己的「保存权限」——它们动的是两张关联表,和基本信息的保存互不相干。
+3. **新建时隐藏空 tab**:角色 / 用户在没有 id 之前,"用户 / 菜单 / 部门 / 角色"里没有可操作内容 → **不渲染**(不是禁用)。
+4. **切 tab 不丢已填内容**:字段状态都在表单组件的 `useState` 里,与 tab 挂载无关(Base UI 只挂载当前面板,
+   所以千万别把字段的 state 放进 tab 里)。
+
+**选择框的高度与「行尾动作」**(`shared/multi-select.tsx` 的两个能力,2026-09 加):
+
+- **`fill`** —— 候选列表**撑满父容器的剩余高度**(父容器得是 flex 列、高度有界)。用户编辑的「部门 / 角色」用它,
+  列表底边**正好停在保存按钮上沿**(实测间距 0);角色 / 部门「用户」tab 的选择框也用它(168 → 341px)。
+  ⚠️ 别再用 `maxHeight={168}` 定高 —— 定高会**压到**下面的动作行(实测溢出 30px)。
+- **`trailing`** —— 搜索行**最右侧**的插槽。`MemberZone` 的「加入」按钮就挂在这(与搜索框同一行、距行右 0px);
+  以前它单独占下面一行,把选择框挤矮了。
+
+**高度这条铁律(改这三个界面时按它走)**:
+
+- **弹窗本身永远不要出现滚动条** —— 滚的只能是**控件内部**(候选列表 / 字段区 / 权限树)。
+  做法:tab 的内容区一律 `flex min-h-0 flex-1 flex-col`,**别在容器上写 `overflow-y-auto`**
+  (写了的症状:整个 tab 区在滚、看上去就是「dialog 在滚」—— 菜单 tab 与角色「用户」tab 都踩过)。
+- **动作行与内容留 12px**(`pt-3`)—— 别让按钮贴着列表底边;列表用 `flex-1` 撑到"按钮上方 12px"处。
+- **基本信息要「排得下」**:字段用 `grid gap-x-3 gap-y-2 sm:grid-cols-2` 两列紧凑排
+  (角色 5 个字段 → 3 行;用户 4 个 → 2 行),字段区实测 **214px 装得下**、不出滚动条。
+  ⚠️ 原来 5 个字段竖排是 **405px** → 字段区自己出滚动条(贴在弹窗右侧,**看着就像「弹窗在滚」**)。
+  ⚠️ **别用「加大弹窗」来消它**:62vh 也只给字段区 ~290px,装不下 405 ✗ —— 要减的是**内容的行数**。
+- 顺带:字段的 `Input` 统一 `h-8`(部门面板一直是这个高度),比默认 `h-9` 每行省 4px。
+- **给选择框一个下限**:`fill` 只给 `min-h-0 flex-1` —— 空间被下面那块挤走时它会塌到几十像素。
+  ⚠️ **下限不能靠 `className` 传**:`className="min-h-[160px]"` 与组件自己的 `min-h-0` **同属一组**,
+  tailwind-merge 会让**后者赢**,静默丢掉。正确做法:**外面包一层** `<div className="flex min-h-[160px] flex-1 flex-col">`。
+
+**角色的权限树搬进了「菜单」tab**(原来是另一个独立对话框,已删):表格行 / 详情里的「菜单权限」入口改为
+**打开编辑并直接落在「菜单」tab**(`initialTab`),不保留第二个入口;树再高也只在 tab 内部滚。
+
+踩过的坑(改造前):`[保存][还原][新增子部门][删除]` 一排夹在字段与成员之间,而成员是**点一下立刻落库**的 ——
+视觉上像「保存会把成员一起存」,于是人会去点一个根本不必点的按钮;`MemberZone` 与「即时生效」那句说明就是那时候定的。
+⚠️ 另外两条已知缺口仍然在:**换上级没有 UI 入口**(树只支持同级拖拽);**成员候选是 `user.list()` 全量**
+(上千人时该加服务端搜索)。
+
+### 性能:先量再改(别凭感觉优化)
+
+"部门管理加载太慢"是真实案例,**量出来的结论和直觉相反**,记在这里免得下次又靠猜:
+
+| 环节 | 实测 | 结论 |
+| --- | --- | --- |
+| `select * from sys_dept`(3691 行) | 52–122 ms | 有成本,但不是主因 |
+| … **再加 `order by sort, name`** | 48–62 ms | **排序几乎不花钱** —— 想靠索引优化排序是白费 |
+| 只取 4 列(id / parent_id / name / sort) | 26–29 ms | 真正的成本是**逐列解码**,不是扫描 |
+| 首屏渲染 3691 行(全展开) | **2908 ms** / 83,526 DOM | **主因在这里** |
+| 首屏渲染 3 行(默认折叠) | **228 ms** / 325 DOM | 修完 **12.8×** |
+
+三条纪律:
+1. **先分段计时**(SQL / 传输 / 渲染各占多少)再决定动哪一层 —— 这次若直接"加索引",什么都不会变;
+2. **`select *` 的全表读加不了索引**:索引帮不了"我要所有行、所有列";要减就减**列**(只取用到的)或**行**(少查);
+3. **前端行数是常数级放大**:100 行 → 1000 行不是"慢 10 倍",它同时拖慢 SSR、水合与之后每一次重渲染。
+
+**索引**:树表把 `parent_id` 单列索引升级成了 **(parent_id, sort) 复合索引**(`sys_dept` / `sys_menu` / `sys_tag`)——
+因为项目里有 **11 处** `where parent_id = ? ... order by sort`(建 / 改 / 重排 / 级联删除都要读同级)。
+⚠️ 达梦侧 `sys_menu` / `sys_tag` 原本**连 `parent_id` 索引都没有**(那两张是手工建的表),这次一并补上。
+改索引名要同步三处:drizzle schema + `create-system-tables.ts` + `create-better-auth-tables-dm.ts`,并在**已存在的库**上手动 drop 旧的。
 
 ### 高度:列表页占满主区,内容在卡片里滚
 
@@ -210,18 +382,18 @@ sidebar-provider 的 <main>    `flex min-h-0 flex-1 flex-col overflow-hidden`
 | 目录 | 职责 |
 | --- | --- |
 | `src/routes/` | 文件路由。文件名即 URL;`(main)` 是无路径布局组 |
-| `src/routes/(main)/demo/` | 框架能力示例页(表格 / 表单 / Query / tRPC / store / DB / Auth / Sentry),用模板自身组件写成,可整目录删除。放在 `(main)` 里是为了复用后台外壳,URL 仍是 `/demo/*` |
+| `src/routes/(main)/demo/` | 框架能力示例页(表格 / 表单 / Query / tRPC / store / DB / Auth),用模板自身组件写成,可整目录删除。放在 `(main)` 里是为了复用后台外壳,URL 仍是 `/demo/*` |
 | `src/routes/(main)/settings/` | 唯一保留的真实业务模块,**7 个页面全部接真实数据**(部门 / 角色 / 用户 / 标签 / 菜单 / 字典 / 参数);前三个 + `lib/rbac.ts` 就是一套 RBAC 骨架。派生新项目时**从这里开始改**,不要删 |
 | `src/components/ui/` | 叶子原语,44 个(vendored shadcn + 自研组合控件)。**两处已被项目改写**:① `tabs.tsx` = 「四种分割形态」的页签(下划线 / 分段 / 药丸 / 卡片,计数走 `count` 属性),规格见 `DESIGN.md` §5.5;② `table.tsx` 的 `TableHead` 多了 `sticky top-0 bg-card`(表格自己滚时表头粘住)。`pnpm dlx shadcn@latest add tabs|table` 会覆盖它们,覆盖后需按该节重做。**取舍原则**:与项目内已有实现**正面冲突**的原语不保留(曾有 shadcn 的 `sidebar` 与 `pagination`,与 `layout/sidebar` + `shared/pagination-control` 打架,已删);通用但当前没用到的保留,并在工作台 UI 示例里点名,否则等于不存在 |
 | `src/components/layout/` | 后台外壳:`sidebar`(含 60px 迷你图标栏)+ `sidebar-header`(品牌标题区)+ `sidebar-provider`(折叠状态)+ `topbar`(面包屑/主题)+ `page-header` / `empty-state` / `stub-page` / `page-transition` / `route-progress` / `module-overview`,导航四件:`nav-config`(静态菜单 + 纯树工具)/ `nav-menu`(库行→树)/ `nav-data`(两个只读 hook)/ `nav-config` |
-| `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件(工作台有示例,见「这个模板里有什么」的工作台行):`table-kit`(表格套件:`DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell` / `TextCell`)、**`sortable-tree`(可拖拽排序树 —— 菜单管理 / 标签管理两页共用同一套交互)**、`ledger-toolbar`(台账工具条)、`filter-chips`(快速筛选 + 已选 pill)、`pagination-control`、`stat-cards`(指标卡)、`tag-badges`(标签渲染:`splitTags` + `TagBadges`,上色走 `ui/badge-list`)、`form-kit`(表单套件)、`icon-picker` + `icons-list` + `use-lucide-icons`(图标选择)、`permission-tree`(权限树 / 权限选择区)、`excel-import` + `ledger-excel`(导入导出) |
+| `src/components/modules/shared/` | 跨模块复用的**领域无关**展示件(工作台有示例,见「这个模板里有什么」的工作台行):`table-kit`(表格套件:`DataTable` / `selectColumn` / `actionsColumn` / `TableLoadingShell` / `TextCell`)、**`sortable-tree`(可拖拽排序树 —— 菜单管理 / 标签管理两页共用同一套交互)**、`ledger-toolbar`(台账工具条)、`filter-chips`(快速筛选 + 已选 pill)、`pagination-control`、`stat-cards`(指标卡)、`badge-list`(`Badge` 单值 / `BadgeList` 多值,表格与详情页共用)、`icon-picker` + `icons-list` + `use-lucide-icons`(图标选择)、`permission-tree`(权限树 / 权限选择区)、**`multi-select`(多选框:布局同 TagInput —— 上面一排可删标签,下面候选列表按原顺序不动)**、**`detail-dialog`(详情弹窗外壳 `DetailDialog` + 底部时间行 `DetailMeta`;字段由页面内联)**、`excel-import` + `ledger-excel`(导入导出) |
 | `src/components/modules/<域>/` | 业务域模块。每页固定文件角色:`-page` / `-table` / `-form` / `-form-mappers` / `-detail`(或整页 `-detail-page`)/ `-stats`;多页面域用 `<域>-<页面>-<角色>`。**不做通用增删改查封装** —— 列定义、行类型、增删改写操作逐页手写。完整约定见 `doc/前端结构与组件约定.md`;现成范例见 `components/modules/settings/` |
 | `src/lib/api/` | `ApiError` 与错误归一化 |
-| `src/lib/` | 通用工具:`table.ts`(v9 app hook + `useRowSelection` 多选)、`excel.ts`(Excel 列类型与**唯一**写盘点 `writeSheet`/`cellText`)、`mock-table.ts`(内存表)、`multi-value.ts`、`format.ts`、`time.ts`、`ids.ts`(编号口径)、`menu-detail-path.ts`、`sys-para.ts`(系统参数读写)、`para-spec.ts`(参数类型码与校验,客户端可 import)、**`rbac.ts`(权限并集计算,服务端)、`menu-spec.ts`(菜单类型码,客户端可 import)、`current-user.ts`(procedure 里读当前用户)**、`logger.ts`、`constants.ts`、`utils.ts` 等 |
-| `src/db/` | `index.ts` 按 `DATABASE_URL` 前缀选驱动(mysql2 / 达梦)并导出 drizzle 实例 `db`;**`dm/` 是达梦驱动**(复用 mysql-core 方言 + dmdb,见「数据库 ▸ 达梦支持」);`schema.ts` 是迁移管辖的表(只剩 `todos`);`data-base-schema.ts` 是**不走迁移**的十三张系统表:五张设置表 + 四张认证表 + 四张权限表(部门 / 角色 / 成员 / 角色→菜单) |
+| `src/lib/` | 通用工具:`table.ts`(v9 app hook + `useRowSelection` 多选)、`excel.ts`(Excel 列类型与**唯一**写盘点 `writeSheet`/`cellText`)、`mock-table.ts`(设计期假后端,只给工作台示例)、`multi-value.ts`、`format.ts`、`time.ts`、`ids.ts`(编号口径)、`menu-detail-path.ts`、`sys-para.ts`(系统参数读写)、`para-spec.ts`(参数类型码与校验,客户端可 import)、**`rbac.ts`(权限并集计算,服务端)、`menu-spec.ts`(菜单类型码,客户端可 import)、`current-user.ts`(procedure 里读当前用户)**、`logger.ts`、`constants.ts`、`utils.ts` 等 |
+| `src/db/` | `index.ts` 按 `DATABASE_URL` 前缀选驱动(mysql2 / 达梦)并导出 drizzle 实例 `db`;**`dm/` 是达梦驱动**(复用 mysql-core 方言 + dmdb,见「数据库 ▸ 达梦支持」);`schema.ts` 是迁移管辖的表(只剩 `todos`);`data-base-schema.ts` 是**不走迁移**的十四张系统表:五张设置表 + 四张认证表 + **五张权限表**(部门 / 角色 / 成员 / **用户→角色** / 角色→菜单) |
 | `src/integrations/` | 第三方接线:tRPC 初始化与路由、TanStack Query 上下文、Better Auth 客户端侧 |
 | `src/hooks/` | 通用 hook:`use-dict`(读 `sys_dict` 的统一入口)、**`use-perms`(`useHasPerm(code)` —— 前端判断按钮显隐的唯一入口)**、`use-stable-keys`(列表稳定 key)、`demo.form*`(框架能力样例专用) |
-| `scripts/` | 只放**运维/建表/迁移/种子脚本**:`create-system-tables`(建十三张系统表)/ `sync-table-meta`(表注释 / 列注释 / 索引名的唯一真源)/ `migrate-ids-to-nanoid`(老库换主键)/ `seed-menus` / `seed-dicts` / `seed-paras` / `seed-tags`,全部幂等(建表 `if not exists`、迁移只改该改的行、种子"只补不覆盖")。业务验证脚本随业务一起删 |
+| `scripts/` | 只放**运维/建表/迁移/种子脚本**:`create-system-tables`(建十四张系统表)/ `sync-table-meta`(表注释 / 列注释 / 索引名的唯一真源)/ `migrate-ids-to-nanoid`(老库换主键)/ `seed-menus` / `seed-dicts` / `seed-paras` / `seed-tags`,全部幂等(建表 `if not exists`、迁移只改该改的行、种子"只补不覆盖")。业务验证脚本随业务一起删 |
 
 ## 随模板分发、但当前**没有调用方**的东西
 
@@ -229,9 +401,8 @@ sidebar-provider 的 <main>    `flex min-h-0 flex-1 flex-col overflow-hidden`
 
 | 件 | 位置 | 说明 |
 | --- | --- | --- |
-| 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`(`formatCode` / `nextIdByTime`)+ `newId()`(nanoid 主键);改 `ID_PREFIX` 换成自己的前缀 |
+| 编号口径 | `lib/ids.ts` | `前缀-YYMMDD-HHMMSS`(`formatCode`)+ `newId()`(nanoid 主键);改 `ID_PREFIX` 换成自己的前缀 |
 | 字典读取钩子 | `hooks/use-dict.ts` | **作为模板底料保留**:页面消费 `sys_dict` 的统一入口(派生项目里把 `dict.byCode` 接好即可用) |
-| 表单版式套件 | `shared/form-kit.tsx`(`FieldGrid` / `FormSection` / `FormActions` / `ReadonlyField` / `TagField`) | **作为模板底料保留**:如果项目要改成统一表单布局,直接用、不用再重写。系统设置各页目前是手写表单(`doc/前端结构与组件约定.md` 那套「逐页手写」的口径) |
 | 权限点选择区 | `shared/permission-tree.tsx`(`PermissionTree` / `PermissionPicker`) | **作为模板底料保留**:重建授权界面时直接用,不用再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块 |
 
 > 这张表只登记**作为模板底料,衍生项目时启用**的件(代码层保留,留作新项目直接用的封装)。本轮删掉了三类名不副实的行:
@@ -242,7 +413,7 @@ sidebar-provider 的 <main>    `flex min-h-0 flex-1 flex-col overflow-hidden`
 **新增可复用件时:要么给它一个真实调用方,要么在工作台展示(本项目即 `components/modules/workbench/ui-gallery.tsx`,它现在同时覆盖 `ui/` / `shared/` / `lib/`),要么登记进上表** —— 三者都不做就会被下一轮清理当成死代码删掉。
 
 展示分两层(见 `ui-gallery.tsx` 文件头):**能独立渲染的就真跑**(拖拽 / 勾选 / 校验都点得动);满足不了下面任一条的只给「签名 + 指路」卡 ——
-① 需要 TanStack Form 的 field context(`shared/form-kit`);② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 全量 lucide;`shared/excel-*` → xlsx);
+① 需要 TanStack Form 的 field context(见 `/demo/form.simple`);② 会把重依赖拖进**工作台首屏包**(`shared/excel-*` → xlsx);
 ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。**别为了"先注册一个"就把重依赖 import 进这一页。**
 
 沿用已有的目录分工,不要新造平级抽象层。业务无关的东西放 `lib/` 或 `components/modules/shared/`,页面专属组件就放页面文件里。
@@ -287,7 +458,7 @@ pnpm dlx shadcn@latest add <component-name>
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
 | `src/db/schema.ts` | 只剩 `todos` 示例表 | 由 drizzle 迁移管理(`drizzle/`) |
-| `src/db/data-base-schema.ts` | **系统表十三张**:系统设置五张(`sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`)+ **认证四张**(`sys_user` / `sys_session` / `sys_account` / `sys_verification`)+ **权限四张**(`sys_department` / `sys_role` / `sys_department_member` / `sys_role_menu`,见「认证 ▸ 权限模型」) | **不进迁移**:只声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)**和** `scripts/create-better-auth-tables-dm.ts`(达梦)维护。**改列之后要同时改它 + 这两个脚本** |
+| `src/db/data-base-schema.ts` | **系统表十四张**:系统设置五张(`sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`)+ **认证四张**(`sys_user` / `sys_session` / `sys_account` / `sys_verification`)+ **权限五张**(`sys_dept` / `sys_role` / `sys_user_dept` / `sys_user_role` / `sys_role_menu`,见「认证 ▸ 权限模型」) | **不进迁移**:只声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)**和** `scripts/create-better-auth-tables-dm.ts`(达梦)维护。**改列之后要同时改它 + 这两个脚本** |
 
 **不要把 `data-base-schema.ts` 的表并进 `schema.ts`** —— 下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
 
@@ -296,7 +467,7 @@ pnpm dlx shadcn@latest add <component-name>
 - env 流转:`.env.example`(随模板分发,无凭据)→ `cp .env.example .env.local`(本地填写,已 gitignore)
 - `DATABASE_URL` **缺失会直接抛错**,`src/db/index.ts` 与 `drizzle.config.ts` 都有显式检查
 - 改 schema 后:`pnpm db:push`(开发期)或 `pnpm db:generate && pnpm db:migrate`
-- 建表:`pnpm db:create`(十三张系统表 = 设置五 + 认证四 + 权限四,幂等 `create table if not exists`,不 drop 不 seed)。**给已存在的表加列**要登记在脚本的 `COLUMN_UPGRADES` 里(`create table if not exists` 不会补列)
+- 建表:`pnpm db:create`(十四张系统表 = 设置五 + 认证四 + 权限五,幂等 `create table if not exists`,不 drop 不 seed)。**给已存在的表加列**要登记在脚本的 `COLUMN_UPGRADES` 里(`create table if not exists` 不会补列);**删列**登记在 `COLUMN_DROPS`(列被合并 / 废弃时用 —— 不注销旧列,老库里那列还带着 not null,下一次插入就会违反约束);**改表名**登记在 `TABLE_RENAMES`(达梦侧改完会自动清一次计划缓存)
 - 种子:`pnpm db:seed:menus`(把 `NAV_NODES` 写进 `sys_menu`)、`db:seed:dicts`、`db:seed:paras`、`db:seed:tags`、**`db:seed:rbac`(权限演示数据)** —— 五个都幂等"只补不覆盖"
 - 老库换主键:`pnpm db:migrate:ids`(语义 id → nanoid + 补 `sys_dict.code` + 修 `para_type` 与值不匹配的行;幂等)
 - 表注释 / 列注释 / 索引名:`pnpm db:sync:meta`(表名改过之后注释不会跟着变,会留下"描述旧列名"的残留 —— 那比没注释更误导)。
@@ -315,7 +486,7 @@ pnpm dlx shadcn@latest add <component-name>
 | 登录页 | `src/routes/login.tsx` | 邮箱 + 密码;`?redirect=` 只接受站内路径(挡开放重定向);已登录会自动跳走 |
 | 守卫 | `src/routes/(main)/route.tsx` → `beforeLoad` | `createServerFn` 里 `auth.api.getSession({ headers: getRequestHeaders() })`;没有会话就 `redirect({ to: "/login", search: { redirect: location.href } })` |
 | 顶栏用户菜单 | `src/components/layout/topbar.tsx` | 显示姓名 / 邮箱 + 退出登录;用户信息由 `beforeLoad` 返回、经 `SidebarProvider` 传到顶栏(SSR 首帧就对,不会先闪"管理员") |
-| 表定义 | `src/db/data-base-schema.ts` | 四张表 `sys_user` / `sys_session` / `sys_account` / `sys_verification`(auth 是**系统内部服务**,按项目口径吃 `sys_` 前缀、不进 drizzle 迁移)。**BA 的 organization 插件已撤掉** —— 组织/部门与角色走项目自己的权限四表,见下节 |
+| 表定义 | `src/db/data-base-schema.ts` | 四张表 `sys_user` / `sys_session` / `sys_account` / `sys_verification`(auth 是**系统内部服务**,按项目口径吃 `sys_` 前缀、不进 drizzle 迁移)。**BA 的 organization 插件已撤掉** —— 组织/部门与角色走项目自己的权限五表,见下节 |
 | 回归测试 | `tests/better-auth.test.ts` | 5 个用例:注册 / 登录 / 取会话 / 错密码 / 登出;每步都回查库里真的落了什么行 |
 
 **两条硬约束**(踩过):
@@ -332,196 +503,117 @@ pnpm dlx shadcn@latest add <component-name>
   注意 `signUpEmail` 会**顺手建一个会话并落下 cookie**,脚本里记得 `db.delete(sysSession)` 清掉(`sys_user` 等四表从 `#/db/data-base-schema` 导入)。
   如果需要长期可用的建用户命令(`pnpm auth:create-user`),说一声就加 —— 本轮没做是因为没确认要。
 
+**管理员代改密码 —— BA 没有这个接口,只能写库,但必须用它的 hasher。** `changePassword` 要**本人会话**
+(邮件/旧密码往返),项目也**没启用 BA 的 admin 插件**,所以"帮别人把密码重置成 X"没有 API 可用。做法:
+
+```ts
+import { hashPassword } from "better-auth/crypto";   // ← 必须用它,自己搓哈希格式对不上、登录直接过不去
+const hash = await hashPassword("新密码");            // 每个账号**单独算一次**(scrypt 自带盐,别共用同一个串)
+await db
+  .update(sysAccount)
+  .set({ password: hash, updatedAt: new Date() })
+  .where(and(eq(sysAccount.userId, id), eq(sysAccount.providerId, "credential")));
+```
+
+⚠️ **改完一定要拿 `auth.api.signInEmail` 真登一次** —— 直接写库最怕的就是"写进去了但登不上"
+(实测过:用 BA 导出的 hasher 写、再用它的登录接口验,才是完整闭环)。
+
+**运维「切换用户」(免登录换身份):`lib/auth-debug.ts` 的 BA 自定义插件端点** `POST /api/auth/debug/switch-user`,
+顶栏入口 `components/layout/user-switcher.tsx`,权限点 `sys:user:impersonate`。
+- **必须是 BA 插件端点**:换身份 = 换一个**签过名**的会话 cookie;`createServerFn` 拿不到 BA 的签名上下文,
+  自己拼 cookie 值等于绑定 BA 私有格式,写 `sys_session` 行也不够。插件端点里 `ctx` 是真的。
+- ⚠️ 它用 BA 的**内部适配器** `internalAdapter.createSession`(官方 admin 插件同款)。**升级 BA 后必须重跑
+  `tests/impersonate.test.ts`** —— 它真的切一次再看会话是谁,`typecheck` 抓不到这类变化。
+- 服务端**必须**再查一遍权限(全站第一处真正的服务端拦截);`perms === null` 时**也拒绝**。切换不删原会话,
+  身份 1 小时过期,前端记"从谁来的"并常驻徽章提示(忘了切回来是这类功能最常见的翻车方式)。
+
 ### 权限模型(部门 / 角色 / 菜单可见性)
 
 **"部门当组织用",但走的不是 Better Auth 的 organization 插件** —— 那套是"选中一个当前组织 + 租户隔离",
-而这里要的是"**同时属于多个部门 + 权限取并集**",语义不同(而且它会往 session 上加一个用不上的
-`active_organization_id`)。所以是项目自己的四张表:
+而这里要的是"**同时属于多个部门 + 角色给权限**",语义不同(而且它会往 session 上加一个用不上的
+`active_organization_id`)。所以是项目自己的五张表:
 
 ```
-sys_department(树)                                     上海公司 / 武汉公司(可嵌套)
-sys_role(全局定义)                                      管理员 / 员工 / 开发 …   ← 不随部门数增长
-sys_department_member(user_id, department_id, role_id)  张三:上海=管理员、武汉=员工
-sys_role_menu(role_id, menu_id)                        角色能看见哪些菜单 / 能用哪些按钮
+sys_dept(树)                         上海公司 / 武汉公司(可嵌套)—— 纯组织架构
+sys_role(全局定义)                          管理员 / 员工 / 开发 …   ← 不随部门数增长
+sys_user_dept(user_id, department_id)  张三 ∈ 上海公司、武汉公司(**不带角色**)
+sys_user_role(user_id, role_id)                张三 → 管理员、普通员工(**权限 = 这些角色的并集**)
+sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能用哪些按钮
 ```
 
-- **角色全局定义、分配时带部门** —— 这是"角色爆炸"的解药:角色行数**不随部门数增长**
-  (4 种角色在 100 个部门里也只有 4 行)。"张三在上海是管理员"记在**成员表**上,
-  不是多建一个"上海管理员"角色。`sys_department_member` 上的
-  `uk_sys_dm_unique(department_id, user_id)` 保证"一人在一个部门只有一个角色"。
-- **并集**:一个人所有 (部门, 角色) 的授权取并集 —— **没有"当前部门",也不需要切换**。
-  计算在 `lib/rbac.ts` 的 `effectiveMenusFor(userId)`:它**只吃 `userId`**,与"怎么拿 userId(会话)"解耦,
-  所以单测可以直接喂一个 id,不必造 HTTP 会话。
-- **菜单与按钮同一张表**:`sys_menu.type` = 1 目录 / 2 菜单 / 3 按钮,`perm` 是权限标识(如 `sys:role:write`)。
-  按钮**不进侧边栏**(`buildNavTree` 会过滤),但作为叶子出现在角色授权树里
-  (`PermissionPicker` 给它一个「操作」徽章);授权后它的 `perm` 进入用户的权限集合 ——
-  前端 `useHasPerm(code)` 认它。**按钮行的 `path` 用不指向路由的占位值**
-  (沿用"纯分组也给占位 path"的既有约定,`path` 保持 not null + 唯一)。
-- **勾子节点要自动补全祖先**:侧边栏是按 `parentId` 拼树的,只授权一个深层子菜单会让那一枝无处安放
-  ("勾了却看不见")。写入(`role.setMenus`)与读取(`rbac.ts`)用同一份 `withAncestorIds()`。
-- **未启用不过滤**:`sys_role_menu` **一条都没有** → 全部菜单可见 + `perms = null`(一律放行)。
-  这是刻意的兜底:新项目/新库还没配权限时,不能把管理员自己锁在门外。配了第一条授权就立即生效。
-- **认不到人 → 失败关闭**:权限体系开着但拿不到会话 → 空菜单 + `perms = []`(不是 `null`)。
-- **隐藏 ≠ 禁止**:本轮只做"可见 / 不可见"(前端)。**服务端还没有路由级 / 接口级拦截** ——
-  真要拦,在对应 procedure 里查同一份权限集合(挂点是 `lib/rbac.ts` 的 `effectiveMenusFor`)。
-- 三页页面:`/settings/departments`(树 + 成员,含加人/改角色)、`/settings/roles`(台账 + 权限点勾选)、
-  `/settings/users`(只读账号台账 + 给某人分配部门/角色)。**账号本身归 BA**(不在这里建/改/删用户)。
+**权限标识 = `域:资源:动作`(三段小写),每段可整段写 `*` 通配。** 例:`sys:role:add` / `sys:role:*` / `sys:*:*` / `*:*:*`(全部权限,**含以后新增的菜单**)。
+- **通配在读取时展开**,只改一处:`lib/rbac.ts` 把模式命中的菜单行当成"被授权"再走同一套祖先补全 —— 所以
+  `use-perms.ts` 与各页面**一行都不用改**,`*:*:*` 也自动覆盖未来新增的域/菜单(不用回来补勾);想收窄再加一条模式行。
+- **域 = 一级模块 key**,允许长新域;受控的是**形状不是取值** —— 菜单接口的 `perm` 用 `PERM_FORMAT` 挡住
+  两段 / 大写 / 半截通配(`sys:ro*`)。⚠️ 段数不符的模式**永远匹配不到**,症状是"勾了没权限",极难查。
+- 运维权限点两条:`*:*:*`(通配,种子授给系统管理员)与 `sys:user:impersonate`(切换用户),挂在隐藏分组「运维工具」下。
 
-**演示数据:`pnpm db:seed:rbac`**(幂等)。跑完可以直接点着看:
-
-| 账号 | 密码 | 能看到什么 |
-| --- | --- | --- |
-| `admin@example.com` | `Passw0rd123` | 上海公司 = 系统管理员 → 全部 9 个菜单 + 两个按钮权限点(角色页的「新增 / 删除」可见) |
-| `zhangsan@example.com` | `Passw0rd123` | 上海公司 = 部门主管 **且** 武汉公司 = 普通员工 → 6 个菜单(并集:标签管理来自第二个角色)、**没有按钮权限(角色页那两个按钮不可见)** |
-
-⚠️ **跑过它之后权限体系就"启用"了**(`sys_role_menu` 不再为空):**没有被分配部门的账号将看不到任何菜单**。
-要回到"未启用、全放行"的状态,把 `sys_role_menu` 清空即可。
-
-**数据权限(行级)是下一轮**:`data_scope` 记在角色上,按「(部门, 角色) 逐对解析后取并集」——
-   张三 → (上海, 管理员) → 全公司数据
-        → (武汉, 员工)   → 仅本人数据        并集 = 全公司 ∪ 他本人在武汉的数据
-现在**不加那一列**(没人读的列就是 AGENTS 禁的「伪扩展点」);`sys_department_member` 已经承载了
-将来做这件事所需的全部信息,到时只需要给 `sys_role` 加列 + 写一个 `where` 构造器。
+模型全文 / 三页页面 / 演示账号 / 行级数据权限规划 → **`doc/rbac-权限模型.md`** ✓。
 
 ### 达梦(DM)支持
 
-`DATABASE_URL` 以 `dm://` 开头时自动走达梦驱动(`src/db/dm/`),业务代码零改动 ——
-`db.select()` / `db.insert()` / `db.transaction()` 写法完全一样。
+**可选的第二条线**:`DATABASE_URL` 以 `dm://` 开头自动走达梦驱动(`src/db/dm/`),业务代码零改动 ✓。
+三条必知前提(**少一条就是「连不上」或「静默挂住」**):① URL **必须**带 `?loginEncrypt=false` ✓(驱动已自动兜底 ✓)
+② 带 `?schema=<模式>` ✓(没写会告警 ✓) ③ 达梦的表要跑一次 `pnpm db:dm:defaults` 补默认值 ✓。
+⚠️ 达梦**没有 drizzle 迁移**(手写 DDL ✓):改 `data-base-schema.ts` 要**同时**改两个建表脚本 ✓;注释走 `pnpm db:sync:meta` ✓。
 
-```bash
-# .env.local
-DATABASE_URL="dm://SYSDBA:SYSDBA@127.0.0.1:5236?schema=eg&loginEncrypt=false"
-```
-
-**三个必须知道的前提**(都踩过):
-
-| 前提 | 为什么 |
-| --- | --- |
-| `?loginEncrypt=false` | **必须带,否则连不上。** 达梦的登录握手用 **DES-CFB** 加密,而 DES 在 OpenSSL 3(Node ≥17;本机 Node 24 + OpenSSL 3.5.7)里被移进 **legacy provider**、默认不加载 → dmdb 建会话密码器时报 `ERR_OSSL_EVP_UNSUPPORTED`,达梦只回 `[6071] 消息加密失败`,而连接池那条 Promise **既不 resolve 也不 reject** —— 症状是**连接挂住、不报任何错**。关掉登录加密即绕开:**不需要任何 Node 启动开关**(实测:不带它连 `select 1` 都过不去;带上它 + 零 flag,29/29 全过)。**驱动会自动兜底**:URL 里没写 `loginEncrypt` 时 `src/db/dm/index.ts` 自动补 `=false`(并打一条 `dm.login_encrypt_defaulted` 日志)—— 所以「忘了写就静默挂住」这个坑不可能再复发;显式写 `loginEncrypt=true` 会告警提醒你先跑 `pnpm check:legacy` |
-| `?schema=<模式>` | 达梦的"登录模式"属性。表在 `eg` 模式而登录用户是 SYSDBA 时,不指定就会 `无效的表或视图名[sys_para]`。**没写会打一条 `dm.no_schema_param` 告警**(这个没法自动兜底 —— 驱动猜不到你的表在哪个模式) |
-| `pnpm db:dm:defaults` | 项目的表在 MySQL 上靠 DDL 的 `DEFAULT`(`sort default 0` / `status default 1` / `create_time default current_timestamp`)兜底,而 drizzle 的 `.default()` 表示"我不写这列"。达梦建表若没带默认值,任何省略这些列的 INSERT 都会 `违反列[X]非空约束` —— 这个脚本幂等地补上 |
-
-**安全权衡(自己判断)**:`loginEncrypt=false` 意味着登录凭证不再走那段加密传输。两点事实:① 那段「加密」本身就是 **DES-CFB(56 位有效密钥)**,对真正的攻击者约等于没有;② 备选方案 `--openssl-legacy-provider` 是**进程级**地把 legacy 算法全开(MD4 / RC4 / DES… 任何依赖都能用),影响面反而更大。**所以默认选 `loginEncrypt=false`**:影响只限这一条连接的登录步骤,而不是整个 Node 进程的密码学能力。要跨不可信网络连达梦,正解是走 **SSL**(dmdb 有 `sslPath`,服务端配证书),而不是靠 DES。
-
-**哪天需要开着登录加密**(或遇到「连接挂住且无报错」):
-
-```bash
-pnpm check:legacy   # 一秒诊断:当前 Node 进程能不能用 DES-CFB(legacy 算法)
-```
-
-要开就得给 Node 加 `NODE_OPTIONS=--openssl-legacy-provider`。⚠️ **`.npmrc` 的 `node-options` 在 pnpm 下不生效** —— 本机 pnpm 11.23.0 实测:`.npmrc` 写不写结果一样(都不可用),只有 shell / CI 层的环境变量或脚本内联才管用(官方 npm 认这个键,pnpm 不认)。
-
-**驱动实现要点**(`src/db/dm/translate.ts` + `session.ts`,都是 dmdb 与 drizzle 的差异,drizzle 官方没有达梦方言):
-
-- **占位符 `?` → `:1,:2…` + 反引号标识符 → 双引号**:`rewriteForDm()` 用状态机扫描(区分代码 / 单引号 / 双引号 / 反引号 / 注释),drizzle/mysql-core 生成 MySQL 语法,达梦默认模式不认。
-- **不能靠 `COMPATIBLE_MODE=4`**:它是静态参数,`SP_SET_PARA_VALUE` 在运行期会报 `-839 不能修改静态配置参数的内存值`,只能改 dm.ini 重启 —— 所以走进程内翻译,服务器零改动。
-- **影响行数字段叫 `rowsAffected`**(不是 mysql2 的 `affectedRows`):写错会静默拿到 `undefined`,症状是"删除成功但返回影响行数 0"。
-- **写操作必须回 mysql2 那套 `[ResultSetHeader, FieldPacket[]]` 元组**:项目里读的是 `(await db.delete(...))[0].affectedRows`。
-- **`dmdb.fetchAsString = [CLOB, DATE]`**:CLOB 默认回 Lob 对象(text 解码器要字符串)、DATE 默认回 Date 对象(drizzle 的 datetime 解码器却调 `value.replace(" ","T")`)。
-  ⚠️ **这两行别在重构里弄丢**:丢过的症状是 24/29 用例失败(`value.replace is not a function` / `BigInt` 序列化报错),因为它们决定的是驱动回什么 JS 类型。另有配套的 `normalizeValue()`(BigInt → Number、Lob → 字符串)在同一文件。
-- **达梦:`text`(CLOB)列不能直接和绑定参数做 `=` 比较**(实测报 `-6105 数据类型不匹配`;字面量 `= 'x'`、`like :1`、int/varchar 列的比较都正常)。四种可用绕法(都实测过):`like :1`(最省事)、`cast(:1 as varchar(4000))`、`to_char(col) = :1`、`dbms_lob.compare(col, :1) = 0`。
-  当前代码里**没有**踩到(所有 `where(eq(...))` 都落在 varchar/id 列上),但**以后要在 `para_value`(text)/`desc`/`items`(json→text)/`todos.title` 上过滤时,别写 `eq()`**,要么改 `like`,要么给列换 `varchar(n)`。
-- **json 列要驱动侧解析**:mysql2 会自动把 JSON 列解析成对象,所以 drizzle/mysql 的 json 列**没有** `mapFromDriverValue`。达梦这边 `items` 是 TEXT,回的是 JSON 字符串 —— 按列类型(`{path, field}` 包装里的 `.field.columnType === "MySqlJson"`)判断后解析。
-- **事务没有 `BEGIN` 语句**:达梦不接受裸 `BEGIN`;靠执行选项 `autoCommit:false` + `Connection.commit()/rollback()` 表达(比 drizzle 自带的 `mysql-proxy` 强,那个直接抛 not supported)。
-- **达梦不支持 DDL 的 `ON UPDATE CURRENT_TIMESTAMP`**(试过,报 `-2994 设置的ON UPDATE表达式错误`),所以**每处 UPDATE 都显式写 `update_time: new Date()`**(routers 里 7 处)。MySQL 上同时写也没坏处 —— 两个方言语义因此一致,不必再靠 DDL 的隐式行为。
-
-**系统的十三张表在达梦上怎么来**:MySQL 走 `scripts/create-system-tables.ts`(`pnpm db:create`,含认证四表 + 权限四表);达梦走不了 `create table` 那套 MySQL 方言,所以另有一份手写 DDL —— `pnpm db:dm:create-ba`(幂等,建认证四表 + 权限四表 + 示例表 `todos`,含外键与索引)。**给已存在的表加列**(如 `sys_menu.type` / `perm`)要登记在两个脚本各自的「老库补列」清单里。⚠️ **达梦的设置五表目前仍没有可复现的 DDL**(既有空白,见「已知陷阱」)。除 `todos` 外的表都**不进 drizzle 迁移**(迁移只管 `todos`)。
-**改 `src/db/data-base-schema.ts` 之后要同时改这两个建表脚本**(MySQL 的 `create-system-tables.ts` + 达梦的 `create-better-auth-tables-dm.ts`)—— 漂移了 better-auth 会在运行时报「Model xxx not found / field not found」或「Missing columns」,`typecheck` 抓不到。同理,达梦期间 MySQL 专属命令(`db:migrate` / `db:push` / `db:studio`)连不上(它们按 mysql 方言解析 `dm://` 串),要用就把 `DATABASE_URL` 临时切回去。
-
-**注释**:达梦侧的表注释 / 列注释也由 `pnpm db:sync:meta` 对齐(`comment on table/column`,不需要重写列定义)。注意它的注释视图**两套字段名**(实测):表注释在 `SYS.ALL_TAB_COMMENTS.OWNER`(就是模式名),列注释在 `SYS.ALL_COL_COMMENTS.SCHEMA_NAME` —— 用错字段会「无效的列名」。
-
-**回归测试**:`tests/better-auth.test.ts` 5 个用例(注册 / 登录 / 取会话 / 错密码 / 登出)、`tests/department.test.ts` 7 个(部门树 / 重名 / 成环 / 删除保护 / 成员 upsert / 重排)、`tests/role.test.ts` 7 个(角色 CRUD / 授权补祖先 / 并集 / 兜底 / 停用 / 按钮)。**两个方言都跑过:达梦 48/48、MySQL 48/48**。
-其中"权限体系未启用"那条**按库里状态分支**验(跑过 `db:seed:rbac` 之后 `sys_role_menu` 非空,它就改验"已启用但没有角色 → 失败关闭")—— 两种状态都是真实存在且必须成立的。
-
-**边界**:`drizzle-kit` 的 dialect 是硬编码枚举,**没有达梦**,所以 `db:generate` / `db:migrate` 对达梦无意义 —— 建表继续手写 SQL(本项目十三张 `sys_*` 表本来就是这样)。`show tables` / `information_schema` 是 MySQL/PG 习惯,达梦用 `SYS.ALL_TABLES`;这些只出现在 `scripts/` 里,不影响业务代码。
-
-**方言口径**:默认与主要目标是 MySQL(不要写 `pg` 的 `Pool` / `postgres` dialect);达梦是**可选的第二条线**,上面那节就是它的全部前提与差异。schema 文件、routers、页面都不分方言 —— 方言差异全部收在 `src/db/dm/` 与 `scripts/dm-*.ts` 里。
+驱动实现要点 / CLOB 比较 / 事务写法 / 索引与注释差异 → **`doc/达梦支持.md`** ✓。
 
 ## 已知陷阱
 
+- **人为改动一律不要"恢复"** —— 这是硬规矩。库里 / 文件里出现与你上次看到的不一致时,**先判断"这是谁改的",而不是先修回去**:
+  用户手工改的表名、演示数据、配置都是**故意的**,把它"修回原样"等于覆盖用户的决定。真实发生过一次:用户把演示账号
+  (`zhangsan`)的角色 / 部门清掉来试界面,我把它当成脏数据又给补齐了。
+  判据只有一条 —— **只清我自己造的东西**:带 `__test__*` / `__probe__*` / `probe*` 这类**我自己加的前缀**才能删;
+  其余一律**只报告、不动手**,拿不准就**问**。`pnpm db:seed:rbac` 同理:它只用于**首次初始化演示数据**,
+  **不能**拿它去"修"数据(那属于覆盖人为改动)。
+  反例(确实该修):`like '__%'` 那个 `_` 通配符 bug 把演示账号删了 —— 那是**我自己的 bug 造的脏数据**,要修。
 - **永远不要提交 `.env*`。** `.gitignore` 已覆盖 `.env`、`.env.*`、`*.local`,并保留 `!.env.example`。`.env.example` 是唯一允许入库的 env 文件,且必须不含真实凭据。
 - **不要删 `src/router.tsx`。** 它不在任何 import 图里(TanStack Start 按**约定路径**发现并加载它),所以"扫引用找死代码"的脚本会误判它是孤儿。删了直接起不来服务。这个坑真实发生过一次。
 - **不要把 `start-tpl` 这个字符串硬编码进业务代码。** 它只应该出现在 `package.json` 的 `name` 和文档里。项目名相关的展示文案走配置或 env。`localStorage` 的 key 尤其要注意加项目前缀。
 - **`src/routes/(main)/demo/` 及其支撑文件可以整目录删除**:`demo/` 目录、`hooks/demo.form-context.ts`、`hooks/demo.form.tsx`、`lib/demo-store.ts`。本模板 `__root.tsx` 的 devtools 只挂了 Router 与 Query 两项(Store devtools 已随业务清理),所以**删 demo 不需要改 `__root.tsx`**。
-- **删掉 demo 后必须补一行 `import "@tanstack/react-start";`**(放在 `src/router.tsx` 顶部)。`server: { handlers }` 这个路由选项的类型来自 `@tanstack/react-start` 的模块增强,而全项目只有 `(main)/demo/sentry.testing.tsx` 和 `(main)/demo/drizzle.tsx` 引用了它。不补的话 `src/routes/api/auth/$.ts` 与 `src/routes/api.trpc.$.tsx` 会报 `'server' does not exist in type ...`。
+- **`@tanstack/react-start` 的类型增强已经有非 demo 的引用方**:`(main)/route.tsx` 与 `integrations/tanstack-query/root-provider.tsx` 都 import 了它,所以**删掉整个 demo 目录不会**让 `server: { handlers }` 报 `'server' does not exist in type ...`(这条陷阱在 demo 收敛到 7 页后已经不成立)。
 - **UI 示例已收在 `components/modules/workbench/ui-gallery.tsx`(+ 同目录 `ui-gallery-table.tsx` 的台账表格示例)**。原来那 7 条 `/showcase/*` 路由在本轮之前就并进来了;要精简模板,删这一个文件即可(`routes/(main)/index.tsx` 引用它)。
 - **demo 目录是"简单示例页"**:每个页面只演示一项能力,且全部用模板自身的组件写。`(main)/demo/table.tsx` 用的是 `useAppTable`(`src/lib/table.ts`)而不是裸的 `useTable`,可以当作接真实 CRUD 表格的参照。这些页面当前不报任何类型或 lint 错误,删或留都不影响 `pnpm typecheck` / `pnpm check` / `pnpm build`。
 - **`sql\`... in (${数组})\` 是错的**:drizzle 会把数组渲染成**一个括号元组**(`in (('a','b'))`),MySQL 直接报 `ER_OPERAND_COLUMNS: Operand should contain 1 column(s)`。数组条件一律用 `inArray(column, ids)`。踩过:标签级联删除/子节点删除/按 id 批量查,三处都中招,单元素时不报错所以很难发现。
-- **调用函数漏括号 = 哑巴 bug(两处都真实踩过)**:`event.preventDefault`(无括号)是一个空表达式,什么也不做;`await invalidate;` 更隐蔽 —— 它 await 的是**函数引用**,立刻 resolve,于是"什么都没失效",症状是"改完了列表不动、得手动刷新"。同一批代码里这两类各踩了 7 次(菜单 4 + 字典 3)。写法上:`await invalidate()`、`event.preventDefault()`;**改完顺手 grep 一遍 `await \w+;`**。
+- **漏括号 = 哑巴 bug(两次真实踩过,各踩了 7 处)**:`await invalidate;` 更隐蔽 —— 它 await 的是**函数引用**,立刻 resolve,于是"什么都没失效"(症状:改完了列表不动、得手动刷新);`event.preventDefault`(无括号)是空表达式,什么也不做 —— **拖拽尤其致命**,HTML5 拖放的规则是「`dragover` 里调了 `preventDefault()`,`drop` 才会触发」,漏了的症状就是"拖了半天没反应"(`settings-menus-tree.tsx` 踩过,同目录 `settings-tags-tree.tsx` 是正确参照)。**改完顺手 grep 一遍 `await \w+;`,改事件处理时对一眼括号数。**
 - **MySQL 改列注释 = 重写整条列定义,漏一个子句就静默改坏列**(真实踩过):MySQL 没有 `comment on`,只能 `alter table … modify column …`,而它要求把列定义**完整重写**。踩过的两个坑:
   ① 漏了 `EXTRA` → 设置表的 `update_time datetime(3) not null default current_timestamp(3) on update current_timestamp(3)` 被改成没有 `on update`、**精度也没了**,更新数据时时间不再自动刷新,而且只有对着 `show create table` 才看得出来(`scripts/sync-table-meta.ts` 的 `COLUMN_REPAIRS` 就是补这个的);
   ② `select extra` **不写别名**读回来的是 `undefined` —— `information_schema` 的字段名是**大写 `EXTRA`**,别的字段我当时都起了别名,就漏了它。症状是"改注释把 `not null` / `auto_increment` / `on update` 一起抹了"。
   改这段代码后请一定跑一遍 `pnpm db:sync:meta` 两次:**第二次必须报「无需改动」**,否则就是没幂等、正在反复改坏列。
-- **`pnpm db:push` 会提议删掉 13 张系统表**(它只认 `drizzle.config.ts` 的 schema = `src/db/schema.ts` = `todos`):终端里它会警告 "You're about to delete sys_menu table with 8 items" 然后等你确认 —— **手快确认就是丢数据**。系统表的正道是 `pnpm db:create`(建表)+ `pnpm db:sync:meta`(注释),迁移只用 `db:generate` + `db:migrate`。
+- **删列必须登记进 `COLUMN_DROPS`(两个建表脚本各一份)**:`create table if not exists` 不会改已存在的表,
+  所以"列被合并 / 废弃"时只改 `data-base-schema.ts` + CREATE 语句是**不够的** —— 老库里那列还在,而且它多半是
+  `not null` 而新代码不再写它,**下一次插入就直接违反非空约束**。同理加列要登记 `COLUMN_UPGRADES`。
+  踩过的实例:角色从「部门成员的角色」改成「用户的全局角色」时,`sys_user_dept.role_id` 就是靠这一段删掉的。
+- **达梦改表名之后必须 `call sp_clear_plan_cache()`**:达梦有**全局执行计划缓存**,表被 `alter table … rename to …` 改过之后,
+  缓存里按旧表名编译的计划仍然在 —— 症状是**看起来完全无关**的报错:`[-7009] Object is modified`(有时是 `[-2106] 无效的表或视图名[旧表名]`),
+  而且**同一条 SQL 换个写法就能过**(实测:同一张表的参数化 DELETE 挂、去掉限定列名就通),极难往"表名"上想。
+  两个建表脚本的「老库改表名」流程已经在 rename 之后自动清一次;手工改过表名的库记得自己跑一遍。
+  顺带记住:`create table if not exists` 只认**新名字** —— 老库里还叫旧名的表它管不着,会当"没这张表"重开一张空的(见 `TABLE_RENAMES`)。
+- **`pnpm db:push` 会提议删掉 14 张系统表**(它只认 `drizzle.config.ts` 的 schema = `src/db/schema.ts` = `todos`):终端里它会警告 "You're about to delete sys_menu table with 8 items" 然后等你确认 —— **手快确认就是丢数据**。系统表的正道是 `pnpm db:create`(建表)+ `pnpm db:sync:meta`(注释),迁移只用 `db:generate` + `db:migrate`。
 - **Better Auth 四表的 drizzle 属性名必须是驼峰,不能跟 `data-base-schema.ts` 的 snake_case 惯例**:写成 `email_verified: boolean("email_verified")` 时 BA 会报
   `Drizzle schema mismatch / Missing columns: user.emailVerified …`,还附带警告「session.expires_at 是 BA 永远不会写的必填列」,随后**所有认证调用直接失败**(测试 5/5 秒挂)。
   它按 **drizzle 属性名**找模型字段。**表名反而随便改**(它按 `src/lib/auth.ts` 传给 adapter 的映射**键名**找表)—— 这就是四表能叫 `sys_*` 的原因。
 - **别给 `<Table>` 再包一层 `overflow-x-auto`**:`ui/table.tsx` 的 `Table` 自己就有 `[data-slot=table-container]` 的 `overflow-x-auto`。多包一层不只是冗余 —— 它比外层更近,会把表头的 `sticky` **抢走**(症状:表头 `position: sticky` 但一滚就跑掉)。参数 / 字典两个手写表格踩过这个坑,已删。
-- **`src/components/ui/` 是 Base UI,不是 Radix** —— shadcn 文档里大量是 **Radix** 写法,**照抄会静默失效**(类型不报错、点了没反应、菜单照常弹开):
+- **`src/components/ui/` 全是 Base UI(radix-ui 依赖已移除)** —— shadcn 文档里大量是 **Radix** 写法,**照抄会静默失效**(类型不报错、点了没反应、菜单照常弹开)。Radix 与 Base UI 的差异点(搬 shadcn 组件时最容易踩):
   - `DropdownMenuItem` 的点击回调是 **`onClick`**;写 Radix 的 `onSelect` = 传了个没人认的 prop(踩过:「退出登录」点了毫无反应,查了半天才发现)。
   - 多态写法是 **`render`**;`asChild` 在这个项目里不存在。
   - `Menu.Item` / `DropdownMenuItem` 默认渲染 **`div`**;要真按钮语义用 `nativeButton`。
   - 拿不准就看它 `extends` 的 `BaseUIComponentProps<...>` / `XxxProps` 的 `.d.ts`(在 `node_modules/.pnpm/@base-ui+react@*/…` 下),别按 Radix 的记忆写。
-- **事件方法漏括号是「哑巴 bug」,拖拽尤其致命**:`event.preventDefault`(无括号)是一个空表达式 —— 不报错、不 lint、编译也能过,但它**什么也没做**。HTML5 拖放的规则是「`dragover` 里调了 `preventDefault()`,`drop` 才会触发」,所以漏这一对括号的症状就是"拖了半天没反应"。`settings-menus-tree.tsx` 踩过这个坑(同目录的 `settings-tags-tree.tsx` 是正确参照)。改事件处理时对一眼括号数。
 - **TanStack Table v9 的行模型必须写成「具名 slot + 调用」**:`tableFeatures({ sortedRowModel: createSortedRowModel() })`。写成 `createSortedRowModel`(无 key、未调用)属于**不会报错的错误**:类型照样通过,但 `getSortedRowModel()` / `getPaginationRowModel()` 实际不存在,症状是**页码算得对(显示"共 4 页")却把全部行都渲染出来**。`src/lib/table.ts` 已按正确写法修复并实测验证,不要改回去。
+- **弹窗被超长内容撑宽 —— 容器缺 `min-w-0`**(真实反复踩过,2026-09):`flex` / `grid` 项的 `min-width` 默认是 `auto`,
+  会被内容的 **min-content** 顶开 —— 参数管理里值一改成长 JSON / 长串,弹窗就宽到超出设计宽度(看着像"对话框变宽了")。
+  修法三件套(参数表单已按此改):① **字段容器 + 控件**都加 `min-w-0`;② 值控件再加 `break-all`(普通文本用 `break-words whitespace-pre-wrap`);
+  ③ 外层 `grid` 也标 `min-w-0`。实测:塞进 **400 个字符**后,`sm:max-w-lg` 的弹窗仍是 **512px**、控件 462px 在框内、**横向溢出 0**。
+  —— 规矩:**任何可能超长的内容**(JSON / 长 ID / URL / 路径 / 备注)进弹窗,先给它的容器 `min-w-0`。
 - **卡片的悬浮反馈是「1px 边框刷成亮蓝」**(`ui/card.tsx`:`hover:border-primary`)。**别给 `<Card>` 传 `hover:border-border` / `hover:shadow-none`** —— 那是当年为了压住 3px 蓝环留的,现在会把悬浮态整个顶掉,症状是"页面上怎么悬浮都不变蓝"(7 个设置页踩过,已删)。
-- **改 `ui/card.tsx` 前先看外部依赖**:它的 `tone`(顶部 2px 强调色线)牵着 `styles.css` 的 `.tone-topline` + `--tone-color` **和 5 处 `<Card tone={...}>` 调用**(工作台的模块色相入口卡)。只删 prop 不清调用 = `typecheck` 直接报 `tone does not exist`。
-- **`<Select>` 要显示中文标签,必须在**根上**传 `items`**。Base UI **不会**从 `<SelectItem>` 子元素收集 label(Radix / shadcn 才会),它只在 `resolveSelectedLabel(value, items, itemToStringLabel)` 里查**根上的 `items` prop**;没有 `items` 就兜底 `stringifyAsLabel(value)` = **原始 id / code**。实测症状:部门页"上级部门"画成 `kqVdwADB7eMB7LKSBrxpn`、菜单页"类型"画成 `2`、工作台 Select 示范格画成 `b`。
-  官方 `SelectRoot.d.ts` 原话:*"Data structure of the items rendered in the select popup. **When specified, `<Select.Value>` renders the label of the selected item instead of the raw value.**"*
-  **写法**:把选项提成一个 `{ value, label }[]`,**根上 `items={列表}` + 子元素 `<SelectItem>` 用同一份**(顺带修好 typeahead —— `items` 也是"浮层关闭时打字跳选项"的数据源):
-  ```tsx
-  const roleItems = roles.map((r) => ({ value: r.id, label: r.name }));
-  <Select items={roleItems} value={roleId} onValueChange={...}>
-    <SelectTrigger><SelectValue placeholder="选角色…" /></SelectTrigger>
-    <SelectContent>
-      {roleItems.map((i) => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
-    </SelectContent>
-  </Select>
-  ```
-  兜底(不想提数组时):`<SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>` 也能显示 —— 但那是绕开库的写法,别当默认。`shared/search-select.tsx`(自带 `selected?.label`)没有这个问题。
-
-- **设计 token 只有一套**:`src/styles.css` 只保留语义 token 与 `@theme inline` 映射,色值与字体全部由 `DESIGN.md` 决定(映射见上文"设计系统")。
-- **主题只有一套**:顶栏切换按钮(`components/layout/topbar.tsx`)与 `__root.tsx` 的首屏引导脚本共用 `src/lib/constants.ts` 的 `THEME_STORAGE_KEY`,无存储值时都回落到系统偏好。改主题必须同时改这两处的读取逻辑。
-- **`__root.tsx` 不渲染任何页面外壳**,只有 HTML 骨架、主题引导脚本与 devtools;页面外壳统一在 `(main)/route.tsx`。它另外配置了 `notFoundComponent`(用 `EmptyState`),不要删掉。
-- **`src/components/ui/*.tsx` 里残留的 `"use client"` 指令已清理**。那是 Next.js 专用指令,在 TanStack Start 里是无意义的噪音,新加组件时如果 shadcn 模板带进来,删掉即可。
-- **`components/ui/` 里 vendored 组件的 lint warning 不要顺手清理**(见上文"新增 shadcn 组件")。当前基线 4 个 warning 里有 3 个出自 `badge-list.tsx`。
-- **时间格式化只走 `lib/time.ts`**。曾经两个文件各有一套日期函数,同一个值在两处可能给出不同结果(而 `toISOString()` 是 UTC,当『给人看的时间』用会差 8 小时 —— 真实踩过两次)。现在只此一处时间模块,**其它任何文件都不要再加日期函数**。
-- **权限弹窗直接用模板里这唯一一个 `PermissionPicker` 实现**(`shared/permission-tree.tsx`)。不要在业务页里再手写「标题 + 计数 + 搜索 + 全选/清空 + 树」那一块 —— 全都长得一样,改起来散在各处。
-- **`mocks/*` 是演示数据,不是业务真相**。当前**只剩 `mocks/tags.ts`** 一个文件(「标签管理」页的示例标签体系 + `seed-tags` 的种子来源)。`mocks/settings.ts`(791 行种子 + 权限点目录)、`mocks/shared.ts`、`mocks/dicts.ts` 都已删除 —— 前者是因为当时的用户 / 角色等页面还没接数据源(现在已全部真实化),后两个是零调用方的残留。别再往回加。
-- **树的"占满 + 内部滚动"也在 `shared/sortable-tree.tsx` 里**(`min-h-0 flex-1 overflow-y-auto` + `scrollbar-gutter: stable`)。原来是页面各包一层,菜单页包了、标签页漏了,于是标签一多就复发同一个问题:树把页面撑得很长,点最下面那个节点时右侧详情已经滚出屏幕。**树的布局约束跟树一起走,不要分到调用方**。
-  高度不再是写死的 `max-h-[62vh]`(那样数据少的页面只有半屏、和数据多的页面高矮不一),改成吃栅格给的高度 —— 见「设计系统 ▸ 高度」。
-- **同一个交互不要写两遍**。菜单树与标签树曾经各有一份「同级判定 + dragover/drop + 提示线 + 折叠 + 键盘上下移」(约 150 行逐字重复),其中的括号坑只在其中一份修过。现在统一走 `shared/sortable-tree.tsx`,页面只提供 `renderRow`。**通用组件里不要出现具体业务的名字**:`shared/tag-badges.tsx` 曾经写死 17 个中文维度名并 import `mocks/tags` 取色 —— 通用层一旦耦合演示数据,派生新项目后全是死映射。
-- **权限过滤已经实装,不要再手写第二套**(见「认证 ▸ 权限模型」)。侧边栏 / 面包屑 / 模块概览统一读 `nav-data.ts` → `trpc.menu.mine`(服务端按角色并集算好),按钮显隐统一走 `useHasPerm()`。曾经的 `nav-permissions.tsx`(Context + `filterNavByPermission`,`granted` 恒为 `null`、全是恒等映射)是**伪扩展点**,已删 —— 教训是"签名先铺开、实现等以后"只会得到一层空转,真做的时候反而要拆掉重来。
-- **`@tanstack/react-start/server` 这类 server-only 模块,不能出现在**客户端可达**的文件里** —— 哪怕写在
-  `if (typeof window === "undefined")` 分支后面、哪怕写成 `await import(...)`。Start 的 **import-protection
-  插件在构建期直接报错**(`RolldownError`,`pnpm build` 挂掉);而 **dev 下的症状更阴**:所有 `(main)` 页面
-  **500、服务端日志里一个字都没有**(整个外壳渲染不起来)。**排查这类"整片 500"先跑 `pnpm build`**。
-  正确写法是它建议的 `createIsomorphicFn().client(...).server(...)`(客户端 / 服务端分支在构建时各自消失),
-  见 `integrations/tanstack-query/root-provider.tsx`。
-- **服务端发起的 tRPC 调用要自己转发 cookie**。SSR 期间的 `ensureQueryData` 是**服务端 fetch 自己**
-  (`http://localhost:PORT/api/trpc`)—— 不转发 cookie,`menu.mine` 这类"认人"的查询在首帧就认不到会话,
-  菜单会先全亮再收窄(闪一下)。实现就是上面那个 `trpcFetch`(只转发 `cookie` 一个头)。
-- **退出登录必须清 query 缓存**(`queryClient.clear()`)。`menu.mine` 与权限是**认人**的,而 query key 不带用户
-  —— 不清的话换个人登录会命中上一个人的缓存(以前 `menu.list` 是公开数据,所以不需要)。
-- **达梦的"设置五表"目前没有可复现的 DDL**(既有空白,不是本轮引入):`pnpm db:create` 是 MySQL 方言
-  (开头 `show tables` 达梦就报语法错,整个脚本跑不了),达梦侧只有 `create-better-auth-tables-dm.ts`
-  (认证四 + 权限四 + todos)—— **现有达梦库里那五张是手工建的**。要补就得照 MySQL 版逐列翻译
-  (去掉 `engine/charset/collate`、`json`→`text`、**不能有 `on update current_timestamp`**),
-  **并在真达梦上验证过再进脚本** —— 别直接抄一份没人跑过的 DDL 进去。
-
 ## 改动完成后自检
 
-按顺序跑:
-
 ```bash
-pnpm typecheck        # 必须 0 error
-pnpm check            # 0 error;warning 可接受
-```
-
-涉及构建配置、依赖、路由或 server 入口的改动,再跑一次:
-
-```bash
+pnpm typecheck
+pnpm check
 pnpm build            # 产物落在 .output/
+pnpm test
 ```
 
 改了 `src/routes/` 下的文件,别忘了 `pnpm generate-routes`。**不要手改 `src/routeTree.gen.ts`**,它是生成物。

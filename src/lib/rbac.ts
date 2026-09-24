@@ -1,25 +1,52 @@
 /**
- * **权限并集的计算** —— 部门 → 角色 → 菜单/按钮。
+ * **权限并集的计算** —— 角色 → 菜单/按钮。
  *
  * 模型(见 `db/data-base-schema.ts` 的注释):
  *
- *   用户 --(sys_department_member, 一人多部门, 每部门一个角色)--> 角色 --(sys_role_menu)--> 菜单 / 按钮
+ *   用户 --(sys_user_role, 一人多角色)--> 角色 --(sys_role_menu)--> 菜单 / 按钮
  *
- * 所以「这个用户能看到什么」= **他所有 (部门, 角色) 组合的授权取并集** ——
- * 没有"当前部门"这个概念,也不需要切换。张三在「上海=管理员、武汉=员工」,
- * 看到的就是两个角色菜单的并集。
+ * 所以「这个用户能看到什么」= **他所有角色的授权取并集** —— 角色与部门无关(部门只是组织架构),
+ * 没有"当前部门"这个概念,也不需要切换。
  *
  * 为什么把算法放在这里、而不是写在 procedure 里:这一层**只吃 `userId`**,
  * 与"怎么拿到 userId(会话)"解耦 —— 单测可以直接喂一个 id,不必造 HTTP 会话。
+ *
+ * ⚠️ 这里是**全站唯一的权限计算处**(服务端只有 `menu.mine` 调它,客户端只有 `hooks/use-perms.ts` 读结果)。
+ * 所以通配符(`*:*:*`)的展开也放在这一处 —— 展开之后,`use-perms.ts` 和各页面**一行都不用改**。
  */
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "#/db";
-import { sysDepartment, sysDepartmentMember, sysMenu, sysRole, sysRoleMenu } from "#/db/data-base-schema";
+import { sysMenu, sysRole, sysRoleMenu, sysUserRole } from "#/db/data-base-schema";
 import { MENU_TYPE } from "#/lib/menu-spec";
 
 /** `sys_menu` 的一行 */
 type MenuRow = typeof sysMenu.$inferSelect;
+
+/**
+ * 权限标识(`perm`)的格式:**`域:资源:动作`**,三段小写;每段可以用一个**整段的 `*`** 通配。
+ *
+ * 域 = 一级模块的 key(如 `sys`),**允许长出新的域**(派生项目加模块就会多一个域)——
+ * 受控的是**形状**,不是取值:菜单接口用这条规则校验,挡住两段 / 大写 / 半截通配(`sys:ro*`)这类脏值。
+ */
+export const PERM_FORMAT = /^(?:[a-z][a-z0-9_]*|\*):(?:[a-z][a-z0-9_]*|\*):(?:[a-z][a-z0-9_]*|\*)$/;
+
+/** 这条 perm 是不是**模式**(含通配段)—— 只在 `effectiveMenusFor` 里用,不外传 */
+function isPermPattern(perm: string): boolean {
+	return perm.includes("*");
+}
+
+/**
+ * 模式与权限点**逐段比较**:某段相等、或模式那一段是 `*`,即算匹配。
+ *
+ * 段数必须一致 —— 所以 `sys:role`(两段)匹配不到任何东西(不放行,也不报错)。
+ * 只支持**整段**通配(`sys:role:*`),不支持半截(`sys:ro*`)—— 后者在接口层就被 `PERM_FORMAT` 挡住。
+ */
+export function permMatches(pattern: string, code: string): boolean {
+	const p = pattern.split(":");
+	const c = code.split(":");
+	return p.length === c.length && p.every((seg, i) => seg === "*" || seg === c[i]);
+}
 
 type EffectiveMenus = {
 	/**
@@ -90,14 +117,13 @@ export async function effectiveMenusFor(userId: string | null): Promise<Effectiv
 		return { rows: null, perms: [] };
 	}
 
-	// 该用户所有「启用的部门 × 启用的角色」
-	const memberships = await db
-		.select({ roleId: sysDepartmentMember.role_id })
-		.from(sysDepartmentMember)
-		.innerJoin(sysRole, eq(sysRole.id, sysDepartmentMember.role_id))
-		.innerJoin(sysDepartment, eq(sysDepartment.id, sysDepartmentMember.department_id))
-		.where(and(eq(sysDepartmentMember.user_id, userId), eq(sysRole.status, 1), eq(sysDepartment.status, 1)));
-	const roleIds = [...new Set(memberships.map((row) => row.roleId))];
+	// 该用户所有「启用的角色」—— 角色是全局的,与部门无关(见 sys_user_role)
+	const assignments = await db
+		.select({ roleId: sysUserRole.role_id })
+		.from(sysUserRole)
+		.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id))
+		.where(and(eq(sysUserRole.user_id, userId), eq(sysRole.status, 1)));
+	const roleIds = [...new Set(assignments.map((row) => row.roleId))];
 	if (roleIds.length === 0) return { rows: null, perms: [] };
 
 	const granted = await db
@@ -105,8 +131,28 @@ export async function effectiveMenusFor(userId: string | null): Promise<Effectiv
 		.from(sysRoleMenu)
 		.where(inArray(sysRoleMenu.role_id, roleIds));
 
+	const grantedIds = granted.map((row) => row.menuId);
+	const grantedSet = new Set(grantedIds);
+
+	/**
+	 * **通配模式在这里展开**(`*:*:*` / `sys:*:*` / `sys:role:*`)。
+	 *
+	 * 做法:把"被模式命中的菜单行"当成**被授权**的行,再走同一套祖先补全 ——
+	 * 于是一个模式的效果和"手勾上这些行"完全一样,没有第二套可见性规则。
+	 * 因为是**读的时候**算,`*:*:*` 自动覆盖**以后新增的域 / 菜单 / 按钮**(不用回来补勾)——
+	 * 这正是"不用一个一个赋权限"的价值所在。
+	 */
+	const grantedPerms = all.filter((row) => grantedSet.has(row.id) && row.perm).map((row) => row.perm as string);
+	const activePatterns = [...new Set(grantedPerms.filter((perm) => isPermPattern(perm)))];
+	const patternHitIds =
+		activePatterns.length === 0
+			? []
+			: all
+					.filter((row) => row.perm && activePatterns.some((p) => permMatches(p, row.perm as string)))
+					.map((row) => row.id);
+
 	// 并集 + 祖先补全(**一次**算完所有授权的祖先,别在循环里逐条查)
-	const allowed = new Set(await withAncestorIds(granted.map((row) => row.menuId)));
+	const allowed = new Set(await withAncestorIds([...grantedIds, ...patternHitIds]));
 
 	const rows = navigable(all).filter((row) => allowed.has(row.id));
 	const perms = [...new Set(all.filter((row) => allowed.has(row.id) && row.perm).map((row) => row.perm as string))];

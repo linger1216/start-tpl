@@ -77,6 +77,16 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "界面偏好",
 		remark: "侧边栏收起后的样子:rail = 收成 60px 图标栏(默认),hidden = 整条隐藏、内容区铺满;填错按 rail 处理",
 	},
+	// 各页表格的「列顺序 + 隐藏项」—— 由每页工具条上的「列」按钮写入(见 hooks/use-column-prefs.ts)。
+	// 键是页面标识(如 settings.roles),值是 { order: string[], hidden: string[] }。
+	// 放在 sys_para 而不是 localStorage:换台机器 / 换浏览器,列设置跟着账号走。
+	"page.columns": {
+		value: "{}",
+		type: PARA_TYPE.JSON,
+		group: "界面偏好",
+		remark:
+			'各页表格的列顺序与隐藏列:{"<页面键>":{"order":["列id",…],"hidden":["列id",…]}};页面上点工具条的「列」即可改',
+	},
 };
 
 const CACHE_TTL_MS = 30_000;

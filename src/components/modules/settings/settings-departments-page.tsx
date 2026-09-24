@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2 } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -15,10 +15,10 @@ import {
 	type DeptTreeNode,
 	SettingsDepartmentsTree,
 } from "#/components/modules/settings/settings-departments-tree";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 
@@ -39,7 +39,6 @@ export function SettingsDepartmentsPage() {
 	const rows = (treeQuery.data ?? []) as DeptRow[];
 	const { tree, byId } = useMemo(() => buildDeptTree(rows), [rows]);
 
-	const rolesQuery = useQuery(trpc.role.list.queryOptions());
 	const usersQuery = useQuery(trpc.user.list.queryOptions());
 
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -110,7 +109,7 @@ export function SettingsDepartmentsPage() {
 	);
 
 	const memberMutation = useMutation(
-		trpc.department.setMemberRole.mutationOptions({
+		trpc.department.addMember.mutationOptions({
 			onSuccess: async () => {
 				await invalidate();
 				toast.success("已更新成员角色");
@@ -129,28 +128,6 @@ export function SettingsDepartmentsPage() {
 		}),
 	);
 
-	/**
-	 * 可选的上级:排除自己与自己的后代(UI 层先挡一次;服务端 `assertNotDescendant` 再挡一次)。
-	 * 两层都要:UI 只防手滑,服务端才是保证。
-	 */
-	const parentOptions = useMemo(() => {
-		const banned = new Set<string>();
-		const collect = (node: DeptTreeNode) => {
-			for (const child of node.children) {
-				banned.add(child.id);
-				collect(child);
-			}
-		};
-		if (selected) collect(selected);
-		return rows
-			.filter((row) => row.id !== selected?.id && !banned.has(row.id))
-			.map((row) => {
-				const depth = byId.get(row.id)?.depth ?? 0;
-				return { id: row.id, label: `${"— ".repeat(depth)}${row.name}` };
-			});
-	}, [rows, selected, byId]);
-
-	const roleOptions = (rolesQuery.data ?? []).map((role) => ({ id: role.id, name: role.name }));
 	const userOptions = (usersQuery.data ?? []).map((user) => ({ id: user.id, name: user.name, email: user.email }));
 	const pending = updateMutation.isPending || deleteMutation.isPending;
 
@@ -160,31 +137,29 @@ export function SettingsDepartmentsPage() {
 				title="部门管理"
 				description="部门是数据权限的边界:一个人可以同时属于多个部门,在每个部门里有一个角色 —— 权限取并集,不需要切换。"
 				actions={
-					<Badge variant="secondary" className="gap-1">
-						<Building2 className="size-3" />共 {rows.length} 个部门
-					</Badge>
+					<div className="flex flex-wrap items-center gap-2">
+						<RefreshButton busy={treeQuery.isFetching} onClick={() => void treeQuery.refetch()} />
+						<Button
+							size="sm"
+							disabled={createMutation.isPending}
+							onClick={() => createMutation.mutate({ parentId: null, name: "新部门" })}
+						>
+							<Plus className="size-3.5" />
+							新增部门
+						</Button>
+					</div>
 				}
 			/>
 
 			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(320px,1.2fr)]">
-				<Card className="flex min-h-0 flex-col">
-					<CardHeader>
-						<CardTitle className="text-[14px]">部门树</CardTitle>
-						<div className="flex items-center gap-2">
-							<Button
-								size="sm"
-								variant="outline"
-								disabled={createMutation.isPending}
-								onClick={() => createMutation.mutate({ parentId: null, name: "新部门" })}
-							>
-								新增部门
-							</Button>
-						</div>
+				<Card className="flex min-h-0 flex-col gap-3">
+					<CardHeader className="flex-row items-center justify-between gap-2">
+						<CardTitle className="flex items-center gap-2">
+							<Building2 className="size-4 text-muted-foreground" />
+							部门树
+						</CardTitle>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
-						<p className="text-[11.5px] text-muted-foreground">
-							拖拽行可调序(仅限同级);**鼠标移到某一行**会显出「新增子部门 / 编辑 / 删除」,也可以选中后在右侧改。
-						</p>
 						<SettingsDepartmentsTree
 							nodes={tree}
 							selectedId={selectedId}
@@ -212,20 +187,18 @@ export function SettingsDepartmentsPage() {
 					</CardContent>
 				</Card>
 
-				<Card>
+				<Card className="flex min-h-0 flex-col">
 					<CardHeader>
 						<CardTitle className="text-[14px]">部门详情</CardTitle>
 					</CardHeader>
-					<CardContent className="min-h-0 flex-1 overflow-y-auto">
+					<CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
 						<SettingsDepartmentsForm
 							node={selected}
 							values={values ?? { name: "", parentId: null, status: true, remark: "" }}
 							dirty={dirty}
 							pending={pending}
-							parentOptions={parentOptions}
 							members={membersQuery.data ?? []}
 							membersLoading={membersQuery.isFetching}
-							roleOptions={roleOptions}
 							userOptions={userOptions}
 							onChange={setValues}
 							onSave={() => {
@@ -240,10 +213,12 @@ export function SettingsDepartmentsPage() {
 							}}
 							onReset={() => selected && setValues(deptFormValues(selected))}
 							onDelete={() => setDeleteOpen(true)}
-							onAddChild={() => selected && createMutation.mutate({ parentId: selected.id, name: "新部门" })}
-							onAddMember={(userId, roleId) =>
-								selected && memberMutation.mutate({ departmentId: selected.id, userId, roleId })
-							}
+							membersPending={memberMutation.isPending || removeMemberMutation.isPending}
+							onAddMembers={(userIds) => {
+								if (!selected) return;
+								// 逐条提交(接口按人幂等);一次选多人时它们会并发跑完
+								for (const userId of userIds) memberMutation.mutate({ departmentId: selected.id, userId });
+							}}
 							onRemoveMember={(userId) =>
 								selected && removeMemberMutation.mutate({ departmentId: selected.id, userId })
 							}

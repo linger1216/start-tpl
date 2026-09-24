@@ -99,7 +99,10 @@ export const sysMenu = mysqlTable(
 		create_time: datetime("create_time", { mode: "date", fsp: 3 }),
 		update_time: datetime("update_time", { mode: "date", fsp: 3 }),
 	},
-	(table) => [index("idx_sys_menu_parent").on(table.parent_id), uniqueIndex("uk_sys_menu_path").on(table.path)],
+	(table) => [
+		index("idx_sys_menu_parent_sort").on(table.parent_id, table.sort),
+		uniqueIndex("uk_sys_menu_path").on(table.path),
+	],
 );
 
 // ── 字典表 ───────────────────────────────────────────────
@@ -207,7 +210,7 @@ export const sysTag = mysqlTable(
 		create_time: datetime("create_time", { mode: "date", fsp: 3 }),
 		update_time: datetime("update_time", { mode: "date", fsp: 3 }),
 	},
-	(table) => [index("idx_sys_tag_parent").on(table.parent_id)],
+	(table) => [index("idx_sys_tag_parent_sort").on(table.parent_id, table.sort)],
 );
 
 // ── 标签 → 对象 关系表 ───────────────────────────────────
@@ -345,9 +348,9 @@ export const sysVerification = mysqlTable(
 // 模型(与 better-auth 的 organization **无关** —— 那套是"选中一个当前组织 + 租户隔离",
 // 这里是"同时属于多个部门 + 权限取并集",语义不同,所以走项目自己的 `sys_*` 表):
 //
-//   sys_department(树)                                    上海公司 / 武汉公司(可嵌套)
+//   sys_dept(树)                                    上海公司 / 武汉公司(可嵌套)
 //   sys_role(全局定义)                                     管理员 / 员工 / 开发 …  ← 不随部门数增长
-//   sys_department_member(user_id, department_id, role_id)  张三:上海=管理员、武汉=员工
+//   sys_user_dept(user_id, department_id, role_id)  张三:上海=管理员、武汉=员工
 //   sys_role_menu(role_id, menu_id)                        角色能看见哪些菜单 / 能用哪些按钮
 //
 // 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
@@ -357,11 +360,11 @@ export const sysVerification = mysqlTable(
 // 现在**不加那一列**,因为没人读的列就是 AGENTS 里禁的「伪扩展点」。届时的形态:
 //   张三 → (上海, 管理员) → 全公司数据
 //        → (武汉, 员工)   → 仅本人数据          并集 = 全公司 ∪ 本人的武汉数据
-// 下面这张 `sys_department_member` 已经承载了将来做这件事所需的全部信息。
+// 下面这张 `sys_user_dept` 已经承载了将来做这件事所需的全部信息。
 
 /** 部门树(数据权限的边界;形状对齐 `sys_menu` / `sys_tag`) */
-export const sysDepartment = mysqlTable(
-	"sys_department",
+export const sysDept = mysqlTable(
+	"sys_dept",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		parent_id: varchar("parent_id", { length: 32 }),
@@ -372,7 +375,7 @@ export const sysDepartment = mysqlTable(
 		create_time: datetime("create_time", { mode: "date" }),
 		update_time: datetime("update_time", { mode: "date" }),
 	},
-	(table) => [index("idx_sys_department_parent").on(table.parent_id)],
+	(table) => [index("idx_sys_department_parent_sort").on(table.parent_id, table.sort)],
 );
 
 /**
@@ -397,19 +400,45 @@ export const sysRole = mysqlTable(
 );
 
 /**
- * 部门成员 —— "谁在哪个部门、是什么角色"。**这张表就是权限并集的来源**。
+ * 部门成员 —— "谁在哪个部门"。**只管组织架构,不携带角色**。
  *
- * `uk_sys_dm_unique(department_id, user_id)`:一个人在同一个部门只能有一个角色
- * (两个列都 not null,所以这个唯一键是真实生效的)。`role_id` **不加 cascade**:
- * 角色还有人用着就不该被删掉 —— procedure 先查引用数给友好报错,DB 的 restrict 当兜底。
+ * 角色是**全局定义**的,和人属于哪个部门无关 —— 所以这里没有 `role_id`,
+ * 用户与角色的关系在下面的 `sys_user_role`。
+ * `uk_sys_dm_unique(department_id, user_id)`:一个人不能重复加入同一个部门
+ * (两个列都 not null,所以这个唯一键是真实生效的)。
  */
-export const sysDepartmentMember = mysqlTable(
-	"sys_department_member",
+export const sysUserDept = mysqlTable(
+	"sys_user_dept",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		department_id: varchar("department_id", { length: 32 })
 			.notNull()
-			.references(() => sysDepartment.id, { onDelete: "cascade" }),
+			.references(() => sysDept.id, { onDelete: "cascade" }),
+		user_id: varchar("user_id", { length: 32 })
+			.notNull()
+			.references(() => sysUser.id, { onDelete: "cascade" }),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
+		index("idx_sys_dm_user").on(table.user_id),
+	],
+);
+
+/**
+ * 用户 → 角色(全局)。**这张表就是权限的来源**。
+ *
+ * 一个用户可以有多个角色,能看到的菜单 / 能用的按钮 = 这些角色授权的**并集**
+ * (`lib/rbac.ts` 的 `effectiveMenusFor`)。
+ *
+ * `role_id` **不加 cascade**:角色还有人用着就不该被删掉 —— procedure 先查引用数给友好报错,
+ * DB 的 restrict 当兜底。
+ */
+export const sysUserRole = mysqlTable(
+	"sys_user_role",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
 		user_id: varchar("user_id", { length: 32 })
 			.notNull()
 			.references(() => sysUser.id, { onDelete: "cascade" }),
@@ -420,9 +449,9 @@ export const sysDepartmentMember = mysqlTable(
 		update_time: datetime("update_time", { mode: "date" }),
 	},
 	(table) => [
-		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
-		index("idx_sys_dm_user").on(table.user_id),
-		index("idx_sys_dm_role").on(table.role_id),
+		uniqueIndex("uk_sys_ur_unique").on(table.user_id, table.role_id),
+		index("idx_sys_ur_user").on(table.user_id),
+		index("idx_sys_ur_role").on(table.role_id),
 	],
 );
 

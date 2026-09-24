@@ -33,3 +33,12 @@ export function asMenuType(value: unknown): MenuType {
 	const n = Number(value);
 	return n === MENU_TYPE.DIR || n === MENU_TYPE.BUTTON ? n : MENU_TYPE.MENU;
 }
+
+/**
+ * 「切换用户(运维)」的权限点 —— **客户端与服务端共用这一份**。
+ *
+ * ⚠️ 别把它写在 `lib/auth-debug.ts` 里:那个文件 import 了 `#/lib/auth` → `#/db` → mysql2,
+ * 客户端组件一旦 import 它,浏览器里没有 `Buffer.prototype`,整个应用直接崩
+ * (同 AGENTS「认证」那两条硬约束的坑)。所以权限码这种"两边都要用的字符串"放这里。
+ */
+export const IMPERSONATE_PERM = "sys:user:impersonate";

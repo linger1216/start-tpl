@@ -1,107 +1,135 @@
+import { actionsColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { createAppColumnHelper } from "#/lib/table";
+import { formatLocalMinute } from "#/lib/time";
 import type { SettingsDictRow } from "./settings-dictionary-types";
 
 export type SettingsDictCallbacks = {
+	onView: (row: SettingsDictRow) => void;
 	onEdit: (row: SettingsDictRow) => void;
 	onToggle: (row: SettingsDictRow) => void;
 	onDelete: (row: SettingsDictRow) => void;
 };
 
+const columnHelper = createAppColumnHelper<SettingsDictRow>();
+
 /**
- * 字段管理表格(字典列表)—— `sys_dict` 一行一个字典。
- * 「字典项」列只展示前几项做抽样,完整内容在编辑弹窗里看。
+ * 字段管理表格(字典列表)的列定义 —— `sys_dict` 一行一个字典。
+ *
+ * **列 = `sys_dict` 的全部列**,一个不少;嫌挤就点工具条里的「列」把不要的收起来。
+ * 「字典项」列只展示前几项做抽样(完整内容在编辑弹窗里看),「项数」是它的派生展示列。
+ *
+ * `busyId` 那行(正在启停 / 删除的那条)把「编辑 / 停用 / 删除」都置灰,避免连点。
  */
-export function SettingsDictionaryTable({
-	rows,
-	busyId,
-	callbacks,
-}: {
-	rows: readonly SettingsDictRow[];
-	busyId: string | null;
-	callbacks: SettingsDictCallbacks;
-}) {
-	return (
-		<Table>
-			<TableHeader>
-				<TableRow>
-					<TableHead className="min-w-40">字典名称</TableHead>
-					<TableHead className="min-w-44">字典编码</TableHead>
-					<TableHead className="min-w-[18rem]">字典项(label = value)</TableHead>
-					<TableHead className="min-w-20">项数</TableHead>
-					<TableHead className="min-w-24">状态</TableHead>
-					<TableHead className="min-w-56">说明</TableHead>
-					<TableHead className="min-w-44">操作</TableHead>
-				</TableRow>
-			</TableHeader>
-			<TableBody>
-				{rows.length === 0 ? (
-					<TableRow>
-						<TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-							还没有字典。点右上角「新建字典」建一个(例:档案类型 entity_category)。
-						</TableCell>
-					</TableRow>
-				) : (
-					rows.map((row) => (
-						<TableRow key={row.id}>
-							<TableCell className="text-[13px] font-medium text-foreground">{row.name}</TableCell>
-							<TableCell translate="no" className="font-mono text-[12px] text-muted-foreground">
-								{row.code}
-							</TableCell>
-							<TableCell>
-								<div className="flex flex-wrap items-center gap-1">
-									{row.items.slice(0, 4).map((item) => (
-										<Badge key={item.value} variant="outline" className="gap-1 text-[11.5px]">
-											{item.label}
-											<span translate="no" className="font-mono text-[10.5px] text-muted-foreground">
-												{item.value}
-											</span>
-										</Badge>
-									))}
-									{row.items.length > 4 ? (
-										<span className="text-[11.5px] text-muted-foreground">等 {row.items.length} 项</span>
-									) : null}
-									{row.items.length === 0 ? <span className="text-[12px] text-muted-foreground">—</span> : null}
-								</div>
-							</TableCell>
-							<TableCell className="tabular-nums text-[12.5px] text-muted-foreground">{row.items.length}</TableCell>
-							<TableCell>
-								<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-[11.5px]">
-									{row.status === 1 ? "启用" : "停用"}
-								</Badge>
-							</TableCell>
-							<TableCell>
-								<span className="line-clamp-2 max-w-64 text-[12.5px] text-muted-foreground" title={row.remark ?? ""}>
-									{row.remark || "—"}
+export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDictCallbacks; busyId: string | null }) {
+	const busy = (row: SettingsDictRow) => busyId === row.id;
+	return columnHelper.columns([
+		columnHelper.accessor("name", {
+			header: "字典名称",
+			sortFn: "text",
+			size: 160,
+			cell: (ctx) => <span className="text-[13px] font-medium text-foreground">{ctx.getValue()}</span>,
+		}),
+		columnHelper.accessor("code", {
+			header: "字典编码",
+			sortFn: "text",
+			size: 170,
+			cell: (ctx) => (
+				<span translate="no" className="font-mono text-[12px] text-muted-foreground">
+					{ctx.getValue()}
+				</span>
+			),
+		}),
+		columnHelper.accessor("items", {
+			header: "字典项(label = value)",
+			size: 300,
+			cell: (ctx) => {
+				const items = ctx.getValue();
+				return (
+					<div className="flex flex-wrap items-center gap-1">
+						{items.slice(0, 4).map((item) => (
+							<Badge key={item.value} variant="outline" className="gap-1 text-[11.5px]">
+								{item.label}
+								<span translate="no" className="font-mono text-[10.5px] text-muted-foreground">
+									{item.value}
 								</span>
-							</TableCell>
-							<TableCell>
-								<div className="flex flex-wrap items-center gap-3">
-									<ActionButton aria-label={`编辑字典 ${row.name}`} onClick={() => callbacks.onEdit(row)}>
-										编辑
-									</ActionButton>
-									<ActionButton
-										aria-label={row.status === 1 ? `停用字典 ${row.name}` : `启用字典 ${row.name}`}
-										title={row.status === 1 ? "停用这个字典" : "启用这个字典"}
-										onClick={() => callbacks.onToggle(row)}
-									>
-										{row.status === 1 ? "停用" : "启用"}
-									</ActionButton>
-									<ActionButton
-										tone="danger"
-										aria-label={`删除字典 ${row.name}`}
-										disabled={busyId === row.id}
-										onClick={() => callbacks.onDelete(row)}
-									>
-										删除
-									</ActionButton>
-								</div>
-							</TableCell>
-						</TableRow>
-					))
-				)}
-			</TableBody>
-		</Table>
-	);
+							</Badge>
+						))}
+						{items.length > 4 ? (
+							<span className="text-[11.5px] text-muted-foreground">等 {items.length} 项</span>
+						) : null}
+						{items.length === 0 ? <span className="text-[12px] text-muted-foreground">—</span> : null}
+					</div>
+				);
+			},
+		}),
+		columnHelper.display({
+			id: "itemCount",
+			header: "项数",
+			size: 80,
+			cell: (ctx) => (
+				<span className="block text-right tabular-nums text-[12.5px] text-muted-foreground">
+					{ctx.row.original.items.length}
+				</span>
+			),
+		}),
+		columnHelper.accessor("status", {
+			header: "状态",
+			size: 84,
+			cell: (ctx) => (
+				<Badge variant={ctx.getValue() === 1 ? "secondary" : "outline"} className="text-[11.5px]">
+					{ctx.getValue() === 1 ? "启用" : "停用"}
+				</Badge>
+			),
+		}),
+		columnHelper.accessor("remark", {
+			header: "说明",
+			size: 240,
+			cell: (ctx) => (
+				<span className="line-clamp-2 max-w-64 text-[12.5px] text-muted-foreground" title={ctx.getValue() ?? ""}>
+					{ctx.getValue() || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("createTime", {
+			header: "创建时间",
+			size: 140,
+			cell: (ctx) => (
+				<span className="tabular-nums text-[12px] text-muted-foreground">
+					{formatLocalMinute(ctx.getValue()) || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("updateTime", {
+			header: "更新时间",
+			size: 140,
+			cell: (ctx) => (
+				<span className="tabular-nums text-[12px] text-muted-foreground">
+					{formatLocalMinute(ctx.getValue()) || "—"}
+				</span>
+			),
+		}),
+		columnHelper.accessor("id", {
+			header: "ID",
+			size: 200,
+			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+		}),
+		actionsColumn<SettingsDictRow>({
+			size: 190,
+			extra: (row) => (
+				<ActionButton
+					disabled={busy(row)}
+					title={row.status === 1 ? "停用这个字典" : "启用这个字典"}
+					onClick={() => callbacks.onToggle(row)}
+				>
+					{row.status === 1 ? "停用" : "启用"}
+				</ActionButton>
+			),
+			onView: callbacks.onView,
+			onEdit: callbacks.onEdit,
+			onDelete: callbacks.onDelete,
+			disabled: busy,
+		}),
+	]);
 }

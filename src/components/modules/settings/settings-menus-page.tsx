@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderTree, ListChecks } from "lucide-react";
+import { FolderTree, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { buildMenuTree, type MenuTreeNode } from "#/components/layout/nav-menu";
@@ -15,6 +15,7 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
@@ -166,9 +167,25 @@ export function SettingsMenusPage() {
 				title="菜单管理"
 				description="系统设置 ▸ 菜单管理:维护侧边栏菜单树。拖拽调整同级顺序、右侧直接改名称 / 路径 / 图标 / 显隐 —— 改完即时生效,无需发版。"
 				actions={
-					<Badge variant="secondary" className="gap-1">
-						<ListChecks className="size-3" />共 {rows.length} 个菜单
-					</Badge>
+					<div className="flex flex-wrap items-center gap-2">
+						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+						<Button
+							size="sm"
+							disabled={createMutation.isPending}
+							onClick={() =>
+								createMutation.mutate({
+									parentId: null,
+									name: "新菜单",
+									path: draftPath(),
+									icon: "file-text",
+									visible: true,
+								})
+							}
+						>
+							<Plus className="size-3.5" />
+							新增一级菜单
+						</Button>
+					</div>
 				}
 			/>
 
@@ -185,22 +202,6 @@ export function SettingsMenusPage() {
 									读取中…
 								</Badge>
 							) : null}
-							<Button
-								size="sm"
-								variant="outline"
-								disabled={createMutation.isPending}
-								onClick={() =>
-									createMutation.mutate({
-										parentId: null,
-										name: "新菜单",
-										path: draftPath(),
-										icon: "file-text",
-										visible: true,
-									})
-								}
-							>
-								新增一级菜单
-							</Button>
 						</div>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">

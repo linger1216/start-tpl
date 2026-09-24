@@ -48,25 +48,10 @@ const pad = (value: number) => String(value).padStart(2, "0");
 
 /**
  * `前缀-YYMMDD-HHMMSS`。**只负责格式化,不保证唯一** ——
- * 同一秒要发两个编号时,由调用方把 `when` 往后顺延 1 秒(见 `nextIdByTime`)。
+ * 同一秒要发两个编号时,由调用方把 `when` 往后顺延 1 秒。
  */
 export function formatCode(prefix: string, when: Date = new Date()): string {
 	const date = `${pad(when.getFullYear() % 100)}${pad(when.getMonth() + 1)}${pad(when.getDate())}`;
 	const time = `${pad(when.getHours())}${pad(when.getMinutes())}${pad(when.getSeconds())}`;
 	return `${prefix}-${date}-${time}`;
-}
-
-/**
- * 从"现在"开始找一个没被占用的编号:`isTaken` 说占了就把时间顺延 1 秒重试。
- *
- * 调用方手上已经有一份"已占用集合"时用它(不必再打库);要靠数据库判重时,
- * 用 `insert` 撞唯一键后重试的路子更省事。
- */
-export function nextIdByTime(prefix: string, isTaken: (code: string) => boolean, maxBumps = 600): string {
-	const base = Date.now();
-	for (let bump = 0; bump < maxBumps; bump += 1) {
-		const candidate = formatCode(prefix, new Date(base + bump * 1000));
-		if (!isTaken(candidate)) return candidate;
-	}
-	throw new Error(`${prefix} 编号连续被占 ${maxBumps} 次,请检查系统时间`);
 }

@@ -75,6 +75,15 @@ export const { useAppTable, createAppColumnHelper, appFeatures } = createTableHo
 /** createTableHook 的 features 类型 —— 列定义 / 表实例 / Header 的泛型参数用 */
 export type AppTableFeatures = typeof appFeatures;
 
+/**
+ * 表格行的最小约束:必须有 `id`。
+ *
+ * `DataTable` / `actionsColumn` / `selectColumn` 的泛型都挂在它上面 —— 所以它属于**表格**这一层,
+ * 而不是 `lib/mock-table.ts`(那个文件是"设计期的假后端",只有工作台示例用)。
+ * 之前放在那边,导致"真表格要 import 一个 mock 文件才能定类型",名字与位置都在误导。
+ */
+export type MockRow = { id: string } & Record<string, unknown>;
+
 // 列 meta 扩展:允许在列定义里挂 className(模块列宽/对齐用)
 declare module "@tanstack/react-table" {
 	interface ColumnMeta<TFeatures extends TableFeatures, TData extends RowData, TValue extends CellData> {

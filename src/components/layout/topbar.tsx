@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { Bell, ChevronRight, LogOut, Menu, Moon, Plus, Search, Sun } from "lucide-react";
+import { Bell, ChevronRight, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -17,6 +18,7 @@ import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { findNavTrailIn, type NavNode } from "./nav-config";
 import { useNavNodes } from "./nav-data";
+import { UserSwitcher } from "./user-switcher";
 
 type Crumb = { label: string; href?: string };
 
@@ -68,19 +70,6 @@ function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
 	return out;
 }
 
-/**
- * 顶栏的主 CTA 文案(**纯装饰**,模板里没有绑定动作)。
- *
- * 只列本项目真实存在的页面 —— 原来还有 `/archive/cases` 与 `/visit` 两条,
- * 那两个路由在本模板里根本不存在,是派生前的残留,已删。
- */
-function primaryCtaLabel(pathname: string): { label: string; icon: "plus" | "check" } | null {
-	if (pathname.startsWith("/settings/users")) return { label: "新增用户", icon: "plus" };
-	if (pathname.startsWith("/settings/roles")) return { label: "新增角色", icon: "plus" };
-	if (pathname.startsWith("/settings/departments")) return { label: "新增部门", icon: "plus" };
-	return null;
-}
-
 export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => void }) {
 	const { pathname } = useLocation();
 	const nodes = useNavNodes();
@@ -88,7 +77,6 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const [theme, setTheme] = useState<ThemeMode>("light");
-	const cta = primaryCtaLabel(pathname);
 
 	// 与 __root.tsx 的主题引导脚本共用同一个键与同一条回落规则(无存储值 → 系统偏好),
 	// 否则首屏会先按系统偏好渲染、再被这里纠正,出现闪烁。
@@ -157,10 +145,10 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 									{c.label}
 								</Link>
 							) : (
-								<span className="flex items-center gap-1.5 rounded-md bg-brand-soft px-2 py-0.5 font-medium text-primary">
+								<Badge className="gap-1.5 bg-brand-soft px-2 font-medium text-primary">
 									<span aria-hidden className="size-1.5 rounded-full bg-primary" />
 									{c.label}
-								</span>
+								</Badge>
 							)}
 						</span>
 					))}
@@ -179,14 +167,6 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 					<span className="shortcut">⌘ K</span>
 				</div>
 
-				{/* 页面相关主 CTA —— 与路由联动 */}
-				{cta ? (
-					<Button size="sm" className="ml-1 gap-1.5 shadow-glow">
-						<Plus className="size-3.5" />
-						{cta.label}
-					</Button>
-				) : null}
-
 				{/* 通知 */}
 				<Button variant="ghost" size="icon" aria-label="通知" className="relative size-8">
 					<Bell className="size-4" />
@@ -199,6 +179,9 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 						{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
 					</span>
 				</Button>
+
+				{/* 切换用户(运维):只有拿到「切换用户」权限的人才会渲染 —— 见 lib/menu-spec.ts 的 IMPERSONATE_PERM */}
+				<UserSwitcher currentUser={{ id: user.id, name: user.name || user.email }} />
 
 				<div className="mx-1 h-5 w-px bg-border" />
 
