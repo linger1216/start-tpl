@@ -155,6 +155,18 @@ const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	return next();
 });
 
+/**
+ * 在 `protectedProcedure` 的 resolver 里取当前用户。
+ *
+ * 中间件已经保证了"有用户",所以这里只是把类型收紧 —— 业务代码不用每处都写一遍
+ * `(ctx as { user: ... }).user` 的转换。
+ */
+export function currentUserOf(ctx: unknown): { id: string; name: string } {
+	const user = (ctx as { user?: InjectedUser | null }).user;
+	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
+	return { id: user.id, name: user.name };
+}
+
 export const createTRPCRouter = t.router;
 
 /** 只挂日志与审计:**任何人**都能调(本项目当前没有这种接口,留着表达"公开"的语义) */

@@ -113,6 +113,12 @@ export const NAV_NODES: NavNode[] = [
 		description: "模板入口页:上手自检清单、目录职责速查、各展示页入口。",
 	},
 	{
+		name: "我的通知",
+		path: "/notices",
+		icon: "bell",
+		description: "站内通知:全部已读、点一条跳到对应页面;有「发通知」权限的人还能给指定的人发一条。",
+	},
+	{
 		name: "框架能力",
 		icon: "workflow",
 		description:

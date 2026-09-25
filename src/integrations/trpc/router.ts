@@ -4,6 +4,7 @@ import { dictRouter } from "./routers/dict";
 import { fileRouter } from "./routers/file";
 import { logRouter } from "./routers/log";
 import { menuRouter } from "./routers/menu";
+import { noticeRouter } from "./routers/notice";
 import { paraRouter } from "./routers/para";
 import { roleRouter } from "./routers/role";
 import { tagRouter } from "./routers/tag";
@@ -12,6 +13,8 @@ import { userRouter } from "./routers/user";
 export const trpcRouter = createTRPCRouter({
 	/** 审计日志(只读,见 doc/审计日志.md) */
 	log: logRouter,
+	/** 站内通知(只碰自己的,见 doc/通知中心.md) */
+	notice: noticeRouter,
 	/** 系统设置 ▸ 菜单管理 —— 读写 `sys_menu` */
 	menu: menuRouter,
 	/** 系统设置 ▸ 字典管理 —— 读写 `sys_dict` */

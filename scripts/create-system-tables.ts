@@ -297,6 +297,22 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_sys_log_path\` (\`path\`, \`create_time\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '审计日志(只增不改;见 doc/审计日志.md)'`,
 },
+/** 站内通知(一条通知一个收件人;已读 = read_at,见 doc/通知中心.md) */
+{
+	name: "sys_notice",
+	ddl: `create table if not exists \`sys_notice\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+    \`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '收件人 id',
+    \`title\` varchar(128) collate utf8mb4_unicode_ci not null comment '标题',
+    \`body\` varchar(255) collate utf8mb4_unicode_ci default null comment '可选正文',
+    \`path\` varchar(255) collate utf8mb4_unicode_ci default null comment '点击跳转的站内路径(必须 / 开头)',
+    \`level\` varchar(16) collate utf8mb4_unicode_ci not null default 'info' comment 'info / success / warn / danger',
+    \`read_at\` datetime default null comment '已读时间;null = 未读',
+    \`create_time\` datetime not null default current_timestamp,
+    primary key (\`id\`),
+    key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`create_time\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '站内通知(一条一个收件人,见 doc/通知中心.md)'`,
+},
 ];;
 
 const before = new Set(

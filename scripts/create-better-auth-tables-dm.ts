@@ -203,6 +203,19 @@ const STATEMENTS: string[] = [
     `create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("create_time")`,
     `create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "create_time")`,
     `create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "create_time")`,
+    // ── sys_notice(站内通知;一条一个收件人,见 doc/通知中心.md)────────────
+    `create table if not exists ${S}."sys_notice" (
+      "id" varchar(32) not null,
+      "user_id" varchar(32) not null,
+      "title" varchar(128) not null,
+      "body" varchar(255),
+      "path" varchar(255),
+      "level" varchar(16) default 'info' not null,
+      "read_at" datetime,
+      "create_time" datetime default current_timestamp not null,
+      primary key ("id")
+    )`,
+    `create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
 
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (

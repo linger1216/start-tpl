@@ -287,6 +287,10 @@ async function main() {
 	if (日志MenuId) {
 		await upsertButton(日志MenuId, "查看审计日志", "sys:log:list", 90);
 	}
+	const 通知MenuId = byPath.get("/notices")?.id;
+	if (通知MenuId) {
+		await upsertButton(通知MenuId, "手动发通知", "sys:notice:add", 90);
+	}
 	const 用户管理MenuId = byPath.get("/settings/users")?.id;
 	if (用户管理MenuId) {
 		await upsertButton(用户管理MenuId, "新增用户", "sys:user:add", 90);

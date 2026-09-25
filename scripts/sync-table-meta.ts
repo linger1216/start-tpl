@@ -38,6 +38,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_tag_relation: "标签与业务对象的关联(某个对象打了哪些标签)",
 	sys_file: "文件元数据(字节存 MinIO;见 doc/文件管理.md)",
 	sys_log: "审计日志(只增不改;见 doc/审计日志.md)",
+	sys_notice: "站内通知(一条一个收件人;见 doc/通知中心.md)",
 	sys_user: "用户(Better Auth 内核四表之一;auth 是系统内部服务,故吃 sys_ 前缀)",
 	sys_session: "登录会话(每个设备 / 浏览器一行;user_id 级联删除)",
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
@@ -210,6 +211,14 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_log", column: "input", comment: "入参快照(已脱敏、截断 2000 字符)" },
 	{ table: "sys_log", column: "duration_ms", comment: "耗时(毫秒)" },
 	{ table: "sys_log", column: "create_time", comment: "创建时间" },
+	{ table: "sys_notice", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_notice", column: "user_id", comment: "收件人 id" },
+	{ table: "sys_notice", column: "title", comment: "标题" },
+	{ table: "sys_notice", column: "body", comment: "可选正文" },
+	{ table: "sys_notice", column: "path", comment: "点击跳转的站内路径(必须 / 开头)" },
+	{ table: "sys_notice", column: "level", comment: "info / success / warn / danger" },
+	{ table: "sys_notice", column: "read_at", comment: "已读时间;null = 未读" },
+	{ table: "sys_notice", column: "create_time", comment: "创建时间" },
 ];
 
 /**

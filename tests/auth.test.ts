@@ -69,6 +69,7 @@ describe("服务端鉴权", () => {
 		await assertRejects(() => nobody.log.list(), "没有权限");
 		await assertRejects(() => nobody.role.create({ name: "不该建成", code: "NOPE", remark: "" }), "没有权限");
 		await assertRejects(() => nobody.file.remove({ ids: ["whatever"] }), "没有权限");
+		await assertRejects(() => nobody.notice.create({ userIds: ["x"], title: "不该发出" }), "没有权限");
 	});
 
 	it("分类守卫:每个写接口必须显式分类(配了权限点 / 或在未配清单里)", () => {

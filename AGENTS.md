@@ -25,6 +25,7 @@ Before editing files for a substantial task:
 | 碰数据库、认证、权限、达梦 | **`doc/数据库与认证.md`** + `doc/达梦支持.md` + `doc/rbac-权限模型.md` |
 | 改接口 / tRPC / 错误处理 | **`doc/后端接口约定.md`** |
 | 文件 / 上传 / MinIO | **`doc/文件管理.md`** |
+| 站内通知 / 铃铛 | **`doc/通知中心.md`** |
 | 鉴权(登录 / 权限)、审计日志 | **`doc/审计日志.md`** |
 | **改任何东西之前** | **`doc/已知陷阱.md`**(每条都真实踩过) + `doc/数据库陷阱.md` |
 | 视觉规范 / 动效 / 色板 | **`DESIGN.md`**(token 在 `src/styles.css`) |

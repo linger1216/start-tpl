@@ -34,11 +34,12 @@
     "db:seed:menus": "dotenv -e .env.local -- tsx scripts/seed-menus.ts",
     "db:seed:dicts": "dotenv -e .env.local -- tsx scripts/seed-dicts.ts",
     "db:seed:paras": "dotenv -e .env.local -- tsx scripts/seed-paras.ts",
-		"db:minio:init": "dotenv -e .env.local -- tsx scripts/init-minio.ts",
+    "db:minio:init": "dotenv -e .env.local -- tsx scripts/init-minio.ts",
     "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts",
     "db:seed:rbac": "dotenv -e .env.local -- tsx scripts/seed-rbac.ts",
     "check:legacy": "node scripts/check-legacy.mjs",
-    "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts"
+    "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts",
+    "db:seed:notices": "dotenv -e .env.local -- tsx scripts/seed-notices.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

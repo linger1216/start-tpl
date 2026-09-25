@@ -216,12 +216,22 @@ export const PERM_BY_PATH: Record<string, string> = {
 	"user.remove": "sys:user:remove",
 	// 审计日志(读接口也走这张表)
 	"log.list": "sys:log:list",
+	// 站内通知(读自己的不需要权限点;替别人发才需要)
+	"notice.create": "sys:notice:add",
 };
 
 /**
- * **已登记但暂未配权限点**的写接口 —— 现在只要求登录。
+ * **只要求登录、不需要权限点**的写接口。
  *
- * 这批已清空:**35 条写接口全部配上了权限点**(按钮在 `scripts/seed-rbac.ts` 里建)。
- * 留着这个空数组是为了让分类守卫继续起作用:以后新增的写接口必须显式二选一,不允许悄悄溜进来。
+ * 两类会出现在这里,加的时候都要写清属于哪一类:
+ *
+ * 1. **天生自限范围** —— 接口在 SQL 层只动"自己那一份数据"(如通知的已读),任何登录用户都该能用;
+ * 2. **还没建权限点** —— 强制会制造"没人能被授予"的假权限,等按钮建好再挪进 `PERM_BY_PATH`。
+ *
+ * `tests/auth.test.ts` 的**分类守卫**强制每次新增写接口都显式二选一,不允许悄悄溜进来。
  */
-export const UNMAPPED_MUTATIONS: readonly string[] = [];
+export const UNMAPPED_MUTATIONS: readonly string[] = [
+	// 类别 1:通知的已读 —— `user_id` 一律取 `ctx.user.id`,碰不到别人的行(见 doc/通知中心.md)
+	"notice.read",
+	"notice.readAll",
+];

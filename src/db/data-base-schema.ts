@@ -487,6 +487,35 @@ export const sysRoleMenu = mysqlTable(
  * 清理任务就按 `(status, create_time)` 扫它。
  */
 /**
+ * 站内通知 —— 一条通知**只属于一个收件人**,所以「已读」就是这一行的 `read_at`:
+ * 零附带表、零联合查询(群发 = 多插几行,`lib/notice.ts` 的 `notifyMany`)。
+ *
+ * 发送只在**服务端**发生(`lib/notice.ts` 的 `notify`),没有公开的创建接口 ——
+ * 站内通知不该被前端随便造。
+ */
+export const sysNotice = mysqlTable(
+	"sys_notice",
+	{
+		/** 主键:nanoid */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 收件人 —— 所有查询都以它为第一条件(别人的通知在 SQL 层就碰不到) */
+		user_id: varchar("user_id", { length: 32 }).notNull(),
+		/** 标题(一行字) */
+		title: varchar("title", { length: 128 }).notNull(),
+		/** 可选正文 */
+		body: varchar("body", { length: 255 }),
+		/** 点击后跳转的**站内路径**(如 `/settings/files`);写入时校验必须 `/` 开头 */
+		path: varchar("path", { length: 255 }),
+		/** info / success / warn / danger —— 决定图标与颜色(走 DESIGN 的语义色) */
+		level: varchar("level", { length: 16 }).notNull().default("info"),
+		/** null = 未读 */
+		read_at: datetime("read_at", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }),
+	},
+	(table) => [index("idx_sys_notice_user").on(table.user_id, table.read_at, table.create_time)],
+);
+
+/**
  * 审计日志 —— **只增不改**:每一次「写调用」是谁、什么时候、对什么、成功没有。
  *
  * 它由 `init.ts` 的 `auditMiddleware` **结构性**写入(不靠每个 resolver 记得加);

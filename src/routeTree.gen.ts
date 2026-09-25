@@ -13,6 +13,7 @@ import { Route as mainRouteRouteImport } from './routes/(main)/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
 import { Route as mainBlankRouteImport } from './routes/(main)/blank'
+import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
 import { Route as mainDemoDrizzleRouteImport } from './routes/(main)/demo/drizzle'
 import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
@@ -49,6 +50,11 @@ const mainIndexRoute = mainIndexRouteImport.update({
 const mainBlankRoute = mainBlankRouteImport.update({
   id: '/blank',
   path: '/blank',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainNoticesRoute = mainNoticesRouteImport.update({
+  id: '/notices',
+  path: '/notices',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainDemoBetterAuthRoute = mainDemoBetterAuthRouteImport.update({
@@ -145,6 +151,7 @@ const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
 export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/blank': typeof mainBlankRoute
+  '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/blank': typeof mainBlankRoute
+  '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/(main)': typeof mainRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/(main)/blank': typeof mainBlankRoute
+  '/(main)/notices': typeof mainNoticesRoute
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/(main)/demo/drizzle': typeof mainDemoDrizzleRoute
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/login'
     | '/blank'
+    | '/notices'
     | '/'
     | '/demo/better-auth'
     | '/demo/drizzle'
@@ -241,6 +251,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/blank'
+    | '/notices'
     | '/'
     | '/demo/better-auth'
     | '/demo/drizzle'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/(main)'
     | '/login'
     | '/(main)/blank'
+    | '/(main)/notices'
     | '/(main)/'
     | '/(main)/demo/better-auth'
     | '/(main)/demo/drizzle'
@@ -321,6 +333,13 @@ declare module '@tanstack/react-router' {
       path: '/blank'
       fullPath: '/blank'
       preLoaderRoute: typeof mainBlankRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/notices': {
+      id: '/(main)/notices'
+      path: '/notices'
+      fullPath: '/notices'
+      preLoaderRoute: typeof mainNoticesRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/demo/better-auth': {
@@ -454,6 +473,7 @@ declare module '@tanstack/react-router' {
 
 interface mainRouteRouteChildren {
   mainBlankRoute: typeof mainBlankRoute
+  mainNoticesRoute: typeof mainNoticesRoute
   mainIndexRoute: typeof mainIndexRoute
   mainDemoBetterAuthRoute: typeof mainDemoBetterAuthRoute
   mainDemoDrizzleRoute: typeof mainDemoDrizzleRoute
@@ -475,6 +495,7 @@ interface mainRouteRouteChildren {
 
 const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainBlankRoute: mainBlankRoute,
+  mainNoticesRoute: mainNoticesRoute,
   mainIndexRoute: mainIndexRoute,
   mainDemoBetterAuthRoute: mainDemoBetterAuthRoute,
   mainDemoDrizzleRoute: mainDemoDrizzleRoute,

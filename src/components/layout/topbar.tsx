@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { Bell, ChevronRight, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
+import { ChevronRight, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
@@ -18,6 +18,7 @@ import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { findNavTrailIn, type NavNode } from "./nav-config";
 import { useNavNodes } from "./nav-data";
+import { NotificationBell } from "./notification-bell";
 import { UserSwitcher } from "./user-switcher";
 
 type Crumb = { label: string; href?: string };
@@ -167,11 +168,8 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 					<span className="shortcut">⌘ K</span>
 				</div>
 
-				{/* 通知 */}
-				<Button variant="ghost" size="icon" aria-label="通知" className="relative size-8">
-					<Bell className="size-4" />
-					<span className="attention-dot absolute top-1.5 right-1.5 size-1.5 rounded-full bg-danger ring-2 ring-background" />
-				</Button>
+				{/* 通知:未读数 + 点开看最近 10 条 + 点一条跳到对应页面(见 doc/通知中心.md) */}
+				<NotificationBell />
 
 				{/* 主题:切换时图标原地转着换出来(icon-swap 绑 key 重挂载) */}
 				<Button variant="ghost" size="icon" aria-label="切换主题" onClick={toggleTheme} className="size-8">
