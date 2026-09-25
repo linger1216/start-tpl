@@ -159,3 +159,69 @@ export async function effectiveMenusFor(userId: string | null): Promise<Effectiv
 	// 可见菜单为空 → 返回 null(区别于"菜单表为空"),展示层据此决定"什么都不显示"
 	return { rows: rows.length > 0 ? rows : null, perms };
 }
+
+/**
+ * **tRPC 路径 → 权限码**的映射(服务端强制的唯一真源)。
+ *
+ * 设计取舍:与其在 55 个 procedure 上各写一次 `permProcedure("…")`(漏写一个就**静默放开**),
+ * 不如把映射收在这一张表里、由中间件按 `path` **结构性**查 —— 与"日志天然全覆盖"同一个思路。
+ *
+ * ⚠️ **登记在这里的码,必须先在 `sys_menu` 里有对应按钮**(`scripts/seed-rbac.ts` 建):
+ * 要求一个"没人能被授予"的码,结果是**已授权的账号集体失权**。现在 35 条写接口已全部登记,
+ * `UNMAPPED_MUTATIONS` **为空** —— `tests/auth.test.ts` 的分类守卫会强制后续新增接口也显式登记。
+ */
+export const PERM_BY_PATH: Record<string, string> = {
+	// 文件
+	"file.presign": "sys:file:upload",
+	"file.confirm": "sys:file:upload",
+	"file.rename": "sys:file:edit",
+	"file.remove": "sys:file:remove",
+	// 菜单
+	"menu.create": "sys:menu:add",
+	"menu.update": "sys:menu:edit",
+	"menu.delete": "sys:menu:remove",
+	"menu.reorder": "sys:menu:sort",
+	// 字典
+	"dict.create": "sys:dict:add",
+	"dict.update": "sys:dict:edit",
+	"dict.delete": "sys:dict:remove",
+	// 参数
+	"para.create": "sys:para:add",
+	"para.update": "sys:para:edit",
+	"para.delete": "sys:para:remove",
+	// 标签
+	"tag.create": "sys:tag:add",
+	"tag.update": "sys:tag:edit",
+	"tag.delete": "sys:tag:remove",
+	"tag.move": "sys:tag:move",
+	"tag.link": "sys:tag:link",
+	"tag.unlink": "sys:tag:link",
+	// 部门
+	"department.create": "sys:department:add",
+	"department.update": "sys:department:edit",
+	"department.remove": "sys:department:remove",
+	"department.reorder": "sys:department:sort",
+	"department.addMember": "sys:department:member",
+	"department.removeMember": "sys:department:member",
+	// 角色
+	"role.create": "sys:role:add",
+	"role.update": "sys:role:edit",
+	"role.remove": "sys:role:remove",
+	"role.addUser": "sys:role:user",
+	"role.removeUser": "sys:role:user",
+	"role.setMenus": "sys:role:perm",
+	// 用户
+	"user.create": "sys:user:add",
+	"user.update": "sys:user:edit",
+	"user.remove": "sys:user:remove",
+	// 审计日志(读接口也走这张表)
+	"log.list": "sys:log:list",
+};
+
+/**
+ * **已登记但暂未配权限点**的写接口 —— 现在只要求登录。
+ *
+ * 这批已清空:**35 条写接口全部配上了权限点**(按钮在 `scripts/seed-rbac.ts` 里建)。
+ * 留着这个空数组是为了让分类守卫继续起作用:以后新增的写接口必须显式二选一,不允许悄悄溜进来。
+ */
+export const UNMAPPED_MUTATIONS: readonly string[] = [];

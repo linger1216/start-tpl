@@ -60,7 +60,7 @@ export function SettingsMenusTree({
 					<>
 						{Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" /> : null}
 						<span className="min-w-0 flex-1 truncate text-[13px]">{node.name}</span>
-						{recordIdFromMenuDetailPath(node.path) ? (
+						{Number(node.type) !== MENU_TYPE.BUTTON && recordIdFromMenuDetailPath(node.path) ? (
 							<Badge variant="outline" className="px-1.5 text-[10.5px] text-primary">
 								参数化
 							</Badge>
@@ -79,7 +79,13 @@ export function SettingsMenusTree({
 								隐藏
 							</Badge>
 						) : null}
-						{node.path ? (
+						{/*
+						  ⚠️ 按钮行**不显示 `path`**:按钮的 `path` 是 `#perm/<权限码>` —— 那只是为了让
+						  `path`(非空唯一键)有值用的**占位**,给人看毫无意义;而右侧还要放权限码,
+						  两个 `max-w-40 truncate` 并排会把名字挤得看不见(实测踩到)。
+						  所以:按钮只给「权限码」,不再重复一份 `#perm/…`。
+						*/}
+						{Number(node.type) === MENU_TYPE.BUTTON ? null : node.path ? (
 							<span className="max-w-40 truncate font-mono text-[11px] text-muted-foreground/70">{node.path}</span>
 						) : (
 							<span className="text-[11px] text-muted-foreground/60">分组</span>

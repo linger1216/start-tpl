@@ -14,6 +14,7 @@ import type { MultiSelectOption } from "#/components/modules/shared/multi-select
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
@@ -234,7 +235,15 @@ export function SettingsUsersPage() {
 						<DetailRow label="邮箱">{detailFor.email}</DetailRow>
 						<DetailRow label="邮箱已验证">{detailFor.emailVerified ? "是" : "否"}</DetailRow>
 						<DetailRow label="头像">
-							<span className="font-mono text-[12px]">{detailFor.image ?? "—"}</span>
+							<div className="flex items-center gap-2">
+								<Avatar className="size-8">
+									{detailFor.image ? <AvatarImage src={detailFor.image} alt={detailFor.name} /> : null}
+									<AvatarFallback className="text-[11px]">{(detailFor.name || "?").slice(0, 1)}</AvatarFallback>
+								</Avatar>
+								<span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+									{detailFor.image ?? "—"}
+								</span>
+							</div>
 						</DetailRow>
 
 						<DetailRow label="部门">

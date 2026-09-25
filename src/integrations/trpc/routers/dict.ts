@@ -15,7 +15,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysDict } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 字典编码规则:小写字母/数字/下划线,字母开头 —— 与建表的唯一键口径一致 */
 const dictCode = z
@@ -58,19 +58,19 @@ async function getByCode(code: string) {
 
 export const dictRouter = createTRPCRouter({
 	/** 全部字典(前端按需取用;字典表很小,直接全给) */
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 消费侧(useDict)自己只看启用的那些
 		const rows = await db.select().from(sysDict).orderBy(asc(sysDict.code));
 		return rows.map(toDictRow);
 	}),
 
 	/** 按**字典编码**读一个(不是按主键 —— 业务侧只认识编码) */
-	byCode: publicProcedure.input(z.object({ code: dictCode })).query(async ({ input }) => {
+	byCode: protectedProcedure.input(z.object({ code: dictCode })).query(async ({ input }) => {
 		const row = await getByCode(input.code);
 		return row ? toDictRow(row) : null;
 	}),
 
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				code: dictCode,
@@ -95,7 +95,7 @@ export const dictRouter = createTRPCRouter({
 			return { id, code: input.code };
 		}),
 
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				code: dictCode,
@@ -127,7 +127,7 @@ export const dictRouter = createTRPCRouter({
 	 * 删除字典 —— 模板未接到「谁在用这个字典」的登记处,所以**不做引用计数校验**:
 	 * 真业务接回后,在这里补检查(常见引用方是治理规则的 `spec.category` 与档案写入路径)。
 	 */
-	delete: publicProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
+	delete: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
 		const existing = await getByCode(input.code);
 		if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "这个字典不存在(可能已被删除)" });
 		await db.delete(sysDict).where(eq(sysDict.code, input.code));

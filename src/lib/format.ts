@@ -7,6 +7,7 @@
  *   - `singleText`:      unknown → 字符串数组(单值字段,空值归一为空数组)
  *   - `jsonText`:        unknown → 可展示文本(字符串原样,null/对象等 → 占位符)
  *   - `orEmpty`:         null | undefined → 占位符
+ *   - `formatBytes`:     字节数 → `1.5 KB`(文件 / 附件展示用)
  *
  * ⚠️ **日期格式化不在这里,在 `lib/time.ts`。**
  * 曾经两个文件各有一套(`formatDateTime` vs `formatLocalDateTime`),同一个值在两处
@@ -29,6 +30,26 @@ export function orEmpty(value: string | null | undefined): string {
  * - null / undefined: 占位符
  * - 其他: JSON.stringify(v, null, 2);不可序列化降级 toString
  */
+/**
+ * 字节数 → 人读字符串(`1536` → `1.5 KB`)。
+ *
+ * 进制用 **1024**(与操作系统 / 网盘一致),但单位写 `KB` / `MB` 而不是 `KiB` / `MiB` ——
+ * 后台界面里"1.5 MB"不用让人停一下换算。不足 1KB 直接给字节数,免得出现 `0.4 KB` 这种没信息量的值。
+ */
+export function formatBytes(bytes: number | null | undefined, fractionDigits = 1): string {
+	const value = Number(bytes ?? 0);
+	if (!Number.isFinite(value) || value <= 0) return "0 B";
+	if (value < 1024) return `${Math.round(value)} B`;
+	const units = ["KB", "MB", "GB", "TB", "PB"];
+	let size = value / 1024;
+	let unit = 0;
+	while (size >= 1024 && unit < units.length - 1) {
+		size /= 1024;
+		unit += 1;
+	}
+	return `${size.toFixed(fractionDigits)} ${units[unit]}`;
+}
+
 export function formatJson(v: unknown): string {
 	if (v === null || v === undefined) return PLACEHOLDER_EMPTY;
 	if (typeof v === "string") {

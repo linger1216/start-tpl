@@ -32,7 +32,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysTag, sysTagRelation } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
 function toTagRow(row: typeof sysTag.$inferSelect) {
@@ -70,12 +70,12 @@ async function collectSubtreeIds(rootId: string): Promise<string[]> {
 }
 
 export const tagRouter = createTRPCRouter({
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));
 		return rows.map(toTagRow);
 	}),
 
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				parentId: z.string().nullable(),
@@ -120,7 +120,7 @@ export const tagRouter = createTRPCRouter({
 			return toTagRow(await getTagRow(id));
 		}),
 
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -143,7 +143,7 @@ export const tagRouter = createTRPCRouter({
 			return toTagRow(await getTagRow(input.id));
 		}),
 
-	delete: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		await getTagRow(input.id);
 		const ids = await collectSubtreeIds(input.id);
 		// 关联关系先清:标签没了,「谁贴过它」的行留着就是脏数据(表上没有外键,不会自动清)
@@ -161,7 +161,7 @@ export const tagRouter = createTRPCRouter({
 	 * 同级重排 / 跨父迁移。传入「目标父 + 该父下完整 id 顺序」,服务端:
 	 *  ① 把被拖节点挂到新父下;② 按给定顺序重写同级 `sort`(要么全改、要么不改,包在事务里)。
 	 */
-	move: publicProcedure
+	move: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -207,7 +207,7 @@ export const tagRouter = createTRPCRouter({
 	 * - 只允许贴**叶子标签**:给「维度」贴标签没有业务含义(维度是分类,不是取值),这里直接拦掉;
 	 * - 重复贴同一个 (tag, obj) 是**幂等**的:返回 `created: false`,不报错 —— 调用方不必先查再插。
 	 */
-	link: publicProcedure
+	link: protectedProcedure
 		.input(
 			z.object({
 				tagId: z.string().min(1).max(32),
@@ -241,7 +241,7 @@ export const tagRouter = createTRPCRouter({
 		}),
 
 	/** **取消标签**:删掉这一条关联。不存在时返回 `removed: 0`(幂等,不抛错) */
-	unlink: publicProcedure
+	unlink: protectedProcedure
 		.input(
 			z.object({
 				tagId: z.string().min(1).max(32),
@@ -266,7 +266,7 @@ export const tagRouter = createTRPCRouter({
 	 * 这个是"逻辑要判/要算"的(`objIds.includes(...)`、喂给别的查询)。
 	 * `objType` 可选:不传 = 该标签下所有类型的对象。
 	 */
-	objectIdsOfTag: publicProcedure
+	objectIdsOfTag: protectedProcedure
 		.input(z.object({ tagId: z.string().min(1).max(32), objType: z.number().int().min(0).max(255).optional() }))
 		.query(async ({ input }) => {
 			const rows = await db
@@ -287,7 +287,7 @@ export const tagRouter = createTRPCRouter({
 	 * 与 `tagsOfObject` 的分工同上:那个回标签名 / 取值给界面渲染,这个回 id 给逻辑用
 	 * (如"这个对象是否带某标签"、"把标签 id 传给别的接口")。
 	 */
-	tagIdsOfObject: publicProcedure
+	tagIdsOfObject: protectedProcedure
 		.input(z.object({ objId: z.string().min(1).max(32), objType: z.number().int().min(0).max(255) }))
 		.query(async ({ input }) => {
 			const rows = await db
@@ -298,7 +298,7 @@ export const tagRouter = createTRPCRouter({
 		}),
 
 	/** **查这个标签打在哪些对象上**:`objType` 可选(不传 = 所有类型的对象);带总数与分页 */
-	objectsOfTag: publicProcedure
+	objectsOfTag: protectedProcedure
 		.input(
 			z.object({
 				tagId: z.string().min(1).max(32),
@@ -334,7 +334,7 @@ export const tagRouter = createTRPCRouter({
 		}),
 
 	/** **查这个对象身上有哪些标签**:带标签名 / 取值,前端直接渲染,不必再查一次标签表 */
-	tagsOfObject: publicProcedure
+	tagsOfObject: protectedProcedure
 		.input(z.object({ objId: z.string().min(1).max(32), objType: z.number().int().min(0).max(255) }))
 		.query(async ({ input }) => {
 			const links = await db

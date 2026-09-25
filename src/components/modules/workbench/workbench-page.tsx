@@ -106,7 +106,7 @@ const STRUCTURE = [
 		icon: Workflow,
 		title: "框架能力(/demo/*)",
 		desc: "tRPC · Query · 表单 · 表格 · Drizzle · Auth · Store —— 每项一个可运行的样例页",
-		path: "/demo/trpc-todo",
+		path: "/demo/tanstack-query",
 	},
 	{
 		icon: FolderTree,

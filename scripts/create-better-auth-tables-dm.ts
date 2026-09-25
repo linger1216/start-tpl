@@ -163,6 +163,47 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_role_menu_menu" on ${S}."sys_role_menu" ("menu_id")`,
 
+	// ── sys_file(文件元数据;字节存 MinIO,见 doc/文件管理.md)─────────────────
+	`create table if not exists ${S}."sys_file" (
+	  "id" varchar(32) not null,
+	  "bucket" varchar(64) not null,
+	  "object_key" varchar(512) not null,
+	  "origin_name" varchar(255) not null,
+	  "ext" varchar(16),
+	  "content_type" varchar(128),
+	  "size" bigint default 0 not null,
+	  "hash" char(64),
+	  "status" tinyint default 0 not null,
+	  "create_time" datetime default current_timestamp not null,
+	  "update_time" datetime default current_timestamp not null,
+	  primary key ("id"),
+	  constraint "uk_sys_file_object" unique ("bucket", "object_key")
+	)`,
+	`create index if not exists "idx_sys_file_status" on ${S}."sys_file" ("status", "create_time")`,
+	`create index if not exists "idx_sys_file_hash" on ${S}."sys_file" ("hash")`,
+    // ── sys_log(审计日志;只增不改,见 doc/审计日志.md)────────────────────
+    `create table if not exists ${S}."sys_log" (
+      "id" varchar(32) not null,
+      "trace_id" varchar(32),
+      "path" varchar(64) not null,
+      "label" varchar(64),
+      "type" varchar(16),
+      "operator_id" varchar(32),
+      "operator_name" varchar(64),
+      "ip" varchar(64),
+      "target" varchar(255),
+      "status" tinyint default 1 not null,
+      "error_code" varchar(48),
+      "error_message" varchar(255),
+      "input" text,
+      "duration_ms" int,
+      "create_time" datetime default current_timestamp not null,
+      primary key ("id")
+    )`,
+    `create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("create_time")`,
+    `create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "create_time")`,
+    `create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "create_time")`,
+
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (
 		"id" int identity(1,1) not null,

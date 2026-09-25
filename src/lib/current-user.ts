@@ -28,3 +28,21 @@ export async function getCurrentUserId(): Promise<string | null> {
 		return null;
 	}
 }
+
+/** 当前登录用户(**带姓名** —— 审计要存姓名快照,账号将来被删也能读懂历史) */
+export type CurrentUser = { id: string; name: string };
+
+/**
+ * 读当前用户(id + 姓名)。与 `getCurrentUserId` 同样吞掉"没有请求上下文"的异常:
+ * 脚本 / 单测直调 procedure 时,"没有用户"就是正确结论 —— 该由 `protectedProcedure` 拒绝,
+ * 不该在这里炸成 500。
+ */
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+	try {
+		const session = await auth.api.getSession({ headers: getRequestHeaders() });
+		if (!session?.user) return null;
+		return { id: session.user.id, name: session.user.name ?? "" };
+	} catch {
+		return null;
+	}
+}

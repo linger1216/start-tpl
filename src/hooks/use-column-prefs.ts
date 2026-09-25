@@ -53,7 +53,24 @@ export function useColumnPrefs<TRow extends MockRow>(pageKey: string, table: Ret
 		appliedRef.current = raw;
 		const mine = parsePageColumns(raw)[pageKey];
 		if (!mine) return;
-		if (mine.order.length > 0) table.setColumnOrder(mine.order);
+		/**
+		 * ⚠️ 保存的顺序必须**和当前列合并**再套用,不能原样 setColumnOrder。
+		 *
+		 * 踩过:文件管理页新加了一列「勾选框」,而 `page.columns` 里是**旧**的顺序(没有那一列)——
+		 * 原样套用之后 **表头与表体对不齐**(表头按新列算、表体按旧顺序渲染),
+		 * 症状是"第一格表头是勾选框、第一格数据却是文件名",极难一眼看出是**列偏好的锅**。
+		 * 规则:旧的顺序里保留(过滤掉已删除的列),**当前存在但没记录的列追加到后面**。
+		 */
+		const currentIds = table.getAllLeafColumns().map((column) => column.id);
+		// 保存的顺序只决定「**已知列之间**的相对次序」;新列(没有记录的)要回到它在**代码里的声明位置**,
+		// 不能一律追加到末尾 —— 否则新加的勾选列会跑到最后一列去(实测踩到)。
+		const savedKnown = mine.order.filter((id) => currentIds.includes(id));
+		const knownSlots = currentIds.filter((id) => savedKnown.includes(id));
+		const reordered = knownSlots.map((_, index) => savedKnown[index] as string);
+		const merged = currentIds.map((id) =>
+			savedKnown.includes(id) ? (reordered[knownSlots.indexOf(id)] as string) : id,
+		);
+		table.setColumnOrder(merged);
 		// 传空对象 = 全部可见(把上一次渲染残留的隐藏态清掉)
 		table.setColumnVisibility(Object.fromEntries((mine.hidden ?? []).map((id) => [id, false])));
 	}, [raw, pageKey]);

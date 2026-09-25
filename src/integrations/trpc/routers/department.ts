@@ -23,7 +23,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysDept, sysRole, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参 */
 function toDepartmentRow(row: typeof sysDept.$inferSelect) {
@@ -85,12 +85,12 @@ async function nextSort(parentId: string | null) {
 }
 
 export const departmentRouter = createTRPCRouter({
-	tree: publicProcedure.query(async () => {
+	tree: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysDept).orderBy(asc(sysDept.sort), asc(sysDept.name));
 		return rows.map(toDepartmentRow);
 	}),
 
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				parentId: z.string().nullable(),
@@ -117,7 +117,7 @@ export const departmentRouter = createTRPCRouter({
 			return toDepartmentRow(await getDepartmentRow(id));
 		}),
 
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -154,7 +154,7 @@ export const departmentRouter = createTRPCRouter({
 	 * 同级重排。口径与 `menu.reorder` 完全一致:传入**父节点 + 该父下全部子节点的 id 顺序**,
 	 * 服务端逐行写 `sort` —— 名单里出现兄弟之外的行就拒绝(拖拽最容易出的错是跨级拖)。
 	 */
-	reorder: publicProcedure
+	reorder: protectedProcedure
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
@@ -181,7 +181,7 @@ export const departmentRouter = createTRPCRouter({
 			return { updated: input.orderedIds.length };
 		}),
 
-	remove: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const row = await getDepartmentRow(input.id);
 		const children = await db.select({ id: sysDept.id }).from(sysDept).where(eq(sysDept.parent_id, input.id));
 		if (children.length > 0) {
@@ -205,7 +205,7 @@ export const departmentRouter = createTRPCRouter({
 	}),
 
 	/** 某部门的成员(一个部门里一人一条)。角色是**全局**的,顺带带出来只读展示。 */
-	members: publicProcedure.input(z.object({ departmentId: z.string().min(1) })).query(async ({ input }) => {
+	members: protectedProcedure.input(z.object({ departmentId: z.string().min(1) })).query(async ({ input }) => {
 		const rows = await db
 			.select({
 				id: sysUserDept.id,
@@ -246,7 +246,7 @@ export const departmentRouter = createTRPCRouter({
 	 * **角色不在这里管** —— 角色是全局的,在「系统设置 ▸ 用户管理」里分配。
 	 * 用"先查再插"而不是 `on duplicate key update`:那是 MySQL 方言,达梦不认。
 	 */
-	addMember: publicProcedure
+	addMember: protectedProcedure
 		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await getDepartmentRow(input.departmentId);
@@ -270,7 +270,7 @@ export const departmentRouter = createTRPCRouter({
 			return { success: true };
 		}),
 
-	removeMember: publicProcedure
+	removeMember: protectedProcedure
 		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await db

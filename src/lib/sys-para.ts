@@ -97,6 +97,37 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		remark:
 			'各页树的展开节点:{"<页面键>":{"expanded":["节点id",…]}};在页面上折叠 / 展开树即可改;删掉某个页面键 = 该树回到默认(全部折叠)',
 	},
+	// 上传策略 —— 由 trpc/routers/file.ts 读取(改参数即时生效,不用改代码)
+	"log.enabled": {
+		value: "true",
+		type: PARA_TYPE.BOOL,
+		group: "审计日志",
+		remark: "总开关;排查期可临时关掉(关掉后不再往 sys_log 写)",
+	},
+	"log.retention_days": {
+		value: "90",
+		type: PARA_TYPE.INT,
+		group: "审计日志",
+		remark: "保留天数;由定时任务清理(批 6)",
+	},
+	"log.skip_paths": {
+		value: "page.",
+		type: PARA_TYPE.STRING,
+		group: "审计日志",
+		remark: "不记的动作:这里填参数**键**前缀 —— 列顺序 / 树展开态属高频 UI 偏好,记进审计就是噪音",
+	},
+	"file.max_size_mb": {
+		value: "20",
+		type: PARA_TYPE.INT,
+		group: "文件管理",
+		remark: "单个文件大小上限(MB);presign 与 confirm 两头都按它校验",
+	},
+	"file.allow_ext": {
+		value: "jpg,jpeg,png,gif,webp,pdf,xlsx,docx",
+		type: PARA_TYPE.STRING,
+		group: "文件管理",
+		remark: "允许上传的后缀(逗号分隔,小写、不带点);不在名单里的一律拒绝",
+	},
 };
 
 const CACHE_TTL_MS = 30_000;

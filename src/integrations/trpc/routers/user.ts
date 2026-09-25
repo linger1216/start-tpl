@@ -25,7 +25,7 @@ import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept, sysUser
 import { auth } from "#/lib/auth";
 import { getCurrentUserId } from "#/lib/current-user";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 export const userRouter = createTRPCRouter({
 	/**
@@ -33,7 +33,7 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * 一次查完所有分配再按 user 归组,**别在循环里逐人查**(N+1)。
 	 */
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		const users = await db.select().from(sysUser).orderBy(asc(sysUser.name), asc(sysUser.email));
 		// 「属于哪些部门」和「有哪些角色」是两件事:前者是组织架构(sys_user_dept),
 		// 后者是全局角色(sys_user_role)。各查一次再按 user 归组,依旧不 N+1。
@@ -85,7 +85,7 @@ export const userRouter = createTRPCRouter({
 	 * ⚠️ `signUpEmail` 会**顺手建一个会话并下发 cookie**,而我们只是"替别人开个账号":
 	 * 不删掉的话,当前这个管理员下一次请求就会变成这个新用户的身份。所以建完立刻删会话。
 	 */
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				name: z.string().min(1, "姓名不能为空").max(128),
@@ -117,7 +117,7 @@ export const userRouter = createTRPCRouter({
 	 * 在这个后台里替人改密码属于"管理员代操作",语义不同,要做得单独设计;直接改邮箱则是管理员
 	 * 修正录入错误的常见诉求(唯一性靠库里那个 `uk_sys_user_email` + 这里的查重兜住)。
 	 */
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -238,7 +238,7 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * ⚠️ **不允许删自己**:删掉自己的会话等于立刻掉线,页面连报错都来不及显示。
 	 */
-	remove: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const me = await getCurrentUserId();
 		if (me && me === input.id) {
 			throw new TRPCError({ code: "FORBIDDEN", message: "不能删除当前登录的账号" });
@@ -255,7 +255,7 @@ export const userRouter = createTRPCRouter({
 	}),
 
 	/** 这个人的所有角色(全局 —— 与部门无关,见 sys_user_role) */
-	roles: publicProcedure.input(z.object({ userId: z.string().min(1) })).query(async ({ input }) => {
+	roles: protectedProcedure.input(z.object({ userId: z.string().min(1) })).query(async ({ input }) => {
 		return db
 			.select({ roleId: sysUserRole.role_id, roleName: sysRole.name })
 			.from(sysUserRole)

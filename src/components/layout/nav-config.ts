@@ -15,7 +15,7 @@
  *  工作台     `/`                    系统入口页:上手自检清单 + 各展示页入口
  *  组件展示   纯分组                  模板自带组件的「活文档」,按组件层级分 7 页
  *  框架能力   纯分组                  tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry
- *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(七个页面,完整 CRUD 骨架)
+ *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(八个页面,完整 CRUD 骨架)
  *
  * 派生新项目时:把「框架能力」这一枝删掉(连带 `routes/(main)/demo/`),
  * 再把「系统设置」按新业务改名 / 扩展即可;UI 原语的示例在工作台
@@ -33,6 +33,7 @@ import {
 	ClipboardList,
 	Contact,
 	Database,
+	Files,
 	FileText,
 	Gauge,
 	KeyRound,
@@ -84,6 +85,7 @@ export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	palette: Palette,
 	// 兜底
 	"file-text": FileText,
+	files: Files,
 };
 
 export type NavIcon = keyof typeof NAV_ICON_MAP;
@@ -114,9 +116,8 @@ export const NAV_NODES: NavNode[] = [
 		name: "框架能力",
 		icon: "workflow",
 		description:
-			"每一项框架能力一个**可运行**的样例页:tRPC 接口、TanStack Query、表单、表格、Drizzle 数据库、登录认证、全局状态。",
+			"每一项框架能力一个**可运行**的样例页:TanStack Query、表单、表格、Drizzle 数据库、登录认证、全局状态(tRPC 本身贯穿所有样例)。",
 		children: [
-			{ name: "tRPC 接口", path: "/demo/trpc-todo", icon: "cable" },
 			{ name: "数据请求", path: "/demo/tanstack-query", icon: "refresh-cw" },
 			{ name: "表单", path: "/demo/form/simple", icon: "clipboard-list" },
 			{ name: "表格", path: "/demo/table", icon: "table" },
@@ -131,7 +132,7 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"七个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
+			"八个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
 			{ name: "部门管理", path: "/settings/departments", icon: "contact" },
@@ -140,6 +141,8 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },
 			{ name: "字典管理", path: "/settings/dictionary", icon: "library" },
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
+			{ name: "文件管理", path: "/settings/files", icon: "files" },
+			{ name: "审计日志", path: "/settings/logs", icon: "scroll-text" },
 		],
 	},
 ];

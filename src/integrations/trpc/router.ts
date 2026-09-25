@@ -1,31 +1,17 @@
-import type { TRPCRouterRecord } from "@trpc/server";
-import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "./init";
+import { createTRPCRouter } from "./init";
 import { departmentRouter } from "./routers/department";
 import { dictRouter } from "./routers/dict";
+import { fileRouter } from "./routers/file";
+import { logRouter } from "./routers/log";
 import { menuRouter } from "./routers/menu";
 import { paraRouter } from "./routers/para";
 import { roleRouter } from "./routers/role";
 import { tagRouter } from "./routers/tag";
 import { userRouter } from "./routers/user";
 
-const todos = [
-	{ id: 1, name: "Get groceries" },
-	{ id: 2, name: "Buy a new phone" },
-	{ id: 3, name: "Finish the project" },
-];
-
-const todosRouter = {
-	list: publicProcedure.query(() => todos),
-	add: publicProcedure.input(z.object({ name: z.string() })).mutation(({ input }) => {
-		const newTodo = { id: todos.length + 1, name: input.name };
-		todos.push(newTodo);
-		return newTodo;
-	}),
-} satisfies TRPCRouterRecord;
-
 export const trpcRouter = createTRPCRouter({
-	todos: todosRouter,
+	/** 审计日志(只读,见 doc/审计日志.md) */
+	log: logRouter,
 	/** 系统设置 ▸ 菜单管理 —— 读写 `sys_menu` */
 	menu: menuRouter,
 	/** 系统设置 ▸ 字典管理 —— 读写 `sys_dict` */
@@ -40,5 +26,7 @@ export const trpcRouter = createTRPCRouter({
 	role: roleRouter,
 	/** 系统设置 ▸ 用户管理 —— 只读 `sys_user` + 读写部门/角色分配 */
 	user: userRouter,
+	/** 系统设置 ▸ 文件管理 —— 读写 `sys_file`(字节存 MinIO,见 doc/文件管理.md) */
+	file: fileRouter,
 });
 export type TRPCRouter = typeof trpcRouter;

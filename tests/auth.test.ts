@@ -1,0 +1,206 @@
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
+
+import { and, eq } from "drizzle-orm";
+
+import { db } from "../src/db/index.ts";
+import { sysLog, sysMenu } from "../src/db/data-base-schema.ts";
+import { UNMAPPED_MUTATIONS, PERM_BY_PATH } from "../src/lib/rbac.ts";
+import { createCallerFactory } from "../src/integrations/trpc/init.ts";
+import { trpcRouter } from "../src/integrations/trpc/router.ts";
+import { TEST_PREFIX, TEST_USER, anonymousCaller, assertRejects, caller, closeDb, uniqueSuffix } from "./helpers.ts";
+
+/**
+ * 服务端鉴权 + 审计。
+ *
+ * 这组用例的存在本身就是这批改造的产物:`anonymousCaller` 能直接断言"未登录必须被拒" ——
+ * 在那之前测试直调没有请求上下文,根本没法测硬校验。
+ */
+const SUFFIX = uniqueSuffix();
+const createdLogIds: string[] = [];
+
+const def = (trpcRouter as unknown as { _def: { procedures: Record<string, { _def?: { type?: string } }> } })._def;
+const PROCEDURES = Object.keys(def.procedures ?? {});
+const typeOf = (path: string) => (def.procedures[path] as { _def?: { type?: string } } | undefined)?._def?.type;
+/**
+ * ⚠️ 审计行是**全局累积**的,而且 `node --test` **按文件并行** ——
+ * 别的测试文件同一时刻也在 `role.create`。所以断言必须**只认自己那条**:
+ * 用本文件唯一的 `code` 去 `target` 里过滤,别数"这个 path 下总共几条"。
+ */
+async function waitForOwnLog(path: string, marker: string): Promise<typeof sysLog.$inferSelect | null> {
+	for (let i = 0; i < 40; i += 1) {
+		const rows = await db.select().from(sysLog).where(eq(sysLog.path, path));
+		const hit = rows.find((row) => (row.target ?? "").includes(marker));
+		if (hit) {
+			createdLogIds.push(hit.id);
+			return hit;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	return null;
+}
+
+after(async () => {
+	if (createdLogIds.length > 0) {
+		for (const id of createdLogIds) await db.delete(sysLog).where(eq(sysLog.id, id));
+	}
+	await closeDb();
+});
+
+describe("服务端鉴权", () => {
+	it("未登录:受保护接口一律 UNAUTHORIZED(以前根本测不了这一条)", async () => {
+		await assertRejects(() => anonymousCaller.role.list(), "请先登录");
+		await assertRejects(() => anonymousCaller.file.list(), "请先登录");
+		await assertRejects(() => anonymousCaller.role.remove({ id: "whatever" }), "请先登录");
+	});
+
+	it("未登录:会话路径上的写接口同样被拦(不只是读)", async () => {
+		await assertRejects(() => anonymousCaller.dict.delete({ code: "whatever" }), "请先登录");
+		await assertRejects(() => anonymousCaller.user.remove({ id: "whatever" }), "请先登录");
+	});
+
+	it("权限:有权限体系但这个账号没有该权限 ⇒ FORBIDDEN(不是只靠前端藏按钮)", async () => {
+		const menus = await db.select().from(sysMenu);
+		// 菜单表空 = 权限体系未启用 ⇒ 一律放行(与前端 useHasPerm 同口径),这条不适用
+		if (menus.length === 0) return;
+
+		// 不带 `isSuper` 的注入用户:库里没有任何角色授权 ⇒ 权限集是空集
+		const nobody = createCallerFactory(trpcRouter)({ user: { id: "test-nobody", name: "无权用户" } });
+		await assertRejects(() => nobody.log.list(), "没有权限");
+		await assertRejects(() => nobody.role.create({ name: "不该建成", code: "NOPE", remark: "" }), "没有权限");
+		await assertRejects(() => nobody.file.remove({ ids: ["whatever"] }), "没有权限");
+	});
+
+	it("分类守卫:每个写接口必须显式分类(配了权限点 / 或在未配清单里)", () => {
+		const mutations = PROCEDURES.filter((path) => typeOf(path) === "mutation");
+		// 先确认守卫本身没有失效:写接口数量掉到 30 以下说明 router 结构变了,得回来看这里
+		assert.ok(mutations.length >= 30, `写接口数量异常(${mutations.length}),守卫可能已失效`);
+		const unclassified = mutations.filter(
+			(path) => !PERM_BY_PATH[path] && !UNMAPPED_MUTATIONS.includes(path),
+		);
+		assert.deepEqual(
+			unclassified,
+			[],
+			`新增写接口必须显式分类:要么在 PERM_BY_PATH 里配权限点,要么加进 UNMAPPED_MUTATIONS 并写清原因。漏了这些:${unclassified.join(", ")}`,
+		);
+	});
+
+	it("权限映射里的码都必须真实存在(否则是「没人能被授予」的假权限)", async () => {
+		const menus = await db.select().from(sysMenu);
+		const perms = new Set(menus.map((menu) => menu.perm).filter((perm): perm is string => Boolean(perm)));
+		// 空库(权限体系还没初始化)时这条不适用 —— 它防的是"配了码但忘了建按钮",不是"还没建表"
+		if (perms.size === 0) return;
+		const missing = [...new Set(Object.values(PERM_BY_PATH))].filter((code) => !perms.has(code));
+		assert.deepEqual(
+			missing,
+			[],
+			`这些权限码在 sys_menu 里没有对应按钮,角色授权树里根本勾不到(等于假权限):${missing.join(", ")}`,
+		);
+	});
+
+	it("权限映射里登记的路径都必须真实存在(防拼错路径名)", () => {
+		for (const path of Object.keys(PERM_BY_PATH)) {
+			assert.ok(PROCEDURES.includes(path), `PERM_BY_PATH 里有不存在的路径:${path}`);
+		}
+	});
+});
+
+describe("审计日志", () => {
+	it("写接口留一行、查询一行都不留(否则列表刷新会把日志淹掉)", async () => {
+		await caller.role.list();
+		await caller.file.list();
+		// 查询**永远**不写审计 ⇒ 这两个 path 在表里应该一行都没有(与并行无关,是确定性断言)
+		assert.equal((await db.select().from(sysLog).where(eq(sysLog.path, "role.list"))).length, 0, "查询不该写审计");
+		assert.equal((await db.select().from(sysLog).where(eq(sysLog.path, "file.list"))).length, 0, "查询不该写审计");
+
+		const code = `${TEST_PREFIX}audit${SUFFIX}`.toUpperCase().slice(0, 32);
+		const created = await caller.role.create({ name: `${TEST_PREFIX}审计角色${SUFFIX}`, code, remark: "" });
+		try {
+			const row = await waitForOwnLog("role.create", code);
+			assert.ok(row, "写调用要留下审计行");
+			const entry = row as typeof sysLog.$inferSelect;
+			assert.equal(entry.status, 1);
+			assert.equal(entry.path, "role.create");
+			assert.equal(entry.label, "新增角色", "动作名由 path 逐词翻译得到");
+			assert.equal(entry.operator_id, TEST_USER.id);
+			assert.equal(entry.operator_name, TEST_USER.name, "姓名要落快照(账号被删后日志仍读得懂)");
+			assert.ok(entry.trace_id, "要带上 traceId,才能和 stdout 日志对上");
+			// ⚠️ `role.create` 的入参里**没有 id**(它是服务端生成的)⇒ 目标描述只能挑到入参里真实存在的字段
+			assert.ok((entry.target ?? "").includes(code), "目标描述要带上入参里能认出的字段(code)");
+			assert.equal(entry.input?.includes(created.id), false, "入参快照就是入参,不该出现服务端生成的东西");
+			assert.ok(entry.duration_ms !== null);
+		} finally {
+			await caller.role.remove({ id: created.id });
+			const extra = await db.select().from(sysLog).where(eq(sysLog.path, "role.remove"));
+			createdLogIds.push(...extra.map((row) => row.id));
+		}
+	});
+
+	it("log.list:按动作筛 / 时间倒序 / 上限生效,且未登录不可读", async () => {
+		await assertRejects(() => anonymousCaller.log.list(), "请先登录");
+
+		const all = await caller.log.list();
+		assert.ok(Array.isArray(all));
+		if (all.length === 0) return; // 全新库、还没发生写调用时不适用
+
+		for (let i = 1; i < all.length; i += 1) {
+			const prev = new Date(all[i - 1]?.createTime ?? 0).getTime();
+			const cur = new Date(all[i]?.createTime ?? 0).getTime();
+			assert.ok(prev >= cur, "审计应按时间倒序");
+		}
+
+		const path = all[0]?.path as string;
+		const only = await caller.log.list({ path });
+		assert.ok(only.length >= 1);
+		assert.ok(
+			only.every((row) => row.path === path),
+			"按动作筛之后不该混进别的路径",
+		);
+
+		assert.ok((await caller.log.list({ limit: 1 })).length <= 1, "limit 要生效");
+		assert.ok((await caller.log.list({ keyword: path })).length >= 1, "搜索框那一端要能命中");
+	});
+
+	it("失败的写调用记 status=0(含错误码),且原来的报错照旧抛出", async () => {
+		const code = `${TEST_PREFIX}fail${SUFFIX}`.toUpperCase().slice(0, 32);
+		const first = await caller.role.create({ name: `${TEST_PREFIX}审计失败${SUFFIX}`, code, remark: "" });
+		try {
+			await assertRejects(() => caller.role.create({ name: "重名", code, remark: "" }), "");
+			// 失败的这一次也会写一行:同 code 下应该出现 status=0 的那条
+			let failedRow: typeof sysLog.$inferSelect | null = null;
+			for (let i = 0; i < 40 && !failedRow; i += 1) {
+				const rows = await db.select().from(sysLog).where(eq(sysLog.path, "role.create"));
+				failedRow = rows.find((row) => (row.target ?? "").includes(code) && row.status === 0) ?? null;
+				if (failedRow) createdLogIds.push(failedRow.id);
+				else await new Promise((resolve) => setTimeout(resolve, 50));
+			}
+			assert.ok(failedRow, "失败的调用也应该留痕");
+			assert.ok(failedRow?.error_code, "要记下错误码");
+		} finally {
+			await caller.role.remove({ id: first.id });
+			const extra = await db.select().from(sysLog).where(eq(sysLog.path, "role.remove"));
+			createdLogIds.push(...extra.map((row) => row.id));
+		}
+	});
+
+	it("入参快照已脱敏:密码字段是 ***", async () => {
+		const email = `${TEST_PREFIX}audit${SUFFIX}@example.com`;
+		const created = await caller.user.create({
+			name: `${TEST_PREFIX}审计用户${SUFFIX}`,
+			email,
+			password: "S3cret-Passw0rd",
+		});
+		try {
+			const snapshot = (await waitForOwnLog("user.create", email))?.input ?? "";
+			assert.ok(snapshot.includes("***"), `入参快照应已脱敏,实际:${snapshot.slice(0, 200)}`);
+			assert.ok(!snapshot.includes("S3cret-Passw0rd"), "明文密码绝不能进审计");
+		} finally {
+			await caller.user.remove({ id: created.id });
+			const extra = await db
+				.select()
+				.from(sysLog)
+				.where(and(eq(sysLog.path, "user.create")));
+			createdLogIds.push(...extra.map((row) => row.id));
+		}
+	});
+});

@@ -1,5 +1,5 @@
 /**
- * **系统表**的 drizzle 定义 —— 九张:
+ * **系统表**的 drizzle 定义 —— 十五张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`。
@@ -27,7 +27,9 @@
  * 走 camelCase,翻译点在 `src/integrations/trpc/routers/{menu,dict,para,tag}.ts`。
  */
 import {
+	bigint,
 	boolean,
+	char,
 	datetime,
 	index,
 	int,
@@ -472,5 +474,90 @@ export const sysRoleMenu = mysqlTable(
 	(table) => [
 		uniqueIndex("uk_sys_role_menu").on(table.role_id, table.menu_id),
 		index("idx_sys_role_menu_menu").on(table.menu_id),
+	],
+);
+
+/**
+ * 文件元数据 —— **字节存 MinIO,这里只存元数据**(见 `doc/文件管理.md`)。
+ *
+ * ⚠️ 只存 `bucket` + `object_key`,**绝不存 URL**:URL 会过期、换对外域名就全废,
+ * 要 URL 的时候当场签(公开桶拼直链 / 私有桶签预签名 GET)。
+ *
+ * `status` 是三态而非软删时间列:上传是**两阶段**的,`0` 是"签发了但还没传上来"的正常中间态,
+ * 清理任务就按 `(status, create_time)` 扫它。
+ */
+/**
+ * 审计日志 —— **只增不改**:每一次「写调用」是谁、什么时候、对什么、成功没有。
+ *
+ * 它由 `init.ts` 的 `auditMiddleware` **结构性**写入(不靠每个 resolver 记得加);
+ * 只记 mutation,默认跳过 `page.*` 这类高频 UI 偏好写入(见 `lib/audit.ts` 与 `doc/审计日志.md`)。
+ */
+export const sysLog = mysqlTable(
+	"sys_log",
+	{
+		/** 主键:nanoid */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 与后端 stdout 日志同值 —— 一条审计能对上一次调用的全部日志 */
+		trace_id: varchar("trace_id", { length: 32 }),
+		/** tRPC 路径(如 `role.create`) */
+		path: varchar("path", { length: 64 }).notNull(),
+		/** 中文动作名(`lib/audit.ts` 的映射表给出,查不到落回 path) */
+		label: varchar("label", { length: 64 }),
+		/** query / mutation(只有 mutation 入库,留着便于将来放开) */
+		type: varchar("type", { length: 16 }),
+		/** 操作人(脚本 / 测试直调时为 null) */
+		operator_id: varchar("operator_id", { length: 32 }),
+		/** 操作人姓名**快照** —— 账号将来被删,历史记录仍读得懂 */
+		operator_name: varchar("operator_name", { length: 64 }),
+		/** 来源 IP(从请求头取;无请求上下文为 null) */
+		ip: varchar("ip", { length: 64 }),
+		/** 目标描述:**尽力而为**(从入参挑 id / ids / key,见 `describeTarget`) */
+		target: varchar("target", { length: 255 }),
+		/** 1 成功 / 0 失败(失败也包含权限被拒) */
+		status: tinyint("status").notNull().default(1),
+		error_code: varchar("error_code", { length: 48 }),
+		error_message: varchar("error_message", { length: 255 }),
+		/** **脱敏后**的入参快照(截断 2000 字符) */
+		input: text("input"),
+		/** 这次调用耗时(毫秒) */
+		duration_ms: int("duration_ms"),
+		/** 审计行不可变 —— 没有 update_time */
+		create_time: datetime("create_time", { mode: "date" }),
+	},
+	(table) => [
+		index("idx_sys_log_time").on(table.create_time),
+		index("idx_sys_log_operator").on(table.operator_id, table.create_time),
+		index("idx_sys_log_path").on(table.path, table.create_time),
+	],
+);
+
+export const sysFile = mysqlTable(
+	"sys_file",
+	{
+		/** 主键:nanoid(见 `lib/ids.ts` 的 `newId()`) */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 桶名:`app-public` 公开直链 / `app-private` 私有预签名 —— **公开还是私有由它决定** */
+		bucket: varchar("bucket", { length: 64 }).notNull(),
+		/** 对象键:`{yyyy}/{MM}/{nanoid}.{ext}`(不用原文件名,躲开中文 / 特殊字符 / 重名) */
+		object_key: varchar("object_key", { length: 512 }).notNull(),
+		/** 原始文件名(下载时进 `Content-Disposition`) */
+		origin_name: varchar("origin_name", { length: 255 }).notNull(),
+		/** 小写后缀(不带点),便于按类型筛 */
+		ext: varchar("ext", { length: 16 }),
+		/** MIME 类型:`confirm` 时以对象存储回的为准,**不信客户端** */
+		content_type: varchar("content_type", { length: 128 }),
+		/** 字节数:`confirm` 时 `statObject` 校准 */
+		size: bigint("size", { mode: "number" }).notNull().default(0),
+		/** 内容 sha256 —— **仅元数据 / 查重钩子,不自动去重**(真要做秒传才加引用计数) */
+		hash: char("hash", { length: 64 }),
+		/** 0 待确认 / 1 正常 / 2 已删除 */
+		status: tinyint("status").notNull().default(0),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_file_object").on(table.bucket, table.object_key),
+		index("idx_sys_file_status").on(table.status, table.create_time),
+		index("idx_sys_file_hash").on(table.hash),
 	],
 );

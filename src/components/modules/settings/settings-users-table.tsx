@@ -1,4 +1,5 @@
 import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { createAppColumnHelper } from "#/lib/table";
@@ -91,15 +92,18 @@ export function userColumns({
 		}),
 		columnHelper.accessor("image", {
 			header: "头像",
-			size: 180,
-			cell: (ctx) => (
-				<span
-					className="line-clamp-1 max-w-44 font-mono text-[11px] text-muted-foreground/70"
-					title={ctx.getValue() ?? ""}
-				>
-					<TextCell value={ctx.getValue()} />
-				</span>
-			),
+			size: 96,
+			cell: (ctx) => {
+				const url = ctx.getValue();
+				const who = ctx.row.original.name;
+				// 真头像;没有地址就退回首字(以前这里是把 URL 当文本显示 —— 那不算「看到头像」)
+				return (
+					<Avatar className="size-8">
+						{url ? <AvatarImage src={url} alt={who} /> : null}
+						<AvatarFallback className="text-[11px]">{(who || "?").slice(0, 1)}</AvatarFallback>
+					</Avatar>
+				);
+			},
 		}),
 		columnHelper.accessor("createdAt", {
 			header: "创建时间",

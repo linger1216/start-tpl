@@ -14,7 +14,7 @@ import { sysPara } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { isParaType, PARA_TYPES, PARA_VALUE_MAX, type ParaType, validateParaValue } from "#/lib/para-spec";
 import { clearParaCache, PARA_DEFAULTS } from "#/lib/sys-para";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 const paraTypeSchema = z
 	.number()
@@ -43,7 +43,7 @@ function toParaRow(key: string, row: typeof sysPara.$inferSelect | undefined) {
 
 export const paraRouter = createTRPCRouter({
 	/** 参数清单:代码默认值 + 库里的覆盖值(库里没有的参数也列出来,否则人不知道能调什么) */
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysPara);
 		const stored = new Map(rows.map((row) => [row.para_key, row]));
 		const keys = [...new Set([...Object.keys(PARA_DEFAULTS), ...rows.map((row) => row.para_key)])];
@@ -58,13 +58,13 @@ export const paraRouter = createTRPCRouter({
 	 * 给"页面需要一条界面偏好"的场景用:侧边栏只关心 `ui.sidebar.collapsed_mode`,
 	 * 没必要为它拉全表。键不存在时回空串,由解析侧回落默认值。
 	 */
-	byKey: publicProcedure.input(z.object({ key: z.string().min(1).max(64) })).query(async ({ input }) => {
+	byKey: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).query(async ({ input }) => {
 		const [row] = await db.select().from(sysPara).where(eq(sysPara.para_key, input.key)).limit(1);
 		return { key: input.key, value: row?.para_value ?? PARA_DEFAULTS[input.key]?.value ?? "" };
 	}),
 
 	/** 改一个参数值(upsert);按声明类型校验,不接受乱七八糟的值 */
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				key: z.string().min(1).max(64),
@@ -115,7 +115,7 @@ export const paraRouter = createTRPCRouter({
 		}),
 
 	/** 新增一个参数(库里没有的新键)。已存在则报错,避免和 `update` 抢活。 */
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				key: z.string().min(1, "参数名不能为空").max(64),
@@ -152,7 +152,7 @@ export const paraRouter = createTRPCRouter({
 		}),
 
 	/** 删除一个参数的库里覆盖值:代码内置的默认参数删完回到默认值,界面新建的参数删完即消失。 */
-	delete: publicProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
+	delete: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
 		await db.delete(sysPara).where(eq(sysPara.para_key, input.key));
 		clearParaCache();
 		return { key: input.key };

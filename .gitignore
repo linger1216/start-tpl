@@ -122,3 +122,9 @@ $RECYCLE.BIN/
 *.xlsx
 *.html
 doc/archive
+
+# ─── AI / 编辑器工具的本地状态 ──────────────────────────
+# ⚠️ 这两个目录**此前已有文件入库**(.commandcode/taste/taste.md、.workbuddy/memory/*.md):
+#    要不要一并 `git rm --cached` 由你决定 —— 规则只保证**以后新增的**不会再进来。
+.commandcode
+.workbuddy

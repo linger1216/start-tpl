@@ -1,7 +1,11 @@
-import { initTRPC } from "@trpc/server";
+import { getRequestHeaders } from "@tanstack/react-start/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
+import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
+import { getCurrentUser } from "#/lib/current-user";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
+import { effectiveMenusFor, PERM_BY_PATH, permMatches } from "#/lib/rbac";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -51,9 +55,116 @@ const loggingMiddleware = t.middleware(async ({ path, type, next, getRawInput, c
 	}
 });
 
+/** 直调 caller 可以注入的用户(脚本 / 测试);HTTP 路径永远拿不到它,只能靠会话 */
+type InjectedUser = { id: string; name: string; isSuper?: boolean };
+
+/** 请求来源 IP;没有请求上下文(脚本 / 单测)返回 null */
+function clientIp(): string | null {
+	try {
+		const headers = getRequestHeaders();
+		const forwarded = headers.get("x-forwarded-for");
+		return (forwarded ? forwarded.split(",")[0].trim() : headers.get("x-real-ip")) ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * ② 登录:tRPC 层的**第一道真拦截**。
+ *
+ * `ctx.user` **直调 caller 注入的优先**(脚本 / 测试),否则读会话。
+ * ⚠️ HTTP 路径没有 `createContext`,所以 `ctx.user` 永远是 undefined ⇒ 注入这条路**从网络不可达**;
+ * 下面的测试正是用「注入一个 isSuper 用户」来免去造角色授权的,安全性来自这一点。
+ */
+const requireUser = t.middleware(async ({ ctx, next }) => {
+	const injected = (ctx as { user?: InjectedUser | null }).user;
+	if (injected !== undefined) {
+		if (!injected) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
+		return next({ ctx: { ...ctx, user: injected } });
+	}
+	const user = await getCurrentUser();
+	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
+	return next({ ctx: { ...ctx, user: { id: user.id, name: user.name } } });
+});
+
+/**
+ * ③ 审计:L2 结构性地把每次**写调用**记进 `sys_log`(只记 mutation)。
+ *
+ * 两处刻意的写法:
+ *  · **fire-and-forget**(`void writeAudit(...)`)—— 业务永远不等审计;
+ *  · **只写一次** —— `next()` 在失败时**不抛**而是 resolve 成 `{ ok:false }`(与日志中间件同一个坑),
+ *    所以这里把成败都收敛到一处再写,否则失败会被记成两条。
+ */
+const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInput, next }) => {
+	const startedAt = Date.now();
+	const rawInput = await getRawInput();
+	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	const config = await readAuditConfig().catch(() => ({ enabled: true, skipPrefixes: ["page."] }));
+	const wanted = config.enabled && shouldAudit({ type, rawInput, skipPrefixes: config.skipPrefixes });
+	const base = {
+		traceId: String((ctx as { traceId?: string }).traceId ?? ""),
+		path,
+		label: labelOf(path),
+		type,
+		operatorId: user?.id ?? null,
+		operatorName: user?.name ?? null,
+		ip: clientIp(),
+		target: describeTarget(rawInput),
+		rawInput,
+	};
+
+	let failure: unknown = null;
+	try {
+		const result = await next();
+		if (result.ok) {
+			if (wanted) void writeAudit({ ...base, status: 1, durationMs: Date.now() - startedAt });
+			return result;
+		}
+		failure = result.error;
+	} catch (error) {
+		failure = error;
+	}
+	if (wanted) {
+		const shaped = failure as { code?: string; message?: string } | undefined;
+		void writeAudit({
+			...base,
+			status: 0,
+			errorCode: shaped?.code ?? "INTERNAL_SERVER_ERROR",
+			errorMessage: shaped?.message ?? String(failure),
+			durationMs: Date.now() - startedAt,
+		});
+	}
+	throw failure;
+});
+
+/**
+ * ④ 权限:按 **path 查表**(`PERM_BY_PATH`)而不是每个 procedure 手写权限码 ——
+ * 漏写一个就静默放开,而查表天然全覆盖。表里没有登记的写接口只要求登录,
+ * 由 `tests/auth.test.ts` 的分类守卫盯着(新增破坏性接口必须显式分类)。
+ */
+const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
+	const code = PERM_BY_PATH[path];
+	if (!code) return next();
+	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	if (user?.isSuper) return next();
+	const { perms } = await effectiveMenusFor(user?.id ?? null);
+	// `perms === null` = 权限体系未启用(菜单表是空的)⇒ 一律放行,与前端 `useHasPerm` 同口径
+	if (perms === null) return next();
+	const hit = [...perms].some((pattern) => permMatches(pattern, code));
+	if (!hit) throw new TRPCError({ code: "FORBIDDEN", message: `没有权限:${code}` });
+	return next();
+});
+
 export const createTRPCRouter = t.router;
-/** 所有 procedure 都挂日志中间件:**100% 的后端入口都有日志** */
-export const publicProcedure = t.procedure.use(loggingMiddleware);
+
+/** 只挂日志与审计:**任何人**都能调(本项目当前没有这种接口,留着表达"公开"的语义) */
+export const publicProcedure = t.procedure.use(loggingMiddleware).use(auditMiddleware);
+/** 基础写/读接口:**必须登录**(全站默认用这个) */
+export const protectedProcedure = t.procedure
+	.use(loggingMiddleware)
+	.use(requireUser)
+	.use(auditMiddleware)
+	.use(permMiddleware);
 /**
  * 服务端直调入口工厂(`createCallerFactory`)。
  *

@@ -23,7 +23,7 @@ import { db } from "#/db";
 import { sysDept, sysRole, sysRoleMenu, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { withAncestorIds } from "#/lib/rbac";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 function toRoleRow(row: typeof sysRole.$inferSelect, memberCount = 0) {
 	return {
@@ -57,7 +57,7 @@ async function assertCodeFree(code: string, selfId?: string) {
 }
 
 export const roleRouter = createTRPCRouter({
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		const roles = await db.select().from(sysRole).orderBy(asc(sysRole.sort), asc(sysRole.name));
 		// 一次查完所有角色的成员数,别在循环里逐条 count(N+1)
 		const counts = await db
@@ -68,7 +68,7 @@ export const roleRouter = createTRPCRouter({
 		return roles.map((row) => toRoleRow(row, countOf.get(row.id) ?? 0));
 	}),
 
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				code: z.string().min(1, "角色标识不能为空").max(64),
@@ -98,7 +98,7 @@ export const roleRouter = createTRPCRouter({
 			return toRoleRow(await getRoleRow(id));
 		}),
 
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -127,7 +127,7 @@ export const roleRouter = createTRPCRouter({
 			return toRoleRow(await getRoleRow(input.id));
 		}),
 
-	remove: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const row = await getRoleRow(input.id);
 		const used = await db.select({ id: sysUserRole.id }).from(sysUserRole).where(eq(sysUserRole.role_id, input.id));
 		if (used.length > 0) {
@@ -148,7 +148,7 @@ export const roleRouter = createTRPCRouter({
 	 * 顺带带出每个人的**部门**:角色是全局的,光有姓名没法消歧(重名 / 不知道这人是谁),
 	 * 部门才是"这个人是谁"的主要线索。
 	 */
-	users: publicProcedure.input(z.object({ roleId: z.string().min(1) })).query(async ({ input }) => {
+	users: protectedProcedure.input(z.object({ roleId: z.string().min(1) })).query(async ({ input }) => {
 		const rows = await db
 			.select({
 				id: sysUserRole.id,
@@ -189,7 +189,7 @@ export const roleRouter = createTRPCRouter({
 	 * 用"先查再插"而不是 `on duplicate key update`:那是 MySQL 方言,达梦不认
 	 * (部门那边的 addMember 是同一个理由)。
 	 */
-	addUser: publicProcedure
+	addUser: protectedProcedure
 		.input(z.object({ roleId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			const [role] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.id, input.roleId)).limit(1);
@@ -214,7 +214,7 @@ export const roleRouter = createTRPCRouter({
 			return { success: true };
 		}),
 
-	removeUser: publicProcedure
+	removeUser: protectedProcedure
 		.input(z.object({ roleId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await db
@@ -223,7 +223,7 @@ export const roleRouter = createTRPCRouter({
 			return { success: true };
 		}),
 
-	menuIds: publicProcedure.input(z.object({ roleId: z.string().min(1) })).query(async ({ input }) => {
+	menuIds: protectedProcedure.input(z.object({ roleId: z.string().min(1) })).query(async ({ input }) => {
 		const rows = await db
 			.select({ menuId: sysRoleMenu.menu_id })
 			.from(sysRoleMenu)
@@ -238,7 +238,7 @@ export const roleRouter = createTRPCRouter({
 	 * 拼树的 —— 那一枝无处安放,结果是"勾了却看不见"。写入时补(`withAncestorIds`),
 	 * 读取时(`lib/rbac.ts`)也用同一份逻辑兜底。
 	 */
-	setMenus: publicProcedure
+	setMenus: protectedProcedure
 		.input(z.object({ roleId: z.string().min(1), menuIds: z.array(z.string().min(1)) }))
 		.mutation(async ({ input }) => {
 			await getRoleRow(input.roleId);

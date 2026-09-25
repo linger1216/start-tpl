@@ -228,6 +228,73 @@ async function main() {
 	}
 	console.log(`  sys:role:add / sys:role:remove;本次新增 ${created.menu} 个`);
 
+	console.log("── 按钮权限点(挂在「文件管理」下,type = 3)──");
+	const filesMenuId = byPath.get("/settings/files")?.id;
+	if (filesMenuId) {
+		await upsertButton(filesMenuId, "上传文件", "sys:file:upload", 90);
+		await upsertButton(filesMenuId, "重命名文件", "sys:file:edit", 91);
+		await upsertButton(filesMenuId, "删除文件", "sys:file:remove", 92);
+	}
+	console.log("  sys:file:upload / sys:file:edit / sys:file:remove");
+
+	console.log("── 按钮权限点(其余各页,type = 3)──");
+	// ⚠️ 这些是**服务端强制**用的权限码(见 `lib/rbac.ts` 的 `PERM_BY_PATH`):
+	//    按钮不存在时,角色授权树里就勾不到它 —— 那么"给某个角色开这个动作"这件事根本无法表达。
+	//    只建点、**不替任何角色授权**:系统管理员是 `*:*:*` 通配(自动全覆盖),
+	//    部门主管 / 普通员工是刻意"只给菜单不给按钮"的演示角色,不动它们。
+	const 菜单管理MenuId = byPath.get("/settings/menus")?.id;
+	if (菜单管理MenuId) {
+		await upsertButton(菜单管理MenuId, "新增菜单", "sys:menu:add", 90);
+		await upsertButton(菜单管理MenuId, "修改菜单", "sys:menu:edit", 91);
+		await upsertButton(菜单管理MenuId, "删除菜单", "sys:menu:remove", 92);
+		await upsertButton(菜单管理MenuId, "菜单排序", "sys:menu:sort", 93);
+	}
+	const 字典管理MenuId = byPath.get("/settings/dictionary")?.id;
+	if (字典管理MenuId) {
+		await upsertButton(字典管理MenuId, "新增字典", "sys:dict:add", 90);
+		await upsertButton(字典管理MenuId, "修改字典", "sys:dict:edit", 91);
+		await upsertButton(字典管理MenuId, "删除字典", "sys:dict:remove", 92);
+	}
+	const 参数管理MenuId = byPath.get("/settings/parameters")?.id;
+	if (参数管理MenuId) {
+		await upsertButton(参数管理MenuId, "新增参数", "sys:para:add", 90);
+		await upsertButton(参数管理MenuId, "修改参数", "sys:para:edit", 91);
+		await upsertButton(参数管理MenuId, "删除参数", "sys:para:remove", 92);
+	}
+	const 标签管理MenuId = byPath.get("/settings/tags")?.id;
+	if (标签管理MenuId) {
+		await upsertButton(标签管理MenuId, "新增标签", "sys:tag:add", 90);
+		await upsertButton(标签管理MenuId, "修改标签", "sys:tag:edit", 91);
+		await upsertButton(标签管理MenuId, "删除标签", "sys:tag:remove", 92);
+		await upsertButton(标签管理MenuId, "移动标签", "sys:tag:move", 93);
+		await upsertButton(标签管理MenuId, "调整标签关联", "sys:tag:link", 94);
+	}
+	const 部门管理MenuId = byPath.get("/settings/departments")?.id;
+	if (部门管理MenuId) {
+		await upsertButton(部门管理MenuId, "新增部门", "sys:department:add", 90);
+		await upsertButton(部门管理MenuId, "修改部门", "sys:department:edit", 91);
+		await upsertButton(部门管理MenuId, "删除部门", "sys:department:remove", 92);
+		await upsertButton(部门管理MenuId, "部门排序", "sys:department:sort", 93);
+		await upsertButton(部门管理MenuId, "调整部门成员", "sys:department:member", 94);
+	}
+	const 角色管理MenuId = byPath.get("/settings/roles")?.id;
+	if (角色管理MenuId) {
+		await upsertButton(角色管理MenuId, "修改角色", "sys:role:edit", 90);
+		await upsertButton(角色管理MenuId, "调整角色成员", "sys:role:user", 91);
+		await upsertButton(角色管理MenuId, "保存角色权限", "sys:role:perm", 92);
+	}
+	const 日志MenuId = byPath.get("/settings/logs")?.id;
+	if (日志MenuId) {
+		await upsertButton(日志MenuId, "查看审计日志", "sys:log:list", 90);
+	}
+	const 用户管理MenuId = byPath.get("/settings/users")?.id;
+	if (用户管理MenuId) {
+		await upsertButton(用户管理MenuId, "新增用户", "sys:user:add", 90);
+		await upsertButton(用户管理MenuId, "修改用户", "sys:user:edit", 91);
+		await upsertButton(用户管理MenuId, "删除用户", "sys:user:remove", 92);
+	}
+	console.log(`  本次新增 ${created.menu} 个按钮权限点`);
+
 	console.log("── 运维权限点(隐藏分组,type = 3)──");
 	// 这一组 visible = 0:不进侧边栏,只在菜单管理 / 角色授权树里可见。
 	// `*:*:*` 是**通配模式**(逐段匹配,见 lib/rbac.ts):授权它 = 全部权限点,**含以后新增的**。

@@ -232,7 +232,10 @@ export function SortableTree<T extends SortableTreeNode>({
 							"group relative flex items-center gap-1.5 rounded-lg border border-transparent py-1.5 pr-1.5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/40",
 							selectedId === node.id ? "border-primary/40 bg-primary/5" : "hover:border-hue-blue-line hover:bg-hover",
 							hint && !hint.allowed && "opacity-60",
-							dragDisabled ? "cursor-default" : "cursor-grab",
+							// ⚠️ 整行**不再**用 `cursor-grab`:行尾按钮是 `cursor-pointer`,
+							//    整行 grab 会让鼠标在两者边界上一抖就 grab ⇄ 手型来回换 ——
+							//    用户报的"鼠标一直闪"实测就是这条(2026-09)。抓取提示只留在把手上(见下)。
+							"cursor-default",
 						)}
 						style={{ paddingLeft: 6 + node.depth * 18 }}
 						onClick={(event) => {
@@ -277,7 +280,10 @@ export function SortableTree<T extends SortableTreeNode>({
 						 * 于是"有子节点的那几行没有把手"—— 用户看到的现象是**"这几行不能拖动"**,
 						 * 其实能拖,只是**没给可供性**。所以箭头归箭头(负责展开),把手归把手(每行都有)。
 						 */}
-						<GripVertical className="size-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+						<GripVertical
+							className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50 active:cursor-grabbing"
+							aria-hidden="true"
+						/>
 
 						{renderRow(node)}
 

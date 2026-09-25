@@ -26,7 +26,7 @@ import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType } from "#/lib/menu-spec";
 import { effectiveMenusFor, PERM_FORMAT } from "#/lib/rbac";
-import { createTRPCRouter, publicProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
 function toMenuRow(row: typeof sysMenu.$inferSelect) {
@@ -86,7 +86,7 @@ const permField = z
 	});
 
 export const menuRouter = createTRPCRouter({
-	list: publicProcedure.query(async () => {
+	list: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 		return rows.map(toMenuRow);
 	}),
@@ -97,12 +97,12 @@ export const menuRouter = createTRPCRouter({
 	 * 与 `list` 的区别:`list` 是"库里有什么"(给管理员改菜单用),`mine` 是"这个人能看什么"。
 	 * 只认会话 —— userId 从请求 cookie 里取(`lib/current-user.ts`)。
 	 */
-	mine: publicProcedure.query(async () => {
+	mine: protectedProcedure.query(async () => {
 		const { rows, perms } = await effectiveMenusFor(await getCurrentUserId());
 		return { rows: rows === null ? null : rows.map(toMenuRow), perms };
 	}),
 
-	update: publicProcedure
+	update: protectedProcedure
 		.input(
 			z.object({
 				id: z.string().min(1),
@@ -145,7 +145,7 @@ export const menuRouter = createTRPCRouter({
 	 * 不如让调用方把"这一层的完整名单"给出来 —— 只要名单里出现了兄弟之外的行,直接拒绝。
 	 * (前端 UI 同样只允许落在同级之间,两层防线。)
 	 */
-	reorder: publicProcedure
+	reorder: protectedProcedure
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
@@ -174,7 +174,7 @@ export const menuRouter = createTRPCRouter({
 			return { updated: input.orderedIds.length, rows: rows.map(toMenuRow) };
 		}),
 
-	create: publicProcedure
+	create: protectedProcedure
 		.input(
 			z.object({
 				parentId: z.string().nullable(),
@@ -217,7 +217,7 @@ export const menuRouter = createTRPCRouter({
 			return toMenuRow(await getMenuRow(id));
 		}),
 
-	delete: publicProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		await getMenuRow(input.id);
 		const children = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.parent_id, input.id));
 		if (children.length > 0) {

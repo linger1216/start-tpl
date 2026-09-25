@@ -23,6 +23,7 @@ import {
 	sysPara,
 	sysRole,
 	sysRoleMenu,
+	sysLog,
 	sysSession,
 	sysTag,
 	sysUser,
@@ -40,8 +41,21 @@ export function uniqueSuffix(): string {
 	return `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
+/**
+ * 直调 procedure 时**注入的用户**。
+ *
+ * 为什么必须注入:中间件要拿"当前用户",而直调 caller 压根没有请求上下文
+ * (`getRequestHeaders()` 会抛)⇒ 不注入的话,加了登录校验之后**每个测试都会 401**。
+ * `isSuper` 让它免去"造角色 + 授权"的样板 —— 这条注入路径**从网络不可达**
+ * (HTTP 入口 `api.trpc.$.tsx` 没有 `createContext`),所以它不是后门。
+ */
+export const TEST_USER = { id: "test-admin", name: "测试管理员", isSuper: true };
+
 /** 直调 procedure 的 caller(等价于服务端内部调用) */
-export const caller = createCallerFactory(trpcRouter)({});
+export const caller = createCallerFactory(trpcRouter)({ user: TEST_USER });
+
+/** **未登录**的 caller —— 用来断言"必须被拒"(在这之前根本没法测这一条) */
+export const anonymousCaller = createCallerFactory(trpcRouter)({ user: null });
 
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;
 
@@ -151,6 +165,18 @@ export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number>
 			await db.delete(sysDept).where(eq(sysDept.id, list[i] as string));
 		}
 		removed += list.length;
+	}
+
+	// ── 审计日志:测试写出的行以 `operator_id = "test-admin"` 标记 —— 它们没有 __test__ 前缀,
+	//     不清就会一直堆(审计是只增不改的表,没有别的清理口子)
+	const staleLogs = await db
+		.select({ id: sysLog.id, operatorId: sysLog.operator_id })
+		.from(sysLog)
+		.where(lt(sysLog.create_time, cutoff));
+	const logIds = staleLogs.filter((row) => row.operatorId === TEST_USER.id).map((row) => row.id);
+	if (logIds.length > 0) {
+		await db.delete(sysLog).where(inArray(sysLog.id, logIds));
+		removed += logIds.length;
 	}
 
 	// ── 三张「配置类」表(键 / 编码带前缀,清理它们没有引用问题)──

@@ -1,7 +1,11 @@
+import { ImagePlus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import type { UserRow } from "#/components/modules/settings/settings-users-table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect, type MultiSelectOption } from "#/components/modules/shared/multi-select";
+import { ActionButton } from "#/components/ui/action-button";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -12,10 +16,12 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import { FileDropzone } from "#/components/ui/file-dropzone";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { useFileUpload } from "#/hooks/use-file-upload";
 
 export type UserFormPayload = {
 	name: string;
@@ -68,6 +74,35 @@ export function SettingsUsersForm({
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [image, setImage] = useState("");
+	const [avatarUploading, setAvatarUploading] = useState(false);
+	const [avatarPercent, setAvatarPercent] = useState(0);
+	const { upload } = useFileUpload();
+
+	/**
+	 * 上传头像 —— 一律进 **公开桶**(公开地址不过期、可直链、可被缓存,头像最合适)。
+	 *
+	 * 秒传由服务端判断:同一张图已经有人传过 ⇒ 不再签发上传地址、直接返回那条记录,
+	 * 这里只需要把它的地址塞进 `image`(用户再点保存即可)。
+	 */
+	async function handleAvatar(file: File) {
+		setAvatarUploading(true);
+		setAvatarPercent(0);
+		const result = await upload(file, "public", setAvatarPercent);
+		setAvatarUploading(false);
+		if (!result.ok) {
+			toast.error(result.message);
+			return;
+		}
+		// 公开桶的图片:thumbUrl 就是那个可直接访问的直链(前缀由 MINIO_PUBLIC_URL 控制)
+		const url = result.row.thumbUrl;
+		if (!url) {
+			toast.error("上传成功,但没拿到可访问地址");
+			return;
+		}
+		setImage(url);
+		toast.success(result.instant ? "相同图片已存在,直接复用了" : "头像已上传", { description: "记得点「保存」" });
+	}
+
 	const [emailVerified, setEmailVerified] = useState(false);
 	const [roleIds, setRoleIds] = useState<string[]>([]);
 	const [departmentIds, setDepartmentIds] = useState<string[]>([]);
@@ -173,14 +208,34 @@ export function SettingsUsersForm({
 								</DetailRow>
 							) : (
 								<>
-									<DetailRow label="头像 URL" htmlFor="user-form-image">
-										<Input
-											id="user-form-image"
-											value={image}
-											placeholder="https://…"
-											className="h-8 text-[13px]"
-											onChange={(event) => setImage(event.target.value)}
-										/>
+									<DetailRow label="头像">
+										<div className="flex items-start gap-3">
+											{/* 预览:有地址就出图,没有就是姓名首字 —— 与列表 / 详情用的是同一个 Avatar */}
+											<Avatar className="size-10 shrink-0">
+												{image ? <AvatarImage src={image} alt={name || "头像"} /> : null}
+												<AvatarFallback className="text-[13px]">{(name || "?").slice(0, 1)}</AvatarFallback>
+											</Avatar>
+											<div className="flex min-w-0 flex-1 flex-col gap-2">
+												<FileDropzone
+													accept=".jpg,.jpeg,.png,.gif,.webp"
+													maxSizeMb={5}
+													disabled={avatarUploading}
+													icon={<ImagePlus className="size-4 text-muted-foreground" />}
+													label={image ? "换一张头像" : "上传头像"}
+													hint="png / jpg / webp,不超过 5MB;上传到公开桶,可直接访问"
+													onFile={(file) => void handleAvatar(file)}
+												/>
+												{avatarUploading ? (
+													<span className="text-[11px] text-muted-foreground">上传中 {avatarPercent}%</span>
+												) : null}
+												{image ? (
+													<span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+														<span className="min-w-0 truncate font-mono">{image}</span>
+														<ActionButton onClick={() => setImage("")}>移除</ActionButton>
+													</span>
+												) : null}
+											</div>
+										</div>
 									</DetailRow>
 									<DetailRow label="邮箱已验证" htmlFor="user-form-emailVerified">
 										<Switch aria-label="邮箱已验证" checked={emailVerified} onCheckedChange={setEmailVerified} />

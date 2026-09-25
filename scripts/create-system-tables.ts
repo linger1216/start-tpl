@@ -251,6 +251,52 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			constraint \`fk_sys_role_menu_menu\` foreign key (\`menu_id\`) references \`sys_menu\` (\`id\`) on delete cascade
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色 → 菜单/按钮授权(同时表达「菜单可见」与「按钮可用」)'`,
 	},
+/** 文件元数据(字节存 MinIO;见 doc/文件管理.md) */
+  {
+    name: "sys_file",
+    ddl: `create table if not exists \`sys_file\` (
+      \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+      \`bucket\` varchar(64) collate utf8mb4_unicode_ci not null comment '桶名(app-public 公开 / app-private 私有)',
+      \`object_key\` varchar(512) collate utf8mb4_unicode_ci not null comment '对象键:{yyyy}/{MM}/{nanoid}.{ext}',
+      \`origin_name\` varchar(255) collate utf8mb4_unicode_ci not null comment '原始文件名(下载时进 Content-Disposition)',
+      \`ext\` varchar(16) collate utf8mb4_unicode_ci default null comment '小写后缀(不带点)',
+      \`content_type\` varchar(128) collate utf8mb4_unicode_ci default null comment 'MIME 类型(以对象存储回的为准)',
+      \`size\` bigint not null default 0 comment '字节数(confirm 时校准)',
+      \`hash\` char(64) collate utf8mb4_unicode_ci default null comment '内容 sha256(仅元数据,不自动去重)',
+      \`status\` tinyint not null default 0 comment '0 待确认 / 1 正常 / 2 已删除',
+      \`create_time\` datetime not null default current_timestamp,
+      \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+      primary key (\`id\`),
+      unique key \`uk_sys_file_object\` (\`bucket\`, \`object_key\`),
+      key \`idx_sys_file_status\` (\`status\`, \`create_time\`),
+      key \`idx_sys_file_hash\` (\`hash\`)
+    ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '文件元数据(字节存 MinIO,见 doc/文件管理.md)'`,
+  },
+/** 审计日志(谁在什么时候对什么做了什么;只增不改,见 doc/审计日志.md) */
+{
+	name: "sys_log",
+	ddl: `create table if not exists \`sys_log\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+    \`trace_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '与后端日志同值的追踪号',
+    \`path\` varchar(64) collate utf8mb4_unicode_ci not null comment 'tRPC 路径(如 role.create)',
+    \`label\` varchar(64) collate utf8mb4_unicode_ci default null comment '中文动作名',
+    \`type\` varchar(16) collate utf8mb4_unicode_ci default null comment 'query / mutation',
+    \`operator_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '操作人 id',
+    \`operator_name\` varchar(64) collate utf8mb4_unicode_ci default null comment '操作人姓名快照',
+    \`ip\` varchar(64) collate utf8mb4_unicode_ci default null comment '来源 IP',
+    \`target\` varchar(255) collate utf8mb4_unicode_ci default null comment '目标描述(尽力而为)',
+    \`status\` tinyint not null default 1 comment '1 成功 / 0 失败',
+    \`error_code\` varchar(48) collate utf8mb4_unicode_ci default null comment '错误码',
+    \`error_message\` varchar(255) collate utf8mb4_unicode_ci default null comment '错误消息(已脱敏截断)',
+    \`input\` text comment '入参快照(已脱敏、截断 2000 字符)',
+    \`duration_ms\` int default null comment '耗时(毫秒)',
+    \`create_time\` datetime not null default current_timestamp,
+    primary key (\`id\`),
+    key \`idx_sys_log_time\` (\`create_time\`),
+    key \`idx_sys_log_operator\` (\`operator_id\`, \`create_time\`),
+    key \`idx_sys_log_path\` (\`path\`, \`create_time\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '审计日志(只增不改;见 doc/审计日志.md)'`,
+},
 ];;
 
 const before = new Set(

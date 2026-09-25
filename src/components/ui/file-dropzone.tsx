@@ -9,14 +9,20 @@ import { cn } from "#/lib/utils";
 /**
  * 文件拖拽上传区 —— 拖拽 / 点击选文件 + 校验 + 展示已选文件名。
  *
- * 只负责"把文件交出去",不负责解析:校验通过后回调 `onFile`,由调用方决定
+ * 只负责"把文件交出去",不负责解析:校验通过后回调,由调用方决定
  * `await file.arrayBuffer()` 之后干什么(解析表格 / 上传 / 预览图,用途各不相同)。
  *
- * `validate` 返回错误文案即拒绝该文件并 toast 提示;不传则只做大小校验。
+ * **单文件用 `onFile`;多文件传 `multiple` + `onFiles`**(后者拿到的是**校验全通过**的那批,
+ * 不合规的文件已被逐个 toast 拒绝、不会混进来)。`fileName` / `onClear` 是单文件那套的展示位;
+ * 多选时由调用方自己列表展示 —— 它更清楚每行的进度与失败原因。
+ *
+ * `validate` 返回错误文案即拒绝该文件并 toast 提示;不传则只做大小校验(多选时逐个校验)。
  */
 
 export function FileDropzone({
 	onFile,
+	onFiles,
+	multiple = false,
 	fileName,
 	onClear,
 	disabled = false,
@@ -30,8 +36,12 @@ export function FileDropzone({
 	validate,
 	className,
 }: {
-	/** 校验通过后回调 */
-	onFile: (file: File) => void | Promise<void>;
+	/** 校验通过后回调(单文件用这个) */
+	onFile?: (file: File) => void | Promise<void>;
+	/** 校验通过后回调(**多文件**用这个;`multiple` 为真时生效) */
+	onFiles?: (files: File[]) => void;
+	/** 允许多选 / 多拖(此时请用 `onFiles` 接收) */
+	multiple?: boolean;
 	/** 已选文件名(有值时展示"已选择"状态与清除按钮) */
 	fileName?: string | null;
 	onClear?: () => void;
@@ -53,20 +63,29 @@ export function FileDropzone({
 
 	const autoHint =
 		accept || maxSizeMb
-			? `支持 ${accept ?? "任意格式"}${maxSizeMb ? ` · 单个文件不超过 ${maxSizeMb}MB` : ""}`
+			? `支持 ${accept ?? "任意格式"}${maxSizeMb ? ` · 单个文件不超过 ${maxSizeMb}MB` : ""}${multiple ? " · 可多选" : ""}`
 			: undefined;
 
-	function acceptFile(file: File) {
-		const rejected = validate?.(file);
-		if (rejected) {
-			toast.error(rejected);
-			return;
+	/** 逐个校验 —— **不合规的当场 toast 拒绝,合规的才交出去**(多选时不能因为一个坏文件丢一批) */
+	function acceptFiles(list: FileList | null | undefined) {
+		const picked = Array.from(list ?? []);
+		if (picked.length === 0) return;
+		const passed: File[] = [];
+		for (const file of picked) {
+			const rejected = validate?.(file);
+			if (rejected) {
+				toast.error(`${file.name}:${rejected}`);
+				continue;
+			}
+			if (maxSizeMb !== undefined && file.size > maxSizeMb * 1024 * 1024) {
+				toast.error(`${file.name}:不能超过 ${maxSizeMb}MB`);
+				continue;
+			}
+			passed.push(file);
 		}
-		if (maxSizeMb !== undefined && file.size > maxSizeMb * 1024 * 1024) {
-			toast.error(`文件不能超过 ${maxSizeMb}MB`);
-			return;
-		}
-		void onFile(file);
+		if (passed.length === 0) return;
+		if (multiple) onFiles?.(passed);
+		else void onFile?.(passed[0]);
 	}
 
 	return (
@@ -84,8 +103,7 @@ export function FileDropzone({
 					event.preventDefault();
 					setDragging(false);
 					if (disabled) return;
-					const file = event.dataTransfer.files?.[0];
-					if (file) acceptFile(file);
+					acceptFiles(event.dataTransfer.files);
 				}}
 				className={cn(
 					"flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-center transition-colors",
@@ -108,10 +126,10 @@ export function FileDropzone({
 				ref={inputRef}
 				type="file"
 				accept={accept}
+				multiple={multiple}
 				className="hidden"
 				onChange={(event) => {
-					const file = event.target.files?.[0];
-					if (file) acceptFile(file);
+					acceptFiles(event.target.files);
 					// 允许连续选同一个文件(否则第二次 change 不触发)
 					event.target.value = "";
 				}}
