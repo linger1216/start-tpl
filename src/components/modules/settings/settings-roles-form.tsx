@@ -191,14 +191,7 @@ export function SettingsRolesForm({
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow
-								label={
-									<>
-										标识<span className="ml-1 font-normal text-muted-foreground">全库唯一,建议小写下划线</span>
-									</>
-								}
-								htmlFor="role-code"
-							>
+							<DetailRow label="标识" htmlFor="role-code">
 								<Input
 									id="role-code"
 									value={code}
@@ -217,14 +210,7 @@ export function SettingsRolesForm({
 									onChange={(event) => setRemark(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow
-								label={
-									<>
-										排序<span className="ml-1 font-normal text-muted-foreground">越小越靠前</span>
-									</>
-								}
-								htmlFor="role-sort"
-							>
+							<DetailRow label="排序" htmlFor="role-sort">
 								<Input
 									id="role-sort"
 									type="number"
@@ -234,13 +220,7 @@ export function SettingsRolesForm({
 									onChange={(event) => setSort(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow
-								label={
-									<>
-										启用<span className="ml-1 font-normal text-muted-foreground">停用后不参与权限计算</span>
-									</>
-								}
-							>
+							<DetailRow label="启用">
 								<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 							</DetailRow>
 						</div>

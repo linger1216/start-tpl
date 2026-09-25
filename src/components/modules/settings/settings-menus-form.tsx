@@ -165,13 +165,7 @@ export function SettingsMenusForm({
 				<IconPicker value={values.icon} onChange={(next) => onChange({ ...values, icon: next })} className="h-8" />
 			</DetailRow>
 
-			<DetailRow
-				label={
-					<>
-						在侧边栏显示<span className="ml-1 font-normal text-muted-foreground">关掉后连同它的子菜单一起隐藏</span>
-					</>
-				}
-			>
+			<DetailRow label="在侧边栏显示">
 				<Switch
 					aria-label="在侧边栏显示"
 					checked={values.visible}

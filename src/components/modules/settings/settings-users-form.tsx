@@ -118,16 +118,13 @@ export function SettingsUsersForm({
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新建用户" : `编辑用户 · ${user?.name ?? ""}`}</DialogTitle>
 					<DialogDescription>
-						{creating
-							? "账号体系归 Better Auth(密码哈希 / 会话 / 登录都由它管),这里只是替人开个账号 —— 建完还没有角色,看不到任何菜单,建好后在「编辑」里分配部门与角色。"
-							: "改姓名 / 邮箱 / 头像 / 邮箱验证状态 / 部门 / 角色。密码走 Better Auth 自己的流程(要本人或邮件往返),不在这里代改。"}
+						{creating ? "新建用户" : "改姓名 / 邮箱 / 头像 / 邮箱验证状态 / 部门 / 角色。"}
 					</DialogDescription>
 				</DialogHeader>
 
 				<Tabs variant="card" value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
 					<TabsList className="shrink-0">
 						<TabsTrigger value="basic">基本信息</TabsTrigger>
-						{/* 新建时账号还没建出来,这两个 tab 里没有任何可分配内容 —— 直接不显示(不是禁用) */}
 						{creating ? null : (
 							<TabsTrigger value="departments" count={departmentIds.length}>
 								部门
@@ -176,14 +173,7 @@ export function SettingsUsersForm({
 								</DetailRow>
 							) : (
 								<>
-									<DetailRow
-										label={
-											<>
-												头像 URL<span className="ml-1 font-normal text-muted-foreground">留空 = 没有头像</span>
-											</>
-										}
-										htmlFor="user-form-image"
-									>
+									<DetailRow label="头像 URL" htmlFor="user-form-image">
 										<Input
 											id="user-form-image"
 											value={image}
@@ -192,14 +182,7 @@ export function SettingsUsersForm({
 											onChange={(event) => setImage(event.target.value)}
 										/>
 									</DetailRow>
-									<DetailRow
-										label={
-											<>
-												邮箱已验证
-												<span className="ml-1 font-normal text-muted-foreground">替人开账号时通常勾上</span>
-											</>
-										}
-									>
+									<DetailRow label="邮箱已验证" htmlFor="user-form-emailVerified">
 										<Switch aria-label="邮箱已验证" checked={emailVerified} onCheckedChange={setEmailVerified} />
 									</DetailRow>
 								</>

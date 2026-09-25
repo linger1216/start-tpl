@@ -151,7 +151,7 @@ export function SettingsDepartmentsPage() {
 				}
 			/>
 
-			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(320px,1.2fr)]">
+			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[30rem_minmax(0,1fr)]">
 				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader className="flex-row items-center justify-between gap-2">
 						<CardTitle className="flex items-center gap-2">

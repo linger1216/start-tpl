@@ -218,23 +218,10 @@ export function SettingsParametersForm({
 
 					{/* 状态 / 可编辑是这个表的真实列(列表里都有),所以表单里也要能改 */}
 					<div className="flex flex-col gap-1">
-						<DetailRow
-							label={
-								<>
-									启用<span className="ml-1 font-normal text-muted-foreground">停用只是标记,代码不读它</span>
-								</>
-							}
-						>
+						<DetailRow label="启用">
 							<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 						</DetailRow>
-						<DetailRow
-							label={
-								<>
-									允许修改
-									<span className="ml-1 font-normal text-muted-foreground">关掉即锁定(界面不可改 / 不可删)</span>
-								</>
-							}
-						>
+						<DetailRow label="允许修改">
 							<Switch aria-label="允许修改" checked={editable} onCheckedChange={setEditable} />
 						</DetailRow>
 					</div>

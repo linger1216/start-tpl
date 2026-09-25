@@ -74,14 +74,7 @@ export function SettingsTagsFormDialog({
 				</DialogHeader>
 
 				<div className="space-y-3">
-					<DetailRow
-						label={
-							<>
-								名称<span className="text-destructive"> *</span>
-							</>
-						}
-						htmlFor="tag-label"
-					>
+					<DetailRow label="名称" htmlFor="tag-label">
 						<Input
 							id="tag-label"
 							value={label}

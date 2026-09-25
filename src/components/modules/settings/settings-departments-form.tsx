@@ -137,16 +137,7 @@ export function SettingsDepartmentsForm({
 								/>
 							</DetailRow>
 
-							<DetailRow
-								label={
-									<>
-										启用
-										<span className="ml-1 font-normal text-muted-foreground">
-											停用的部门不参与权限计算(成员还在,只是不生效)
-										</span>
-									</>
-								}
-							>
+							<DetailRow label="启用">
 								<Switch
 									aria-label="启用"
 									checked={values.status}

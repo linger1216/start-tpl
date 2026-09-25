@@ -61,8 +61,13 @@ export function groupByParent<T extends TreeRow>(
 	const roots = [...(byParent.get(rootKey) ?? [])];
 	if (options?.promoteOrphans !== false) {
 		const known = new Set(rows.map((row) => row.id));
-		// parentId 非空、但父不在这批行里 → 当一级(否则整枝消失)
-		for (const row of rows) if (row.parentId != null && !known.has(row.parentId)) roots.push(row);
+		// parentId 非空、且父不在这批行里 → 当一级(否则整枝消失)。
+		// ⚠️ 必须排掉「parentId 等于顶层值」的行:它们**已经在** roots 里了(根按 rootKey 分桶),
+		// 再推一次就会把根渲染两遍(实测部门树 1 → 89 个节点那个 bug 就是这么来的)。
+		for (const row of rows) {
+			if (row.parentId == null || row.parentId === rootKey) continue;
+			if (!known.has(row.parentId)) roots.push(row);
+		}
 	}
 	return { byParent, roots };
 }
