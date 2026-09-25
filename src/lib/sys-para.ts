@@ -87,6 +87,16 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		remark:
 			'各页表格的列顺序与隐藏列:{"<页面键>":{"order":["列id",…],"hidden":["列id",…]}};页面上点工具条的「列」即可改',
 	},
+	// 各页树的「展开到哪」—— 由三棵树折叠 / 展开时写入(见 hooks/use-tree-prefs.ts)。
+	// 键是页面标识(如 settings.menus),值是 { expanded: string[] }(只记已展开的节点 id;
+	// 没设置过 = 全部折叠)。与 page.columns 一样存 sys_para,换机器跟着账号走。
+	"page.tree": {
+		value: "{}",
+		type: PARA_TYPE.JSON,
+		group: "界面偏好",
+		remark:
+			'各页树的展开节点:{"<页面键>":{"expanded":["节点id",…]}};在页面上折叠 / 展开树即可改;删掉某个页面键 = 该树回到默认(全部折叠)',
+	},
 };
 
 const CACHE_TTL_MS = 30_000;

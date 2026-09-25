@@ -1,4 +1,4 @@
-import { actionsColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { PARA_TYPE, PARA_TYPE_META, type ParaType } from "#/lib/para-spec";
 import { createAppColumnHelper } from "#/lib/table";
@@ -91,12 +91,8 @@ export function parameterColumns({
 			header: "当前值",
 			size: 240,
 			cell: (ctx) => (
-				<span
-					translate="no"
-					title={previewValue(ctx.row.original)}
-					className="block max-w-[16rem] truncate font-mono text-[12.5px] font-medium text-foreground"
-				>
-					{previewValue(ctx.row.original)}
+				<span translate="no" className="font-mono text-[12.5px] font-medium text-foreground">
+					<TextCell value={previewValue(ctx.row.original)} truncate />
 				</span>
 			),
 		}),
@@ -128,14 +124,18 @@ export function parameterColumns({
 		columnHelper.accessor("remark", {
 			header: "说明",
 			size: 340,
-			cell: (ctx) => <span className="line-clamp-2 text-[12px] text-muted-foreground">{ctx.getValue() || "—"}</span>,
+			cell: (ctx) => (
+				<span className="line-clamp-2 text-[12px] text-muted-foreground">
+					<TextCell value={ctx.getValue()} />
+				</span>
+			),
 		}),
 		columnHelper.accessor("createdAt", {
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),
@@ -144,14 +144,18 @@ export function parameterColumns({
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue() || "—"}</span>,
+			cell: (ctx) => (
+				<span className="font-mono text-[11px] text-muted-foreground/70">
+					<TextCell value={ctx.getValue()} />
+				</span>
+			),
 		}),
 		actionsColumn<ParameterRow>({
 			size: 150,

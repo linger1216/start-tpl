@@ -29,29 +29,23 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { useAppTable } from "#/lib/table";
+import { bySortThenName, groupByParent } from "#/lib/tree";
 
 /**
  * 菜单行 → 权限树:菜单是枝、**按钮**(`type = 3`)是叶,后者带「操作」徽章。
  * 给角色勾按钮 = 那个按钮的 `perm` 进入他的权限集合(前端 `useHasPerm` 认它)。
  */
 function buildPermTree(rows: readonly MenuRow[]): PermissionNode[] {
-	const byParent = new Map<string, MenuRow[]>();
-	for (const row of rows) {
-		const key = row.parentId ?? "";
-		byParent.set(key, [...(byParent.get(key) ?? []), row]);
-	}
-	for (const list of byParent.values()) {
-		list.sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name, "zh-Hans-CN"));
-	}
-	const build = (parentKey: string): PermissionNode[] =>
-		(byParent.get(parentKey) ?? []).map((row) => {
-			const children = build(row.id);
-			const node: PermissionNode = { id: row.id, name: row.name };
-			if (Number(row.type) === MENU_TYPE.BUTTON) node.kind = "操作";
-			if (children.length > 0) node.children = children;
-			return node;
-		});
-	return build("");
+	// 分组 / 同级排序 / 父不存在时提升为一级 → 统一走 lib/tree.ts(节点形状不同,所以自己递归)
+	const { byParent, roots } = groupByParent(rows, { rootKey: "", compare: bySortThenName });
+	const build = (row: MenuRow): PermissionNode => {
+		const children = (byParent.get(row.id) ?? []).map(build);
+		const node: PermissionNode = { id: row.id, name: row.name };
+		if (Number(row.type) === MENU_TYPE.BUTTON) node.kind = "操作";
+		if (children.length > 0) node.children = children;
+		return node;
+	};
+	return roots.map(build);
 }
 
 /**
@@ -244,7 +238,10 @@ export function SettingsRolesPage() {
 
 			<LedgerToolbar
 				search={keyword}
-				onSearchChange={setKeyword}
+				onSearchChange={(value) => {
+					setKeyword(value);
+					table.setPageIndex(0);
+				}}
 				searchPlaceholder="搜索角色名 / 标识…"
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>

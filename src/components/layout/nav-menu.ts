@@ -1,4 +1,5 @@
 import { MENU_TYPE } from "#/lib/menu-spec";
+import { bySortThenName, groupByParent } from "#/lib/tree";
 import { NAV_ICON_MAP, type NavIcon, type NavNode } from "./nav-config";
 
 /**
@@ -48,18 +49,9 @@ export function menuIconOf(icon: string | null | undefined): NavIcon {
  */
 export function buildNavTree(rows: readonly MenuRow[]): NavNode[] {
 	const visibleRows = rows.filter((row) => Number(row.visible) !== 0 && Number(row.type) !== MENU_TYPE.BUTTON);
-	const byParent = new Map<string, MenuRow[]>();
-	for (const row of visibleRows) {
-		const key = row.parentId ?? "";
-		const list = byParent.get(key) ?? [];
-		list.push(row);
-		byParent.set(key, list);
-	}
-	for (const list of byParent.values()) {
-		list.sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name, "zh-Hans-CN"));
-	}
+	// 分组 + 同级排序 + 孤儿提升都走 lib/tree.ts(五套树算法收成一处,见那里的注释)
+	const { byParent, roots } = groupByParent(visibleRows, { rootKey: "", compare: bySortThenName });
 
-	const known = new Set(visibleRows.map((row) => row.id));
 	/** 正在展开的节点:防 `parentId` 成环(脏数据下只是少一层,不会栈溢出) */
 	const expanding = new Set<string>();
 	const toNode = (row: MenuRow): NavNode => {
@@ -77,9 +69,8 @@ export function buildNavTree(rows: readonly MenuRow[]): NavNode[] {
 		return node;
 	};
 
-	// 一级菜单:parentId 为空,或父节点已不存在(父被删 → 子升为一级,免得整枝消失)
-	const roots = visibleRows.filter((row) => !row.parentId || !known.has(row.parentId));
-	return roots.sort((left, right) => left.sort - right.sort || 0).map(toNode);
+	// 一级菜单由 `groupByParent` 给出(含"父被删 → 子升为一级",免得整枝消失)
+	return roots.map(toNode);
 }
 
 /**
@@ -91,37 +82,3 @@ export type MenuTreeNode = MenuRow & {
 	/** 层级(0 = 一级);拖拽时用来判断"是不是同一级" */
 	depth: number;
 };
-
-/**
- * 平铺记录 → **管理树**(不过滤 `visible`、保留 id)。
- *
- * 与 `buildNavTree` 的区别:那个是"渲染给终端用户看的"(丢隐藏、丢 id、映射图标);
- * 这个是"给管理员操作的"(要 id 才能改、要看得见隐藏项、要能判断同级)。
- */
-export function buildMenuTree(rows: readonly MenuRow[]): { tree: MenuTreeNode[]; byId: Map<string, MenuTreeNode> } {
-	const byParent = new Map<string, MenuRow[]>();
-	for (const row of rows) {
-		const key = row.parentId ?? "";
-		byParent.set(key, [...(byParent.get(key) ?? []), row]);
-	}
-	for (const list of byParent.values()) {
-		list.sort((left, right) => left.sort - right.sort || left.name.localeCompare(right.name, "zh-Hans-CN"));
-	}
-
-	const known = new Set(rows.map((row) => row.id));
-	const expanding = new Set<string>();
-	const byId = new Map<string, MenuTreeNode>();
-	const toNode = (row: MenuRow, depth: number): MenuTreeNode => {
-		const node: MenuTreeNode = { ...row, depth, children: [] };
-		byId.set(row.id, node);
-		if (!expanding.has(row.id)) {
-			expanding.add(row.id);
-			node.children = (byParent.get(row.id) ?? []).map((child) => toNode(child, depth + 1));
-			expanding.delete(row.id);
-		}
-		return node;
-	};
-
-	const roots = rows.filter((row) => !row.parentId || !known.has(row.parentId));
-	return { tree: roots.map((row) => toNode(row, 0)), byId };
-}

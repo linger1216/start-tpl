@@ -5,12 +5,7 @@ import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsTagsFormDialog, type TagFormValues } from "#/components/modules/settings/settings-tags-form-dialog";
-import {
-	buildTagTree,
-	SettingsTagsTree,
-	type TagNode,
-	type TagRow,
-} from "#/components/modules/settings/settings-tags-tree";
+import { SettingsTagsTree, type TagNode, type TagRow } from "#/components/modules/settings/settings-tags-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
@@ -20,6 +15,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { buildTree, bySortThenLabel } from "#/lib/tree";
 
 /**
  * 系统设置 ▸ 标签管理 —— **持久化**的 `sys_tag` 树(维度 → 标签两级)。
@@ -44,21 +40,10 @@ export function SettingsTagsPage() {
 
 	const listQuery = useQuery({ ...trpc.tag.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as TagRow[];
-	const tree = useMemo(() => buildTagTree(rows), [rows]);
+	const { tree, byId } = useMemo(() => buildTree(rows, { compare: bySortThenLabel }), [rows]);
 
-	const findNode = (id: string | null): TagNode | null => {
-		if (!id) return null;
-		const walk = (nodes: TagNode[]): TagNode | null => {
-			for (const node of nodes) {
-				if (node.id === id) return node;
-				const deeper = walk(node.children);
-				if (deeper) return deeper;
-			}
-			return null;
-		};
-		return walk(tree);
-	};
-	const selected = findNode(selectedId);
+	// 按 id 找节点直接用 `buildTree` 顺手带回来的 `byId`(以前这里手写了一遍递归)
+	const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
 	const createMutation = useMutation(
 		trpc.tag.create.mutationOptions({
@@ -275,7 +260,7 @@ export function SettingsTagsPage() {
 									<div>
 										<dt className="text-muted-foreground">父级</dt>
 										<dd className="mt-0.5 text-foreground">
-											{selected.parentId ? (findNode(selected.parentId)?.label ?? "(已删除)") : "— 顶层维度"}
+											{selected.parentId ? ((byId.get(selected.parentId) ?? null)?.label ?? "(已删除)") : "— 顶层维度"}
 										</dd>
 									</div>
 									<div>

@@ -1,4 +1,4 @@
-import { actionsColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { createAppColumnHelper } from "#/lib/table";
@@ -97,7 +97,7 @@ export function userColumns({
 					className="line-clamp-1 max-w-44 font-mono text-[11px] text-muted-foreground/70"
 					title={ctx.getValue() ?? ""}
 				>
-					{ctx.getValue() || "—"}
+					<TextCell value={ctx.getValue()} />
 				</span>
 			),
 		}),
@@ -106,7 +106,7 @@ export function userColumns({
 			size: 140,
 			cell: (ctx) => (
 				<span className="text-[12px] text-muted-foreground tabular-nums">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),
@@ -115,7 +115,7 @@ export function userColumns({
 			size: 140,
 			cell: (ctx) => (
 				<span className="text-[12px] text-muted-foreground tabular-nums">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),

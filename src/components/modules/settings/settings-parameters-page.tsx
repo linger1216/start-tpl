@@ -199,7 +199,10 @@ export function SettingsParametersPage() {
 
 			<LedgerToolbar
 				search={keyword}
-				onSearchChange={setKeyword}
+				onSearchChange={(value) => {
+					setKeyword(value);
+					table.setPageIndex(0);
+				}}
 				searchPlaceholder="搜索参数名 / 分组 / 说明…"
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>

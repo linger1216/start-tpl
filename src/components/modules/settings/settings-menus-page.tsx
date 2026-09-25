@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderTree, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { buildMenuTree, type MenuTreeNode } from "#/components/layout/nav-menu";
+import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import {
@@ -20,6 +20,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
 import { asMenuType, MENU_TYPE } from "#/lib/menu-spec";
+import { buildTree, bySortThenName } from "#/lib/tree";
 
 /**
  * 系统设置 ▸ 菜单管理(编排壳)—— **左侧树 + 右侧详情**,菜单改完直接生效。
@@ -45,7 +46,7 @@ export function SettingsMenusPage() {
 	const queryClient = useQueryClient();
 	const listQuery = useQuery(trpc.menu.list.queryOptions());
 	const rows = listQuery.data ?? [];
-	const { tree, byId } = useMemo(() => buildMenuTree(rows), [rows]);
+	const { tree, byId } = useMemo(() => buildTree(rows, { rootKey: "", compare: bySortThenName }), [rows]);
 
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [values, setValues] = useState<MenuFormValues | null>(null);

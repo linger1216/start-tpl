@@ -3,29 +3,11 @@ import { Folder, Plus, Tag, Trash2 } from "lucide-react";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { useTreePrefs } from "#/hooks/use-tree-prefs";
+import type { TreeNode } from "#/lib/tree";
 
 /** 标签树节点(前端拼树后的形状)—— 行字段 + 树特有字段(与部门树同构,别再逐字段抄一遍) */
-export type TagNode = TagRow & {
-	depth: number;
-	children: TagNode[];
-};
-
-/** 平铺行 → 树(自关联,递归拼;排序用 `sort`,再 `label`) */
-export function buildTagTree(rows: readonly TagRow[]): TagNode[] {
-	const byParent = new Map<string | null, TagRow[]>();
-	for (const row of rows) {
-		const key = row.parentId ?? null;
-		const bucket = byParent.get(key);
-		if (bucket) bucket.push(row);
-		else byParent.set(key, [row]);
-	}
-	const make = (row: TagRow, depth: number): TagNode => {
-		const kids = (byParent.get(row.id) ?? []).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
-		return { ...row, depth, children: kids.map((kid) => make(kid, depth + 1)) };
-	};
-	const roots = (byParent.get(null) ?? []).sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
-	return roots.map((root) => make(root, 0));
-}
+/** 标签树节点 —— 通用节点形态(见 `lib/tree.ts`) */
+export type TagNode = TreeNode<TagRow>;
 
 /** 平铺行的形状(与 tRPC `tag.list` 出参一致) */
 export type TagRow = {

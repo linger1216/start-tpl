@@ -6,8 +6,8 @@ import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { IconPicker } from "#/components/modules/shared/icon-picker";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
@@ -100,18 +100,16 @@ export function SettingsMenusForm({
 				{dirty ? <span className="shrink-0 text-[11.5px] text-warn-fg">未保存</span> : null}
 			</div>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">名称</Label>
+			<DetailRow label="名称">
 				<Input
 					value={values.name}
 					aria-label="菜单名称"
 					className="h-8 text-[13px]"
 					onChange={(event) => onChange({ ...values, name: event.target.value })}
 				/>
-			</div>
+			</DetailRow>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">类型</Label>
+			<DetailRow label="类型">
 				<Select
 					items={typeItems}
 					value={String(values.type)}
@@ -129,10 +127,9 @@ export function SettingsMenusForm({
 					</SelectContent>
 				</Select>
 				<p className="text-[11.5px] text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
-			</div>
+			</DetailRow>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">权限标识</Label>
+			<DetailRow label="权限标识">
 				<Input
 					value={values.perm}
 					aria-label="权限标识"
@@ -143,7 +140,7 @@ export function SettingsMenusForm({
 				<p className="text-[11.5px] text-muted-foreground">
 					前端 <code className="font-mono">useHasPerm()</code> 认它;按钮必须有,目录 / 菜单可空。
 				</p>
-			</div>
+			</DetailRow>
 
 			{detailRecordId ? (
 				<div className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-[11.5px] text-muted-foreground">
@@ -153,8 +150,7 @@ export function SettingsMenusForm({
 				</div>
 			) : null}
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">路径</Label>
+			<DetailRow label="路径">
 				<Input
 					value={values.path}
 					aria-label="菜单路径"
@@ -163,24 +159,25 @@ export function SettingsMenusForm({
 					onChange={(event) => onChange({ ...values, path: event.target.value })}
 				/>
 				<p className="text-[11.5px] text-muted-foreground">路径全局唯一(重了会让两个菜单指向同一个页面)。</p>
-			</div>
+			</DetailRow>
 
-			<div className="space-y-1">
-				<Label className="text-[12px]">图标</Label>
+			<DetailRow label="图标">
 				<IconPicker value={values.icon} onChange={(next) => onChange({ ...values, icon: next })} className="h-8" />
-			</div>
+			</DetailRow>
 
-			<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
-				<div>
-					<div className="text-[12.5px]">在侧边栏显示</div>
-					<p className="text-[11.5px] text-muted-foreground">关掉后连同它的子菜单一起隐藏</p>
-				</div>
+			<DetailRow
+				label={
+					<>
+						在侧边栏显示<span className="ml-1 font-normal text-muted-foreground">关掉后连同它的子菜单一起隐藏</span>
+					</>
+				}
+			>
 				<Switch
 					aria-label="在侧边栏显示"
 					checked={values.visible}
 					onCheckedChange={(next) => onChange({ ...values, visible: next })}
 				/>
-			</div>
+			</DetailRow>
 
 			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { DetailMeta, type DetailMetaInfo } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
 	DialogContent,
@@ -11,7 +12,6 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import { Textarea } from "#/components/ui/textarea";
 
 export type TagFormValues = { label: string; value: string | null; desc: string | null };
@@ -74,10 +74,14 @@ export function SettingsTagsFormDialog({
 				</DialogHeader>
 
 				<div className="space-y-3">
-					<div className="space-y-1.5">
-						<Label htmlFor="tag-label" className="text-[12px]">
-							名称<span className="text-destructive"> *</span>
-						</Label>
+					<DetailRow
+						label={
+							<>
+								名称<span className="text-destructive"> *</span>
+							</>
+						}
+						htmlFor="tag-label"
+					>
 						<Input
 							id="tag-label"
 							value={label}
@@ -86,11 +90,8 @@ export function SettingsTagsFormDialog({
 							placeholder="如 场所风险等级 / 红色"
 							onChange={(event) => setLabel(event.target.value)}
 						/>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="tag-value" className="text-[12px]">
-							取值(可选)
-						</Label>
+					</DetailRow>
+					<DetailRow label="取值(可选)" htmlFor="tag-value">
 						<Input
 							id="tag-value"
 							value={value}
@@ -99,11 +100,8 @@ export function SettingsTagsFormDialog({
 							placeholder="可与名称不同,留空则同名称"
 							onChange={(event) => setValue(event.target.value)}
 						/>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="tag-desc" className="text-[12px]">
-							含义(可选)
-						</Label>
+					</DetailRow>
+					<DetailRow label="含义(可选)" htmlFor="tag-desc">
 						<Textarea
 							id="tag-desc"
 							value={desc}
@@ -112,7 +110,7 @@ export function SettingsTagsFormDialog({
 							placeholder="这个标签代表什么,给人看的说明"
 							onChange={(event) => setDesc(event.target.value)}
 						/>
-					</div>
+					</DetailRow>
 				</div>
 
 				<DetailMeta meta={meta} />

@@ -10,7 +10,6 @@ import {
 	SettingsDepartmentsForm,
 } from "#/components/modules/settings/settings-departments-form";
 import {
-	buildDeptTree,
 	type DeptRow,
 	type DeptTreeNode,
 	SettingsDepartmentsTree,
@@ -21,6 +20,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { buildTree, bySortThenName } from "#/lib/tree";
 
 /**
  * 系统设置 ▸ 部门管理 —— **左侧部门树 + 右侧详情(含成员)**。
@@ -37,7 +37,7 @@ export function SettingsDepartmentsPage() {
 
 	const treeQuery = useQuery(trpc.department.tree.queryOptions());
 	const rows = (treeQuery.data ?? []) as DeptRow[];
-	const { tree, byId } = useMemo(() => buildDeptTree(rows), [rows]);
+	const { tree, byId } = useMemo(() => buildTree(rows, { rootKey: "", compare: bySortThenName }), [rows]);
 
 	const usersQuery = useQuery(trpc.user.list.queryOptions());
 

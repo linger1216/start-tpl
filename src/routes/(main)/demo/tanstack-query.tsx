@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
 
 import { PageHeader } from "#/components/layout/page-header";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { JsonBlock } from "#/components/ui/json-block";
+import { RefreshButton } from "#/components/ui/refresh-button";
 import { Spinner } from "#/components/ui/spinner";
+import { formatLocalDateTime } from "#/lib/time";
 
 export const Route = createFileRoute("/(main)/demo/tanstack-query")({
 	component: TanStackQueryDemo,
@@ -35,12 +35,7 @@ function TanStackQueryDemo() {
 			<PageHeader
 				title="TanStack Query"
 				description="用 useQuery 管理一次异步请求的加载、缓存与刷新状态。"
-				actions={
-					<Button variant="outline" size="sm" disabled={isFetching} onClick={() => void refetch()}>
-						<RefreshCw />
-						刷新
-					</Button>
-				}
+				actions={<RefreshButton busy={isFetching} onClick={() => void refetch()} />}
 			/>
 
 			<Card>
@@ -52,9 +47,7 @@ function TanStackQueryDemo() {
 					<div className="flex flex-wrap items-center gap-2">
 						<Badge variant={status === "success" ? "default" : "secondary"}>{status}</Badge>
 						{dataUpdatedAt > 0 && (
-							<span className="text-[13px] text-muted-foreground">
-								更新于 {new Date(dataUpdatedAt).toLocaleTimeString()}
-							</span>
+							<span className="text-[13px] text-muted-foreground">更新于 {formatLocalDateTime(dataUpdatedAt)}</span>
 						)}
 					</div>
 

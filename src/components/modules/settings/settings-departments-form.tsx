@@ -3,11 +3,10 @@ import { Save } from "lucide-react";
 import type { DeptTreeNode } from "#/components/modules/settings/settings-departments-tree";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MemberZone } from "#/components/modules/shared/member-zone";
-import { DetailRow } from "#/components/ui/detail-row";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
@@ -138,17 +137,22 @@ export function SettingsDepartmentsForm({
 								/>
 							</DetailRow>
 
-							<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
-								<div>
-									<div className="text-[12.5px]">启用</div>
-									<p className="text-[11.5px] text-muted-foreground">停用的部门不参与权限计算(成员还在,只是不生效)</p>
-								</div>
+							<DetailRow
+								label={
+									<>
+										启用
+										<span className="ml-1 font-normal text-muted-foreground">
+											停用的部门不参与权限计算(成员还在,只是不生效)
+										</span>
+									</>
+								}
+							>
 								<Switch
 									aria-label="启用"
 									checked={values.status}
 									onCheckedChange={(next) => onChange({ ...values, status: next })}
 								/>
-							</div>
+							</DetailRow>
 						</div>
 
 						{/* 字段区的动作:保存 / 还原在左,删除这种"记录级"危险动作推到最右、离保存远一点 */}

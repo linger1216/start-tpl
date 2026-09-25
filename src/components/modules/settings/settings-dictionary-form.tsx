@@ -1,7 +1,7 @@
-import { useEffect } from "react";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
 	DialogContent,
@@ -45,10 +45,6 @@ export function SettingsDictionaryForm({
 	const rowKeys = useStableKeys(values.items.length, "dict-item-row");
 
 	// 打开时聚焦到第一个输入(桌面端;不 autofocus 移动端)
-	useEffect(() => {
-		if (!open) return;
-	}, [open]);
-
 	function setItem(index: number, patch: Partial<{ label: string; value: string }>) {
 		const items = [...values.items];
 		items[index] = { ...items[index], ...patch };
@@ -74,11 +70,8 @@ export function SettingsDictionaryForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="grid gap-3 sm:grid-cols-2">
-					<div className="space-y-1">
-						<Label htmlFor="dict-name" className="text-[12px]">
-							字典名称
-						</Label>
+				<div className="flex flex-col gap-1">
+					<DetailRow label="字典名称" htmlFor="dict-name">
 						<Input
 							id="dict-name"
 							value={values.name}
@@ -87,11 +80,8 @@ export function SettingsDictionaryForm({
 							autoComplete="off"
 							onChange={(event) => onChange({ ...values, name: event.target.value })}
 						/>
-					</div>
-					<div className="space-y-1">
-						<Label htmlFor="dict-id" className="text-[12px]">
-							字典编码
-						</Label>
+					</DetailRow>
+					<DetailRow label="字典编码" htmlFor="dict-id">
 						<Input
 							id="dict-id"
 							value={values.code}
@@ -112,11 +102,8 @@ export function SettingsDictionaryForm({
 								? "编码是主键,也被别的功能引用,创建后不可改。"
 								: "小写字母/数字/下划线,以字母开头;创建后不可改。"}
 						</p>
-					</div>
-					<div className="space-y-1 sm:col-span-2">
-						<Label htmlFor="dict-remark" className="text-[12px]">
-							说明
-						</Label>
+					</DetailRow>
+					<DetailRow label="说明" htmlFor="dict-remark">
 						<Input
 							id="dict-remark"
 							value={values.remark}
@@ -124,14 +111,14 @@ export function SettingsDictionaryForm({
 							placeholder="这个字典是给谁用的…"
 							onChange={(event) => onChange({ ...values, remark: event.target.value })}
 						/>
-					</div>
-					<div className="flex h-8 items-center rounded-lg border border-border px-2.5 sm:col-span-2">
+					</DetailRow>
+					<DetailRow label="启用这个字典">
 						<Switch
-							label="启用这个字典"
+							aria-label="启用这个字典"
 							checked={values.status}
 							onCheckedChange={(next) => onChange({ ...values, status: next })}
 						/>
-					</div>
+					</DetailRow>
 				</div>
 
 				<div className="space-y-2">

@@ -1,4 +1,4 @@
-import { actionsColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
@@ -76,7 +76,7 @@ export function roleColumns({
 			size: 200,
 			cell: (ctx) => (
 				<span className="line-clamp-2 max-w-56 text-[12.5px] text-muted-foreground" title={ctx.getValue() ?? ""}>
-					{ctx.getValue() || "—"}
+					<TextCell value={ctx.getValue()} />
 				</span>
 			),
 		}),
@@ -85,7 +85,7 @@ export function roleColumns({
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),
@@ -94,7 +94,7 @@ export function roleColumns({
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),

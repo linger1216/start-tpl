@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
 	DialogContent,
@@ -10,7 +11,6 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
@@ -135,11 +135,8 @@ export function SettingsParametersForm({
 					) : null}
 
 					{creating ? (
-						<div className="grid min-w-0 grid-cols-2 gap-3">
-							<div className="min-w-0 space-y-1.5">
-								<Label htmlFor="cfg-key" className="text-[12px]">
-									参数名
-								</Label>
+						<div className="flex min-w-0 flex-col gap-3">
+							<DetailRow label="参数名" htmlFor="cfg-key">
 								<Input
 									id="cfg-key"
 									value={key}
@@ -149,11 +146,8 @@ export function SettingsParametersForm({
 									className="font-mono text-[12px]"
 									onChange={(event) => setKey(event.target.value)}
 								/>
-							</div>
-							<div className="min-w-0 space-y-1.5">
-								<Label htmlFor="cfg-type" className="text-[12px]">
-									类型
-								</Label>
+							</DetailRow>
+							<DetailRow label="类型" htmlFor="cfg-type">
 								<Select
 									items={typeItems}
 									value={String(type)}
@@ -170,14 +164,11 @@ export function SettingsParametersForm({
 										))}
 									</SelectContent>
 								</Select>
-							</div>
+							</DetailRow>
 						</div>
 					) : null}
 
-					<div className="min-w-0 space-y-1.5">
-						<Label htmlFor="cfg-value" className="text-[12px]">
-							参数值
-						</Label>
+					<DetailRow label="参数值" htmlFor="cfg-value">
 						{isJsonLike ? (
 							<Textarea
 								id="cfg-value"
@@ -204,12 +195,9 @@ export function SettingsParametersForm({
 						) : (
 							<p className="text-[11.5px] text-muted-foreground">{PARA_TYPE_META[effectiveType].hint}</p>
 						)}
-					</div>
+					</DetailRow>
 
-					<div className="min-w-0 space-y-1.5">
-						<Label htmlFor="cfg-group" className="text-[12px]">
-							分组
-						</Label>
+					<DetailRow label="分组" htmlFor="cfg-group">
 						<Input
 							id="cfg-group"
 							value={group}
@@ -217,11 +205,8 @@ export function SettingsParametersForm({
 							className="text-[12px]"
 							onChange={(event) => setGroup(event.target.value)}
 						/>
-					</div>
-					<div className="min-w-0 space-y-1.5">
-						<Label htmlFor="cfg-remark" className="text-[12px]">
-							说明
-						</Label>
+					</DetailRow>
+					<DetailRow label="说明" htmlFor="cfg-remark">
 						<Input
 							id="cfg-remark"
 							value={remark}
@@ -229,24 +214,29 @@ export function SettingsParametersForm({
 							className="text-[12px]"
 							onChange={(event) => setRemark(event.target.value)}
 						/>
-					</div>
+					</DetailRow>
 
 					{/* 状态 / 可编辑是这个表的真实列(列表里都有),所以表单里也要能改 */}
-					<div className="grid gap-2 sm:grid-cols-2">
-						<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
-							<div>
-								<div className="text-[12.5px]">启用</div>
-								<p className="text-[11.5px] text-muted-foreground">停用只是标记,代码不读它</p>
-							</div>
+					<div className="flex flex-col gap-1">
+						<DetailRow
+							label={
+								<>
+									启用<span className="ml-1 font-normal text-muted-foreground">停用只是标记,代码不读它</span>
+								</>
+							}
+						>
 							<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
-						</div>
-						<div className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-2">
-							<div>
-								<div className="text-[12.5px]">允许修改</div>
-								<p className="text-[11.5px] text-muted-foreground">关掉即锁定(界面不可改 / 不可删)</p>
-							</div>
+						</DetailRow>
+						<DetailRow
+							label={
+								<>
+									允许修改
+									<span className="ml-1 font-normal text-muted-foreground">关掉即锁定(界面不可改 / 不可删)</span>
+								</>
+							}
+						>
 							<Switch aria-label="允许修改" checked={editable} onCheckedChange={setEditable} />
-						</div>
+						</DetailRow>
 					</div>
 				</div>
 

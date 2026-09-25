@@ -6,8 +6,8 @@ import type { RoleRow } from "#/components/modules/settings/settings-roles-table
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MemberZone } from "#/components/modules/shared/member-zone";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
-import { DetailRow } from "#/components/ui/detail-row";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
 	DialogContent,
@@ -17,7 +17,6 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
@@ -180,10 +179,9 @@ export function SettingsRolesForm({
 					</TabsList>
 
 					{/* ── 基本信息 ─────────────────────────────────────────── */}
-					{/* ── 基本信息 ─────────────────────────────────────────── */}
 					<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
 						{/* 两列紧凑排(5 个字段压成 3 行):字段区要在 214px 里装下,否则它会自己出滚动条 */}
-						<div className="grid min-h-0 flex-1 content-start gap-x-3 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2">
+						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
 							<DetailRow label="角色名" htmlFor="role-name">
 								<Input
 									id="role-name"
@@ -193,7 +191,14 @@ export function SettingsRolesForm({
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow label={<>标识<span className="ml-1 font-normal text-muted-foreground">全库唯一,建议小写下划线</span></>} htmlFor="role-code">
+							<DetailRow
+								label={
+									<>
+										标识<span className="ml-1 font-normal text-muted-foreground">全库唯一,建议小写下划线</span>
+									</>
+								}
+								htmlFor="role-code"
+							>
 								<Input
 									id="role-code"
 									value={code}
@@ -202,10 +207,7 @@ export function SettingsRolesForm({
 									onChange={(event) => setCode(event.target.value)}
 								/>
 							</DetailRow>
-							<div className="space-y-1 sm:col-span-2">
-								<Label htmlFor="role-remark" className="text-[12px]">
-									说明
-								</Label>
+							<DetailRow label="说明" htmlFor="role-remark">
 								<Textarea
 									id="role-remark"
 									value={remark}
@@ -214,8 +216,15 @@ export function SettingsRolesForm({
 									className="text-[12px]"
 									onChange={(event) => setRemark(event.target.value)}
 								/>
-							</div>
-							<DetailRow label={<>排序<span className="ml-1 font-normal text-muted-foreground">越小越靠前</span></>} htmlFor="role-sort">
+							</DetailRow>
+							<DetailRow
+								label={
+									<>
+										排序<span className="ml-1 font-normal text-muted-foreground">越小越靠前</span>
+									</>
+								}
+								htmlFor="role-sort"
+							>
 								<Input
 									id="role-sort"
 									type="number"
@@ -225,13 +234,15 @@ export function SettingsRolesForm({
 									onChange={(event) => setSort(event.target.value)}
 								/>
 							</DetailRow>
-							<div className="flex items-center justify-between gap-2 self-start rounded-lg border border-border px-2.5 py-1.5">
-								<div>
-									<div className="text-[12.5px]">启用</div>
-									<p className="text-[11px] text-muted-foreground">停用后不参与权限计算</p>
-								</div>
+							<DetailRow
+								label={
+									<>
+										启用<span className="ml-1 font-normal text-muted-foreground">停用后不参与权限计算</span>
+									</>
+								}
+							>
 								<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
-							</div>
+							</DetailRow>
 						</div>
 						{actions(
 							<Button

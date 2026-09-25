@@ -1,4 +1,4 @@
-import { actionsColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
@@ -88,7 +88,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			size: 240,
 			cell: (ctx) => (
 				<span className="line-clamp-2 max-w-64 text-[12.5px] text-muted-foreground" title={ctx.getValue() ?? ""}>
-					{ctx.getValue() || "—"}
+					<TextCell value={ctx.getValue()} />
 				</span>
 			),
 		}),
@@ -97,7 +97,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),
@@ -106,7 +106,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			size: 140,
 			cell: (ctx) => (
 				<span className="tabular-nums text-[12px] text-muted-foreground">
-					{formatLocalMinute(ctx.getValue()) || "—"}
+					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
 		}),

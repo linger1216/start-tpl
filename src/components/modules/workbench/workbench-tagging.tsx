@@ -8,6 +8,7 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toApiError } from "#/lib/api/error";
 
 /**
  * 工作台 · **打标签**示例(标签 ↔ 业务对象 的多态多对多)。
@@ -70,7 +71,7 @@ export function WorkbenchTagging() {
 				setPickTag("");
 				toast.success(outcome.created ? "已打标签" : "这个标签已经贴过了");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toast.error(toApiError(error).message),
 		}),
 	);
 
@@ -79,7 +80,7 @@ export function WorkbenchTagging() {
 			onSuccess: async () => {
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toast.error(toApiError(error).message),
 		}),
 	);
 

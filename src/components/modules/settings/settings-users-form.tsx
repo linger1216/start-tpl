@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { UserRow } from "#/components/modules/settings/settings-users-table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect, type MultiSelectOption } from "#/components/modules/shared/multi-select";
-import { DetailRow } from "#/components/ui/detail-row";
 import { Button } from "#/components/ui/button";
+import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
 	DialogContent,
@@ -143,7 +143,7 @@ export function SettingsUsersForm({
 					{/* ── 基本信息 ─────────────────────────────────────────── */}
 					<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
 						{/* 两列紧凑排:字段区要在 ~214px 里装下,否则它会自己出滚动条(与角色编辑同形) */}
-						<div className="grid min-h-0 flex-1 content-start gap-x-3 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2">
+						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
 							<DetailRow label="姓名" htmlFor="user-form-name">
 								<Input
 									id="user-form-name"
@@ -164,10 +164,7 @@ export function SettingsUsersForm({
 								/>
 							</DetailRow>
 							{creating ? (
-								<div className="space-y-1 sm:col-span-2">
-									<Label htmlFor="user-form-password" className="text-[12px]">
-										初始密码(至少 8 位)
-									</Label>
+								<DetailRow label="初始密码(至少 8 位)" htmlFor="user-form-password">
 									<Input
 										id="user-form-password"
 										type="password"
@@ -176,10 +173,17 @@ export function SettingsUsersForm({
 										className="h-8 text-[13px]"
 										onChange={(event) => setPassword(event.target.value)}
 									/>
-								</div>
+								</DetailRow>
 							) : (
 								<>
-									<DetailRow label={<>头像 URL<span className="ml-1 font-normal text-muted-foreground">留空 = 没有头像</span></>} htmlFor="user-form-image">
+									<DetailRow
+										label={
+											<>
+												头像 URL<span className="ml-1 font-normal text-muted-foreground">留空 = 没有头像</span>
+											</>
+										}
+										htmlFor="user-form-image"
+									>
 										<Input
 											id="user-form-image"
 											value={image}
@@ -188,13 +192,16 @@ export function SettingsUsersForm({
 											onChange={(event) => setImage(event.target.value)}
 										/>
 									</DetailRow>
-									<div className="flex items-center justify-between gap-3 self-start rounded-xl border border-border px-3 py-1.5">
-										<div className="space-y-0.5">
-											<Label className="text-[12px]">邮箱已验证</Label>
-											<p className="text-[11px] text-muted-foreground">替人开账号时通常勾上</p>
-										</div>
+									<DetailRow
+										label={
+											<>
+												邮箱已验证
+												<span className="ml-1 font-normal text-muted-foreground">替人开账号时通常勾上</span>
+											</>
+										}
+									>
 										<Switch aria-label="邮箱已验证" checked={emailVerified} onCheckedChange={setEmailVerified} />
-									</div>
+									</DetailRow>
 								</>
 							)}
 						</div>
