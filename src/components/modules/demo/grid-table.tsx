@@ -9,6 +9,8 @@ export type GridRow = {
 	name: string;
 	townName: string | null;
 	townId: string | null;
+	/** 归属的「管理单元」节点(行级数据范围按它算) */
+	groupId: string | null;
 	ownerName: string | null;
 	ownerId: string | null;
 	duty: string | null;

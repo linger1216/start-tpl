@@ -20,7 +20,11 @@ import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./hel
 
 const SUFFIX = uniqueSuffix();
 const NAME = `${TEST_PREFIX}file.${SUFFIX}.png`;
-/** 测试里创建的 object_key(按它精确清理,不靠 LIKE 前缀 —— `_` 是 SQL 通配符,踩过) */
+/** 测试里创建的 object_key(按它精确清理,不靠 LIKE 前缀 —— `_` 是 SQL 通配符,踩过)
+ *
+ * ⚠️ **只要调了 `presign` 就要 push** —— 没确认的 presign 也会插一行(`status = 0` 待上传)。
+ * "只拿上传地址就断言"的用例(后缀 / 跨桶 / 已删除行不秒传)最容易漏,实测**每跑一轮漏 3 行**。
+ */
 const created: string[] = [];
 
 /** 真把字节 PUT 到 MinIO(浏览器走的是同一条路,只是这里没有 CORS 限制) */
@@ -180,6 +184,7 @@ test("秒传:后缀不同不命中(对象键里带着后缀,复用会永远对�
 	await caller.file.confirm({ bucket: png.bucket, objectKey: png.objectKey, hash });
 
 	const jpg = await caller.file.presign({ name: `${TEST_PREFIX}ext.${SUFFIX}.jpg`, size: 12, kind: "private", hash });
+	created.push(jpg.objectKey);
 	assert.equal(jpg.instant, false, "同 hash 但后缀不同 → 不秒传");
 	assert.ok(jpg.uploadUrl, "不秒传就要正常签发上传地址");
 });
@@ -192,6 +197,7 @@ test("秒传:桶不同不命中(对象在桶里,public 不能复用 private 的�
 	await caller.file.confirm({ bucket: priv.bucket, objectKey: priv.objectKey, hash });
 
 	const pub = await caller.file.presign({ name: `${TEST_PREFIX}bucket.${SUFFIX}.png`, size: 12, kind: "public", hash });
+	created.push(pub.objectKey);
 	assert.equal(pub.instant, false, "跨桶不秒传");
 	assert.ok(pub.uploadUrl);
 });
@@ -205,6 +211,7 @@ test("秒传:已删除的行不参与命中(它的对象可能已经被清理)",
 	await caller.file.remove({ ids: [aRow.id] });
 
 	const again = await caller.file.presign({ name: `${TEST_PREFIX}gone2.${SUFFIX}.png`, size: 12, kind: "private", hash });
+	created.push(again.objectKey);
 	assert.equal(again.instant, false, "只剩已删除的行 → 不能秒传");
 	assert.ok(again.uploadUrl, "应当照常走一遍真实上传");
 });

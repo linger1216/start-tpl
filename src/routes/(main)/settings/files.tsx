@@ -2,8 +2,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsFilesPage } from "#/components/modules/settings/settings-files-page";
+import { PAGE_SIZE_KEY } from "#/hooks/use-page-size";
 
 export const Route = createFileRoute("/(main)/settings/files")({
-	loader: ({ context }) => context.queryClient.ensureQueryData(context.trpc.file.list.queryOptions()),
+	loader: ({ context }) =>
+		Promise.all([
+			context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY })),
+			context.queryClient.ensureQueryData(context.trpc.file.list.queryOptions()),
+		]),
 	component: SettingsFilesPage,
 });

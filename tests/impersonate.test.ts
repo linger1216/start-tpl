@@ -112,19 +112,45 @@ async function grantImpersonate(userId: string): Promise<void> {
 	await db.insert(sysUserRole).values({ id: newId(), user_id: userId, role_id: roleId, create_time: now, update_time: now });
 }
 
+/** 把某人的「切换用户」授权撤掉(删掉那条用户-角色关联)—— 验证例外不会变成永久通行证 */
+async function revokeImpersonate(userId: string): Promise<void> {
+	await db.delete(sysUserRole).where(eq(sysUserRole.user_id, userId));
+}
+
+/**
+ * 清尾:**一步失败不跳过后面的**(只告警、不再抛)。
+ *
+ * 为什么不用裸 `await` 串下来:清理是"删自己造的夹具",与用例结论无关;
+ * 而**只要中间一步抛了,后面的删除就全被跳过** —— 实测一次偶发失败就漏下 8 个
+ * `__test__imp_*` 账号 + 对应角色,还得等下一轮(30 分钟后)兜底清扫才收掉。
+ * 顺序仍然是先子后父(session / account / user_role → role_menu / role → user → menu),
+ * 否则外键 restrict 会拦。
+ */
+async function cleanupStep(label: string, fn: () => Promise<unknown>): Promise<void> {
+	try {
+		await fn();
+	} catch (error) {
+		console.warn(`[cleanup] ${label} 失败(继续清后面的):${(error as Error).message}`);
+	}
+}
+
 after(async () => {
 	if (createdUserIds.length > 0) {
-		await db.delete(sysSession).where(inArray(sysSession.userId, createdUserIds));
-		await db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds));
-		await db.delete(sysUserRole).where(inArray(sysUserRole.user_id, createdUserIds));
+		await cleanupStep("删除会话", () => db.delete(sysSession).where(inArray(sysSession.userId, createdUserIds)));
+		await cleanupStep("删除 account", () => db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds)));
+		await cleanupStep("删除 user_role", () =>
+			db.delete(sysUserRole).where(inArray(sysUserRole.user_id, createdUserIds)),
+		);
 	}
 	if (createdRoleIds.length > 0) {
-		await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, createdRoleIds));
-		await db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds));
+		await cleanupStep("删除 role_menu", () => db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, createdRoleIds)));
+		await cleanupStep("删除 role", () => db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds)));
 	}
-	if (createdUserIds.length > 0) await db.delete(sysUser).where(inArray(sysUser.id, createdUserIds));
-	if (createdMenuIds.length > 0) await db.delete(sysMenu).where(inArray(sysMenu.id, createdMenuIds));
-	await closeDb();
+	if (createdUserIds.length > 0)
+		await cleanupStep("删除 user", () => db.delete(sysUser).where(inArray(sysUser.id, createdUserIds)));
+	if (createdMenuIds.length > 0)
+		await cleanupStep("删除 menu", () => db.delete(sysMenu).where(inArray(sysMenu.id, createdMenuIds)));
+	await cleanupStep("关闭连接", () => closeDb());
 });
 
 test("切换用户:有权限的人能切,切完拿新 cookie 查会话就是目标身份", async () => {
@@ -197,14 +223,30 @@ test("切换用户:切成没有该权限的人之后,仍然能切回原身(否�
 	const back = await auth.api.getSession({ headers: new Headers({ cookie: cookiesOf(undo) }) });
 	assert.equal(back?.user.id, operator.id, "回到了原身");
 
-	// 例外**只**对原身开:目标身份去切第三个人 → 仍然 403
+	// 原身份有权限 ⇒ **带着它的签名 cookie 可以继续切别人**(等价于原身份本人在操作)
+	// 这不是提权:下面一条会验证「原身份被撤权后就不行了」。
 	const other = await makeUser("undo_other");
+	const onward = await auth.api.switchUser({
+		body: { userId: other.id },
+		headers: new Headers({ cookie: asTargetCookies }),
+		asResponse: true,
+	});
+	assert.equal(onward.status, 200, "原身份有权限时,可以继续切到别人");
+	
+	// 强不变量:把原身份的权限**撤掉**,例外就只剩「切回原身」,不能再切别人
+	await revokeImpersonate(operator.id);
 	const denied = await auth.api.switchUser({
 		body: { userId: other.id },
 		headers: new Headers({ cookie: asTargetCookies }),
 		asResponse: true,
 	});
-	assert.equal(denied.status, 403, "不能拿这条例外当跳板去切别人");
+	assert.equal(denied.status, 403, "原身份被撤权后,不能借例外当跳板");
+	const stillUndo = await auth.api.switchUser({
+		body: { userId: operator.id },
+		headers: new Headers({ cookie: asTargetCookies }),
+		asResponse: true,
+	});
+	assert.equal(stillUndo.status, 200, "但切回原身的例外仍然保留(否则人被困住)");
 });
 
 test("切换用户:未登录 401 / 切自己 400 / 目标不存在 404", async () => {

@@ -161,7 +161,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
 	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_role", column: "remark", comment: "说明" },
-	{ table: "sys_role", column: "data_scope", comment: "数据范围:all / self / dept / dept_below / up:N" },
+	{ table: "sys_role", column: "data_scope", comment: "数据范围:all / dept_below / dept / self" },
 	{ table: "sys_role", column: "create_time", comment: "创建时间" },
 	{ table: "sys_role", column: "update_time", comment: "更新时间" },
 	// sys_user_dept
@@ -224,7 +224,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "demo_grid", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "demo_grid", column: "name", comment: "网格名称(片区名)" },
 	{ table: "demo_grid", column: "town_name", comment: "所属街镇(文本)" },
-	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id" },
+	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id(展示/统计用)" },
+	{ table: "demo_grid", column: "group_id", comment: "管理单元 → sys_dept.id(行级范围按它过滤)" },
 	{ table: "demo_grid", column: "owner_name", comment: "网格长姓名" },
 	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(self 档用)" },
 	{ table: "demo_grid", column: "duty", comment: "工作职务" },

@@ -98,8 +98,8 @@ export const sysMenu = mysqlTable(
 		 * 这里顺手加过滤,否则运维把一行停用后菜单会静默消失。
 		 */
 		status: tinyint("status").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date", fsp: 3 }),
-		update_time: datetime("update_time", { mode: "date", fsp: 3 }),
+		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		index("idx_sys_menu_parent_sort").on(table.parent_id, table.sort),
@@ -132,8 +132,8 @@ export const sysDict = mysqlTable(
 		items: json("items").$type<Array<{ label: string; value: string }> | null>(),
 		remark: varchar("remark", { length: 255 }),
 		status: tinyint("status").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [uniqueIndex("uk_sys_dict_code").on(table.code)],
 );
@@ -172,8 +172,8 @@ export const sysPara = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		/** 0 = 代码内置不允许改 */
 		editable: tinyint("editable").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [index("idx_para_group").on(table.para_group)],
 );
@@ -209,8 +209,8 @@ export const sysTag = mysqlTable(
 		desc: text("desc"),
 		/** 同级排序,越小越靠前 */
 		sort: int("sort").notNull().default(0),
-		create_time: datetime("create_time", { mode: "date", fsp: 3 }),
-		update_time: datetime("update_time", { mode: "date", fsp: 3 }),
+		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 	},
 	(table) => [index("idx_sys_tag_parent_sort").on(table.parent_id, table.sort)],
 );
@@ -242,8 +242,8 @@ export const sysTagRelation = mysqlTable(
 		tag_id: varchar("tag_id", { length: 32 }).notNull(),
 		obj_id: varchar("obj_id", { length: 32 }).notNull(),
 		obj_type: tinyint("obj_type").notNull(),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		index("idx_tag_rel_tag").on(table.tag_id),
@@ -358,11 +358,10 @@ export const sysVerification = mysqlTable(
 // 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
 // (上海管理员 / 武汉管理员 / …)。全局定义 + 分配时带部门,4 种角色在 100 个部门里也只有 4 行。
 //
-// **数据权限是下一轮**(`data_scope` 记在角色上,按「(部门, 角色) 逐对解析后取并集」)——
-// 现在**不加那一列**,因为没人读的列就是 AGENTS 里禁的「伪扩展点」。届时的形态:
-//   张三 → (上海, 管理员) → 全公司数据
-//        → (武汉, 员工)   → 仅本人数据          并集 = 全公司 ∪ 本人的武汉数据
-// 下面这张 `sys_user_dept` 已经承载了将来做这件事所需的全部信息。
+// **行级数据权限已经落地**,载体是 `sys_role.data_scope` 那一列(四档:`all` / `dept_below` / `dept` / `self`),
+// 展开成"一批部门 id"后与业务表的**归属组织列**比较 —— 见 `doc/rbac-权限模型.md`。
+//   张三(挂「七宝镇网格组」)→ 角色 `duizhang`(`dept_below`) → 七宝镇网格组及其以下的数据
+// 下面这张 `sys_user_dept` 承载"我属于哪些组织";**跨部门 / 借调**靠把数据的归属组织指到对方所在节点解决。
 
 /** 部门树(数据权限的边界;形状对齐 `sys_menu` / `sys_tag`) */
 export const sysDept = mysqlTable(
@@ -374,8 +373,8 @@ export const sysDept = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [index("idx_sys_department_parent_sort").on(table.parent_id, table.sort)],
 );
@@ -396,19 +395,20 @@ export const sysRole = mysqlTable(
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
 		/**
-		 * **数据范围(行级数据权限的唯一载体)** —— 值就是一个"档位词",参数编码在同一列里:
+		 * **数据范围(行级数据权限的唯一载体)** —— 值就是一个"档位词":
 		 *
-		 *  · `all`         全部数据(默认;升级后可见范围一行不变)
-		 *  · `self`        仅本人(业务表 `create_by` = 我)
-		 *  · `dept`        本部门(我所属部门集合)
-		 *  · `dept_below`  本部门及以下(+ 各自子树)
-		 *  · `up:N`        往上到「从根往下第 N 层」及以下(如 `up:1` = 街镇)
+		 *  · `all`         全部数据(默认;不按组织限制)
+		 *  · `dept_below`  本部门及以下(我所属部门 + 各自子树)
+		 *  · `dept`        本部门(只我所属那一层,不含下级)
+		 *  · `self`        仅本人(业务表的**负责人列** = 我)
 		 *
-		 * 校验在 `lib/data-scope.ts` 的 `parseScope()`,**值非法一律 fail-closed**。
+		 * 校验 / 解析在 `lib/data-scope-spec.ts` 的 `parseScope()`,**值非法一律 fail-closed**。
+		 * ⚠️ 业务表的「归属组织」列要指向**人也会被挂上去的那类节点**,否则「本部门及以下」对不上;
+		 * 用户 / 组织由区里每天推送(`sys_user_dept` 是同步来的),跨部门靠数据侧的归属组织解决。
 		 */
 		data_scope: varchar("data_scope", { length: 32 }).notNull().default("all"),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [uniqueIndex("uk_sys_role_code").on(table.code)],
 );
@@ -431,8 +431,8 @@ export const sysUserDept = mysqlTable(
 		user_id: varchar("user_id", { length: 32 })
 			.notNull()
 			.references(() => sysUser.id, { onDelete: "cascade" }),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
@@ -459,8 +459,8 @@ export const sysUserRole = mysqlTable(
 		role_id: varchar("role_id", { length: 32 })
 			.notNull()
 			.references(() => sysRole.id),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_ur_unique").on(table.user_id, table.role_id),
@@ -480,8 +480,8 @@ export const sysRoleMenu = mysqlTable(
 		menu_id: varchar("menu_id", { length: 32 })
 			.notNull()
 			.references(() => sysMenu.id, { onDelete: "cascade" }),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_role_menu").on(table.role_id, table.menu_id),
@@ -522,7 +522,7 @@ export const sysNotice = mysqlTable(
 		level: varchar("level", { length: 16 }).notNull().default("info"),
 		/** null = 未读 */
 		read_at: datetime("read_at", { mode: "date" }),
-		create_time: datetime("create_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [index("idx_sys_notice_user").on(table.user_id, table.read_at, table.create_time)],
 );
@@ -563,7 +563,7 @@ export const sysLog = mysqlTable(
 		/** 这次调用耗时(毫秒) */
 		duration_ms: int("duration_ms"),
 		/** 审计行不可变 —— 没有 update_time */
-		create_time: datetime("create_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		index("idx_sys_log_time").on(table.create_time),
@@ -576,8 +576,9 @@ export const sysLog = mysqlTable(
  * Demo:综合网格履职(**行级数据权限的第二个真实落点**)。
  *
  * 字段只保留方案里说的那几个 —— Excel 后面 17 列月度统计**不建**。
- * 两个"指向"是行级权限的关键:`town_id`(街镇节点,给 `dept` / `up:N` 档用)、
- * `owner_id`(负责人,给 `self` 档用 —— 也就是"队员只能看自己管辖的网格")。
+ * 两个"指向"是行级权限的关键:`group_id`(「管理单元」,`dept` / `dept_below` 档按它过滤)、
+ * `owner_id`(负责人,`self` 档按它过滤 —— 也就是"队员只能看自己管辖的网格")。
+ * `town_id` 只用于展示 / 筛选 / 统计,**不参与行级过滤**(见 `doc/rbac-权限模型.md`)。
  */
 export const sysDemoGrid = mysqlTable(
 	"demo_grid",
@@ -588,8 +589,15 @@ export const sysDemoGrid = mysqlTable(
 		name: varchar("name", { length: 64 }).notNull(),
 		/** 所属街镇(Excel 原样文本,便于列表直接展示) */
 		town_name: varchar("town_name", { length: 32 }),
-		/** 所属街镇 → `sys_dept.id`(行级范围按它过滤) */
+		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计,**不参与行级过滤**) */
 		town_id: varchar("town_id", { length: 32 }),
+		/**
+		 * 「管理单元」→ `sys_dept.id`(**行级数据范围按这一列过滤**)。
+		 *
+		 * ⚠️ 必须指向**人也会被挂上去的那类节点**(这里是「××网格组」,`sys_user_dept` 挂的就是它),
+		 * 不要指向统计口径的节点(街镇 / 区)。理由见 `doc/rbac-权限模型.md`。
+		 */
+		group_id: varchar("group_id", { length: 32 }),
 		/** 网格长姓名(Excel 原样;92 位真实姓名里没几个能对上账号,所以另存 owner_id) */
 		owner_name: varchar("owner_name", { length: 32 }),
 		/** 负责人 → `sys_user.id`;**队员的 `self` 档就是 `owner_id = 我`** */
@@ -597,10 +605,14 @@ export const sysDemoGrid = mysqlTable(
 		/** 工作职务(Excel 原样) */
 		duty: varchar("duty", { length: 64 }),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
-	(table) => [index("idx_demo_grid_town").on(table.town_id), index("idx_demo_grid_owner").on(table.owner_id)],
+	(table) => [
+		index("idx_demo_grid_town").on(table.town_id),
+		index("idx_demo_grid_group").on(table.group_id),
+		index("idx_demo_grid_owner").on(table.owner_id),
+	],
 );
 
 export const sysFile = mysqlTable(
@@ -624,8 +636,8 @@ export const sysFile = mysqlTable(
 		hash: char("hash", { length: 64 }),
 		/** 0 待确认 / 1 正常 / 2 已删除 */
 		status: tinyint("status").notNull().default(0),
-		create_time: datetime("create_time", { mode: "date" }),
-		update_time: datetime("update_time", { mode: "date" }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_file_object").on(table.bucket, table.object_key),

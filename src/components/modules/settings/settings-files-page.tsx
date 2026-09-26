@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useColumnPrefs } from "#/hooks/use-column-prefs";
+import { usePageSize } from "#/hooks/use-page-size";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -140,11 +141,12 @@ export function SettingsFilesPage() {
 		[canRemove, handleDownload, selected, toggleOne, toggleMany],
 	);
 
+	const defaultPageSize = usePageSize();
 	const table = useAppTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: 20 } },
+		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
 	});
 	const { pageIndex, pageSize } = table.state.pagination;
 	// 列顺序 / 隐藏项存进参数 `page.columns`(与参数 / 用户 / 字典页同一套)

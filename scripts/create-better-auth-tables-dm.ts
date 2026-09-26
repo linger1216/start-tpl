@@ -223,6 +223,7 @@ const STATEMENTS: string[] = [
       "name" varchar(64) not null,
       "town_name" varchar(32),
       "town_id" varchar(32),
+      "group_id" varchar(32),
       "owner_name" varchar(32),
       "owner_id" varchar(32),
       "duty" varchar(64),
@@ -232,6 +233,7 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
     `create index if not exists "idx_demo_grid_town" on ${S}."demo_grid" ("town_id")`,
+    `create index if not exists "idx_demo_grid_group" on ${S}."demo_grid" ("group_id")`,
     `create index if not exists "idx_demo_grid_owner" on ${S}."demo_grid" ("owner_id")`,
 
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
@@ -324,6 +326,7 @@ async function main() {
 		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
 		{ table: "sys_menu", column: "perm", ddl: "varchar(64)" },
 		{ table: "sys_role", column: "data_scope", ddl: "varchar(32) default 'all' not null" },
+		{ table: "demo_grid", column: "group_id", ddl: "varchar(32)" },
 	];
 	for (const upgrade of columnUpgrades) {
 		const cols = await q(

@@ -14,6 +14,7 @@ import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useColumnPrefs } from "#/hooks/use-column-prefs";
+import { usePageSize } from "#/hooks/use-page-size";
 import { useTRPC } from "#/integrations/trpc/react";
 import { useAppTable } from "#/lib/table";
 
@@ -46,11 +47,12 @@ export function SettingsLogsPage() {
 
 	const columns = useMemo(() => logColumns({ onView: setViewing }), []);
 
+	const defaultPageSize = usePageSize();
 	const table = useAppTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: 20 } },
+		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
 	});
 	const { pageIndex, pageSize } = table.state.pagination;
 	// 列顺序 / 隐藏项存进参数 `page.columns`(与参数 / 用户 / 字典 / 文件页同一套)

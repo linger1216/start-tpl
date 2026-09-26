@@ -60,8 +60,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 角色 | `duizhang`(**队长**)· `up:2`(往上到第 2 层 = 本街镇及以下);`duiyuan`(**队员**)· `self`(只看自己负责的) |
+| 角色 | `duizhang`(**队长**)· `dept_below`(本部门及以下 = 本网格组及以下);`duiyuan`(**队员**)· `self`(只看自己负责的) |
 | 部门 | 13 个「<街镇>网格组」,挂在各自街镇节点下(队长与队员同属它) |
 | 账号 | 26 个:`<拼音>.leader@example.com` / `<拼音>.member@example.com`(拼音 = huacao / meilong / maqiao / jiangchuanlu / gumeilu / hongqiao / xinhong / xinzhuang / zhuanqiao / qibao / pujiang / wujing / pujin),密码与管理员相同 |
 | 授权 | 两个角色各授了菜单;队长另授 `sys:grid:{add,edit,remove,assign}`(队员只读) |
+| 网格归属 | 71 行里 **69 行**的 `group_id` 已回填到本街镇网格组(另 2 行没有街镇,见下),`town_id` 仍只作展示 / 筛选 |
 | 网格指派 | 71 行中 **39 行**已指派负责人(每个街镇前一半给它自己的队员) |
+
+> ⚠️ `demo_grid` 里 **2 行没有街镇**(Excel 里是"申北(北部)片区 / 鑫都(南部)片区",部门树里没有对应节点)⇒
+> `group_id` 为空、**任何组织档都看不到**(只有 `all` 与它的负责人能看到)—— 这是"归属未知"的正确表现,不是漏数据。

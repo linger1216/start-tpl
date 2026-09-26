@@ -97,6 +97,13 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		remark:
 			'各页树的展开节点:{"<页面键>":{"expanded":["节点id",…]}};在页面上折叠 / 展开树即可改;删掉某个页面键 = 该树回到默认(全部折叠)',
 	},
+	// 列表页默认每页多少条 —— 由 hooks/use-page-size.ts 读取(每个列表路由的 loader 都 prefetch 它)。
+	"page.size": {
+		value: "20",
+		type: PARA_TYPE.INT,
+		group: "界面偏好",
+		remark: "列表页默认每页多少条;只认 10 / 20 / 50 / 100,填别的按 20 处理;改完对之后打开的页面生效",
+	},
 	// 上传策略 —— 由 trpc/routers/file.ts 读取(改参数即时生效,不用改代码)
 	"log.enabled": {
 		value: "true",

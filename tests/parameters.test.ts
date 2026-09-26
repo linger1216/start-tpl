@@ -15,6 +15,8 @@ import { eq } from "drizzle-orm";
 
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
+import { PAGE_SIZE_KEY, parsePageSize } from "../src/hooks/use-page-size.ts";
+import { PAGE_SIZES } from "../src/lib/constants.ts";
 import { PARA_TYPE } from "../src/lib/para-spec.ts";
 import { PARA_DEFAULTS } from "../src/lib/sys-para.ts";
 import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
@@ -112,6 +114,28 @@ test("代码内置的参数:即使库里没有行,清单也要列出它(否则�
 	for (const key of Object.keys(PARA_DEFAULTS)) {
 		assert.ok(keys.has(key), `内置参数 ${key} 应出现在清单里`);
 	}
+});
+
+test("界面偏好 `page.size`:代码内置默认 20,解析只认分页器那几档", async () => {
+	const spec = PARA_DEFAULTS[PAGE_SIZE_KEY];
+	assert.ok(spec, `PARA_DEFAULTS 里必须有 ${PAGE_SIZE_KEY}`);
+	assert.equal(spec.value, "20", "默认每每页条数就是 20");
+	assert.equal(spec.type, PARA_TYPE.INT);
+	assert.equal(spec.group, "界面偏好");
+
+	// 解析规则:分页器只给 4 档按钮,PAGE_SIZES 之外的値按 20 处理(不猜"最接近的那档")
+	assert.equal(parsePageSize("50"), 50);
+	assert.equal(parsePageSize("30"), 20);
+	assert.equal(parsePageSize("abc"), 20);
+	assert.equal(parsePageSize(""), 20);
+	assert.equal(parsePageSize(undefined), 20);
+
+	// 读得出来:库里没有这行时也回代码默认值(否则列表页会拿不到页尺寸)
+	const { value } = await caller.para.byKey({ key: PAGE_SIZE_KEY });
+	// 断言"解析出来的一定是分页器上的某一档",而不是"必须等于 20" —— 那是代码默认值,人是可以改参数的
+	const parsed = parsePageSize(value);
+	assert.ok((PAGE_SIZES as readonly number[]).includes(parsed), `${PAGE_SIZE_KEY} = ${value} 必须落在 PAGE_SIZES 里`);
+	assert.deepEqual(PAGE_SIZES, [10, 20, 50, 100]);
 });
 
 after(async () => {

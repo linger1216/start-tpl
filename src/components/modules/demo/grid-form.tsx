@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -17,6 +17,7 @@ export type GridFormPayload = {
 	name: string;
 	townId: string | null;
 	townName: string | null;
+	groupId: string | null;
 	ownerId: string | null;
 	ownerName: string | null;
 	duty: string | null;
@@ -37,6 +38,7 @@ export function GridForm({
 	pending,
 	editing,
 	townOptions,
+	groupOptionsOf,
 	userOptions,
 	onSubmit,
 }: {
@@ -48,17 +50,21 @@ export function GridForm({
 		name: string;
 		townId: string | null;
 		townName: string | null;
+		groupId: string | null;
 		ownerId: string | null;
 		ownerName: string | null;
 		duty: string | null;
 		remark: string | null;
 	} | null;
 	townOptions: Option[];
+	/** 某个街镇下的「归属组织」候选(演示数据里就是「××网格组」)—— 行级数据范围按它算 */
+	groupOptionsOf: (townId: string) => Option[];
 	userOptions: Option[];
 	onSubmit: (payload: GridFormPayload) => void;
 }) {
 	const [name, setName] = useState("");
 	const [townId, setTownId] = useState("");
+	const [groupId, setGroupId] = useState("");
 	const [ownerId, setOwnerId] = useState("");
 	const [ownerName, setOwnerName] = useState("");
 	const [duty, setDuty] = useState("");
@@ -69,20 +75,22 @@ export function GridForm({
 		if (!open) return;
 		setName(editing?.name ?? "");
 		setTownId(editing?.townId ?? "");
+		setGroupId(editing?.groupId ?? "");
 		setOwnerId(editing?.ownerId ?? "");
 		setOwnerName(editing?.ownerName ?? "");
 		setDuty(editing?.duty ?? "");
 		setRemark(editing?.remark ?? "");
 	}, [open, editing]);
 
-	const NONE = "__none__"; // Base UI 的 Select 不接受空字符串当值
+	const groupOptions = useMemo(() => groupOptionsOf(townId), [groupOptionsOf, townId]);
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="flex max-h-[70vh] flex-col sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>{editing ? "编辑网格" : "新增网格"}</DialogTitle>
 					<DialogDescription>
-						「所属街镇」决定**队长**看得到哪些(**本街镇及以下**);「负责人」决定**队员**看得到哪些(只看自己负责的)。
+						「归属组织」决定**队长**看得到哪些(**本部门及以下**);「负责人」决定**队员**看得到哪些(只看自己负责的)。
 					</DialogDescription>
 				</DialogHeader>
 
@@ -90,14 +98,38 @@ export function GridForm({
 					<DetailRow label="所属街镇">
 						<Select
 							items={townOptions}
-							value={townId || NONE}
-							onValueChange={(next) => setTownId(next && next !== NONE ? String(next) : "")}
+							value={townId || null}
+							onValueChange={(next) => {
+								const picked = next ? String(next) : "";
+								setTownId(picked);
+								// 换了街镇 ⇒ 原来选的归属组织多半不属于它了:清掉;若只有一个候选就直接替人选中
+								const options = groupOptionsOf(picked);
+								setGroupId(options.length === 1 ? (options[0]?.value ?? "") : "");
+							}}
 						>
 							<SelectTrigger id="grid-town" size="sm" className="w-full">
-								<SelectValue />
+								<SelectValue placeholder="请选择所属街镇" />
 							</SelectTrigger>
 							<SelectContent>
 								{townOptions.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</DetailRow>
+					<DetailRow label="归属组织(数据范围按它算)">
+						<Select
+							items={groupOptions}
+							value={groupId || null}
+							onValueChange={(next) => setGroupId(next ? String(next) : "")}
+						>
+							<SelectTrigger id="grid-group" size="sm" className="w-full">
+								<SelectValue placeholder={townId ? "未指定(指定后队长才看得到)" : "先选所属街镇"} />
+							</SelectTrigger>
+							<SelectContent>
+								{groupOptions.map((item) => (
 									<SelectItem key={item.value} value={item.value}>
 										{item.label}
 									</SelectItem>
@@ -117,11 +149,11 @@ export function GridForm({
 					<DetailRow label="负责人(系统账号)">
 						<Select
 							items={userOptions}
-							value={ownerId || NONE}
-							onValueChange={(next) => setOwnerId(next && next !== NONE ? String(next) : "")}
+							value={ownerId || null}
+							onValueChange={(next) => setOwnerId(next ? String(next) : "")}
 						>
 							<SelectTrigger id="grid-owner" size="sm" className="w-full">
-								<SelectValue />
+								<SelectValue placeholder="未指定(指定后队员才看得到)" />
 							</SelectTrigger>
 							<SelectContent>
 								{userOptions.map((item) => (
@@ -170,6 +202,7 @@ export function GridForm({
 								name: name.trim(),
 								townId: townId || null,
 								townName: townOptions.find((t) => t.value === townId)?.label ?? null,
+								groupId: groupId || null,
 								ownerId: ownerId || null,
 								ownerName: ownerName.trim() || null,
 								duty: duty.trim() || null,

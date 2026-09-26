@@ -12,7 +12,7 @@ export type RoleRow = {
 	sort: number;
 	status: number;
 	remark: string | null;
-	/** 数据范围(all / self / dept / dept_below / up:N),见 lib/data-scope.ts */
+	/** 数据范围(all / dept_below / dept / self),见 lib/data-scope-spec.ts */
 	dataScope: string | null;
 	createTime: string | null;
 	updateTime: string | null;

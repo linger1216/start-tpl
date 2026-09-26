@@ -125,7 +125,7 @@ export function MemberZone<T extends MemberZoneRow>({
 			) : members.length === 0 ? (
 				<p className="text-xs text-muted-foreground">{emptyText}</p>
 			) : (
-				<div className="min-h-0 space-y-2">
+				<div className="flex min-h-0 flex-1 flex-col gap-2">
 					{members.length > FILTER_THRESHOLD ? (
 						<Input
 							value={keyword}
@@ -135,7 +135,7 @@ export function MemberZone<T extends MemberZoneRow>({
 							className="h-7 text-xs"
 						/>
 					) : null}
-					<ul className="max-h-40 space-y-1 overflow-y-auto">
+					<ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
 						{filtered.length === 0 ? (
 							<li className="px-1 text-xs text-muted-foreground">没有匹配的{title}</li>
 						) : (

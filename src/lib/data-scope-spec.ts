@@ -12,18 +12,26 @@
  */
 
 export const SCOPE_VALUES = ["all", "self", "dept", "dept_below"] as const;
-/** `up:N` 里的 N = 从根(第 0 层)往下数的层号 */
-export type DataScope = (typeof SCOPE_VALUES)[number] | `up:${number}`;
+export type DataScope = (typeof SCOPE_VALUES)[number];
 
 /** 值域校验(与 `lib/rbac.ts` 的 `PERM_FORMAT` 同一套纪律:形状不对就当没配) */
-export const SCOPE_FORMAT = /^(all|self|dept|dept_below|up:\d{1,2})$/;
+export const SCOPE_FORMAT = /^(all|self|dept|dept_below)$/;
+
+/**
+ * 已下线的旧档位「往上到第 N 层」(`up:N`)—— **只在界面上给个人话解释**,不参与解析、不当有效值。
+ *
+ * 为什么下线:它把「人能看到的范围」同「组织树有几层」绑死了,而各街镇层级深浅不一,
+ * 「填几层」既难解释也容易填错。现在改用「本部门及以下」+ 把数据的「归属组织」指向
+ * **人也会被挂上去的那类节点**(详见 `doc/rbac-权限模型.md`)。
+ */
+const LEGACY_UP_FORMAT = /^up:\d{1,2}$/;
 
 /** 宽窄排序:多角色**取最宽**(`all` 最宽,`self` 最窄) */
-const WIDTH: Record<string, number> = { self: 0, dept: 1, up: 2, dept_below: 3, all: 4 };
+const WIDTH: Record<string, number> = { self: 0, dept: 1, dept_below: 2, all: 3 };
 
 export function scopeWidth(scope: DataScope | null): number {
 	if (!scope) return -1;
-	return scope.startsWith("up:") ? (WIDTH.up as number) : (WIDTH[scope] ?? -1);
+	return WIDTH[scope] ?? -1;
 }
 
 /** 校验并解析;**非法 ⇒ `null`**(调用方一律 fail-closed,不放开) */
@@ -33,7 +41,7 @@ export function parseScope(value: string | null | undefined): DataScope | null {
 }
 
 /**
- * 多角色**取最宽**(`all` > `dept_below` > `up:N` > `dept` > `self`)。
+ * 多角色**取最宽**(`all` > `dept_below` > `dept` > `self`)。
  *
  * ⚠️ **一个有效档都没有时返回 `all`(不收窄)**,不是最窄 —— 与项目既有口径一致
  * (`lib/rbac.ts` 的 `perms = null`「权限体系未启用 ⇒ 一律放行」)。
@@ -48,10 +56,14 @@ export function widestScope(values: readonly (string | null | undefined)[]): Dat
 /** 表格 / 详情里显示用的中文标签;非法值原样回显(便于排查) */
 export function scopeLabel(value: string | null | undefined): string {
 	const scope = parseScope(value);
-	if (!scope) return value ? `非法(${value})` : "—";
+	if (!scope) {
+		if (!value) return "—";
+		// 旧档位给个解释,别让人看到 `up:2` 一头雾水
+		if (LEGACY_UP_FORMAT.test(value.trim())) return "旧档位「往上到第 N 层」已下线,请改成「本部门及以下」";
+		return `非法(${value})`;
+	}
 	if (scope === "all") return "全部数据";
 	if (scope === "self") return "仅本人";
 	if (scope === "dept") return "本部门";
-	if (scope === "dept_below") return "本部门及以下";
-	return `往上到第 ${scope.slice(3)} 层及以下`;
+	return "本部门及以下";
 }

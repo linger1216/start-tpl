@@ -67,7 +67,14 @@ export function userSwitchPlugin() {
 					const isUndo = Boolean(impersonator) && ctx.body.userId === impersonator;
 					if (!isUndo) {
 						const { perms } = await effectiveMenusFor(user.id);
-						if (!perms?.includes(IMPERSONATE_PERM)) {
+						let allowed = Boolean(perms?.includes(IMPERSONATE_PERM));
+						// 原身份由 **签名 cookie** 证明,且它本来就有权限才能切过来 —— 所以「继续切到别人」
+						// 沿用它的授权。这不是提权:仍然要求**原身份**本身有权限。
+						if (!allowed && impersonator) {
+							const { perms: originalPerms } = await effectiveMenusFor(impersonator);
+							allowed = Boolean(originalPerms?.includes(IMPERSONATE_PERM));
+						}
+						if (!allowed) {
 							throw new APIError("FORBIDDEN", { message: "你的账号没有被授予「切换用户」的权限" });
 						}
 					}

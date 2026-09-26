@@ -13,9 +13,13 @@ import { createTRPCRouter, currentUserOf, protectedProcedure } from "../init";
  * Demo:综合网格履职(行级数据权限的**第二个真实落点**)。
  *
  * 三档语义(见 `doc/rbac-权限模型.md` 与 `doc/测试数据/README.md`):
- *  · **队员**(`self`)  ⇒ `owner_id = 我` —— 「只能看自己管辖的网格」
- *  · **队长**(`up:2`)  ⇒ `town_id IN (本街镇及其下级)` —— 「看整个街镇」
- *  · **区**(`all`)     ⇒ 不过滤 —— 「看全部街镇」
+ *  · **队员**(`self`)       ⇒ `owner_id = 我` —— 「只能看自己管辖的网格」
+ *  · **队长**(`dept_below`) ⇒ `group_id IN (本网格组及其下级)` —— 「看整个街镇」
+ *  · **区**(`all`)          ⇒ 不过滤 —— 「看全部街镇」
+ *
+ * ⚠️ 行级过滤认的是 **`group_id`(管理单元)**,不是 `town_id`:人挂的节点是「××网格组」,
+ * 数据也要指向同一个节点,「本部门 / 本部门及以下」才能一次对上所有街镇。
+ * `town_id` / `town_name` 只用于展示、筛选、统计。
  *
  * ⚠️ **四处共用同一个范围条件**(list / update / remove / assign):
  * 只在 `list` 上套范围 = 队员拿到别人的 id 照样能改能删(IDOR),那是行级权限最经典的漏洞。
@@ -25,6 +29,7 @@ const gridOut = (row: typeof sysDemoGrid.$inferSelect) => ({
 	name: row.name,
 	townName: row.town_name,
 	townId: row.town_id,
+	groupId: row.group_id,
 	ownerName: row.owner_name,
 	ownerId: row.owner_id,
 	duty: row.duty,
@@ -37,9 +42,9 @@ const gridOut = (row: typeof sysDemoGrid.$inferSelect) => ({
 async function scopeWhere(userId: string): Promise<SQL | undefined> {
 	const { scope, departmentIds } = await scopeOf(userId);
 	if (scope === "all") return undefined;
-	// self 档按负责人过滤;其余档(本部门 / 及以下 / 往上到某层)都归约成"一批部门 id"
+	// self 档按负责人过滤;其余档(本部门 / 本部门及以下)都归约成"一批部门 id"
 	if (scope === "self") return eq(sysDemoGrid.owner_id, userId);
-	return deptCondition(sysDemoGrid.town_id, departmentIds);
+	return deptCondition(sysDemoGrid.group_id, departmentIds);
 }
 
 /** 取一条**我可见的**网格;不可见与不存在**一律当成"看不到"**(不泄漏"存在但无权") */
@@ -58,6 +63,7 @@ const writeInput = z.object({
 	name: z.string().min(1, "网格名称不能为空").max(64),
 	townName: z.string().max(32).nullable().default(null),
 	townId: z.string().max(32).nullable().default(null),
+	groupId: z.string().max(32).nullable().default(null),
 	ownerName: z.string().max(32).nullable().default(null),
 	ownerId: z.string().max(32).nullable().default(null),
 	duty: z.string().max(64).nullable().default(null),
@@ -85,6 +91,7 @@ export const demoGridRouter = createTRPCRouter({
 			name: input.name.trim(),
 			town_name: input.townName?.trim() || null,
 			town_id: input.townId || null,
+			group_id: input.groupId || null,
 			owner_name: input.ownerName?.trim() || null,
 			owner_id: input.ownerId || null,
 			duty: input.duty?.trim() || null,
@@ -105,6 +112,7 @@ export const demoGridRouter = createTRPCRouter({
 				name: input.name.trim(),
 				town_name: input.townName?.trim() || null,
 				town_id: input.townId || null,
+				group_id: input.groupId || null,
 				owner_name: input.ownerName?.trim() || null,
 				owner_id: input.ownerId || null,
 				duty: input.duty?.trim() || null,

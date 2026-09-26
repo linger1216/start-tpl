@@ -199,7 +199,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0 comment '排序,越小越靠前',
 			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '说明',
-			\`data_scope\` varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / self / dept / dept_below / up:N',
+			\`data_scope\` varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / dept_below / dept / self',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -321,7 +321,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
     \`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '网格名称(片区名)',
     \`town_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇(文本)',
-    \`town_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇 → sys_dept.id',
+    \`town_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇 → sys_dept.id(展示/统计用)',
+    \`group_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(行级范围按它过滤)',
     \`owner_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '网格长姓名',
     \`owner_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '负责人 → sys_user.id(self 档用)',
     \`duty\` varchar(64) collate utf8mb4_unicode_ci default null comment '工作职务',
@@ -330,6 +331,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`update_time\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
     key \`idx_demo_grid_town\` (\`town_id\`),
+    key \`idx_demo_grid_group\` (\`group_id\`),
     key \`idx_demo_grid_owner\` (\`owner_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = 'Demo:综合网格履职(行级数据权限落点)'`,
 },
@@ -392,11 +394,16 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		column: "perm",
 		ddl: "varchar(64) collate utf8mb4_unicode_ci default null comment '权限标识,如 sys:role:write;前端 useHasPerm() 认它'",
 	},
-{
-	table: "sys_role",
-	column: "data_scope",
-	ddl: "varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / self / dept / dept_below / up:N'",
-},
+	{
+		table: "sys_role",
+		column: "data_scope",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / self / dept / dept_below'",
+	},
+	{
+		table: "demo_grid",
+		column: "group_id",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(行级范围按它过滤)'",
+	},
 ];
 
 for (const upgrade of COLUMN_UPGRADES) {

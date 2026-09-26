@@ -23,6 +23,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useColumnPrefs } from "#/hooks/use-column-prefs";
+import { usePageSize } from "#/hooks/use-page-size";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { useAppTable } from "#/lib/table";
@@ -109,10 +110,11 @@ export function SettingsUsersPage() {
 		() => userColumns({ onView: setDetailFor, onEdit: setEditing, onDelete: setPendingDelete }),
 		[],
 	);
+	const defaultPageSize = usePageSize();
 	const table = useAppTable({
 		columns,
 		data: filtered,
-		initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
+		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
 	});
 	const { pageIndex, pageSize } = table.state.pagination;
 	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)

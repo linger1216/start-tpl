@@ -67,6 +67,8 @@ function PermissionTreeNode({
 				<Checkbox
 					aria-label={`选择${node.name}`}
 					checked={on}
+					// 只勾了一部分 ⇒ **半选**:以前父节点看着像完全没勾,折叠时最容易误判「怎么全没勾」
+					indeterminate={hit > 0 && !on}
 					onCheckedChange={(checked) => onToggle(ids, checked === true)}
 				/>
 				<span className={depth === 0 ? "text-sm font-medium text-foreground" : "text-xs text-foreground"}>

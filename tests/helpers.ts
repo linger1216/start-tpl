@@ -167,13 +167,16 @@ export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number>
 		removed += list.length;
 	}
 
-	// ── 审计日志:测试写出的行以 `operator_id = "test-admin"` 标记 —— 它们没有 __test__ 前缀,
-	//     不清就会一直堆(审计是只增不改的表,没有别的清理口子)
+	// ── 审计日志:两类都要清 —— ① `operator_id = "test-admin"`(内部 caller 的标记,没有 __test__ 前缀);
+	//     ② operator 是**测试自己建的账号**(`__test__u-…`,demo-grid / data-scope 那些用例用的 caller)。
+	//     审计是只增不改的表,漏一类就会一直堆(实测每跑一轮漏 ~6 行)。
 	const staleLogs = await db
 		.select({ id: sysLog.id, operatorId: sysLog.operator_id })
 		.from(sysLog)
 		.where(lt(sysLog.create_time, cutoff));
-	const logIds = staleLogs.filter((row) => row.operatorId === TEST_USER.id).map((row) => row.id);
+	const logIds = staleLogs
+		.filter((row) => row.operatorId === TEST_USER.id || startsWithPrefix(row.operatorId))
+		.map((row) => row.id);
 	if (logIds.length > 0) {
 		await db.delete(sysLog).where(inArray(sysLog.id, logIds));
 		removed += logIds.length;

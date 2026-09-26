@@ -14,11 +14,16 @@
  *
  * ## 切完记住"从谁来的"
  *
- * 记录写在 `sessionStorage`(只影响当前标签页):顶栏据此常驻一个「切换身份中」徽章 +
- * 面板里的「切回原本身份」——**忘了切回来是这类功能最常见的翻车方式**。
+ * 记录写在 `sessionStorage`(只影响当前标签页):顶栏据此常驻一个「切换身份中」徽章。
+ * **原身份就在候选名单里**(正常一项),点它就切回去了 —— 不再单列「切回原本身份」那一项。
+ *
+ * ## 为什么切换到别人之后还能继续切
+ *
+ * 切换本身就要求**原身份**有 `sys:user:impersonate`;所以「继续切」沿用的是**原身份的授权**,
+ * 凭据是服务端那份**签过名的原身份 cookie**。这不是提权:原身份被撤权后就只剩「切回原身」这一条例外。
  */
 import { useQuery } from "@tanstack/react-query";
-import { Check, UserCog } from "lucide-react";
+import { UserCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -60,7 +65,9 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 	const [from, setFrom] = useState<SwitchedFrom | null>(null);
 	useEffect(() => setFrom(readFrom()), []);
 
-	const usersQuery = useQuery({ ...trpc.user.list.queryOptions(), enabled: canSwitch });
+	// 只要「当前身份有权限」**或**「正在以别人的身份浏览」就能取列表 ——
+	// 后者由服务端按**原身份的签名 cookie**放行(它本来就有权限才能切过来,不是提权)。
+	const usersQuery = useQuery({ ...trpc.user.list.queryOptions(), enabled: canSwitch || !!from });
 
 	/** 按部门分组 —— 调试"某部门的人能看到什么"时,按部门找最顺手 */
 	const groups = useMemo(() => {
@@ -120,7 +127,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 				</PopoverTrigger>
 				<PopoverContent align="end" className="w-[22rem] p-0">
 					<div className="space-y-2 p-2">
-						{canSwitch ? (
+						{canSwitch || from ? (
 							<Input
 								value={keyword}
 								onChange={(event) => setKeyword(event.target.value)}
@@ -129,62 +136,40 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 								className="h-8 text-sm"
 							/>
 						) : null}
-						{from ? (
-							<button
-								type="button"
-								disabled={pending}
-								onClick={() => void switchTo(from.id)}
-								className="flex w-full items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-xs transition-colors duration-150 hover:bg-hover disabled:opacity-60"
-							>
-								<Check className="size-3.5 shrink-0 text-primary" />
-								切回原本身份({from.name})
-							</button>
-						) : null}
 					</div>
 
-					{!canSwitch ? (
-						<p className="border-t border-border px-3 py-2.5 text-xs text-muted-foreground">
-							当前身份没有切换他人的权限,但你可以切回原本身份。
-						</p>
-					) : (
-						<div className="max-h-[60vh] overflow-y-auto border-t border-border p-1">
-							{usersQuery.isLoading ? (
-								<p className="px-2 py-3 text-xs text-muted-foreground">加载中…</p>
-							) : groups.length === 0 ? (
-								<p className="px-2 py-3 text-xs text-muted-foreground">没有匹配的用户</p>
-							) : (
-								groups.map(([department, rows]) => (
-									<div key={department} className="mb-1">
-										<div className="px-2 py-1 text-xs font-medium text-muted-foreground">{department}</div>
-										{rows.map((user) => {
-											const isSelf = user.id === currentUser.id;
-											return (
-												<button
-													type="button"
-													key={user.id}
-													disabled={pending || isSelf}
-													onClick={() => void switchTo(user.id)}
-													className="flex w-full flex-col gap-1 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
-												>
-													<span className="flex items-center gap-2">
-														<span className="truncate text-sm">{user.name || user.email}</span>
-														{isSelf ? <Badge variant="outline">当前</Badge> : null}
-													</span>
-													<span className="truncate text-xs text-muted-foreground">{user.email}</span>
-													<BadgeList
-														values={user.roleNames}
-														layout="wrap"
-														color="stable"
-														emptyPlaceholder="未分配角色"
-													/>
-												</button>
-											);
-										})}
-									</div>
-								))
-							)}
-						</div>
-					)}
+					<div className="max-h-[60vh] overflow-y-auto border-t border-border p-1">
+						{usersQuery.isLoading ? (
+							<p className="px-2 py-3 text-xs text-muted-foreground">加载中…</p>
+						) : groups.length === 0 ? (
+							<p className="px-2 py-3 text-xs text-muted-foreground">没有匹配的用户</p>
+						) : (
+							groups.map(([department, rows]) => (
+								<div key={department} className="mb-1">
+									<div className="px-2 py-1 text-xs font-medium text-muted-foreground">{department}</div>
+									{rows.map((user) => {
+										const isSelf = user.id === currentUser.id;
+										return (
+											<button
+												type="button"
+												key={user.id}
+												disabled={pending || isSelf}
+												onClick={() => void switchTo(user.id)}
+												className="flex w-full flex-col gap-1 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
+											>
+												<span className="flex items-center gap-2">
+													<span className="truncate text-sm">{user.name || user.email}</span>
+													{isSelf ? <Badge variant="outline">当前</Badge> : null}
+												</span>
+												<span className="truncate text-xs text-muted-foreground">{user.email}</span>
+												<BadgeList values={user.roleNames} layout="wrap" color="stable" emptyPlaceholder="未分配角色" />
+											</button>
+										);
+									})}
+								</div>
+							))
+						)}
+					</div>
 				</PopoverContent>
 			</Popover>
 		</div>

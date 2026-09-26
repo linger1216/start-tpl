@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useColumnPrefs } from "#/hooks/use-column-prefs";
+import { usePageSize } from "#/hooks/use-page-size";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { useAppTable } from "#/lib/table";
@@ -128,12 +129,13 @@ export function SettingsParametersPage() {
 		[],
 	);
 
+	const defaultPageSize = usePageSize();
 	const table = useAppTable({
 		columns,
 		data: filtered,
 		// 行标识用 `para_key`(`sys_para.id` 是库里的无意义短串,且"纯代码内置"的参数压根没落库)
 		getRowId: (row) => row.key,
-		initialState: { pagination: { pageIndex: 0, pageSize: 20 } },
+		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
 	});
 	const { pageIndex, pageSize } = table.state.pagination;
 	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
