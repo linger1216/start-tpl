@@ -1,35 +1,34 @@
 /**
- * **RBAC 演示数据种子** —— 部门 / 角色 / 成员 / 授权 / 两个演示账号。
+ * **RBAC 种子** —— 角色 / 按钮权限点 / 授权。
  *
- * 口径与其它种子脚本一致:**幂等、只补不覆盖**。已经存在的部门 / 角色 / 授权 / 成员一个字节都不动 ——
+ * 口径与其它种子脚本一致:**幂等、只补不覆盖**。已经存在的角色 / 授权一个字节都不动 ——
  * 你在界面上改过的东西,再跑一次不会被冲掉。
  *
- * 造出来的东西(可以照着它点一遍界面):
+ * 造出来的东西:
  *
- *   部门      上海公司(研发部、市场部)、武汉公司
- *   角色      系统管理员 / 部门主管 / 普通员工(全局定义,不随部门复制)
- *   按钮      角色管理页下的「新增角色 / 删除角色」两个权限点(type = 3,不进侧边栏)
- *   授权      系统管理员 = 全部菜单与按钮;部门主管 = 一部分;普通员工 = 更少
- *   成员      admin@example.com → 上海公司 = 系统管理员(保证管理员自己不被锁死)
- *             zhangsan@example.com → 上海公司 = 部门主管 **且** 武汉公司 = 普通员工  ← 并集演示
+ *   角色      系统管理员(全局定义,不随部门复制)
+ *   按钮      各页的操作权限点(sys:role:* / sys:file:* / sys:user:* / sys:grid:* …)与隐藏的运维权限点
+ *   授权      系统管理员 = *:*:*(通配:全部菜单与按钮,含以后新增的)
  *
- * 用法:`pnpm db:seed:rbac`(可重复跑)
+ * ⚠️ **本脚本不建演示部门、也不建演示账号。**
+ *   「上海公司 / 武汉公司 / 研发部 / 市场部」「部门主管 / 普通员工」「zhangsan@example.com」
+ *   曾经由本脚本创建,现已去掉 —— 真实项目的部门与人员是外部同步进来的,初始化脚本不该再造一份。
+ *   要演示数据请另写脚本,不要混进初始化流程,否则「重跑一次」就变成了「改数据」。
+ *
+ * 用法:pnpm db:seed:rbac(可重复跑)
  */
 import "dotenv/config";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
-	sysDept,
-	sysUserDept,
 	sysMenu,
 	sysRole,
 	sysRoleMenu,
 	sysUser,
 	sysUserRole,
 } from "../src/db/data-base-schema.ts";
-import { auth } from "../src/lib/auth.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
@@ -42,40 +41,10 @@ import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
  * **只清自己造的东西**(`__test__*` / `__probe__*`),其余只报告、别动手(见 AGENTS「已知陷阱」首条)。
  */
 
-/** 演示账号(密码与开发账号一致,方便来回切着看) */
-const DEMO_EMAIL = "zhangsan@example.com";
-const DEMO_PASSWORD = "Passw0rd123";
 /** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
 const ADMIN_EMAIL = "admin@example.com";
 
 const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
-
-// ── 部门 ──────────────────────────────────────────────────────────
-async function upsertDepartment(name: string, parentId: string | null, sort: number): Promise<string> {
-	const [existing] = await db
-		.select({ id: sysDept.id })
-		.from(sysDept)
-		.where(
-			and(
-				eq(sysDept.name, name),
-				parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId),
-			),
-		)
-		.limit(1);
-	if (existing) return existing.id;
-	const id = newId();
-	await db.insert(sysDept).values({
-		id,
-		parent_id: parentId,
-		name,
-		sort,
-		status: 1,
-		create_time: new Date(),
-		update_time: new Date(),
-	});
-	created.dept += 1;
-	return id;
-}
 
 // ── 角色 ──────────────────────────────────────────────────────────
 async function upsertRole(code: string, name: string, sort: number, remark: string): Promise<string> {
@@ -141,29 +110,6 @@ async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise
 	created.grant += ids.length;
 }
 
-// ── 成员(已存在就不动 —— 你在界面上换过的角色不会被覆盖)────────────
-/** 把人加进部门(组织架构;**角色不在这张表上**)—— 已存在就不动 */
-async function addMemberIfAbsent(departmentId: string, userId: string, label: string): Promise<void> {
-	const [existing] = await db
-		.select({ id: sysUserDept.id })
-		.from(sysUserDept)
-		.where(and(eq(sysUserDept.department_id, departmentId), eq(sysUserDept.user_id, userId)))
-		.limit(1);
-	if (existing) {
-		console.log(`  · ${label} 已是部门成员,不动`);
-		return;
-	}
-	await db.insert(sysUserDept).values({
-		id: newId(),
-		department_id: departmentId,
-		user_id: userId,
-		create_time: new Date(),
-		update_time: new Date(),
-	});
-	created.member += 1;
-	console.log(`  + ${label}(部门成员)`);
-}
-
 /** 分配**全局角色**(userId × roleId)—— 已存在就不动 */
 async function assignRoleIfAbsent(userId: string, roleId: string, label: string): Promise<void> {
 	const [existing] = await db
@@ -186,36 +132,9 @@ async function assignRoleIfAbsent(userId: string, roleId: string, label: string)
 	console.log(`  + ${label}(角色)`);
 }
 
-async function ensureDemoUser(): Promise<string | null> {
-	const [existing] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, DEMO_EMAIL)).limit(1);
-	if (existing) return existing.id;
-	try {
-		const result = await auth.api.signUpEmail({
-			body: { email: DEMO_EMAIL, password: DEMO_PASSWORD, name: "张三" },
-		});
-		created.user += 1;
-		// signUpEmail 会顺手建一个会话并下发 cookie —— 脚本里不需要它,删掉
-		await db.execute(sql`delete from sys_session where user_id = ${result.user.id}`);
-		return result.user.id;
-	} catch (error) {
-		console.warn(`  ! 建演示账号失败(可能已存在):${(error as Error).message}`);
-		return null;
-	}
-}
-
 async function main() {
-	console.log("── 部门 ──");
-	const shanghai = await upsertDepartment("上海公司", null, 1);
-	const wuhan = await upsertDepartment("武汉公司", null, 2);
-	await upsertDepartment("研发部", shanghai, 1);
-	await upsertDepartment("市场部", shanghai, 2);
-	console.log(`  上海公司 / 武汉公司(+ 研发部 / 市场部);本次新增 ${created.dept} 个`);
 
-	console.log("── 角色 ──");
 	const adminRole = await upsertRole("sys_admin", "系统管理员", 1, "示例:能看见全部菜单与按钮");
-	const managerRole = await upsertRole("dept_manager", "部门主管", 2, "示例:看得到部门/角色/用户,但看不到参数与字典");
-	const staffRole = await upsertRole("staff", "普通员工", 3, "示例:只看得见工作台、系统设置与标签管理");
-	console.log(`  系统管理员 / 部门主管 / 普通员工;本次新增 ${created.role} 个`);
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
 	// 否则下面"给系统管理员全部授权"的那份清单会漏掉刚建的两个按钮(实测踩过)。
@@ -291,6 +210,13 @@ async function main() {
 	if (通知MenuId) {
 		await upsertButton(通知MenuId, "手动发通知", "sys:notice:add", 90);
 	}
+	const 网格MenuId = byPath.get("/demo/grid")?.id;
+	if (网格MenuId) {
+		await upsertButton(网格MenuId, "新增网格", "sys:grid:add", 90);
+		await upsertButton(网格MenuId, "编辑网格", "sys:grid:edit", 91);
+		await upsertButton(网格MenuId, "删除网格", "sys:grid:remove", 92);
+		await upsertButton(网格MenuId, "批量指派负责人", "sys:grid:assign", 93);
+	}
 	const 用户管理MenuId = byPath.get("/settings/users")?.id;
 	if (用户管理MenuId) {
 		await upsertButton(用户管理MenuId, "新增用户", "sys:user:add", 90);
@@ -314,38 +240,20 @@ async function main() {
 
 	// 部门主管:**只给菜单、不给按钮** —— 这样切到演示账号能直接看到
 	// 「页面进得去,但页里的新增 / 删除按钮不可见」(按钮级可见性)
-	const managerPaths = ["/", "/settings", "/settings/users", "/settings/departments", "/settings/roles"];
-	const managerMenuIds = managerPaths.map((path) => byPath.get(path)?.id).filter((id): id is string => Boolean(id));
-	await grantIfEmpty(managerRole, managerMenuIds);
-
-	// 普通员工:只有工作台 + 系统设置 + 标签管理
-	const staffPaths = ["/", "/settings", "/settings/tags"];
-	const staffMenuIds = staffPaths.map((path) => byPath.get(path)?.id).filter((id): id is string => Boolean(id));
-	await grantIfEmpty(staffRole, staffMenuIds);
 
 	console.log(`  本次写入 ${created.grant} 条授权行(已配过的角色不动)`);
 
 	console.log("── 部门成员 + 全局角色 ──");
 	const [admin] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, ADMIN_EMAIL)).limit(1);
 	if (admin) {
-		await addMemberIfAbsent(shanghai, admin.id, `${ADMIN_EMAIL} → 上海公司`);
 		await assignRoleIfAbsent(admin.id, adminRole, `${ADMIN_EMAIL} → 系统管理员`);
 	}
 
-	// `ensureDemoUser` 返回的是 **用户 id 字符串**(不是行对象)
-	const demoUserId = await ensureDemoUser();
-	if (demoUserId) {
-		await addMemberIfAbsent(shanghai, demoUserId, `${DEMO_EMAIL} → 上海公司`);
-		await addMemberIfAbsent(wuhan, demoUserId, `${DEMO_EMAIL} → 武汉公司`);
-		await assignRoleIfAbsent(demoUserId, managerRole, `${DEMO_EMAIL} → 部门主管`);
-		await assignRoleIfAbsent(demoUserId, staffRole, `${DEMO_EMAIL} → 普通员工`);
-	}
 
 	// ── 收尾:把两个账号的实际可见菜单算出来,一眼能看出"并集" ──
 	console.log("\n── 效果 ──");
 	for (const [email, id] of [
 		[ADMIN_EMAIL, admin?.id],
-		[DEMO_EMAIL, demoUserId],
 	] as const) {
 		if (!id) continue;
 		const effective = await effectiveMenusFor(id);

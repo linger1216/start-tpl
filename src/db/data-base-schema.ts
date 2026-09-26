@@ -395,6 +395,18 @@ export const sysRole = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
+		/**
+		 * **数据范围(行级数据权限的唯一载体)** —— 值就是一个"档位词",参数编码在同一列里:
+		 *
+		 *  · `all`         全部数据(默认;升级后可见范围一行不变)
+		 *  · `self`        仅本人(业务表 `create_by` = 我)
+		 *  · `dept`        本部门(我所属部门集合)
+		 *  · `dept_below`  本部门及以下(+ 各自子树)
+		 *  · `up:N`        往上到「从根往下第 N 层」及以下(如 `up:1` = 街镇)
+		 *
+		 * 校验在 `lib/data-scope.ts` 的 `parseScope()`,**值非法一律 fail-closed**。
+		 */
+		data_scope: varchar("data_scope", { length: 32 }).notNull().default("all"),
 		create_time: datetime("create_time", { mode: "date" }),
 		update_time: datetime("update_time", { mode: "date" }),
 	},
@@ -558,6 +570,37 @@ export const sysLog = mysqlTable(
 		index("idx_sys_log_operator").on(table.operator_id, table.create_time),
 		index("idx_sys_log_path").on(table.path, table.create_time),
 	],
+);
+
+/**
+ * Demo:综合网格履职(**行级数据权限的第二个真实落点**)。
+ *
+ * 字段只保留方案里说的那几个 —— Excel 后面 17 列月度统计**不建**。
+ * 两个"指向"是行级权限的关键:`town_id`(街镇节点,给 `dept` / `up:N` 档用)、
+ * `owner_id`(负责人,给 `self` 档用 —— 也就是"队员只能看自己管辖的网格")。
+ */
+export const sysDemoGrid = mysqlTable(
+	"demo_grid",
+	{
+		/** 主键:nanoid */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 网格名称(就是片区名:中春片区 / 九星片区 …) */
+		name: varchar("name", { length: 64 }).notNull(),
+		/** 所属街镇(Excel 原样文本,便于列表直接展示) */
+		town_name: varchar("town_name", { length: 32 }),
+		/** 所属街镇 → `sys_dept.id`(行级范围按它过滤) */
+		town_id: varchar("town_id", { length: 32 }),
+		/** 网格长姓名(Excel 原样;92 位真实姓名里没几个能对上账号,所以另存 owner_id) */
+		owner_name: varchar("owner_name", { length: 32 }),
+		/** 负责人 → `sys_user.id`;**队员的 `self` 档就是 `owner_id = 我`** */
+		owner_id: varchar("owner_id", { length: 32 }),
+		/** 工作职务(Excel 原样) */
+		duty: varchar("duty", { length: 64 }),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }),
+		update_time: datetime("update_time", { mode: "date" }),
+	},
+	(table) => [index("idx_demo_grid_town").on(table.town_id), index("idx_demo_grid_owner").on(table.owner_id)],
 );
 
 export const sysFile = mysqlTable(

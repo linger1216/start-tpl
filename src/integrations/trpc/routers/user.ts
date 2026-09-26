@@ -24,8 +24,9 @@ import { db } from "#/db";
 import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
 import { auth } from "#/lib/auth";
 import { getCurrentUserId } from "#/lib/current-user";
+import { scopeOf, userIdsOfDepartments } from "#/lib/data-scope";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, protectedProcedure } from "../init";
+import { createTRPCRouter, currentUserOf, protectedProcedure } from "../init";
 
 export const userRouter = createTRPCRouter({
 	/**
@@ -33,8 +34,14 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * 一次查完所有分配再按 user 归组,**别在循环里逐人查**(N+1)。
 	 */
-	list: protectedProcedure.query(async () => {
-		const users = await db.select().from(sysUser).orderBy(asc(sysUser.name), asc(sysUser.email));
+	list: protectedProcedure.query(async ({ ctx }) => {
+		// ⚠️ 行级数据权限的**唯一落点**(见 lib/data-scope.ts):档位在角色上,范围在部门树上算
+		const me = currentUserOf(ctx).id;
+		const { scope, departmentIds } = await scopeOf(me);
+		const scopeWhere =
+			scope === "all" ? undefined : scope === "self" ? eq(sysUser.id, me) : userIdsOfDepartments(departmentIds);
+
+		const users = await db.select().from(sysUser).where(scopeWhere).orderBy(asc(sysUser.name), asc(sysUser.email));
 		// 「属于哪些部门」和「有哪些角色」是两件事:前者是组织架构(sys_user_dept),
 		// 后者是全局角色(sys_user_role)。各查一次再按 user 归组,依旧不 N+1。
 		const memberships = await db

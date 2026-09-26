@@ -27,18 +27,30 @@ type DraftRow = { key: string; parentKey: string | null; name: string; path: str
 /**
  * 深度优先展平。`key` 就是 `path`。
  *
- * ⚠️ 表定义里 `path` 是 **not null + 唯一**,所以**没有 path 的节点(如「组件展示 / 框架能力」
- * 这两个纯分组)连同其子树一起跳过** —— 它们只活在代码兜底 `NAV_NODES` 里,
- * 能进库的必然有路由。跳过的节点会打印出来,别让"少了一枝"变成静默行为。
+ * ⚠️ 表定义里 `path` 是 **not null + 唯一**,而 `NAV_NODES` 里有**纯分组**(没有自己的路由,
+ * 如「框架能力 / Demo」)。早期实现是把它们**连同子树一起跳过**,后果是:
+ * 分组下的页面永远进不了 `sys_menu` ⇒ 权限体系一开(侧边栏以库为准)**整枝消失**,
+ * 而且授权树里也没有它们,自然授不了按钮权限。实测踩过(见 `doc/测试数据/README.md`)。
+ *
+ * 现在的做法:给纯分组一个**合成 path** `#group/<名字>`(与按钮的 `#perm/<权限码>` 同一套思路 ——
+ * 表上要求非空,那就给个"不是真实路由"的占位),然后**照常往下走**。
+ * 合成 path 不会被当成跳转目标:`sidebar.tsx` 判断顺序是「先看有没有 children,再看 path」,
+ * 有子节点的行永远渲染成可展开分组。
  */
-function flatten(nodes: readonly NavNode[], parentKey: string | null, out: DraftRow[] = [], skipped: string[] = []): DraftRow[] {
+function flatten(nodes: readonly NavNode[], parentKey: string | null, out: DraftRow[] = [], renamed: string[] = []): DraftRow[] {
+	const used = new Set(out.map((row) => row.key));
 	nodes.forEach((node) => {
-		if (!node.path) {
-			skipped.push(node.name);
-			return; // 连子树一起跳过
+		let key = node.path;
+		if (!key) {
+			// 纯分组:合成 path 兜底(同名分组加序号,保证唯一)
+			key = `#group/${node.name}`;
+			let n = 2;
+			while (used.has(key)) key = `#group/${node.name}-${n++}`;
+			renamed.push(node.name);
 		}
-		out.push({ key: node.path, parentKey, name: node.name, path: node.path, icon: node.icon });
-		if (node.children?.length) flatten(node.children, node.path, out, skipped);
+		used.add(key);
+		out.push({ key, parentKey, name: node.name, path: key, icon: node.icon });
+		if (node.children?.length) flatten(node.children, key, out, renamed);
 	});
 	return out;
 }
@@ -49,8 +61,8 @@ const existing: ExistingRow[] = await db
 /** path → 已存在的行(有 path 的节点按它认) */
 const byPath = new Map(existing.map((row) => [row.path, row]));
 
-const skipped: string[] = [];
-const drafts = flatten(NAV_NODES, null, [], skipped);
+const grouped: string[] = [];
+const drafts = flatten(NAV_NODES, null, [], grouped);
 /** 业务键 → 该节点最终用的主键(nanoid) */
 const idByKey = new Map<string, string>();
 const toInsert: Array<typeof sysMenu.$inferInsert> = [];
@@ -80,6 +92,6 @@ if (toInsert.length > 0) await db.insert(sysMenu).values(toInsert);
 const all = await db.select({ id: sysMenu.id }).from(sysMenu);
 console.log(
 	`✓ 菜单种子完成:配置里 ${drafts.length} 个有路由的节点,本次新增 ${toInsert.length} 行,表内共 ${all.length} 行(已存在的未覆盖)` +
-			(skipped.length > 0 ? `\n  跳过 ${skipped.length} 个没有 path 的节点(path 是表上的非空唯一键):${skipped.join("、")}` : ""),
+			(grouped.length > 0 ? `\n  把 ${grouped.length} 个纯分组用合成 path 并进了菜单树:${grouped.join("、")}` : ""),
 );
 process.exit(0);

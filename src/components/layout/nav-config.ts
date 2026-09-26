@@ -132,6 +132,13 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "全局状态", path: "/demo/store", icon: "boxes" },
 		],
 	},
+
+	{
+		name: "Demo",
+		icon: "grid-3x3",
+		description: "演示性业务页(可随 demo 一起删):目前是「网格履职」—— 行级数据权限的落地示例。",
+		children: [{ name: "网格履职", path: "/demo/grid", icon: "grid-3x3" }],
+	},
 	{
 		// ★ 本模板保留的真实业务模块 —— 派生新项目时从这里开始改
 		name: "系统设置",

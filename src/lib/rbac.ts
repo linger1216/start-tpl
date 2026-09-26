@@ -218,6 +218,11 @@ export const PERM_BY_PATH: Record<string, string> = {
 	"log.list": "sys:log:list",
 	// 站内通知(读自己的不需要权限点;替别人发才需要)
 	"notice.create": "sys:notice:add",
+	// Demo 网格履职(行级数据权限的演示表)
+	"demoGrid.create": "sys:grid:add",
+	"demoGrid.update": "sys:grid:edit",
+	"demoGrid.remove": "sys:grid:remove",
+	"demoGrid.assign": "sys:grid:assign",
 };
 
 /**

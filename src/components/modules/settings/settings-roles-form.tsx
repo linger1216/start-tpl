@@ -17,11 +17,22 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+
+/** 数据范围五档 —— 文案就是文档里的说法(`up` 那档旁边再填层号) */
+/** 数据范围五档 */
+export const SCOPE_ITEMS = [
+	{ value: "all", label: "全部数据" },
+	{ value: "self", label: "仅本人" },
+	{ value: "dept", label: "本部门" },
+	{ value: "dept_below", label: "本部门及以下" },
+	{ value: "up", label: "往上到指定层级及以下" },
+];
 
 export type RoleFormPayload = {
 	code: string;
@@ -30,6 +41,8 @@ export type RoleFormPayload = {
 	sort?: number;
 	status: boolean;
 	remark: string | null;
+	/** 数据范围 —— 见 lib/data-scope.ts(all / self / dept / dept_below / up:N) */
+	dataScope: string;
 };
 
 type RoleUserRow = {
@@ -100,6 +113,9 @@ export function SettingsRolesForm({
 	const [remark, setRemark] = useState("");
 	const [sort, setSort] = useState("0");
 	const [status, setStatus] = useState(true);
+	/** 数据范围:四档词 + 一个"往上到第几层"(拼成 `up:N` 存进同一列) */
+	const [scopeKind, setScopeKind] = useState<"all" | "self" | "dept" | "dept_below" | "up">("all");
+	const [scopeLevel, setScopeLevel] = useState("1");
 	const [tab, setTab] = useState<RoleFormTab>("basic");
 
 	// ── 菜单权限(与基本信息各自保存)─────────────────────────────
@@ -220,6 +236,38 @@ export function SettingsRolesForm({
 									onChange={(event) => setSort(event.target.value)}
 								/>
 							</DetailRow>
+							<DetailRow label="数据范围">
+								<Select
+									items={SCOPE_ITEMS}
+									value={scopeKind}
+									onValueChange={(next) => setScopeKind(next as typeof scopeKind)}
+								>
+									<SelectTrigger id="role-scope" size="sm" className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{SCOPE_ITEMS.map((item) => (
+											<SelectItem key={item.value} value={item.value}>
+												{item.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</DetailRow>
+							{scopeKind === "up" ? (
+								<DetailRow label="往上到第几层" htmlFor="role-scope-level">
+									<Input
+										id="role-scope-level"
+										className="h-8 text-[13px]"
+										value={scopeLevel}
+										onChange={(e) => setScopeLevel(e.target.value)}
+										placeholder="1"
+									/>
+									<span className="mt-1 block text-[11.5px] text-muted-foreground">
+										从根(第 0 层)往下数;例:区 → 街镇(1) → 部门(2),填 1 就是「本街镇及以下」
+									</span>
+								</DetailRow>
+							) : null}
 							<DetailRow label="启用">
 								<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 							</DetailRow>
@@ -229,6 +277,7 @@ export function SettingsRolesForm({
 								disabled={pending || invalid}
 								onClick={() =>
 									onSubmit({
+										dataScope: scopeKind === "up" ? `up:${scopeLevel.trim() || "1"}` : scopeKind,
 										name: name.trim(),
 										code: code.trim(),
 										sort: sort.trim() === "" ? undefined : Number(sort),

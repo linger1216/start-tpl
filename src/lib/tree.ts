@@ -113,3 +113,61 @@ export function bySortThenName<T extends { sort: number; name: string }>(left: T
 export function bySortThenLabel<T extends { sort: number; label: string }>(left: T, right: T): number {
 	return left.sort - right.sort || left.label.localeCompare(right.label, "zh-Hans-CN");
 }
+
+/**
+ * 取这批节点的**所有后代**(含自己)—— 给"本部门及以下"用。
+ *
+ * 环保护同 `buildTree`:脏数据里出现 A→B→A 时靠 `out` 集合停住,不会无限递归。
+ */
+export function collectDescendantIds<T extends TreeRow>(rows: readonly T[], rootIds: Iterable<string>): string[] {
+	const byParent = new Map<string, T[]>();
+	for (const row of rows) {
+		const key = row.parentId ?? "";
+		const list = byParent.get(key);
+		if (list) list.push(row);
+		else byParent.set(key, [row]);
+	}
+	const out = new Set<string>();
+	const walk = (id: string): void => {
+		if (out.has(id)) return; // 环 / 重复:直接停
+		out.add(id);
+		for (const child of byParent.get(id) ?? []) walk(child.id);
+	};
+	for (const id of rootIds) walk(id);
+	return [...out];
+}
+
+/**
+ * 从某个节点**往上**找到「**从根往下第 N 层**」的祖先(含自己)。
+ *
+ * 约定:**根是第 0 层**(所以树的含义是"根在最上、层号往下加")。
+ * 找不到(自己的层级比 N 还浅)返回 `null` —— 调用方**fail-closed**。
+ *
+ * 例:树是 `区(0) → 街镇(1) → 部门(2)`,从"某部门"找 `level = 1` ⇒ 它所属的**街镇**。
+ */
+export function findAncestorAtLevel<T extends TreeRow>(
+	rows: readonly T[],
+	fromId: string,
+	level: number,
+): string | null {
+	const byId = new Map(rows.map((row) => [row.id, row]));
+	// 先把自己到根的链拉出来:[自己, 父, 祖父, …, 根]
+	const chain: string[] = [];
+	const seen = new Set<string>();
+	let current = byId.get(fromId);
+	while (current && !seen.has(current.id)) {
+		seen.add(current.id);
+		chain.push(current.id);
+		const parentId = current.parentId ?? "";
+		current = parentId ? byId.get(parentId) : undefined;
+	}
+	if (chain.length === 0) return null;
+	const last = byId.get(chain[chain.length - 1] as string);
+	// ⚠️ 链的末端必须**真的是根**(没有父,或父不在表里)才算数:
+	//    环状脏数据(x→y→x)走不出根,那种情况下"从根往下第 N 层"没有定义 ⇒ 返回 null(fail-closed)。
+	const isRoot = !last || !(last.parentId ?? "") || !byId.has(last.parentId as string);
+	if (!isRoot) return null;
+	const rootIndex = chain.length - 1; // 末位就是根 ⇒ 它的层号 = 0
+	const index = rootIndex - level;
+	return index >= 0 ? (chain[index] ?? null) : null;
+}

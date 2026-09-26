@@ -1,4 +1,5 @@
 import { createTRPCRouter } from "./init";
+import { demoGridRouter } from "./routers/demo-grid";
 import { departmentRouter } from "./routers/department";
 import { dictRouter } from "./routers/dict";
 import { fileRouter } from "./routers/file";
@@ -15,6 +16,8 @@ export const trpcRouter = createTRPCRouter({
 	log: logRouter,
 	/** 站内通知(只碰自己的,见 doc/通知中心.md) */
 	notice: noticeRouter,
+	/** Demo:综合网格履职(行级数据权限落点,见 doc/测试数据/README.md) */
+	demoGrid: demoGridRouter,
 	/** 系统设置 ▸ 菜单管理 —— 读写 `sys_menu` */
 	menu: menuRouter,
 	/** 系统设置 ▸ 字典管理 —— 读写 `sys_dict` */

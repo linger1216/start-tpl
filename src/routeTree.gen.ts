@@ -16,6 +16,7 @@ import { Route as mainBlankRouteImport } from './routes/(main)/blank'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
 import { Route as mainDemoDrizzleRouteImport } from './routes/(main)/demo/drizzle'
+import { Route as mainDemoGridRouteImport } from './routes/(main)/demo/grid'
 import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
 import { Route as mainDemoTableRouteImport } from './routes/(main)/demo/table'
 import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/tanstack-query'
@@ -65,6 +66,11 @@ const mainDemoBetterAuthRoute = mainDemoBetterAuthRouteImport.update({
 const mainDemoDrizzleRoute = mainDemoDrizzleRouteImport.update({
   id: '/demo/drizzle',
   path: '/demo/drizzle',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainDemoGridRoute = mainDemoGridRouteImport.update({
+  id: '/demo/grid',
+  path: '/demo/grid',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainDemoStoreRoute = mainDemoStoreRouteImport.update({
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
+  '/demo/grid': typeof mainDemoGridRoute
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
+  '/demo/grid': typeof mainDemoGridRoute
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/(main)/demo/drizzle': typeof mainDemoDrizzleRoute
+  '/(main)/demo/grid': typeof mainDemoGridRoute
   '/(main)/demo/store': typeof mainDemoStoreRoute
   '/(main)/demo/table': typeof mainDemoTableRoute
   '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo/better-auth'
     | '/demo/drizzle'
+    | '/demo/grid'
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -255,6 +265,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo/better-auth'
     | '/demo/drizzle'
+    | '/demo/grid'
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/(main)/'
     | '/(main)/demo/better-auth'
     | '/(main)/demo/drizzle'
+    | '/(main)/demo/grid'
     | '/(main)/demo/store'
     | '/(main)/demo/table'
     | '/(main)/demo/tanstack-query'
@@ -354,6 +366,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/drizzle'
       fullPath: '/demo/drizzle'
       preLoaderRoute: typeof mainDemoDrizzleRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/demo/grid': {
+      id: '/(main)/demo/grid'
+      path: '/demo/grid'
+      fullPath: '/demo/grid'
+      preLoaderRoute: typeof mainDemoGridRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/demo/store': {
@@ -477,6 +496,7 @@ interface mainRouteRouteChildren {
   mainIndexRoute: typeof mainIndexRoute
   mainDemoBetterAuthRoute: typeof mainDemoBetterAuthRoute
   mainDemoDrizzleRoute: typeof mainDemoDrizzleRoute
+  mainDemoGridRoute: typeof mainDemoGridRoute
   mainDemoStoreRoute: typeof mainDemoStoreRoute
   mainDemoTableRoute: typeof mainDemoTableRoute
   mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
@@ -499,6 +519,7 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainIndexRoute: mainIndexRoute,
   mainDemoBetterAuthRoute: mainDemoBetterAuthRoute,
   mainDemoDrizzleRoute: mainDemoDrizzleRoute,
+  mainDemoGridRoute: mainDemoGridRoute,
   mainDemoStoreRoute: mainDemoStoreRoute,
   mainDemoTableRoute: mainDemoTableRoute,
   mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,

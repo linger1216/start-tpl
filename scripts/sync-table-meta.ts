@@ -39,6 +39,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_file: "文件元数据(字节存 MinIO;见 doc/文件管理.md)",
 	sys_log: "审计日志(只增不改;见 doc/审计日志.md)",
 	sys_notice: "站内通知(一条一个收件人;见 doc/通知中心.md)",
+	demo_grid: "Demo:综合网格履职(行级数据权限落点)",
 	sys_user: "用户(Better Auth 内核四表之一;auth 是系统内部服务,故吃 sys_ 前缀)",
 	sys_session: "登录会话(每个设备 / 浏览器一行;user_id 级联删除)",
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
@@ -160,6 +161,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
 	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_role", column: "remark", comment: "说明" },
+	{ table: "sys_role", column: "data_scope", comment: "数据范围:all / self / dept / dept_below / up:N" },
 	{ table: "sys_role", column: "create_time", comment: "创建时间" },
 	{ table: "sys_role", column: "update_time", comment: "更新时间" },
 	// sys_user_dept
@@ -219,6 +221,16 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_notice", column: "level", comment: "info / success / warn / danger" },
 	{ table: "sys_notice", column: "read_at", comment: "已读时间;null = 未读" },
 	{ table: "sys_notice", column: "create_time", comment: "创建时间" },
+	{ table: "demo_grid", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "demo_grid", column: "name", comment: "网格名称(片区名)" },
+	{ table: "demo_grid", column: "town_name", comment: "所属街镇(文本)" },
+	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id" },
+	{ table: "demo_grid", column: "owner_name", comment: "网格长姓名" },
+	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(self 档用)" },
+	{ table: "demo_grid", column: "duty", comment: "工作职务" },
+	{ table: "demo_grid", column: "remark", comment: "备注" },
+	{ table: "demo_grid", column: "create_time", comment: "创建时间" },
+	{ table: "demo_grid", column: "update_time", comment: "更新时间" },
 ];
 
 /**

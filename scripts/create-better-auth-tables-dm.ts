@@ -117,6 +117,7 @@ const STATEMENTS: string[] = [
 		"sort" int default 0 not null,
 		"status" tinyint default 1 not null,
 		"remark" varchar(255),
+		"data_scope" varchar(32) default 'all' not null,
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
@@ -216,6 +217,22 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
     `create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
+    // ── demo_grid(Demo:综合网格履职;行级数据权限落点)──────────────────
+    `create table if not exists ${S}."demo_grid" (
+      "id" varchar(32) not null,
+      "name" varchar(64) not null,
+      "town_name" varchar(32),
+      "town_id" varchar(32),
+      "owner_name" varchar(32),
+      "owner_id" varchar(32),
+      "duty" varchar(64),
+      "remark" varchar(255),
+      "create_time" datetime default current_timestamp not null,
+      "update_time" datetime default current_timestamp not null,
+      primary key ("id")
+    )`,
+    `create index if not exists "idx_demo_grid_town" on ${S}."demo_grid" ("town_id")`,
+    `create index if not exists "idx_demo_grid_owner" on ${S}."demo_grid" ("owner_id")`,
 
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (
@@ -306,6 +323,7 @@ async function main() {
 	const columnUpgrades: Array<{ table: string; column: string; ddl: string }> = [
 		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
 		{ table: "sys_menu", column: "perm", ddl: "varchar(64)" },
+		{ table: "sys_role", column: "data_scope", ddl: "varchar(32) default 'all' not null" },
 	];
 	for (const upgrade of columnUpgrades) {
 		const cols = await q(
