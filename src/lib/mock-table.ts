@@ -16,7 +16,7 @@ import type { MockRow } from "./table";
 export type MockDraft = Record<string, unknown>;
 
 /** 表状态:行类型默认是最宽的 `MockRow`,各域可用自己的行类型实例化(`createMockTable<XxxRow>`) */
-export type MockTableState<T extends MockRow = MockRow> = {
+type MockTableState<T extends MockRow = MockRow> = {
 	rows: T[];
 	/** 追加(新增 / Excel「追加导入」) */
 	insert: (drafts: MockDraft[]) => void;

@@ -34,7 +34,7 @@ export function SettingsRolesDetail({
 			description={<span className="font-mono">{row?.code ?? ""}</span>}
 			badge={
 				row ? (
-					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-[11px]">
+					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
 						{row.status === 1 ? "启用" : "停用"}
 					</Badge>
 				) : null
@@ -50,26 +50,26 @@ export function SettingsRolesDetail({
 			{row ? (
 				<div className="flex flex-col gap-0">
 					<DetailRow label="ID">
-						<span className="font-mono text-[12px]">{row.id}</span>
+						<span className="font-mono text-xs">{row.id}</span>
 					</DetailRow>
 					<DetailRow label="角色名">
-						<span className="text-[13px] font-medium">{row.name}</span>
+						<span className="text-sm font-medium">{row.name}</span>
 					</DetailRow>
 					<DetailRow label="标识">
-						<span className="font-mono text-[12px]">{row.code}</span>
+						<span className="font-mono text-xs">{row.code}</span>
 					</DetailRow>
 					<DetailRow label="排序">
 						<span className="tabular-nums">{row.sort}</span>
 					</DetailRow>
 					{/* 派生值(不是表里的列):用胶囊形状区分,别和真实字段混成一样 */}
 					<DetailRow label="分配用户数">
-						<Badge variant="secondary" className="text-[11px] tabular-nums">
+						<Badge variant="secondary" className="text-xs tabular-nums">
 							{row.memberCount} 人
 						</Badge>
 					</DetailRow>
 					<DetailRow label="数据范围">{scopeLabel(row?.dataScope)}</DetailRow>
 					<DetailRow label="说明">
-						<span className="text-[13px]">{row.remark || "—"}</span>
+						<span className="text-sm">{row.remark || "—"}</span>
 					</DetailRow>
 				</div>
 			) : null}

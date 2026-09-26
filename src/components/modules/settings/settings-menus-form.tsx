@@ -84,7 +84,7 @@ export function SettingsMenusForm({
 
 	if (!node) {
 		return (
-			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border text-[13px] text-muted-foreground">
+			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
 				左侧选一个菜单,这里直接改它的名称 / 路径 / 图标
 			</div>
 		);
@@ -94,17 +94,17 @@ export function SettingsMenusForm({
 		<div key={key} className="space-y-3">
 			<div className="flex items-center justify-between gap-2">
 				<div className="min-w-0">
-					<div className="truncate text-[13.5px] font-medium text-foreground">{node.name}</div>
-					<div className="truncate font-mono text-[11.5px] text-muted-foreground">{node.id}</div>
+					<div className="truncate text-sm font-medium text-foreground">{node.name}</div>
+					<div className="truncate font-mono text-xs text-muted-foreground">{node.id}</div>
 				</div>
-				{dirty ? <span className="shrink-0 text-[11.5px] text-warn-fg">未保存</span> : null}
+				{dirty ? <span className="shrink-0 text-xs text-warn-fg">未保存</span> : null}
 			</div>
 
 			<DetailRow label="名称">
 				<Input
 					value={values.name}
 					aria-label="菜单名称"
-					className="h-8 text-[13px]"
+					className="h-8 text-sm"
 					onChange={(event) => onChange({ ...values, name: event.target.value })}
 				/>
 			</DetailRow>
@@ -115,7 +115,7 @@ export function SettingsMenusForm({
 					value={String(values.type)}
 					onValueChange={(next) => onChange({ ...values, type: asMenuType(next) })}
 				>
-					<SelectTrigger className="h-8 text-[13px]" aria-label="菜单类型">
+					<SelectTrigger className="h-8 text-sm" aria-label="菜单类型">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -126,7 +126,7 @@ export function SettingsMenusForm({
 						))}
 					</SelectContent>
 				</Select>
-				<p className="text-[11.5px] text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
+				<p className="text-xs text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
 			</DetailRow>
 
 			<DetailRow label="权限标识">
@@ -134,16 +134,16 @@ export function SettingsMenusForm({
 					value={values.perm}
 					aria-label="权限标识"
 					placeholder="如 sys:role:write"
-					className="h-8 font-mono text-[12.5px]"
+					className="h-8 font-mono text-xs"
 					onChange={(event) => onChange({ ...values, perm: event.target.value })}
 				/>
-				<p className="text-[11.5px] text-muted-foreground">
+				<p className="text-xs text-muted-foreground">
 					前端 <code className="font-mono">useHasPerm()</code> 认它;按钮必须有,目录 / 菜单可空。
 				</p>
 			</DetailRow>
 
 			{detailRecordId ? (
-				<div className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-[11.5px] text-muted-foreground">
+				<div className="rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs text-muted-foreground">
 					这是<span className="mx-0.5 font-medium text-primary">参数化菜单</span>:点它会打开记录
 					<span className="mx-0.5 font-mono text-foreground">{detailRecordId}</span>
 					的明细页。关联由对应的业务页维护,这里只展示。
@@ -155,10 +155,10 @@ export function SettingsMenusForm({
 					value={values.path}
 					aria-label="菜单路径"
 					placeholder="分组留空;页面填路由,如 /archive/cases"
-					className="h-8 font-mono text-[12.5px]"
+					className="h-8 font-mono text-xs"
 					onChange={(event) => onChange({ ...values, path: event.target.value })}
 				/>
-				<p className="text-[11.5px] text-muted-foreground">路径全局唯一(重了会让两个菜单指向同一个页面)。</p>
+				<p className="text-xs text-muted-foreground">路径全局唯一(重了会让两个菜单指向同一个页面)。</p>
 			</DetailRow>
 
 			<DetailRow label="图标">

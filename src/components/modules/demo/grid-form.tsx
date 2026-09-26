@@ -108,7 +108,7 @@ export function GridForm({
 					<DetailRow label="网格名称(片区)" htmlFor="grid-name">
 						<Input
 							id="grid-name"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							placeholder="如:中春片区"
@@ -135,7 +135,7 @@ export function GridForm({
 					<DetailRow label="网格长姓名(Excel 原样)" htmlFor="grid-owner-name">
 						<Input
 							id="grid-owner-name"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={ownerName}
 							onChange={(e) => setOwnerName(e.target.value)}
 							placeholder="如:沈佳梅"
@@ -144,7 +144,7 @@ export function GridForm({
 					<DetailRow label="工作职务" htmlFor="grid-duty">
 						<Input
 							id="grid-duty"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={duty}
 							onChange={(e) => setDuty(e.target.value)}
 							placeholder="如:党委副书记(党群)"
@@ -153,7 +153,7 @@ export function GridForm({
 					<DetailRow label="备注" htmlFor="grid-remark">
 						<Input
 							id="grid-remark"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={remark}
 							onChange={(e) => setRemark(e.target.value)}
 						/>

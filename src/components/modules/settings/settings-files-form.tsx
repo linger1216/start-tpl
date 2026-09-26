@@ -56,7 +56,7 @@ export function SettingsFilesForm({
 							id="file-origin-name"
 							value={name}
 							autoFocus
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							onChange={(event) => setName(event.target.value)}
 							onKeyDown={(event) => {
 								if (event.key === "Enter" && canSubmit) onSubmit(trimmed);
@@ -64,7 +64,7 @@ export function SettingsFilesForm({
 						/>
 					</DetailRow>
 					<DetailRow label="对象键">
-						<span className="font-mono text-[11.5px] text-muted-foreground">{row?.objectKey ?? "—"}</span>
+						<span className="font-mono text-xs text-muted-foreground">{row?.objectKey ?? "—"}</span>
 					</DetailRow>
 				</div>
 

@@ -88,7 +88,7 @@ export function SettingsDepartmentsForm({
 }) {
 	if (!node) {
 		return (
-			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-[13px] text-muted-foreground">
+			<div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
 				左侧选一个部门,这里改它的名称 / 启停 / 备注,并管理成员
 			</div>
 		);
@@ -99,10 +99,10 @@ export function SettingsDepartmentsForm({
 			{/* 标题:这一行只说明"现在改的是哪个部门",不放任何动作 */}
 			<div className="flex items-center justify-between gap-2">
 				<div className="min-w-0">
-					<div className="truncate text-[13.5px] font-medium text-foreground">{node.name}</div>
-					<div className="truncate font-mono text-[11.5px] text-muted-foreground">{node.id}</div>
+					<div className="truncate text-sm font-medium text-foreground">{node.name}</div>
+					<div className="truncate font-mono text-xs text-muted-foreground">{node.id}</div>
 				</div>
-				{dirty ? <span className="shrink-0 text-[11.5px] text-warn-fg">未保存</span> : null}
+				{dirty ? <span className="shrink-0 text-xs text-warn-fg">未保存</span> : null}
 			</div>
 
 			{/* 两个 tab:字段(要保存)/ 用户(即时生效)—— 形态与用户编辑、角色编辑一致(card) */}
@@ -122,7 +122,7 @@ export function SettingsDepartmentsForm({
 								<Input
 									value={values.name}
 									aria-label="部门名"
-									className="h-8 text-[13px]"
+									className="h-8 text-sm"
 									onChange={(event) => onChange({ ...values, name: event.target.value })}
 								/>
 							</DetailRow>
@@ -132,7 +132,7 @@ export function SettingsDepartmentsForm({
 									value={values.remark}
 									aria-label="备注"
 									rows={2}
-									className="text-[12.5px]"
+									className="text-xs"
 									onChange={(event) => onChange({ ...values, remark: event.target.value })}
 								/>
 							</DetailRow>

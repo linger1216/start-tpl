@@ -169,7 +169,7 @@ export function SettingsFilesUpload({
 
 					{items.length > 0 ? (
 						<div className="space-y-1">
-							<div className="flex items-center justify-between text-[11px] text-muted-foreground">
+							<div className="flex items-center justify-between text-xs text-muted-foreground">
 								<span>
 									共 {items.length} 个{uploaded > 0 ? `(已完成 ${uploaded})` : ""}
 								</span>
@@ -182,8 +182,8 @@ export function SettingsFilesUpload({
 								{items.map((item) => (
 									<li key={item.id} className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5">
 										<FileText className="size-3.5 shrink-0 text-muted-foreground" />
-										<span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{item.file.name}</span>
-										<span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+										<span className="min-w-0 flex-1 truncate text-xs text-foreground">{item.file.name}</span>
+										<span className="shrink-0 text-xs text-muted-foreground tabular-nums">
 											{formatBytes(item.file.size)}
 										</span>
 										{/* 状态格宽度固定,免得每行文字长短不一来回跳 */}
@@ -195,7 +195,7 @@ export function SettingsFilesUpload({
 														style={{ width: `${item.percent}%` }}
 													/>
 												</span>
-												<span className="w-7 text-right text-[11px] text-muted-foreground tabular-nums">
+												<span className="w-7 text-right text-xs text-muted-foreground tabular-nums">
 													{item.percent}%
 												</span>
 											</span>
@@ -203,8 +203,8 @@ export function SettingsFilesUpload({
 											<span
 												className={
 													item.status === "error"
-														? "w-24 shrink-0 truncate text-right text-[11px] text-destructive"
-														: "w-24 shrink-0 text-right text-[11px] text-muted-foreground"
+														? "w-24 shrink-0 truncate text-right text-xs text-destructive"
+														: "w-24 shrink-0 text-right text-xs text-muted-foreground"
 												}
 												title={
 													item.error ??
@@ -240,7 +240,7 @@ export function SettingsFilesUpload({
 					) : null}
 
 					<div className="flex flex-col gap-1.5">
-						<span className="text-[12px] font-medium text-muted-foreground">全部存到哪个桶</span>
+						<span className="text-xs font-medium text-muted-foreground">全部存到哪个桶</span>
 						<Select items={BUCKET_ITEMS} value={kind} onValueChange={(next) => setKind(next as "public" | "private")}>
 							<SelectTrigger id="file-bucket" size="sm" className="w-full">
 								<SelectValue />

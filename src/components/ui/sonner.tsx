@@ -37,9 +37,9 @@ export function Toaster() {
 			// 与设计系统一致:圆角 12px、字体沿用全局、宽度上限贴近弹窗
 			toastOptions={{
 				classNames: {
-					toast: "rounded-xl font-sans text-[13px]",
-					title: "text-[13px] font-medium",
-					description: "text-[12.5px]",
+					toast: "rounded-xl font-sans text-sm",
+					title: "text-sm font-medium",
+					description: "text-xs",
 				},
 			}}
 		/>

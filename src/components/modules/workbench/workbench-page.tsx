@@ -131,7 +131,7 @@ export function WorkbenchPage() {
 			{/* UI 组件示例 —— 原来 7 个 /showcase/* 路由收敛到这里一块 */}
 			<Card tone="var(--hue-violet)">
 				<CardHeader>
-					<CardTitle className="text-[15px]">UI 组件示例</CardTitle>
+					<CardTitle className="text-base">UI 组件示例</CardTitle>
 					<CardDescription>
 						<code className="font-mono">components/ui/</code> 下 44 个通用原语的最小可用例子 —— 受控的都给好了
 						useState,可直接抄进业务页。新增/删除原语时同步在这里加减一格,别让它们变回孤儿。
@@ -148,7 +148,7 @@ export function WorkbenchPage() {
 			{/* 上手四件 */}
 			<Card tone="var(--hue-blue)">
 				<CardHeader>
-					<CardTitle className="text-[15px]">新项目上手四件</CardTitle>
+					<CardTitle className="text-base">新项目上手四件</CardTitle>
 					<CardDescription>照着走一遍,你就有了一个干净的 TanStack Start 模板。</CardDescription>
 				</CardHeader>
 				<CardContent className="pt-0">
@@ -159,13 +159,13 @@ export function WorkbenchPage() {
 								className="rounded-xl border border-border bg-card/60 p-3 transition-[background-color,border-color] duration-150 hover:border-border-strong hover:bg-card"
 							>
 								<div className="mb-2 flex items-center gap-2">
-									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-soft font-mono text-[12px] text-primary">
+									<span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-soft font-mono text-xs text-primary">
 										{index + 1}
 									</span>
 									<check.icon className="size-3.5 text-muted-foreground" />
 								</div>
 								<div className="font-medium text-foreground">{check.title}</div>
-								<p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{check.desc}</p>
+								<p className="mt-1 text-xs leading-relaxed text-muted-foreground">{check.desc}</p>
 							</li>
 						))}
 					</ol>
@@ -175,7 +175,7 @@ export function WorkbenchPage() {
 			{/* 模板四大块 */}
 			<Card tone="var(--hue-violet)">
 				<CardHeader>
-					<CardTitle className="text-[15px]">模板自带的四大入口</CardTitle>
+					<CardTitle className="text-base">模板自带的四大入口</CardTitle>
 					<CardDescription>由 NAV_NODES 派生 —— 改 nav-config.ts 这里全部跟着变。</CardDescription>
 				</CardHeader>
 				<CardContent className="pt-0">
@@ -194,7 +194,7 @@ export function WorkbenchPage() {
 										<span className="font-medium text-foreground">{item.title}</span>
 										<ArrowRight className="size-3.5 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 group-hover:opacity-100" />
 									</div>
-									<p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{item.desc}</p>
+									<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.desc}</p>
 								</div>
 							</Link>
 						))}
@@ -205,7 +205,7 @@ export function WorkbenchPage() {
 			{/* 系统设置模块介绍 —— 七个页面分别吃什么数据 */}
 			<Card tone="var(--hue-amber)">
 				<CardHeader>
-					<CardTitle className="flex items-center gap-2 text-[15px]">
+					<CardTitle className="flex items-center gap-2 text-base">
 						<Database className="size-4 text-muted-foreground" />
 						系统设置模块(唯一保留的真实业务)
 					</CardTitle>
@@ -237,22 +237,20 @@ export function WorkbenchPage() {
 									<div className="flex items-center justify-between gap-2">
 										<span className="truncate font-medium text-foreground">{page.name}</span>
 										{page.source ? (
-											<Badge variant="secondary" className="shrink-0 px-1.5 font-mono text-[10.5px]">
+											<Badge variant="secondary" className="shrink-0 px-1.5 font-mono text-xs">
 												{page.source}
 											</Badge>
 										) : (
-											<Badge className="shrink-0 bg-hue-amber-soft px-1.5 text-[10.5px] text-hue-amber-fg">
-												待实现
-											</Badge>
+											<Badge className="shrink-0 bg-hue-amber-soft px-1.5 text-xs text-hue-amber-fg">待实现</Badge>
 										)}
 									</div>
-									<p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{page.desc}</p>
+									<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{page.desc}</p>
 								</div>
 							</Link>
 						))}
 					</div>
 
-					<div className="rounded-xl border border-dashed border-border p-3 text-[12.5px] leading-relaxed text-muted-foreground">
+					<div className="rounded-xl border border-dashed border-border p-3 text-xs leading-relaxed text-muted-foreground">
 						<div className="mb-1.5 flex items-center gap-1.5 font-medium text-foreground">
 							<TagIcon className="size-3.5 text-muted-foreground" />
 							建表与灌种子(全部幂等)
@@ -277,12 +275,12 @@ export function WorkbenchPage() {
 			{/* 一级菜单索引(派生自 NAV_NODES) */}
 			<Card tone="var(--hue-teal)">
 				<CardHeader>
-					<CardTitle className="text-[15px]">一级菜单索引</CardTitle>
+					<CardTitle className="text-base">一级菜单索引</CardTitle>
 					<CardDescription>点进去就是对应模块。这里列的是直接挂 path 的一级叶子。</CardDescription>
 				</CardHeader>
 				<CardContent className="pt-0">
 					{entries.length === 0 ? (
-						<div className="rounded-lg border border-dashed border-border p-4 text-[13px] text-muted-foreground">
+						<div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
 							当前没有任何直接挂 path 的一级叶子 —— 工作台就不会渲染这块。
 						</div>
 					) : (
@@ -298,10 +296,10 @@ export function WorkbenchPage() {
 			{/* 派生时删什么 */}
 			<Card tone="var(--hue-amber)" className="border-dashed">
 				<CardHeader>
-					<CardTitle className="text-[15px]">派生新项目时删什么</CardTitle>
+					<CardTitle className="text-base">派生新项目时删什么</CardTitle>
 					<CardDescription>以下三处是模板自带的入口,新业务上线前可整块删掉。</CardDescription>
 				</CardHeader>
-				<CardContent className="space-y-2 pt-0 text-[13px] leading-relaxed text-muted-foreground">
+				<CardContent className="space-y-2 pt-0 text-sm leading-relaxed text-muted-foreground">
 					<p>
 						<code className="font-mono text-foreground">routes/(main)/demo/</code> —— 框架能力样例页(只保留 Better Auth
 						的配置即可),与 <code className="font-mono text-foreground">hooks/demo.form*</code>。
@@ -319,7 +317,7 @@ export function WorkbenchPage() {
 						<code className="font-mono text-foreground">db/data-base-schema.ts</code>。保留前先把真实业务模块的字段接上,
 						别直接整盘删。
 					</p>
-					<p className="pt-1 text-[12px]">
+					<p className="pt-1 text-xs">
 						删完后跑 <code className="font-mono text-foreground">pnpm generate-routes</code> +{" "}
 						<code className="font-mono text-foreground">pnpm typecheck</code>,确认零悬空引用。
 					</p>
@@ -350,7 +348,7 @@ function EntryCard({ node }: { node: NavNode & { path: string } }) {
 					<ArrowRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0.5 group-hover:opacity-100" />
 				</div>
 				{node.description ? (
-					<p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{node.description}</p>
+					<p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{node.description}</p>
 				) : null}
 			</div>
 		</Link>

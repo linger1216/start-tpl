@@ -54,10 +54,10 @@ export function SettingsFilesDetail({
 			badge={
 				row ? (
 					<>
-						<Badge variant="outline" className="font-mono text-[11px]">
+						<Badge variant="outline" className="font-mono text-xs">
 							{row.ext || "无后缀"}
 						</Badge>
-						<Badge variant={status.variant} className="text-[11px]">
+						<Badge variant={status.variant} className="text-xs">
 							{status.label}
 						</Badge>
 					</>
@@ -76,7 +76,7 @@ export function SettingsFilesDetail({
 				<>
 					{/* 预览块:图片直接看,其余给"打开 / 下载"(私有桶的地址是现签的,不要缓存它) */}
 					<div className="space-y-1.5">
-						<div className="text-[12px] font-medium text-muted-foreground">预览</div>
+						<div className="text-xs font-medium text-muted-foreground">预览</div>
 						{live && isImage && url ? (
 							<img
 								src={url}
@@ -86,7 +86,7 @@ export function SettingsFilesDetail({
 						) : (
 							<div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-4">
 								<FileText className="size-4 shrink-0 text-muted-foreground" />
-								<span className="text-[12.5px] text-muted-foreground">
+								<span className="text-xs text-muted-foreground">
 									{row.status === 2 ? "已删除,对象已清掉" : live && url ? "这个类型没有内联预览" : "正在取地址…"}
 								</span>
 								{url ? (
@@ -110,23 +110,23 @@ export function SettingsFilesDetail({
 					    再写两个 DetailRow 就是同一件事两个形态(与另外四个详情页不一致 —— 这里踩过) */}
 					<div className="flex flex-col gap-0">
 						<DetailRow label="ID">
-							<span className="font-mono text-[12px]">{row.id}</span>
+							<span className="font-mono text-xs">{row.id}</span>
 						</DetailRow>
 						<DetailRow label="文件名">{row.originName}</DetailRow>
 						<DetailRow label="后缀">{row.ext || "—"}</DetailRow>
 						<DetailRow label="类型">
-							<span className="font-mono text-[12px]">{row.contentType || "—"}</span>
+							<span className="font-mono text-xs">{row.contentType || "—"}</span>
 						</DetailRow>
 						<DetailRow label="大小">{formatBytes(row.size)}</DetailRow>
 						<DetailRow label="状态">{status.label}</DetailRow>
 						<DetailRow label="桶">
-							<span className="font-mono text-[12px]">{row.bucket}</span>
+							<span className="font-mono text-xs">{row.bucket}</span>
 						</DetailRow>
 						<DetailRow label="对象键">
-							<span className="font-mono text-[11.5px] break-all">{row.objectKey}</span>
+							<span className="font-mono text-xs break-all">{row.objectKey}</span>
 						</DetailRow>
 						<DetailRow label="sha256">
-							<span className="font-mono text-[11.5px] break-all">{row.hash || "—"}</span>
+							<span className="font-mono text-xs break-all">{row.hash || "—"}</span>
 						</DetailRow>
 					</div>
 				</>

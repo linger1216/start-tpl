@@ -126,7 +126,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 								onChange={(event) => setKeyword(event.target.value)}
 								placeholder="搜索姓名或邮箱…"
 								aria-label="搜索用户"
-								className="h-8 text-[13px]"
+								className="h-8 text-sm"
 							/>
 						) : null}
 						{from ? (
@@ -134,7 +134,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 								type="button"
 								disabled={pending}
 								onClick={() => void switchTo(from.id)}
-								className="flex w-full items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-[12.5px] transition-colors duration-150 hover:bg-hover disabled:opacity-60"
+								className="flex w-full items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-xs transition-colors duration-150 hover:bg-hover disabled:opacity-60"
 							>
 								<Check className="size-3.5 shrink-0 text-primary" />
 								切回原本身份({from.name})
@@ -143,19 +143,19 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 					</div>
 
 					{!canSwitch ? (
-						<p className="border-t border-border px-3 py-2.5 text-[12px] text-muted-foreground">
+						<p className="border-t border-border px-3 py-2.5 text-xs text-muted-foreground">
 							当前身份没有切换他人的权限,但你可以切回原本身份。
 						</p>
 					) : (
 						<div className="max-h-[60vh] overflow-y-auto border-t border-border p-1">
 							{usersQuery.isLoading ? (
-								<p className="px-2 py-3 text-[12px] text-muted-foreground">加载中…</p>
+								<p className="px-2 py-3 text-xs text-muted-foreground">加载中…</p>
 							) : groups.length === 0 ? (
-								<p className="px-2 py-3 text-[12px] text-muted-foreground">没有匹配的用户</p>
+								<p className="px-2 py-3 text-xs text-muted-foreground">没有匹配的用户</p>
 							) : (
 								groups.map(([department, rows]) => (
 									<div key={department} className="mb-1">
-										<div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">{department}</div>
+										<div className="px-2 py-1 text-xs font-medium text-muted-foreground">{department}</div>
 										{rows.map((user) => {
 											const isSelf = user.id === currentUser.id;
 											return (
@@ -167,10 +167,10 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 													className="flex w-full flex-col gap-1 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
 												>
 													<span className="flex items-center gap-2">
-														<span className="truncate text-[13px]">{user.name || user.email}</span>
+														<span className="truncate text-sm">{user.name || user.email}</span>
 														{isSelf ? <Badge variant="outline">当前</Badge> : null}
 													</span>
-													<span className="truncate text-[11px] text-muted-foreground">{user.email}</span>
+													<span className="truncate text-xs text-muted-foreground">{user.email}</span>
 													<BadgeList
 														values={user.roleNames}
 														layout="wrap"

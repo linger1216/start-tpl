@@ -189,7 +189,7 @@ export function SettingsDepartmentsPage() {
 
 				<Card className="flex min-h-0 flex-col">
 					<CardHeader>
-						<CardTitle className="text-[14px]">部门详情</CardTitle>
+						<CardTitle className="text-sm">部门详情</CardTitle>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
 						<SettingsDepartmentsForm

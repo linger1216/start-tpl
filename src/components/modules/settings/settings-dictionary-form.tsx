@@ -75,7 +75,7 @@ export function SettingsDictionaryForm({
 						<Input
 							id="dict-name"
 							value={values.name}
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							placeholder="如 档案类型…"
 							autoComplete="off"
 							onChange={(event) => onChange({ ...values, name: event.target.value })}
@@ -92,12 +92,12 @@ export function SettingsDictionaryForm({
 							placeholder="entity_category…"
 							className={
 								editing
-									? "h-8 cursor-default bg-muted/40 font-mono text-[12.5px] text-muted-foreground"
-									: "h-8 font-mono text-[12.5px]"
+									? "h-8 cursor-default bg-muted/40 font-mono text-xs text-muted-foreground"
+									: "h-8 font-mono text-xs"
 							}
 							onChange={(event) => onChange({ ...values, code: event.target.value })}
 						/>
-						<p className="text-[11.5px] text-muted-foreground">
+						<p className="text-xs text-muted-foreground">
 							{editing
 								? "编码是主键,也被别的功能引用,创建后不可改。"
 								: "小写字母/数字/下划线,以字母开头;创建后不可改。"}
@@ -107,7 +107,7 @@ export function SettingsDictionaryForm({
 						<Input
 							id="dict-remark"
 							value={values.remark}
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							placeholder="这个字典是给谁用的…"
 							onChange={(event) => onChange({ ...values, remark: event.target.value })}
 						/>
@@ -123,7 +123,7 @@ export function SettingsDictionaryForm({
 
 				<div className="space-y-2">
 					<div className="flex items-center justify-between gap-2">
-						<Label className="text-[12px]">字典项(顺序即下拉顺序)</Label>
+						<Label className="text-xs">字典项(顺序即下拉顺序)</Label>
 						<ActionButton onClick={() => onChange({ ...values, items: [...values.items, { label: "", value: "" }] })}>
 							新增字典项
 						</ActionButton>
@@ -135,7 +135,7 @@ export function SettingsDictionaryForm({
 									value={item.label}
 									aria-label={`第 ${index + 1} 项的显示名`}
 									placeholder="显示名(label)…"
-									className="h-8 w-44 text-[13px]"
+									className="h-8 w-44 text-sm"
 									onChange={(event) => setItem(index, { label: event.target.value })}
 								/>
 								<span aria-hidden="true" className="text-muted-foreground">
@@ -147,7 +147,7 @@ export function SettingsDictionaryForm({
 									placeholder="取值(value)…"
 									translate="no"
 									spellCheck={false}
-									className="h-8 w-44 font-mono text-[12.5px]"
+									className="h-8 w-44 font-mono text-xs"
 									onChange={(event) => setItem(index, { value: event.target.value })}
 								/>
 								<ActionButton
@@ -174,7 +174,7 @@ export function SettingsDictionaryForm({
 							</div>
 						))}
 						{values.items.length === 0 ? (
-							<p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+							<p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
 								还没有字典项(可以保存成空字典,之后再补)。
 							</p>
 						) : null}
@@ -184,7 +184,7 @@ export function SettingsDictionaryForm({
 				{error ? (
 					<p
 						role="alert"
-						className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive"
+						className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
 					>
 						{error}
 					</p>

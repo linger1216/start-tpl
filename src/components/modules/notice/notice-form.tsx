@@ -100,7 +100,7 @@ export function NoticeForm({
 					<DetailRow label="标题" htmlFor="notice-title">
 						<Input
 							id="notice-title"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
 							placeholder="例如:有 3 个账号还没分配角色"
@@ -109,7 +109,7 @@ export function NoticeForm({
 					<DetailRow label="正文(可选)" htmlFor="notice-body">
 						<Input
 							id="notice-body"
-							className="h-8 text-[13px]"
+							className="h-8 text-sm"
 							value={body}
 							onChange={(e) => setBody(e.target.value)}
 							placeholder="一句话说明,最长 255 字"
@@ -118,7 +118,7 @@ export function NoticeForm({
 					<DetailRow label="跳转路径(可选)" htmlFor="notice-path">
 						<Input
 							id="notice-path"
-							className="h-8 font-mono text-[13px]"
+							className="h-8 font-mono text-sm"
 							value={path}
 							onChange={(e) => setPath(e.target.value)}
 							placeholder="/settings/users"

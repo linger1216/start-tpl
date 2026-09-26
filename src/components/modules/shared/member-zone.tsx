@@ -88,12 +88,12 @@ export function MemberZone<T extends MemberZoneRow>({
 			<div className="flex items-center justify-between gap-2">
 				<div className="flex items-center gap-1.5">
 					<Users className="size-3.5 text-muted-foreground" />
-					<span className="text-[13px] font-medium">
+					<span className="text-sm font-medium">
 						{title}({members.length})
 					</span>
 				</div>
 				{/* 这一区不经过外层的"保存" —— 必须写出来(见文件头) */}
-				<span className="text-[11.5px] text-muted-foreground">加人 / 移出即时生效,不用保存</span>
+				<span className="text-xs text-muted-foreground">加人 / 移出即时生效,不用保存</span>
 			</div>
 			{/* 候选选择框:高度填满本区剩余空间;「加入」与搜索框同一行、靠最右 */}
 			<div className="flex min-h-[160px] flex-1 flex-col">
@@ -121,9 +121,9 @@ export function MemberZone<T extends MemberZoneRow>({
 				/>
 			</div>
 			{loading ? (
-				<p className="text-[12px] text-muted-foreground">加载中…</p>
+				<p className="text-xs text-muted-foreground">加载中…</p>
 			) : members.length === 0 ? (
-				<p className="text-[12px] text-muted-foreground">{emptyText}</p>
+				<p className="text-xs text-muted-foreground">{emptyText}</p>
 			) : (
 				<div className="min-h-0 space-y-2">
 					{members.length > FILTER_THRESHOLD ? (
@@ -132,12 +132,12 @@ export function MemberZone<T extends MemberZoneRow>({
 							onChange={(event) => setKeyword(event.target.value)}
 							placeholder={`在 ${members.length} 个${title}里过滤…`}
 							aria-label={`过滤${title}`}
-							className="h-7 text-[12.5px]"
+							className="h-7 text-xs"
 						/>
 					) : null}
 					<ul className="max-h-40 space-y-1 overflow-y-auto">
 						{filtered.length === 0 ? (
-							<li className="px-1 text-[12px] text-muted-foreground">没有匹配的{title}</li>
+							<li className="px-1 text-xs text-muted-foreground">没有匹配的{title}</li>
 						) : (
 							filtered.map((member) => (
 								<li
@@ -145,8 +145,8 @@ export function MemberZone<T extends MemberZoneRow>({
 									className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5"
 								>
 									<div className="min-w-0 flex flex-wrap flex-1 items-center gap-3">
-										<div className="truncate text-[11px]">{member.userName || member.userEmail}</div>
-										<span className="truncate text-[11px] text-muted-foreground">{member.userEmail}</span>
+										<div className="truncate text-xs">{member.userName || member.userEmail}</div>
+										<span className="truncate text-xs text-muted-foreground">{member.userEmail}</span>
 										<BadgeList
 											values={badgeValues(member)}
 											layout="wrap"

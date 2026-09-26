@@ -45,24 +45,24 @@ export function roleColumns({
 			header: "角色",
 			sortFn: "text",
 			size: 160,
-			cell: (ctx) => <span className="text-[13px]">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="text-sm">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("code", {
 			header: "标识",
 			sortFn: "text",
 			size: 150,
-			cell: (ctx) => <span className="font-mono text-[12px] text-muted-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("memberCount", {
 			header: "成员",
 			size: 80,
-			cell: (ctx) => <span className="block text-right tabular-nums text-[12.5px]">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="block text-right tabular-nums text-xs">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
 			cell: (ctx) => (
-				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-[11px]">
+				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
 					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
 				</Badge>
 			),
@@ -71,19 +71,19 @@ export function roleColumns({
 			header: "排序",
 			size: 72,
 			cell: (ctx) => (
-				<span className="block text-right tabular-nums text-[12.5px] text-muted-foreground">{ctx.getValue()}</span>
+				<span className="block text-right tabular-nums text-xs text-muted-foreground">{ctx.getValue()}</span>
 			),
 		}),
 		columnHelper.accessor("dataScope", {
 			header: "数据范围",
 			size: 150,
-			cell: (ctx) => <span className="text-[12.5px]">{scopeLabel(ctx.getValue())}</span>,
+			cell: (ctx) => <span className="text-xs">{scopeLabel(ctx.getValue())}</span>,
 		}),
 		columnHelper.accessor("remark", {
 			header: "备注",
 			size: 200,
 			cell: (ctx) => (
-				<span className="line-clamp-2 max-w-56 text-[12.5px] text-muted-foreground" title={ctx.getValue() ?? ""}>
+				<span className="line-clamp-2 max-w-56 text-xs text-muted-foreground" title={ctx.getValue() ?? ""}>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -92,7 +92,7 @@ export function roleColumns({
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -101,7 +101,7 @@ export function roleColumns({
 			header: "更新时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -109,7 +109,7 @@ export function roleColumns({
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground/70">{ctx.getValue()}</span>,
 		}),
 		actionsColumn<RoleRow>({
 			size: 190,

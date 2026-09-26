@@ -24,10 +24,10 @@ export function DetailRow({
 }) {
 	return (
 		<div className="grid grid-cols-[100px_1fr] items-start gap-3 py-2">
-			<Label htmlFor={htmlFor} className="text-[12px] font-normal text-muted-foreground">
+			<Label htmlFor={htmlFor} className="text-xs font-normal text-muted-foreground">
 				{label}
 			</Label>
-			<div className="min-w-0 wrap-break-words text-[13px] text-foreground">{children}</div>
+			<div className="min-w-0 wrap-break-words text-sm text-foreground">{children}</div>
 		</div>
 	);
 }

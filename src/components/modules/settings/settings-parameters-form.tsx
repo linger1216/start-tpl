@@ -119,7 +119,7 @@ export function SettingsParametersForm({
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>{creating ? "新增参数" : "修改参数"}</DialogTitle>
-					<DialogDescription translate="no" className="min-w-0 font-mono text-[12px]">
+					<DialogDescription translate="no" className="min-w-0 font-mono text-xs">
 						{creating ? "新建一个系统参数" : (row?.key ?? "")}
 					</DialogDescription>
 				</DialogHeader>
@@ -128,7 +128,7 @@ export function SettingsParametersForm({
 					{!creating ? (
 						// 只展示表里真有的东西:说明(remark)+ 类型码(para_type)。
 						// 「默认值」是代码内置值、不是表里的列,已从这里去掉(见 data-base-schema.ts)。
-						<p className="rounded-lg bg-secondary min-w-0 whitespace-pre-wrap break-words px-3 py-2 text-[12px] text-muted-foreground">
+						<p className="rounded-lg bg-secondary min-w-0 whitespace-pre-wrap break-words px-3 py-2 text-xs text-muted-foreground">
 							{row?.remark}
 							<span className="ml-1">(类型 {PARA_TYPE_META[effectiveType].label})</span>
 						</p>
@@ -143,7 +143,7 @@ export function SettingsParametersForm({
 									translate="no"
 									spellCheck={false}
 									placeholder="如 app.title"
-									className="font-mono text-[12px]"
+									className="font-mono text-xs"
 									onChange={(event) => setKey(event.target.value)}
 								/>
 							</DetailRow>
@@ -177,7 +177,7 @@ export function SettingsParametersForm({
 								spellCheck={false}
 								rows={5}
 								placeholder={'{"a":1} 或 ["a","b"]'}
-								className={`min-w-0 break-all font-mono text-[12px] ${problem ? "border-destructive/60" : ""}`}
+								className={`min-w-0 break-all font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
 						) : (
@@ -186,14 +186,14 @@ export function SettingsParametersForm({
 								value={value}
 								translate="no"
 								spellCheck={false}
-								className={`font-mono text-[12px] ${problem ? "border-destructive/60" : ""}`}
+								className={`font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
 						)}
 						{problem ? (
-							<p className="text-[11.5px] text-destructive">{problem}</p>
+							<p className="text-xs text-destructive">{problem}</p>
 						) : (
-							<p className="text-[11.5px] text-muted-foreground">{PARA_TYPE_META[effectiveType].hint}</p>
+							<p className="text-xs text-muted-foreground">{PARA_TYPE_META[effectiveType].hint}</p>
 						)}
 					</DetailRow>
 
@@ -202,7 +202,7 @@ export function SettingsParametersForm({
 							id="cfg-group"
 							value={group}
 							placeholder="如 业务配置(可空)"
-							className="text-[12px]"
+							className="text-xs"
 							onChange={(event) => setGroup(event.target.value)}
 						/>
 					</DetailRow>
@@ -211,7 +211,7 @@ export function SettingsParametersForm({
 							id="cfg-remark"
 							value={remark}
 							placeholder="给人看的参数说明"
-							className="text-[12px]"
+							className="text-xs"
 							onChange={(event) => setRemark(event.target.value)}
 						/>
 					</DetailRow>

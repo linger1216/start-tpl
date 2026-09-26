@@ -15,7 +15,7 @@
  */
 
 /** 能拼成树的行的最小要求(项目的自关联表都满足) */
-export type TreeRow = {
+type TreeRow = {
 	id: string;
 	parentId: string | null;
 };

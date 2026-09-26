@@ -43,7 +43,7 @@ export function Switch({
 					)}
 				/>
 			</span>
-			{label && <span className="text-[12.5px] text-foreground">{label}</span>}
+			{label && <span className="text-xs text-foreground">{label}</span>}
 		</button>
 	);
 }

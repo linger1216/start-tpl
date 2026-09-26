@@ -112,14 +112,14 @@ export function FileDropzone({
 				)}
 			>
 				{icon ?? <Upload className="size-4 text-muted-foreground" />}
-				<span className="text-[13px] text-foreground">
+				<span className="text-sm text-foreground">
 					{label ?? (
 						<>
 							把文件拖到这里,或<span className="text-primary">点击选择</span>
 						</>
 					)}
 				</span>
-				{(hint ?? autoHint) ? <span className="text-[12px] text-muted-foreground">{hint ?? autoHint}</span> : null}
+				{(hint ?? autoHint) ? <span className="text-xs text-muted-foreground">{hint ?? autoHint}</span> : null}
 			</button>
 
 			<input
@@ -136,7 +136,7 @@ export function FileDropzone({
 			/>
 
 			{fileName ? (
-				<div className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-[12.5px]">
+				<div className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-xs">
 					<FileSpreadsheet className="size-3.5 shrink-0 text-muted-foreground" />
 					<span className="min-w-0 flex-1 truncate text-foreground">{fileName}</span>
 					{onClear ? (

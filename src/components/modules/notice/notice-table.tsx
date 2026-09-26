@@ -43,9 +43,7 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 			size: 240,
 			cell: (ctx) => (
 				<span
-					className={
-						ctx.row.original.read ? "text-[12.5px] text-muted-foreground" : "text-[12.5px] font-medium text-foreground"
-					}
+					className={ctx.row.original.read ? "text-xs text-muted-foreground" : "text-xs font-medium text-foreground"}
 				>
 					{ctx.getValue()}
 				</span>
@@ -59,12 +57,12 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 		columnHelper.accessor("path", {
 			header: "跳转路径",
 			size: 180,
-			cell: (ctx) => <span className="font-mono text-[12px] text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
 		}),
 		columnHelper.accessor("createTime", {
 			header: "时间",
 			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-[12.5px]">{formatLocalMinute(ctx.getValue())}</span>,
+			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
 		}),
 		actionsColumn<NoticeRow>({
 			size: 90,

@@ -155,9 +155,7 @@ function NavItem({
 	if (!node.path && !hasChildren) {
 		return (
 			<div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
-				<span className="text-[10.5px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-					{node.name}
-				</span>
+				<span className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{node.name}</span>
 				<span className="h-px flex-1 bg-gradient-to-r from-border to-transparent" />
 			</div>
 		);
@@ -176,7 +174,7 @@ function NavItem({
 					onClick={() => onToggle(nodeId)}
 					aria-expanded={open}
 					className={cn(
-						"group/nav relative flex w-full items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-[13px] font-medium",
+						"group/nav relative flex w-full items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-sm font-medium",
 						selfSelected ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
 						"transition-[color,background-color] duration-150 ease-brand",
 					)}
@@ -219,7 +217,7 @@ function NavItem({
 			className={cn(
 				// 选中态 = 浅底 + 强调色文字图标(无边框,只用底色区分);
 				// 未选中 = 深色文字,hover 只换底色 —— hover **不**变蓝,蓝色只属于"被选中"。
-				"group/nav relative flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-[13px] font-medium",
+				"group/nav relative flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-sm font-medium",
 				"transition-[color,background-color] duration-150 ease-brand",
 				active ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
 			)}

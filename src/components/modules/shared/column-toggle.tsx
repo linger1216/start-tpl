@@ -72,7 +72,7 @@ export function ColumnToggle<TRow extends MockRow>({
 				<Columns3 className="size-3.5" />列
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-64 p-0">
-				<div className="border-b border-border px-3 py-2 text-[11.5px] text-muted-foreground">拖动排序 · 勾选显示</div>
+				<div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">拖动排序 · 勾选显示</div>
 				<div className="max-h-72 overflow-y-auto p-1">
 					{columns.map((column) => {
 						const label = typeof column.columnDef.header === "string" ? column.columnDef.header : column.id;
@@ -99,7 +99,7 @@ export function ColumnToggle<TRow extends MockRow>({
 									setOverId(null);
 								}}
 								className={cn(
-									"flex items-center gap-2 rounded-md px-1.5 py-1 text-[12.5px] hover:bg-muted/60",
+									"flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-muted/60",
 									isOver && "bg-brand-faint ring-1 ring-primary/40",
 									dragId === column.id && "opacity-50",
 								)}
@@ -122,11 +122,11 @@ export function ColumnToggle<TRow extends MockRow>({
 					})}
 				</div>
 				<div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-					<span className="text-[11px] text-muted-foreground">锁定的列不可隐藏</span>
+					<span className="text-xs text-muted-foreground">锁定的列不可隐藏</span>
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-6 px-2 text-[11.5px]"
+						className="h-6 px-2 text-xs"
 						onClick={() => {
 							table.setColumnVisibility({});
 							table.setColumnOrder(currentOrder);

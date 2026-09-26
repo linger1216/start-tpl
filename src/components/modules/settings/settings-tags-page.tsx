@@ -199,7 +199,7 @@ export function SettingsTagsPage() {
 						{rows.length === 0 ? (
 							<div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
 								<FolderTree className="size-8 opacity-40" />
-								<p className="text-[13px]">还没有标签,点右上角新增一个维度。</p>
+								<p className="text-sm">还没有标签,点右上角新增一个维度。</p>
 							</div>
 						) : (
 							<SettingsTagsTree
@@ -227,20 +227,20 @@ export function SettingsTagsPage() {
 						{!selected ? (
 							<div className="flex h-48 flex-col items-center justify-center gap-1 text-center text-muted-foreground">
 								<TagsIcon className="size-8 opacity-40" />
-								<p className="text-[13px]">从左侧树点选一个节点查看详情。</p>
+								<p className="text-sm">从左侧树点选一个节点查看详情。</p>
 							</div>
 						) : (
 							<div className="space-y-4">
 								<div className="flex items-start justify-between gap-3">
 									<div className="min-w-0">
 										<div className="flex items-center gap-2">
-											<h3 className="truncate text-[18px] font-semibold text-foreground">{selected.label}</h3>
+											<h3 className="truncate text-lg font-semibold text-foreground">{selected.label}</h3>
 											<Badge variant={selected.parentId === null ? "default" : "secondary"}>
 												{selected.parentId === null ? "维度" : "标签"}
 											</Badge>
 										</div>
 										{selected.value ? (
-											<p className="mt-1 font-mono text-[12.5px] text-muted-foreground">{selected.value}</p>
+											<p className="mt-1 font-mono text-xs text-muted-foreground">{selected.value}</p>
 										) : null}
 									</div>
 									<div className="flex shrink-0 items-center gap-1">
@@ -252,7 +252,7 @@ export function SettingsTagsPage() {
 									</div>
 								</div>
 
-								<dl className="grid grid-cols-2 gap-3 text-[12.5px]">
+								<dl className="grid grid-cols-2 gap-3 text-xs">
 									<div>
 										<dt className="text-muted-foreground">含义</dt>
 										<dd className="mt-0.5 text-foreground">{selected.desc || "—"}</dd>
@@ -269,7 +269,7 @@ export function SettingsTagsPage() {
 									</div>
 									<div>
 										<dt className="text-muted-foreground">节点 id</dt>
-										<dd className="mt-0.5 truncate font-mono text-[11.5px] text-muted-foreground">{selected.id}</dd>
+										<dd className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{selected.id}</dd>
 									</div>
 								</dl>
 							</div>

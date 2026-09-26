@@ -56,7 +56,7 @@ function DemoStore() {
 					<CardDescription>selectFullName(store.state) —— 普通函数,不需要额外的 store。</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<p className="font-heading text-[20px] font-semibold text-foreground">{fullName}</p>
+					<p className="font-heading text-xl font-semibold text-foreground">{fullName}</p>
 				</CardContent>
 			</Card>
 		</div>

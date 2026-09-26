@@ -53,13 +53,13 @@ export function userColumns({
 			header: "姓名",
 			sortFn: "text",
 			size: 150,
-			cell: (ctx) => <span className="text-[13px]">{ctx.getValue() || "(未填姓名)"}</span>,
+			cell: (ctx) => <span className="text-sm">{ctx.getValue() || "(未填姓名)"}</span>,
 		}),
 		columnHelper.accessor("email", {
 			header: "邮箱",
 			sortFn: "text",
 			size: 220,
-			cell: (ctx) => <span className="text-[12.5px] text-muted-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="text-xs text-muted-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("departmentNames", {
 			header: "部门",
@@ -68,7 +68,7 @@ export function userColumns({
 				const list = ctx.getValue();
 				// 多值一律走 BadgeList —— 别自己拿 span 拼一个"长得像徽章"的东西:
 				// 那样字号 / 圆角 / 配色会各写各的,和详情页 / 别处的徽章对不上。
-				if (list.length === 0) return <span className="text-[12px] text-muted-foreground">未加入部门</span>;
+				if (list.length === 0) return <span className="text-xs text-muted-foreground">未加入部门</span>;
 				return <BadgeList values={list} layout="wrap" color="stable" />;
 			},
 		}),
@@ -77,7 +77,7 @@ export function userColumns({
 			size: 200,
 			cell: (ctx) => {
 				const list = ctx.getValue();
-				if (list.length === 0) return <span className="text-[12px] text-warn-fg">未分配(看不到任何菜单)</span>;
+				if (list.length === 0) return <span className="text-xs text-warn-fg">未分配(看不到任何菜单)</span>;
 				return <BadgeList values={list} layout="wrap" color="stable" />;
 			},
 		}),
@@ -85,7 +85,7 @@ export function userColumns({
 			header: "邮箱已验证",
 			size: 100,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-[11px]">
+				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
 					{ctx.getValue() ? "已验证" : "未验证"}
 				</Badge>
 			),
@@ -100,7 +100,7 @@ export function userColumns({
 				return (
 					<Avatar className="size-8">
 						{url ? <AvatarImage src={url} alt={who} /> : null}
-						<AvatarFallback className="text-[11px]">{(who || "?").slice(0, 1)}</AvatarFallback>
+						<AvatarFallback className="text-xs">{(who || "?").slice(0, 1)}</AvatarFallback>
 					</Avatar>
 				);
 			},
@@ -109,7 +109,7 @@ export function userColumns({
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="text-[12px] text-muted-foreground tabular-nums">
+				<span className="text-xs text-muted-foreground tabular-nums">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -118,7 +118,7 @@ export function userColumns({
 			header: "更新时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="text-[12px] text-muted-foreground tabular-nums">
+				<span className="text-xs text-muted-foreground tabular-nums">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -126,7 +126,7 @@ export function userColumns({
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground/70">{ctx.getValue()}</span>,
 		}),
 		actionsColumn<UserRow>({ size: 160, onView, onEdit, onDelete }),
 	]);

@@ -206,7 +206,7 @@ export function SettingsMenusPage() {
 						</div>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
-						<p className="text-[11.5px] text-muted-foreground">
+						<p className="text-xs text-muted-foreground">
 							拖拽行可调序(仅限同级:上半插入到目标前,下半插入到目标后);拖到别的层级会显示禁止态。选中某行后也可用 ↑ / ↓
 							键在同级内移动。
 						</p>
@@ -237,7 +237,7 @@ export function SettingsMenusPage() {
 				{/* 宽屏吸顶:万一页面还是需要滚动,详情也不会跑到视野外 */}
 				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader>
-						<CardTitle className="text-[14px]">菜单详情</CardTitle>
+						<CardTitle className="text-sm">菜单详情</CardTitle>
 					</CardHeader>
 					<CardContent className="min-h-0 flex-1 overflow-y-auto">
 						<SettingsMenusForm
@@ -284,7 +284,7 @@ export function SettingsMenusPage() {
 				</Card>
 			</div>
 
-			<p className="text-[12.5px] text-muted-foreground">
+			<p className="text-xs text-muted-foreground">
 				注:菜单树的图标名对应 `sidebar` 里登记的图标集,认不出的图标会退回默认图标;路径全局唯一,重复会在保存时被拦下。
 			</p>
 

@@ -133,7 +133,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 				<nav
 					key={pathname}
 					aria-label="breadcrumb"
-					className="stagger flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground"
+					className="stagger flex min-w-0 items-center gap-1 text-sm text-muted-foreground"
 				>
 					{crumbs.map((c, i) => (
 						<span key={`${c.label}:${c.href ?? ""}`} className="flex items-center gap-1">
@@ -163,7 +163,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 					<Search aria-hidden="true" />
 					<Input
 						placeholder="搜索页面 / 档案 / 主体"
-						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-[13px] transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-brand-ring"
+						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-sm transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-brand-ring"
 					/>
 					<span className="shortcut">⌘ K</span>
 				</div>
@@ -189,18 +189,18 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 						aria-label="用户菜单"
 						className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/40"
 					>
-						<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-[12px] font-medium text-foreground ring-1 ring-border">
+						<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-foreground ring-1 ring-border">
 							{(user.name || user.email).slice(0, 1).toUpperCase()}
 						</span>
-						<span className="hidden max-w-32 truncate text-[13px] sm:block">{user.name || user.email}</span>
+						<span className="hidden max-w-32 truncate text-sm sm:block">{user.name || user.email}</span>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-56">
 						<DropdownMenuLabel className="font-normal">
-							<div className="truncate text-[13px] font-medium text-foreground">{user.name || "(未填姓名)"}</div>
-							<div className="truncate text-[11.5px] text-muted-foreground">{user.email}</div>
+							<div className="truncate text-sm font-medium text-foreground">{user.name || "(未填姓名)"}</div>
+							<div className="truncate text-xs text-muted-foreground">{user.email}</div>
 						</DropdownMenuLabel>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem onClick={() => void handleSignOut()} className="gap-2 text-[13px]">
+						<DropdownMenuItem onClick={() => void handleSignOut()} className="gap-2 text-sm">
 							<LogOut className="size-3.5" />
 							退出登录
 						</DropdownMenuItem>

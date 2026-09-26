@@ -29,7 +29,7 @@ export function SettingsDictionaryDetail({
 			description={<span className="font-mono">{row?.code ?? ""}</span>}
 			badge={
 				row ? (
-					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-[11px]">
+					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
 						{row.status === 1 ? "启用" : "停用"}
 					</Badge>
 				) : null
@@ -40,39 +40,39 @@ export function SettingsDictionaryDetail({
 				<>
 					<div className="flex flex-col gap-0">
 						<DetailRow label="ID">
-							<span className="font-mono text-[12px]">{row.id}</span>
+							<span className="font-mono text-xs">{row.id}</span>
 						</DetailRow>
 						<DetailRow label="字典名称">
-							<span className="text-[13px] font-medium">{row.name}</span>
+							<span className="text-sm font-medium">{row.name}</span>
 						</DetailRow>
 						<DetailRow label="字典编码">
-							<span className="font-mono text-[12px]">{row.code}</span>
+							<span className="font-mono text-xs">{row.code}</span>
 						</DetailRow>
 						{/* 项数是派生值:用「N 项」胶囊,和下面那份真实清单对得上 */}
 						<DetailRow label="项数">
-							<Badge variant="secondary" className="tabular-nums text-[11px]">
+							<Badge variant="secondary" className="tabular-nums text-xs">
 								{row.items.length} 项
 							</Badge>
 						</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-[13px]">{row.remark || "—"}</span>
+							<span className="text-sm">{row.remark || "—"}</span>
 						</DetailRow>
 					</div>
 					<div className="space-y-1.5">
-						<div className="text-[12px] font-medium text-muted-foreground">字典项(顺序即下拉顺序)</div>
+						<div className="text-xs font-medium text-muted-foreground">字典项(顺序即下拉顺序)</div>
 						{row.items.length === 0 ? (
-							<p className="text-[13px] text-muted-foreground">(还没有项)</p>
+							<p className="text-sm text-muted-foreground">(还没有项)</p>
 						) : (
 							<ol className="space-y-1">
 								{row.items.map((item, index) => (
 									<li
 										key={item.value}
-										className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-[12.5px]"
+										className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs"
 									>
-										<span className="w-6 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
+										<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
 											{index + 1}
 										</span>
-										<span className="font-mono text-[11.5px] text-muted-foreground">{item.value}</span>
+										<span className="font-mono text-xs text-muted-foreground">{item.value}</span>
 										<span className="truncate text-foreground">{item.label}</span>
 									</li>
 								))}

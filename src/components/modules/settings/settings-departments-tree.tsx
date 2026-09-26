@@ -50,7 +50,7 @@ export function SettingsDepartmentsTree({
 		return (
 			<div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
 				<Building2 className="size-8 opacity-40" />
-				<p className="text-[12.5px]">还没有部门,点右上角的 ＋ 新增一个</p>
+				<p className="text-xs">还没有部门,点右上角的 ＋ 新增一个</p>
 			</div>
 		);
 	}
@@ -68,9 +68,9 @@ export function SettingsDepartmentsTree({
 			onReorder={onReorder}
 			renderRow={(node) => (
 				<>
-					<span className="min-w-0 flex-1 truncate text-[13px]">{node.name}</span>
+					<span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
 					{node.status === 0 ? (
-						<Badge variant="outline" className="px-1.5 text-[10.5px] text-muted-foreground">
+						<Badge variant="outline" className="px-1.5 text-xs text-muted-foreground">
 							已停用
 						</Badge>
 					) : null}

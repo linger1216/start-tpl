@@ -246,7 +246,7 @@ export function SettingsRolesPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
+			<Card className="flex min-h-104 flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<KeyRound className="size-4 text-muted-foreground" />

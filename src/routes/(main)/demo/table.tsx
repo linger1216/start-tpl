@@ -93,7 +93,7 @@ function TableDemo() {
 								className="h-8 w-64 pl-8"
 							/>
 						</div>
-						<p className="text-[13px] text-muted-foreground">
+						<p className="text-sm text-muted-foreground">
 							匹配 {matched} 条 · 共 {pageCount} 页
 						</p>
 					</div>
@@ -146,7 +146,7 @@ function TableDemo() {
 					</Table>
 
 					<div className="flex flex-wrap items-center justify-between gap-3">
-						<p className="text-[13px] text-muted-foreground">
+						<p className="text-sm text-muted-foreground">
 							第 {pageIndex + 1} / {Math.max(pageCount, 1)} 页 · 每页 {pageSize} 条
 						</p>
 						<div className="flex items-center gap-2">

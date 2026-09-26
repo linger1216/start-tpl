@@ -10,14 +10,14 @@ import { ActionButton } from "#/components/ui/action-button";
 export function SettingsParametersCleanup() {
 	return (
 		<div className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2">
-			<span className="text-[12.5px] text-muted-foreground">
+			<span className="text-xs text-muted-foreground">
 				raw 保留清理:模板未启用 ——
 				<span className="ml-1 font-medium text-foreground">把清理任务接上后此按钮可用</span>
 			</span>
 			<ActionButton tone="danger" disabled title="清理任务尚未接入,详见 lib/sys-para.ts">
 				立即清理
 			</ActionButton>
-			<span className="text-[11.5px] text-muted-foreground">只动「已抽取」;未抽取 / 失败的行永不清理。</span>
+			<span className="text-xs text-muted-foreground">只动「已抽取」;未抽取 / 失败的行永不清理。</span>
 		</div>
 	);
 }

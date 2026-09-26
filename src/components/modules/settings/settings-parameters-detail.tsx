@@ -32,10 +32,10 @@ export function SettingsParametersDetail({
 			badge={
 				row ? (
 					<>
-						<Badge variant="secondary" className="font-mono text-[11px]">
+						<Badge variant="secondary" className="font-mono text-xs">
 							{PARA_TYPE_META[row.type].label}
 						</Badge>
-						<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-[11px]">
+						<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
 							{row.status === 1 ? "启用" : "停用"}
 						</Badge>
 					</>
@@ -49,24 +49,24 @@ export function SettingsParametersDetail({
 					{/* 字段直接内联写:哪一行要特殊渲染(徽章 / 完整 JSON / 自定义块)就地决定,不经过"字段声明"这层 */}
 					<div className="flex flex-col gap-0">
 						<DetailRow label="ID">
-							<span className="font-mono text-[12px]">{row.id}</span>
+							<span className="font-mono text-xs">{row.id}</span>
 						</DetailRow>
 						<DetailRow label="参数名">
-							<span className="font-mono text-[12px]">{row.key}</span>
+							<span className="font-mono text-xs">{row.key}</span>
 						</DetailRow>
 						<DetailRow label="类型">{PARA_TYPE_META[row.type].label}</DetailRow>
 						<DetailRow label="分组">{row.group || "—"}</DetailRow>
 						<DetailRow label="可编辑">{row.editable ? "允许(editable = 1)" : "代码内置,不可改"}</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-[13px]">{row.remark || "—"}</span>
+							<span className="text-sm">{row.remark || "—"}</span>
 						</DetailRow>
 					</div>
 					<div className="space-y-1.5">
-						<div className="text-[12px] font-medium text-muted-foreground">当前值</div>
+						<div className="text-xs font-medium text-muted-foreground">当前值</div>
 						{/* 完整值:不截断、不折行丢字,长 JSON 也能整段看完并复制 */}
 						<pre
 							translate="no"
-							className="max-h-72 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap break-all text-foreground"
+							className="max-h-72 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-foreground"
 						>
 							{row.value === "" ? "(空)" : row.value}
 						</pre>

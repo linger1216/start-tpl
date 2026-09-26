@@ -29,14 +29,14 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "字典名称",
 			sortFn: "text",
 			size: 160,
-			cell: (ctx) => <span className="text-[13px] font-medium text-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="text-sm font-medium text-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("code", {
 			header: "字典编码",
 			sortFn: "text",
 			size: 170,
 			cell: (ctx) => (
-				<span translate="no" className="font-mono text-[12px] text-muted-foreground">
+				<span translate="no" className="font-mono text-xs text-muted-foreground">
 					{ctx.getValue()}
 				</span>
 			),
@@ -49,17 +49,15 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 				return (
 					<div className="flex flex-wrap items-center gap-1">
 						{items.slice(0, 4).map((item) => (
-							<Badge key={item.value} variant="outline" className="gap-1 text-[11.5px]">
+							<Badge key={item.value} variant="outline" className="gap-1 text-xs">
 								{item.label}
-								<span translate="no" className="font-mono text-[10.5px] text-muted-foreground">
+								<span translate="no" className="font-mono text-xs text-muted-foreground">
 									{item.value}
 								</span>
 							</Badge>
 						))}
-						{items.length > 4 ? (
-							<span className="text-[11.5px] text-muted-foreground">等 {items.length} 项</span>
-						) : null}
-						{items.length === 0 ? <span className="text-[12px] text-muted-foreground">—</span> : null}
+						{items.length > 4 ? <span className="text-xs text-muted-foreground">等 {items.length} 项</span> : null}
+						{items.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : null}
 					</div>
 				);
 			},
@@ -69,7 +67,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "项数",
 			size: 80,
 			cell: (ctx) => (
-				<span className="block text-right tabular-nums text-[12.5px] text-muted-foreground">
+				<span className="block text-right tabular-nums text-xs text-muted-foreground">
 					{ctx.row.original.items.length}
 				</span>
 			),
@@ -78,7 +76,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "状态",
 			size: 84,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() === 1 ? "secondary" : "outline"} className="text-[11.5px]">
+				<Badge variant={ctx.getValue() === 1 ? "secondary" : "outline"} className="text-xs">
 					{ctx.getValue() === 1 ? "启用" : "停用"}
 				</Badge>
 			),
@@ -87,7 +85,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "说明",
 			size: 240,
 			cell: (ctx) => (
-				<span className="line-clamp-2 max-w-64 text-[12.5px] text-muted-foreground" title={ctx.getValue() ?? ""}>
+				<span className="line-clamp-2 max-w-64 text-xs text-muted-foreground" title={ctx.getValue() ?? ""}>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -96,7 +94,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -105,7 +103,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			header: "更新时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -113,7 +111,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground/70">{ctx.getValue()}</span>,
 		}),
 		actionsColumn<SettingsDictRow>({
 			size: 190,

@@ -193,7 +193,7 @@ export function TagInput({
 			/>
 			{suggestions && suggestions.filter((item) => !value.some((e) => e.value === item)).length > 0 ? (
 				<div className="flex flex-wrap items-center gap-1.5">
-					<span className="text-[11.5px] text-muted-foreground">可选:</span>
+					<span className="text-xs text-muted-foreground">可选:</span>
 					{suggestions
 						.filter((item) => !value.some((e) => e.value === item))
 						.map((item) => (
@@ -202,7 +202,7 @@ export function TagInput({
 								type="button"
 								disabled={isDisabled || remaining === 0}
 								onClick={() => onChange(dedupEntries([...value, { value: item }]))}
-								className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11.5px] text-muted-foreground transition-colors enabled:hover:border-primary enabled:hover:text-foreground disabled:opacity-50"
+								className="rounded-md border border-border bg-card px-1.5 py-0.5 text-xs text-muted-foreground transition-colors enabled:hover:border-primary enabled:hover:text-foreground disabled:opacity-50"
 							>
 								+ {item}
 							</button>

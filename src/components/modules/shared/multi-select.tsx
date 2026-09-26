@@ -98,7 +98,7 @@ export function MultiSelect({
 		<div className={cn(className, fill && "flex min-h-0 flex-1 flex-col")}>
 			<div className="flex flex-wrap items-center gap-2">
 				<ListChecks className="size-3.5 text-primary" />
-				<span className="text-[12px] text-muted-foreground tabular-nums">
+				<span className="text-xs text-muted-foreground tabular-nums">
 					已选 <span className="font-medium text-foreground">{value.length}</span> 项 / 共 {options.length} 项
 				</span>
 				<Input
@@ -134,7 +134,7 @@ export function MultiSelect({
 				style={fill ? undefined : { maxHeight }}
 			>
 				{rows.length === 0 ? (
-					<p className="px-1 py-2 text-[12.5px] text-muted-foreground">{emptyText}</p>
+					<p className="px-1 py-2 text-xs text-muted-foreground">{emptyText}</p>
 				) : (
 					rows.map((option) => (
 						// 行里**唯一的表单控件**是 Checkbox(带 aria-label);标签文字包一个 tabIndex={-1} 的按钮,
@@ -157,21 +157,19 @@ export function MultiSelect({
 								type="button"
 								tabIndex={-1}
 								disabled={disabled}
-								className="min-w-0 flex-1 truncate text-left text-[13px] text-foreground disabled:cursor-not-allowed"
+								className="min-w-0 flex-1 truncate text-left text-sm text-foreground disabled:cursor-not-allowed"
 								onClick={() => toggle(option.value, !selected.has(option.value))}
 							>
 								{option.label}
 							</button>
 							{option.hint ? (
-								<span className="shrink-0 truncate text-[11px] text-muted-foreground">{option.hint}</span>
+								<span className="shrink-0 truncate text-xs text-muted-foreground">{option.hint}</span>
 							) : null}
 						</div>
 					))
 				)}
 				{hidden > 0 ? (
-					<p className="px-1.5 pt-1 text-[11.5px] text-muted-foreground">
-						还有 {hidden} 项没显示 —— 输入关键词缩小范围
-					</p>
+					<p className="px-1.5 pt-1 text-xs text-muted-foreground">还有 {hidden} 项没显示 —— 输入关键词缩小范围</p>
 				) : null}
 			</div>
 		</div>

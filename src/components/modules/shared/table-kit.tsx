@@ -282,7 +282,7 @@ export function TableLoadingShell({
 				<div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
 					<Badge
 						variant="outline"
-						className="h-7 gap-1.5 bg-background/95 px-2.5 text-[12px] text-muted-foreground shadow-sm"
+						className="h-7 gap-1.5 bg-background/95 px-2.5 text-xs text-muted-foreground shadow-sm"
 					>
 						<Loader2 className="size-3.5 animate-spin" />
 						{label}

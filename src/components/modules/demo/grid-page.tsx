@@ -237,7 +237,7 @@ export function GridPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
+			<Card className="flex min-h-104 flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Grid3x3 className="size-4 text-muted-foreground" />
@@ -257,7 +257,7 @@ export function GridPage() {
 				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 					{selected.size > 0 ? (
 						<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-							<span className="text-[12.5px] text-foreground">
+							<span className="text-xs text-foreground">
 								已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
 								<span className="ml-2 text-muted-foreground">
 									(

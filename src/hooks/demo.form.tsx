@@ -34,10 +34,10 @@ function FieldShell({
 }) {
 	return (
 		<div className="space-y-1.5">
-			<Label className="text-[12.5px]">{label}</Label>
+			<Label className="text-xs">{label}</Label>
 			{children}
-			{hint && !error ? <p className="text-[11.5px] text-muted-foreground">{hint}</p> : null}
-			{error ? <p className="text-[11.5px] text-[color:var(--danger-fg)]">{error}</p> : null}
+			{hint && !error ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+			{error ? <p className="text-xs text-[color:var(--danger-fg)]">{error}</p> : null}
 		</div>
 	);
 }
@@ -119,7 +119,7 @@ function SwitchField({ label }: { label: string }) {
 	const field = useFieldContext<boolean>();
 	return (
 		<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-			<Label className="text-[13px]">{label}</Label>
+			<Label className="text-sm">{label}</Label>
 			<Switch checked={field.state.value} onCheckedChange={(checked) => field.handleChange(checked === true)} />
 		</div>
 	);
@@ -151,7 +151,7 @@ function SubscribeButton({ label = "提交" }: { label?: string }) {
 				<button
 					type="submit"
 					disabled={!canSubmit}
-					className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-opacity disabled:opacity-60"
+					className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-60"
 				>
 					{isSubmitting ? "提交中…" : label}
 				</button>

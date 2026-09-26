@@ -88,7 +88,7 @@ export function NotificationBell() {
 				<Bell className="size-4" />
 				{unread > 0 ? (
 					// 未读用**品牌色**而不是告警红:未读不是告警(告警语义只留给 success/warn/danger)
-					<span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-medium text-primary-foreground tabular-nums">
+					<span className="absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs leading-none font-medium text-primary-foreground tabular-nums">
 						{unread > 9 ? "9+" : unread}
 					</span>
 				) : null}
@@ -96,7 +96,7 @@ export function NotificationBell() {
 
 			<DropdownMenuContent align="end" className="w-80 p-0">
 				<div className="flex items-center justify-between border-b border-border px-3 py-2">
-					<span className="text-[13px] font-medium text-foreground">通知</span>
+					<span className="text-sm font-medium text-foreground">通知</span>
 					{/* ⚠️ **常驻**:以前只在有未读时渲染,结果"全部已读"会突然消失 —— 用户以为没这个功能(实测反馈) */}
 					<ActionButton disabled={pending || unread === 0} onClick={() => readAllMutation.mutate()}>
 						全部已读
@@ -104,7 +104,7 @@ export function NotificationBell() {
 				</div>
 
 				{items.length === 0 ? (
-					<div className="px-3 py-8 text-center text-[12.5px] text-muted-foreground">暂无通知</div>
+					<div className="px-3 py-8 text-center text-xs text-muted-foreground">暂无通知</div>
 				) : (
 					<div className="max-h-[60vh] overflow-auto py-1">
 						{items.map((item) => {
@@ -128,16 +128,16 @@ export function NotificationBell() {
 										<span
 											className={
 												item.read
-													? "block truncate text-[12.5px] text-muted-foreground"
-													: "block truncate text-[12.5px] font-medium text-foreground"
+													? "block truncate text-xs text-muted-foreground"
+													: "block truncate text-xs font-medium text-foreground"
 											}
 										>
 											{item.title}
 										</span>
 										{item.body ? (
-											<span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">{item.body}</span>
+											<span className="mt-0.5 block truncate text-xs text-muted-foreground">{item.body}</span>
 										) : null}
-										<span className="mt-0.5 block text-[11px] text-muted-foreground/70 tabular-nums">
+										<span className="mt-0.5 block text-xs text-muted-foreground/70 tabular-nums">
 											{formatLocalMinute(item.createTime)}
 											{item.path ? " · 点击跳转" : ""}
 										</span>
@@ -149,7 +149,7 @@ export function NotificationBell() {
 				)}
 
 				<DropdownMenuSeparator className="my-0" />
-				<div className="px-3 py-1.5 text-[11px] text-muted-foreground/70">只显示最近 10 条</div>
+				<div className="px-3 py-1.5 text-xs text-muted-foreground/70">只显示最近 10 条</div>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

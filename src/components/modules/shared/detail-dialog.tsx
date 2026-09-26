@@ -41,7 +41,7 @@ export function DetailMeta({ meta, className }: { meta?: DetailMetaInfo | null; 
 	const updated = meta.updatedAt ? formatLocalMinute(meta.updatedAt) : null;
 	if (!created && !updated) return null;
 	return (
-		<div className={cn("flex flex-wrap items-center flex-1 gap-x-4 text-[11px]", className)}>
+		<div className={cn("flex flex-wrap items-center flex-1 gap-x-4 text-xs", className)}>
 			{created ? <span>创建于 {created}</span> : null}
 			{created && updated ? <span aria-hidden>·</span> : null}
 			{updated ? <span>更新于 {updated}</span> : null}

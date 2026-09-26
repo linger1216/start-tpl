@@ -170,13 +170,13 @@ export function NoticePage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
+			<Card className="flex min-h-104 flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Bell className="size-4 text-muted-foreground" />
 						通知清单
 					</CardTitle>
-					<span className="text-[12px] text-muted-foreground tabular-nums">匹配 {filtered.length} 条</span>
+					<span className="text-xs text-muted-foreground tabular-nums">匹配 {filtered.length} 条</span>
 				</CardHeader>
 				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>

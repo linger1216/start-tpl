@@ -69,14 +69,14 @@ function PermissionTreeNode({
 					checked={on}
 					onCheckedChange={(checked) => onToggle(ids, checked === true)}
 				/>
-				<span className={depth === 0 ? "text-[13px] font-medium text-foreground" : "text-[12px] text-foreground"}>
+				<span className={depth === 0 ? "text-sm font-medium text-foreground" : "text-xs text-foreground"}>
 					{node.name}
 				</span>
-				<span className="text-[11px] tabular-nums text-muted-foreground">
+				<span className="text-xs tabular-nums text-muted-foreground">
 					{hit}/{ids.length}
 				</span>
 				{node.kind === "操作" ? (
-					<Badge variant="outline" className="text-[10px]">
+					<Badge variant="outline" className="text-xs">
 						操作
 					</Badge>
 				) : null}
@@ -120,7 +120,7 @@ export function PermissionTree({
 			{nodes.map((node) => (
 				<PermissionTreeNode key={node.id} node={node} keyword={keyword} selected={selected} onToggle={onToggle} />
 			))}
-			{visible.length === 0 ? <p className="text-[12px] text-muted-foreground">没有匹配的权限点</p> : null}
+			{visible.length === 0 ? <p className="text-xs text-muted-foreground">没有匹配的权限点</p> : null}
 		</>
 	);
 }
@@ -157,7 +157,7 @@ export function PermissionPicker({
 		<div className={className}>
 			<div className="flex flex-wrap items-center gap-2">
 				<KeyRound className="size-3.5 text-primary" />
-				<span className="text-[13px] font-medium text-foreground">
+				<span className="text-sm font-medium text-foreground">
 					{title}({selected.length} 项已选 / 共 {total} 项)
 				</span>
 				<Input

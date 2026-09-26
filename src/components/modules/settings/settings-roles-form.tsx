@@ -203,7 +203,7 @@ export function SettingsRolesForm({
 									id="role-name"
 									value={name}
 									placeholder="如:部门主管"
-									className="h-8 text-[13px]"
+									className="h-8 text-sm"
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
@@ -212,7 +212,7 @@ export function SettingsRolesForm({
 									id="role-code"
 									value={code}
 									placeholder="如:dept_manager"
-									className="h-8 font-mono text-[12.5px]"
+									className="h-8 font-mono text-xs"
 									onChange={(event) => setCode(event.target.value)}
 								/>
 							</DetailRow>
@@ -222,7 +222,7 @@ export function SettingsRolesForm({
 									value={remark}
 									rows={2}
 									placeholder="给人看的说明"
-									className="text-[12px]"
+									className="text-xs"
 									onChange={(event) => setRemark(event.target.value)}
 								/>
 							</DetailRow>
@@ -232,7 +232,7 @@ export function SettingsRolesForm({
 									type="number"
 									value={sort}
 									placeholder="0"
-									className="h-8 text-[13px]"
+									className="h-8 text-sm"
 									onChange={(event) => setSort(event.target.value)}
 								/>
 							</DetailRow>
@@ -258,12 +258,12 @@ export function SettingsRolesForm({
 								<DetailRow label="往上到第几层" htmlFor="role-scope-level">
 									<Input
 										id="role-scope-level"
-										className="h-8 text-[13px]"
+										className="h-8 text-sm"
 										value={scopeLevel}
 										onChange={(e) => setScopeLevel(e.target.value)}
 										placeholder="1"
 									/>
-									<span className="mt-1 block text-[11.5px] text-muted-foreground">
+									<span className="mt-1 block text-xs text-muted-foreground">
 										从根(第 0 层)往下数;例:区 → 街镇(1) → 部门(2),填 1 就是「本街镇及以下」
 									</span>
 								</DetailRow>
@@ -317,7 +317,7 @@ export function SettingsRolesForm({
 					{editing ? (
 						<TabsContent value="menus" className="flex min-h-0 flex-1 flex-col">
 							<div className="flex min-h-0 flex-1 flex-col gap-3">
-								<p className="text-[11.5px] text-muted-foreground">
+								<p className="text-xs text-muted-foreground">
 									勾中的菜单会出现在侧边栏;勾中的**按钮**决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
 									保存时服务端会自动补全上级菜单。
 								</p>

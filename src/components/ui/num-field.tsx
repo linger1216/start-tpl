@@ -38,7 +38,7 @@ export function NumField({
 			min={min}
 			max={max}
 			disabled={disabled}
-			className={cn("h-7 w-16 px-2 text-[12.5px] tabular-nums", className)}
+			className={cn("h-7 w-16 px-2 text-xs tabular-nums", className)}
 		/>
 	);
 }

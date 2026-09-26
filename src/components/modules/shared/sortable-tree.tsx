@@ -340,7 +340,7 @@ export function SortableTree<T extends SortableTreeNode>({
 		 */
 		<div className="flex min-h-0 flex-1 flex-col">
 			<div className="flex shrink-0 items-center justify-between gap-2 pb-1">
-				<span className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+				<span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 					<ListTree className="size-3.5" />共 <span className="font-medium tabular-nums text-foreground">{total}</span>{" "}
 					个节点
 					{searching ? (
@@ -370,7 +370,7 @@ export function SortableTree<T extends SortableTreeNode>({
 						onChange={(event) => setKeyword(event.target.value)}
 						placeholder={searchPlaceholder}
 						aria-label={searchPlaceholder}
-						className="h-7 pr-7 pl-7 text-[12.5px]"
+						className="h-7 pr-7 pl-7 text-xs"
 					/>
 					<button
 						type="button"
@@ -387,7 +387,7 @@ export function SortableTree<T extends SortableTreeNode>({
 			<div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
 				<div role="tree" aria-label={ariaLabel} className="space-y-0.5">
 					{filtered.length === 0 ? (
-						<p className="px-2 py-6 text-center text-[12.5px] text-muted-foreground">
+						<p className="px-2 py-6 text-center text-xs text-muted-foreground">
 							{searching ? "没有匹配的节点" : "还没有节点"}
 						</p>
 					) : (

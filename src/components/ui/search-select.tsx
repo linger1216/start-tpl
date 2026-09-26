@@ -107,7 +107,7 @@ export function SearchSelect<T extends string = string>({
 				disabled={disabled}
 				aria-disabled={disabled}
 				className={cn(
-					"flex h-8 items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-[13px] whitespace-nowrap transition-colors outline-none",
+					"flex h-8 items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
 					disabled ? "cursor-not-allowed opacity-50" : "hover:border-foreground/50 hover:text-foreground",
 					triggerClassName,
 				)}
@@ -143,7 +143,7 @@ export function SearchSelect<T extends string = string>({
 						onKeyDown={onInputKeyDown}
 						placeholder="搜索…"
 						className={cn(
-							"h-7 w-full rounded-lg border border-input bg-background pr-2 pl-7 text-[13px] outline-none",
+							"h-7 w-full rounded-lg border border-input bg-background pr-2 pl-7 text-sm outline-none",
 							inputClassName,
 						)}
 					/>
@@ -151,7 +151,7 @@ export function SearchSelect<T extends string = string>({
 
 				<div className="min-h-0 flex-1 overflow-y-auto p-2.5 pt-1">
 					{filtered.length === 0 ? (
-						<div className="px-2.5 py-2 text-[12.5px] text-muted-foreground">{emptyText}</div>
+						<div className="px-2.5 py-2 text-xs text-muted-foreground">{emptyText}</div>
 					) : (
 						filtered.map((o, i) => {
 							const active = o.value === value;
@@ -165,7 +165,7 @@ export function SearchSelect<T extends string = string>({
 									onClick={() => pick(o.value)}
 									onMouseEnter={() => setHighlight(i)}
 									className={cn(
-										"flex w-full items-center gap-1 rounded-lg px-1.5 py-1.5 text-left text-[13px] text-foreground transition-colors",
+										"flex w-full items-center gap-1 rounded-lg px-1.5 py-1.5 text-left text-sm text-foreground transition-colors",
 										highlighted && "bg-muted/60",
 										active && "font-medium",
 									)}

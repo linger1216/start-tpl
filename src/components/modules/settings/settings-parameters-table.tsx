@@ -72,7 +72,7 @@ export function parameterColumns({
 			sortFn: "text",
 			size: 240,
 			cell: (ctx) => (
-				<span translate="no" className="font-mono text-[12px] text-foreground">
+				<span translate="no" className="font-mono text-xs text-foreground">
 					{ctx.getValue()}
 				</span>
 			),
@@ -82,7 +82,7 @@ export function parameterColumns({
 			sortFn: "text",
 			size: 130,
 			cell: (ctx) => (
-				<Badge variant="secondary" className="text-[11.5px]">
+				<Badge variant="secondary" className="text-xs">
 					{ctx.getValue()}
 				</Badge>
 			),
@@ -91,7 +91,7 @@ export function parameterColumns({
 			header: "当前值",
 			size: 240,
 			cell: (ctx) => (
-				<span translate="no" className="font-mono text-[12.5px] font-medium text-foreground">
+				<span translate="no" className="font-mono text-xs font-medium text-foreground">
 					<TextCell value={previewValue(ctx.row.original)} truncate />
 				</span>
 			),
@@ -100,14 +100,14 @@ export function parameterColumns({
 			header: "类型",
 			size: 100,
 			cell: (ctx) => (
-				<Badge className={`text-[11px] ${TYPE_TONE[ctx.getValue()]}`}>{PARA_TYPE_META[ctx.getValue()].label}</Badge>
+				<Badge className={`text-xs ${TYPE_TONE[ctx.getValue()]}`}>{PARA_TYPE_META[ctx.getValue()].label}</Badge>
 			),
 		}),
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
 			cell: (ctx) => (
-				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-[11px]">
+				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
 					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
 				</Badge>
 			),
@@ -116,7 +116,7 @@ export function parameterColumns({
 			header: "可编辑",
 			size: 96,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-[11px]">
+				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
 					{ctx.getValue() ? "可改" : "内置只读"}
 				</Badge>
 			),
@@ -125,7 +125,7 @@ export function parameterColumns({
 			header: "说明",
 			size: 340,
 			cell: (ctx) => (
-				<span className="line-clamp-2 text-[12px] text-muted-foreground">
+				<span className="line-clamp-2 text-xs text-muted-foreground">
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -134,7 +134,7 @@ export function parameterColumns({
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -143,7 +143,7 @@ export function parameterColumns({
 			header: "更新时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12px] text-muted-foreground">
+				<span className="tabular-nums text-xs text-muted-foreground">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -152,7 +152,7 @@ export function parameterColumns({
 			header: "ID",
 			size: 200,
 			cell: (ctx) => (
-				<span className="font-mono text-[11px] text-muted-foreground/70">
+				<span className="font-mono text-xs text-muted-foreground/70">
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),

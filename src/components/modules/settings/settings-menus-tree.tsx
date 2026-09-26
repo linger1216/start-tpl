@@ -59,22 +59,22 @@ export function SettingsMenusTree({
 				return (
 					<>
 						{Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" /> : null}
-						<span className="min-w-0 flex-1 truncate text-[13px]">{node.name}</span>
+						<span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
 						{Number(node.type) !== MENU_TYPE.BUTTON && recordIdFromMenuDetailPath(node.path) ? (
-							<Badge variant="outline" className="px-1.5 text-[10.5px] text-primary">
+							<Badge variant="outline" className="px-1.5 text-xs text-primary">
 								参数化
 							</Badge>
 						) : null}
 						{Number(node.type) === MENU_TYPE.BUTTON ? (
-							<Badge variant="outline" className="px-1.5 text-[10.5px] text-hue-violet-fg">
+							<Badge variant="outline" className="px-1.5 text-xs text-hue-violet-fg">
 								按钮
 							</Badge>
 						) : null}
 						{Number(node.type) === MENU_TYPE.BUTTON && node.perm ? (
-							<span className="max-w-40 truncate font-mono text-[11px] text-muted-foreground/70">{node.perm}</span>
+							<span className="max-w-40 truncate font-mono text-xs text-muted-foreground/70">{node.perm}</span>
 						) : null}
 						{node.visible === 0 ? (
-							<Badge variant="outline" className="gap-1 px-1.5 text-[10.5px] text-muted-foreground">
+							<Badge variant="outline" className="gap-1 px-1.5 text-xs text-muted-foreground">
 								<EyeOff className="size-3" />
 								隐藏
 							</Badge>
@@ -86,9 +86,9 @@ export function SettingsMenusTree({
 						  所以:按钮只给「权限码」,不再重复一份 `#perm/…`。
 						*/}
 						{Number(node.type) === MENU_TYPE.BUTTON ? null : node.path ? (
-							<span className="max-w-40 truncate font-mono text-[11px] text-muted-foreground/70">{node.path}</span>
+							<span className="max-w-40 truncate font-mono text-xs text-muted-foreground/70">{node.path}</span>
 						) : (
-							<span className="text-[11px] text-muted-foreground/60">分组</span>
+							<span className="text-xs text-muted-foreground/60">分组</span>
 						)}
 					</>
 				);

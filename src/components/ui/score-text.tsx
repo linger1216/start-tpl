@@ -15,11 +15,11 @@ function scoreClassName(n: number): string {
  */
 export function ScoreText({ value, className }: { value: unknown; className?: string }) {
 	if (value === null || value === undefined || value === "") {
-		return <span className={cn("font-mono text-[12px] text-muted-foreground", className)}>{PLACEHOLDER_EMPTY}</span>;
+		return <span className={cn("font-mono text-xs text-muted-foreground", className)}>{PLACEHOLDER_EMPTY}</span>;
 	}
 	const n = Number(value);
 	if (Number.isNaN(n)) {
-		return <span className={cn("font-mono text-[12px] text-muted-foreground", className)}>{PLACEHOLDER_EMPTY}</span>;
+		return <span className={cn("font-mono text-xs text-muted-foreground", className)}>{PLACEHOLDER_EMPTY}</span>;
 	}
 	return <Badge className={cn(scoreClassName(n), className)}>{n.toFixed(1)}</Badge>;
 }

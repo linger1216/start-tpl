@@ -179,7 +179,7 @@ export function SettingsUsersPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
+			<Card className="flex min-h-104 flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Users className="size-4 text-muted-foreground" />
@@ -214,7 +214,7 @@ export function SettingsUsersPage() {
 				description={detailFor?.email ?? ""}
 				badge={
 					detailFor ? (
-						<Badge variant={detailFor.emailVerified ? "secondary" : "outline"} className="text-[11px]">
+						<Badge variant={detailFor.emailVerified ? "secondary" : "outline"} className="text-xs">
 							{detailFor.emailVerified ? "邮箱已验证" : "邮箱未验证"}
 						</Badge>
 					) : null
@@ -227,10 +227,10 @@ export function SettingsUsersPage() {
 				{detailFor ? (
 					<div className="grid gap-x-6 gap-y-1 sm:grid-cols-1">
 						<DetailRow label="ID">
-							<span className="font-mono text-[12px]">{detailFor.id}</span>
+							<span className="font-mono text-xs">{detailFor.id}</span>
 						</DetailRow>
 						<DetailRow label="姓名">
-							<span className="text-[13px] font-medium">{detailFor.name}</span>
+							<span className="text-sm font-medium">{detailFor.name}</span>
 						</DetailRow>
 						<DetailRow label="邮箱">{detailFor.email}</DetailRow>
 						<DetailRow label="邮箱已验证">{detailFor.emailVerified ? "是" : "否"}</DetailRow>
@@ -238,9 +238,9 @@ export function SettingsUsersPage() {
 							<div className="flex items-center gap-2">
 								<Avatar className="size-8">
 									{detailFor.image ? <AvatarImage src={detailFor.image} alt={detailFor.name} /> : null}
-									<AvatarFallback className="text-[11px]">{(detailFor.name || "?").slice(0, 1)}</AvatarFallback>
+									<AvatarFallback className="text-xs">{(detailFor.name || "?").slice(0, 1)}</AvatarFallback>
 								</Avatar>
-								<span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+								<span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
 									{detailFor.image ?? "—"}
 								</span>
 							</div>

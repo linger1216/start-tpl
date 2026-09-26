@@ -49,11 +49,11 @@ const LIST_STYLE: Record<TabVariant, string> = {
 /** 每种形态的未选中态(几何 + hover 提示) */
 const TRIGGER_BASE: Record<TabVariant, string> = {
 	underline:
-		"relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 	segmented:
-		"relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 text-[12.5px] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	pill: "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-[13px] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+	pill: "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 };
 
 /** 每种形态的选中态 —— 全部写成带 `data-active:` 前缀的字面量(见文件头) */
@@ -128,7 +128,7 @@ export function TabsTrigger({
 				<Badge
 					variant="secondary"
 					className={cn(
-						"h-[1.125rem] min-w-[1.25rem] rounded-full bg-muted px-1.5 text-[10.5px] font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
+						"h-[1.125rem] min-w-[1.25rem] rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
 						COUNT_ACTIVE[variant],
 					)}
 				>

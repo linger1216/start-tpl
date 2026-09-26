@@ -97,7 +97,7 @@ export function UiGalleryTable() {
 					header: "编号",
 					sortFn: "text",
 					size: 130,
-					cell: (ctx) => <span className="font-mono text-[12.5px]">{ctx.getValue()}</span>,
+					cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue()}</span>,
 				}),
 				columnHelper.accessor("name", { header: "名称", sortFn: "text", size: 170 }),
 				columnHelper.accessor("tags", {
@@ -121,7 +121,7 @@ export function UiGalleryTable() {
 					header: "更新时间",
 					sortFn: "text",
 					size: 150,
-					cell: (ctx) => <span className="text-[12.5px] text-muted-foreground">{ctx.getValue()}</span>,
+					cell: (ctx) => <span className="text-xs text-muted-foreground">{ctx.getValue()}</span>,
 				}),
 				actionsColumn<LedgerRow>({
 					onEdit: (row) => toast.info(`编辑 ${row.code}`, { description: "示例:这里打开表单弹窗" }),
@@ -242,7 +242,7 @@ export function UiGalleryTable() {
 				{/* 批量操作条:只在选中时出现,并且长在表格正上方(动作与选择对象挨着) */}
 				{selected.size > 0 ? (
 					<div className="flex items-center justify-between gap-3 border-b border-border bg-brand-faint px-3.5 py-2">
-						<span className="text-[12.5px] text-foreground">
+						<span className="text-xs text-foreground">
 							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
 							<span className="ml-2 text-muted-foreground">
 								(

@@ -76,8 +76,8 @@ function LoginPage() {
 						<LayoutDashboard className="size-5" />
 					</span>
 					<div>
-						<h1 className="text-[18px] font-semibold tracking-[-0.01em] text-foreground">登录管理后台</h1>
-						<p className="mt-1 text-[13px] text-muted-foreground">用邮箱与密码进入</p>
+						<h1 className="text-lg font-semibold tracking-[-0.01em] text-foreground">登录管理后台</h1>
+						<p className="mt-1 text-sm text-muted-foreground">用邮箱与密码进入</p>
 					</div>
 				</div>
 
@@ -110,7 +110,7 @@ function LoginPage() {
 							</div>
 
 							{error ? (
-								<p role="alert" className="text-[12.5px] text-danger">
+								<p role="alert" className="text-xs text-danger">
 									{error}
 								</p>
 							) : null}
@@ -123,7 +123,7 @@ function LoginPage() {
 					</CardContent>
 				</Card>
 
-				<p className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
+				<p className="text-center text-xs leading-relaxed text-muted-foreground">
 					本模板<strong className="font-medium text-foreground">不开放自注册</strong> —— 账号需先在库里建好(见{" "}
 					<code className="font-mono">AGENTS.md</code>「认证」一节)。
 					<Link to="/" className="ml-1 text-primary hover:underline">

@@ -68,9 +68,9 @@ export function SettingsTagsTree({
 					) : (
 						<Tag className="size-3.5 shrink-0 text-muted-foreground" />
 					)}
-					<span className="min-w-0 flex-1 truncate text-[13px]">{node.label}</span>
+					<span className="min-w-0 flex-1 truncate text-sm">{node.label}</span>
 					{node.value ? (
-						<span className="max-w-32 truncate font-mono text-[11px] text-muted-foreground/70">{node.value}</span>
+						<span className="max-w-32 truncate font-mono text-xs text-muted-foreground/70">{node.value}</span>
 					) : null}
 				</>
 			)}

@@ -28,7 +28,7 @@ function SelectTrigger({
 			data-slot="select-trigger"
 			data-size={size}
 			className={cn(
-				"flex w-fit items-center justify-between gap-2 rounded-lg border border-input bg-card py-2 pr-2.5 pl-3 text-[13px] min-w-32 whitespace-nowrap transition-[color,background-color,border-color,box-shadow] outline-none select-none hover:border-primary hover:ring-[3px] hover:ring-[color:var(--af-blue-ring)] focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-[color:var(--af-blue-ring)] data-popup-open:border-primary data-popup-open:ring-3 data-popup-open:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/40 dark:hover:bg-input/60 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+				"flex w-fit items-center justify-between gap-2 rounded-lg border border-input bg-card py-2 pr-2.5 pl-3 text-sm min-w-32 whitespace-nowrap transition-[color,background-color,border-color,box-shadow] outline-none select-none hover:border-primary hover:ring-[3px] hover:ring-[color:var(--af-blue-ring)] focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-[color:var(--af-blue-ring)] data-popup-open:border-primary data-popup-open:ring-3 data-popup-open:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/40 dark:hover:bg-input/60 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 				className,
 			)}
 			{...props}
@@ -87,7 +87,7 @@ function SelectLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) 
 		<SelectPrimitive.GroupLabel
 			data-slot="select-label"
 			className={cn(
-				"px-2.5 pt-2 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground",
+				"px-2.5 pt-2 pb-1 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground",
 				className,
 			)}
 			{...props}
@@ -100,7 +100,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
 		<SelectPrimitive.Item
 			data-slot="select-item"
 			className={cn(
-				"relative flex w-full cursor-pointer items-center gap-2.5 rounded-md py-2 pr-10 pl-2.5 text-[13px] outline-hidden select-none transition-colors focus:not-data-[selected=true]:bg-muted/50 focus:not-data-[selected=true]:text-foreground data-highlighted:not-data-[selected=true]:bg-muted/50 data-highlighted:not-data-[selected=true]:text-foreground data-selected:bg-muted/70 data-selected:font-medium data-selected:text-foreground not-data-[variant=destructive]:data-selected:**:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+				"relative flex w-full cursor-pointer items-center gap-2.5 rounded-md py-2 pr-10 pl-2.5 text-sm outline-hidden select-none transition-colors focus:not-data-[selected=true]:bg-muted/50 focus:not-data-[selected=true]:text-foreground data-highlighted:not-data-[selected=true]:bg-muted/50 data-highlighted:not-data-[selected=true]:text-foreground data-selected:bg-muted/70 data-selected:font-medium data-selected:text-foreground not-data-[variant=destructive]:data-selected:**:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
 				className,
 			)}
 			{...props}

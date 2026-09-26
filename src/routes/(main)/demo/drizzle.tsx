@@ -97,7 +97,7 @@ function DemoDrizzle() {
 						<ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
 							{result.todos.map((todo: TodoRow) => (
 								<li key={todo.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-									<span className="text-[14px]">{todo.title}</span>
+									<span className="text-sm">{todo.title}</span>
 									<span className="font-mono text-muted-foreground">{formatLocalMinute(todo.createdAt)}</span>
 								</li>
 							))}
@@ -129,7 +129,7 @@ function DemoDrizzle() {
 						</Button>
 					</form>
 
-					{writeError && <p className="text-[13px] text-destructive">{writeError}</p>}
+					{writeError && <p className="text-sm text-destructive">{writeError}</p>}
 				</CardContent>
 			</Card>
 		</div>

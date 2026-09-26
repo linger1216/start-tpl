@@ -51,7 +51,7 @@ export function gridColumns({
 			header: "所属街镇",
 			size: 120,
 			cell: (ctx) => (
-				<span className="text-[12.5px]" title={ctx.row.original.townId ?? ""}>
+				<span className="text-xs" title={ctx.row.original.townId ?? ""}>
 					{ctx.getValue() ?? "—"}
 				</span>
 			),
@@ -59,7 +59,7 @@ export function gridColumns({
 		columnHelper.accessor("name", {
 			header: "网格名称",
 			size: 140,
-			cell: (ctx) => <span className="text-[13px] font-medium text-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="text-sm font-medium text-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("ownerName", {
 			header: "网格长",
@@ -74,7 +74,7 @@ export function gridColumns({
 				return owner ? (
 					<Badge variant="secondary">{owner}</Badge>
 				) : (
-					<span className="text-[12px] text-muted-foreground/60">未指派</span>
+					<span className="text-xs text-muted-foreground/60">未指派</span>
 				);
 			},
 		}),
@@ -87,7 +87,7 @@ export function gridColumns({
 		columnHelper.accessor("updateTime", {
 			header: "更新时间",
 			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-[12.5px]">{formatLocalMinute(ctx.getValue())}</span>,
+			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
 		}),
 		actionsColumn<GridRow>({ size: 160, onView, onEdit, onDelete }),
 	]);

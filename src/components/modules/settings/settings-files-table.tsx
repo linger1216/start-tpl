@@ -113,7 +113,7 @@ export function fileColumns({
 			header: "文件名",
 			size: 220,
 			cell: (ctx) => (
-				<span className="text-[13px] font-medium text-foreground" title={ctx.getValue()}>
+				<span className="text-sm font-medium text-foreground" title={ctx.getValue()}>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -122,7 +122,7 @@ export function fileColumns({
 			header: "后缀",
 			size: 80,
 			cell: (ctx) => (
-				<Badge variant="outline" className="font-mono text-[11px]">
+				<Badge variant="outline" className="font-mono text-xs">
 					{ctx.getValue() || "—"}
 				</Badge>
 			),
@@ -131,7 +131,7 @@ export function fileColumns({
 			header: "类型",
 			size: 160,
 			cell: (ctx) => (
-				<span className="font-mono text-[11px] text-muted-foreground/70">
+				<span className="font-mono text-xs text-muted-foreground/70">
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -139,7 +139,7 @@ export function fileColumns({
 		columnHelper.accessor("size", {
 			header: "大小",
 			size: 100,
-			cell: (ctx) => <span className="text-[12.5px] tabular-nums">{formatBytes(ctx.getValue())}</span>,
+			cell: (ctx) => <span className="text-xs tabular-nums">{formatBytes(ctx.getValue())}</span>,
 		}),
 		columnHelper.accessor("status", {
 			header: "状态",
@@ -147,7 +147,7 @@ export function fileColumns({
 			cell: (ctx) => {
 				const meta = STATUS_META[ctx.getValue()] ?? STATUS_META[0];
 				return (
-					<Badge variant={meta.variant} className="text-[11px]">
+					<Badge variant={meta.variant} className="text-xs">
 						{meta.label}
 					</Badge>
 				);
@@ -156,13 +156,13 @@ export function fileColumns({
 		columnHelper.accessor("bucket", {
 			header: "桶",
 			size: 140,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("objectKey", {
 			header: "对象键",
 			size: 260,
 			cell: (ctx) => (
-				<span className="font-mono text-[11px] text-muted-foreground/70">
+				<span className="font-mono text-xs text-muted-foreground/70">
 					<TextCell value={ctx.getValue()} truncate />
 				</span>
 			),
@@ -171,7 +171,7 @@ export function fileColumns({
 			header: "sha256",
 			size: 160,
 			cell: (ctx) => (
-				<span className="font-mono text-[11px] text-muted-foreground/70">
+				<span className="font-mono text-xs text-muted-foreground/70">
 					<TextCell value={ctx.getValue()} truncate />
 				</span>
 			),
@@ -180,7 +180,7 @@ export function fileColumns({
 			header: "创建时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="text-[12px] text-muted-foreground tabular-nums">
+				<span className="text-xs text-muted-foreground tabular-nums">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -189,7 +189,7 @@ export function fileColumns({
 			header: "更新时间",
 			size: 140,
 			cell: (ctx) => (
-				<span className="text-[12px] text-muted-foreground tabular-nums">
+				<span className="text-xs text-muted-foreground tabular-nums">
 					<TextCell value={formatLocalMinute(ctx.getValue())} />
 				</span>
 			),
@@ -197,7 +197,7 @@ export function fileColumns({
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
-			cell: (ctx) => <span className="font-mono text-[11px] text-muted-foreground/70">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground/70">{ctx.getValue()}</span>,
 		}),
 		// 4 个文字按钮(下载 / 详情 / 编辑 / 删除),宽度给足免得换行把行高撑开
 		actionsColumn<FileRow>({

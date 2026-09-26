@@ -72,9 +72,6 @@ export const { useAppTable, createAppColumnHelper, appFeatures } = createTableHo
 	}),
 });
 
-/** createTableHook 的 features 类型 —— 列定义 / 表实例 / Header 的泛型参数用 */
-export type AppTableFeatures = typeof appFeatures;
-
 /**
  * 表格行的最小约束:必须有 `id`。
  *

@@ -229,7 +229,7 @@ export function SettingsDictionaryPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-[26rem] flex-1 flex-col gap-4">
+			<Card className="flex min-h-104 flex-1 flex-col gap-4">
 				<CardHeader className="flex-row items-center justify-between gap-3">
 					<CardTitle className="flex items-center gap-2">
 						<Library className="size-4 text-muted-foreground" />
@@ -262,7 +262,7 @@ export function SettingsDictionaryPage() {
 				</CardContent>
 			</Card>
 
-			<p className="text-[12.5px] text-muted-foreground">
+			<p className="text-xs text-muted-foreground">
 				说明:字典项顺序就是下拉里的顺序(编辑弹窗里可上移/下移);停用的字典不参与下拉,但不影响已存在的数据。
 				删除字典前会检查有没有功能在用(例:治理规则的「写入档案」在用档案类型字典时会拒绝删除)。
 			</p>

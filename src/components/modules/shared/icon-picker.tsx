@@ -153,7 +153,7 @@ function Section({
 }) {
 	return (
 		<div className="mb-3 last:mb-0">
-			<div className="mb-2 px-1 text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase">{title}</div>
+			<div className="mb-2 px-1 text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">{title}</div>
 			{icons.length === 0 && emptyText ? (
 				<div className="py-6 text-center text-xs text-muted-foreground">{emptyText}</div>
 			) : (

@@ -35,13 +35,13 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 		columnHelper.accessor("createTime", {
 			header: "时间",
 			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-[12.5px]">{formatLocalMinute(ctx.getValue())}</span>,
+			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
 		}),
 		columnHelper.accessor("label", {
 			header: "动作",
 			size: 130,
 			cell: (ctx) => (
-				<span className="text-[12.5px]" title={ctx.row.original.path}>
+				<span className="text-xs" title={ctx.row.original.path}>
 					{ctx.getValue() ?? ctx.row.original.path}
 				</span>
 			),
@@ -49,13 +49,13 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 		columnHelper.accessor("path", {
 			header: "接口路径",
 			size: 140,
-			cell: (ctx) => <span className="font-mono text-[12px] text-muted-foreground">{ctx.getValue()}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("operatorName", {
 			header: "操作人",
 			size: 110,
 			cell: (ctx) => (
-				<span className="text-[12.5px]" title={ctx.row.original.operatorId ?? ""}>
+				<span className="text-xs" title={ctx.row.original.operatorId ?? ""}>
 					{ctx.getValue() ?? <span className="text-muted-foreground/60">系统 / 脚本</span>}
 				</span>
 			),
@@ -78,7 +78,7 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 		columnHelper.accessor("errorCode", {
 			header: "错误码",
 			size: 120,
-			cell: (ctx) => <span className="font-mono text-[12px]">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? "—"}</span>,
 		}),
 		columnHelper.accessor("errorMessage", {
 			header: "错误信息",
@@ -89,18 +89,18 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 			header: "耗时",
 			size: 90,
 			cell: (ctx) => (
-				<span className="tabular-nums text-[12.5px]">{ctx.getValue() === null ? "—" : `${ctx.getValue()} ms`}</span>
+				<span className="tabular-nums text-xs">{ctx.getValue() === null ? "—" : `${ctx.getValue()} ms`}</span>
 			),
 		}),
 		columnHelper.accessor("ip", {
 			header: "来源 IP",
 			size: 130,
-			cell: (ctx) => <span className="font-mono text-[12px]">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? "—"}</span>,
 		}),
 		columnHelper.accessor("traceId", {
 			header: "追踪号",
 			size: 150,
-			cell: (ctx) => <span className="font-mono text-[12px] text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
 		}),
 		columnHelper.accessor("input", {
 			header: "入参快照",

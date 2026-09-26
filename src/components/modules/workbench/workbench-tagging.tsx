@@ -105,7 +105,7 @@ export function WorkbenchTagging() {
 	return (
 		<Card tone="var(--hue-teal)">
 			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-[15px]">
+				<CardTitle className="flex items-center gap-2 text-base">
 					<TagIcon className="size-4 text-muted-foreground" />
 					打标签(标签 ↔ 业务对象)
 				</CardTitle>
@@ -117,7 +117,7 @@ export function WorkbenchTagging() {
 			</CardHeader>
 			<CardContent className="space-y-4 pt-0">
 				{noTags ? (
-					<div className="rounded-lg border border-dashed border-border p-4 text-[13px] text-muted-foreground">
+					<div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
 						标签表里还没有叶子标签 —— 先跑
 						<code className="mx-1 font-mono text-foreground">pnpm db:seed:tags</code>
 						灌一份示例标签体系(幂等,可重复执行)。
@@ -143,16 +143,16 @@ export function WorkbenchTagging() {
 						</div>
 
 						<div className="min-h-10">
-							<div className="mb-1.5 text-[12px] text-muted-foreground">
+							<div className="mb-1.5 text-xs text-muted-foreground">
 								当前标签({current.length})
 								<span className="ml-1 text-muted-foreground/70">
 									obj_type = {DEMO_OBJ_TYPE},obj_id = {objId}
 								</span>
 							</div>
 							{loading ? (
-								<p className="text-[12.5px] text-muted-foreground">读取标签中…</p>
+								<p className="text-xs text-muted-foreground">读取标签中…</p>
 							) : current.length === 0 ? (
-								<p className="text-[12.5px] text-muted-foreground">还没贴标签 —— 从下面选一个加进来。</p>
+								<p className="text-xs text-muted-foreground">还没贴标签 —— 从下面选一个加进来。</p>
 							) : (
 								// 可删除的标签也走 BadgeList(onRemove 自带 ×):不要用 span + 手写 button 拼一个"像徽章"的东西
 								<BadgeList
@@ -169,7 +169,7 @@ export function WorkbenchTagging() {
 						</div>
 
 						{loading || noTags ? (
-							<p className="text-[12.5px] text-muted-foreground">{loading ? "读取标签中…" : "暂无可贴的标签"}</p>
+							<p className="text-xs text-muted-foreground">{loading ? "读取标签中…" : "暂无可贴的标签"}</p>
 						) : (
 							<div className="flex items-center gap-2">
 								<Select value={pickTag} onValueChange={(value) => setPickTag(value ?? "")}>
@@ -178,7 +178,7 @@ export function WorkbenchTagging() {
 									</SelectTrigger>
 									<SelectContent>
 										{candidates.length === 0 ? (
-											<div className="px-2 py-1.5 text-[12px] text-muted-foreground">没有可贴的了</div>
+											<div className="px-2 py-1.5 text-xs text-muted-foreground">没有可贴的了</div>
 										) : (
 											candidates.map((tag) => (
 												<SelectItem key={tag.id} value={tag.id}>
@@ -202,9 +202,9 @@ export function WorkbenchTagging() {
 					{/* ── 右:反查 —— 这个标签打在哪些对象上 ───────────────── */}
 					<div className="space-y-3 rounded-xl border border-border p-3">
 						<div>
-							<div className="mb-1.5 text-[12px] text-muted-foreground">按标签反查对象(`objectIdsOfTag`)</div>
+							<div className="mb-1.5 text-xs text-muted-foreground">按标签反查对象(`objectIdsOfTag`)</div>
 							{loading || noTags ? (
-								<p className="text-[12.5px] text-muted-foreground">{loading ? "读取标签中…" : "暂无可查的标签"}</p>
+								<p className="text-xs text-muted-foreground">{loading ? "读取标签中…" : "暂无可查的标签"}</p>
 							) : (
 								<Select value={probeTag} onValueChange={(value) => setProbeTag(value ?? "")}>
 									<SelectTrigger size="sm" className="w-full">
@@ -223,17 +223,17 @@ export function WorkbenchTagging() {
 
 						<div className="min-h-9">
 							{probeTag === "" ? (
-								<p className="text-[12.5px] text-muted-foreground">先选一个标签。</p>
+								<p className="text-xs text-muted-foreground">先选一个标签。</p>
 							) : objectsOfTagQuery.data && objectsOfTagQuery.data.length > 0 ? (
 								<div className="flex flex-wrap gap-1.5">
 									{objectsOfTagQuery.data.map((id) => (
-										<Badge key={id} variant="outline" className="font-mono text-[11.5px]">
+										<Badge key={id} variant="outline" className="font-mono text-xs">
 											{id}
 										</Badge>
 									))}
 								</div>
 							) : (
-								<p className="text-[12.5px] text-muted-foreground">这个标签还没贴到任何对象上。</p>
+								<p className="text-xs text-muted-foreground">这个标签还没贴到任何对象上。</p>
 							)}
 						</div>
 
@@ -242,9 +242,7 @@ export function WorkbenchTagging() {
 								<Trash2 className="size-3.5" />
 								清空三个演示对象的标签
 							</Button>
-							<p className="mt-1.5 text-[11.5px] text-muted-foreground">
-								只删演示对象上的关联(`unlink`),不动标签本身。
-							</p>
+							<p className="mt-1.5 text-xs text-muted-foreground">只删演示对象上的关联(`unlink`),不动标签本身。</p>
 						</div>
 					</div>
 				</div>

@@ -181,7 +181,7 @@ export function SettingsUsersForm({
 									id="user-form-name"
 									value={name}
 									placeholder="如:张三"
-									className="h-8 text-[13px]"
+									className="h-8 text-sm"
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
@@ -191,7 +191,7 @@ export function SettingsUsersForm({
 									type="email"
 									value={email}
 									placeholder="name@example.com"
-									className="h-8 text-[13px]"
+									className="h-8 text-sm"
 									onChange={(event) => setEmail(event.target.value)}
 								/>
 							</DetailRow>
@@ -202,7 +202,7 @@ export function SettingsUsersForm({
 										type="password"
 										value={password}
 										placeholder="交给本人后让他自己改"
-										className="h-8 text-[13px]"
+										className="h-8 text-sm"
 										onChange={(event) => setPassword(event.target.value)}
 									/>
 								</DetailRow>
@@ -213,7 +213,7 @@ export function SettingsUsersForm({
 											{/* 预览:有地址就出图,没有就是姓名首字 —— 与列表 / 详情用的是同一个 Avatar */}
 											<Avatar className="size-10 shrink-0">
 												{image ? <AvatarImage src={image} alt={name || "头像"} /> : null}
-												<AvatarFallback className="text-[13px]">{(name || "?").slice(0, 1)}</AvatarFallback>
+												<AvatarFallback className="text-sm">{(name || "?").slice(0, 1)}</AvatarFallback>
 											</Avatar>
 											<div className="flex min-w-0 flex-1 flex-col gap-2">
 												<FileDropzone
@@ -226,10 +226,10 @@ export function SettingsUsersForm({
 													onFile={(file) => void handleAvatar(file)}
 												/>
 												{avatarUploading ? (
-													<span className="text-[11px] text-muted-foreground">上传中 {avatarPercent}%</span>
+													<span className="text-xs text-muted-foreground">上传中 {avatarPercent}%</span>
 												) : null}
 												{image ? (
-													<span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+													<span className="flex items-center gap-2 text-xs text-muted-foreground">
 														<span className="min-w-0 truncate font-mono">{image}</span>
 														<ActionButton onClick={() => setImage("")}>移除</ActionButton>
 													</span>
@@ -249,7 +249,7 @@ export function SettingsUsersForm({
 					{/* ── 部门(组织架构,不影响权限)─────────────────────────── */}
 					<TabsContent value="departments" className="flex min-h-0 flex-1 flex-col">
 						<div className="flex min-h-0 flex-1 flex-col gap-1">
-							<Label className="text-[12px]">
+							<Label className="text-xs">
 								部门
 								<span className="ml-1 font-normal text-muted-foreground">
 									组织架构,一个人可以同时属于多个部门(不影响权限)
@@ -271,7 +271,7 @@ export function SettingsUsersForm({
 					{/* ── 角色(全局,决定看得到哪些菜单)───────────────────── */}
 					<TabsContent value="roles" className="flex min-h-0 flex-1 flex-col">
 						<div className="flex min-h-0 flex-1 flex-col gap-1">
-							<Label className="text-[12px]">
+							<Label className="text-xs">
 								角色(全局)
 								<span className="ml-1 font-normal text-muted-foreground">决定能看见哪些菜单,多个角色取并集</span>
 							</Label>

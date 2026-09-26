@@ -47,7 +47,7 @@ function TanStackQueryDemo() {
 					<div className="flex flex-wrap items-center gap-2">
 						<Badge variant={status === "success" ? "default" : "secondary"}>{status}</Badge>
 						{dataUpdatedAt > 0 && (
-							<span className="text-[13px] text-muted-foreground">更新于 {formatLocalDateTime(dataUpdatedAt)}</span>
+							<span className="text-sm text-muted-foreground">更新于 {formatLocalDateTime(dataUpdatedAt)}</span>
 						)}
 					</div>
 

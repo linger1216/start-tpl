@@ -1,6 +1,7 @@
 import { Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { ActionIconButton } from "#/components/ui/action-button";
 import { Input } from "#/components/ui/input";
 import { cn } from "#/lib/utils";
 
@@ -42,16 +43,11 @@ export function LedgerToolbar({
 					className="h-8 pr-8 pl-8"
 				/>
 				{/* 清除搜索:常驻显示(输入为空时置灰禁用),避免图标一会儿有一会儿没有 */}
-				<button
-					type="button"
-					aria-label="清除搜索"
-					title="清除搜索"
-					disabled={!search}
-					onClick={() => onSearchChange("")}
-					className="absolute top-1/2 right-2 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors disabled:cursor-default disabled:opacity-35 enabled:cursor-pointer enabled:hover:bg-muted enabled:hover:text-foreground"
-				>
-					<X className="size-3.5" />
-				</button>
+				<span className="absolute top-1/2 right-2 -translate-y-1/2">
+					<ActionIconButton label="清除搜索" disabled={!search} onClick={() => onSearchChange("")}>
+						<X className="size-3.5" />
+					</ActionIconButton>
+				</span>
 			</div>
 
 			<div className="ml-auto flex min-h-8 min-w-72 flex-wrap items-center justify-end gap-2">{actions}</div>

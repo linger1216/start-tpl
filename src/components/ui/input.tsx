@@ -9,7 +9,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
 			type={type}
 			data-slot="input"
 			className={cn(
-				"h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3.5 py-1.5 text-[14px] text-foreground transition-colors outline-none " +
+				"h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3.5 py-1.5 text-sm text-foreground transition-colors outline-none " +
 					"file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground " +
 					"placeholder:text-muted-foreground " +
 					// 悬停 / 焦点:边框刷主色 + 3px 蓝环(用户偏好,保留)

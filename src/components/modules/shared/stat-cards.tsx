@@ -112,13 +112,13 @@ function StatCell({
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-px">
 				<div className="flex items-baseline gap-1">
-					<span className="font-heading text-[20px] leading-none font-medium tracking-[-0.01em] tabular-nums text-foreground">
+					<span className="font-heading text-xl leading-none font-medium tracking-[-0.01em] tabular-nums text-foreground">
 						{typeof value === "number" ? value.toLocaleString() : value}
 					</span>
-					{unit ? <span className="text-[11px] text-muted-foreground">{unit}</span> : null}
+					{unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
 				</div>
 				<div className="flex min-w-0 items-center justify-between gap-2">
-					<span className="truncate text-[11.5px] text-muted-foreground">
+					<span className="truncate text-xs text-muted-foreground">
 						{label}
 						{description ? <span className="ml-1 opacity-70">· {description}</span> : null}
 					</span>
@@ -126,11 +126,7 @@ function StatCell({
 						// 增减百分比是显示值 → 用 Badge(形状照旧靠 className 覆盖)
 						<Badge
 							variant="secondary"
-							className={cn(
-								"h-4 shrink-0 rounded-md px-1 py-px text-[10.5px] font-medium tabular-nums",
-								trendColor,
-								trendBg,
-							)}
+							className={cn("h-4 shrink-0 rounded-md px-1 py-px text-xs font-medium tabular-nums", trendColor, trendBg)}
 						>
 							{delta}
 						</Badge>

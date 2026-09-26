@@ -165,8 +165,8 @@ function Cell({
 	return (
 		<div className={cn("min-w-0 rounded-xl border border-border bg-card p-3", wide && "md:col-span-2 xl:col-span-3")}>
 			<div className="mb-2 flex items-baseline gap-2">
-				<code className="font-mono text-[12px] text-foreground">{name}</code>
-				{hint ? <span className="truncate text-[11px] text-muted-foreground">{hint}</span> : null}
+				<code className="font-mono text-xs text-foreground">{name}</code>
+				{hint ? <span className="truncate text-xs text-muted-foreground">{hint}</span> : null}
 			</div>
 			<div className={cn(wide ? "space-y-2" : "flex flex-wrap items-center gap-2")}>{children}</div>
 		</div>
@@ -177,7 +177,7 @@ function Group({ title, desc, children }: { title: string; desc: string; childre
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle className="text-[14px]">{title}</CardTitle>
+				<CardTitle className="text-sm">{title}</CardTitle>
 				<CardDescription>{desc}</CardDescription>
 			</CardHeader>
 			<CardContent className="pt-0">
@@ -212,7 +212,7 @@ export function UiGallery() {
 			{/* 台账表格:一格里塞不下,给它整宽卡片(见文件头最后一条约定) */}
 			<Card>
 				<CardHeader>
-					<CardTitle className="text-[14px]">台账表格(完整业务页骨架)</CardTitle>
+					<CardTitle className="text-sm">台账表格(完整业务页骨架)</CardTitle>
 					<CardDescription>
 						指标卡 → 快速筛选 chip → 工具条 → 批量操作条 → 表格(多选 / 排序 / 徽章 / 标签 / 数值对齐 / 行操作)→
 						分页。列定义走 <code className="font-mono">lib/table.ts</code> 的 v9 app hook,多选列与 操作列用{" "}
@@ -242,11 +242,11 @@ export function UiGallery() {
 				</Cell>
 				<Cell name="Checkbox" hint="勾选">
 					<Checkbox checked={checkOn} onCheckedChange={(v) => setCheckOn(v === true)} />
-					<span className="text-[12px] text-muted-foreground">{checkOn ? "已选" : "未选"}</span>
+					<span className="text-xs text-muted-foreground">{checkOn ? "已选" : "未选"}</span>
 				</Cell>
 				<Cell name="Switch" hint="开关">
 					<Switch checked={switchOn} onCheckedChange={setSwitchOn} />
-					<span className="text-[12px] text-muted-foreground">{switchOn ? "开" : "关"}</span>
+					<span className="text-xs text-muted-foreground">{switchOn ? "开" : "关"}</span>
 				</Cell>
 				<Cell name="Slider" hint="滑杆">
 					<Slider
@@ -254,7 +254,7 @@ export function UiGallery() {
 						onValueChange={(v) => setSliderVal(typeof v === "number" ? v : (v[0] ?? 0))}
 						className="w-32"
 					/>
-					<span className="text-[12px] text-muted-foreground">{sliderVal}</span>
+					<span className="text-xs text-muted-foreground">{sliderVal}</span>
 				</Cell>
 				<Cell name="NumField" hint="数字输入(带 min/max)">
 					<NumField value={numVal} onChange={setNumVal} min={0} max={99} />
@@ -349,11 +349,9 @@ export function UiGallery() {
 					<Skeleton className="h-4 w-24" />
 				</Cell>
 				<Cell name="StatCards" hint="指标条 —— 同一个 items,两种 variant:strip 横向分隔条(默认)/ cards 独立小卡" wide>
-					<p className="text-[11px] text-muted-foreground">variant="strip"(默认)—— 一条横向分隔,适合作页面顶部指标条</p>
+					<p className="text-xs text-muted-foreground">variant="strip"(默认)—— 一条横向分隔,适合作页面顶部指标条</p>
 					<StatCards items={DEMO_STATS} />
-					<p className="pt-2 text-[11px] text-muted-foreground">
-						variant="cards" —— 各自独立的小卡片,适合作网格里的指标区
-					</p>
+					<p className="pt-2 text-xs text-muted-foreground">variant="cards" —— 各自独立的小卡片,适合作网格里的指标区</p>
 					<StatCards variant="cards" items={DEMO_STATS} />
 				</Cell>
 				<Cell name="StatCardsSkeleton" hint="指标卡骨架">
@@ -372,7 +370,7 @@ export function UiGallery() {
 						<ActionButton tone="danger">删除</ActionButton>
 						<ActionButton disabled>停用(已禁用)</ActionButton>
 					</div>
-					<p className="text-[11.5px] text-muted-foreground">
+					<p className="text-xs text-muted-foreground">
 						与上面 <code className="font-mono">Button</code> 的分工:这些位置**空间很窄**(一行要并排 3~5 个),
 						所以不要图标、悬停才出下划线。主操作与对话框动作(新增 / 保存 / 确定)仍用{" "}
 						<code className="font-mono">Button</code>。
@@ -382,9 +380,9 @@ export function UiGallery() {
 					<div className="flex items-center gap-3">
 						<RefreshButton onClick={() => toast.success("已刷新")} />
 						<RefreshButton busy onClick={() => toast.success("已刷新")} />
-						<span className="text-[11px] text-muted-foreground">← 左:静置;右:busy(转起来、禁用)</span>
+						<span className="text-xs text-muted-foreground">← 左:静置;右:busy(转起来、禁用)</span>
 					</div>
-					<p className="text-[11.5px] text-muted-foreground">
+					<p className="text-xs text-muted-foreground">
 						每个页面页头都有它。**别再手写带文字的刷新按钮**,也别在别的页面用第二个图标 —— 统一走这一件。
 					</p>
 				</Cell>
@@ -507,7 +505,7 @@ export function UiGallery() {
 				<Cell name="Popover" hint="气泡">
 					<Popover>
 						<PopoverTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>气泡</PopoverTrigger>
-						<PopoverContent className="text-[12px]">内容</PopoverContent>
+						<PopoverContent className="text-xs">内容</PopoverContent>
 					</Popover>
 				</Cell>
 				<Cell name="Tooltip" hint="提示(需 TooltipProvider)">
@@ -567,13 +565,13 @@ export function UiGallery() {
 								</TabsTrigger>
 								<TabsTrigger value="done">已完成</TabsTrigger>
 							</TabsList>
-							<TabsContent value="all" className="text-[12px] text-muted-foreground">
+							<TabsContent value="all" className="text-xs text-muted-foreground">
 								{variant} 形态的内容区 —— 换 variant 只改容器与选中态,API 完全一致。
 							</TabsContent>
-							<TabsContent value="mine" className="text-[12px] text-muted-foreground">
+							<TabsContent value="mine" className="text-xs text-muted-foreground">
 								我负责的 3 条。
 							</TabsContent>
-							<TabsContent value="done" className="text-[12px] text-muted-foreground">
+							<TabsContent value="done" className="text-xs text-muted-foreground">
 								已完成的内容。
 							</TabsContent>
 						</Tabs>
@@ -584,7 +582,7 @@ export function UiGallery() {
 						<CollapsibleTrigger className={buttonVariants({ variant: "outline", size: "sm" })}>
 							{collapsedOpen ? "收起" : "展开"}
 						</CollapsibleTrigger>
-						<CollapsibleContent className="pt-2 text-[12px]">被折叠的内容</CollapsibleContent>
+						<CollapsibleContent className="pt-2 text-xs">被折叠的内容</CollapsibleContent>
 					</Collapsible>
 				</Cell>
 				<Cell name="Reveal" hint="进场动画">
@@ -604,11 +602,11 @@ export function UiGallery() {
 					<div className="w-full rounded-lg border border-border bg-card p-2 shadow-card">
 						<Calendar mode="single" selected={day} onSelect={setDay} />
 					</div>
-					<p className="text-[12px] text-muted-foreground">已选:{day ? day.toLocaleDateString("zh-CN") : "—"}</p>
+					<p className="text-xs text-muted-foreground">已选:{day ? day.toLocaleDateString("zh-CN") : "—"}</p>
 				</Cell>
 				<Cell name="DateRangePicker" hint="日期区间(带快捷范围)">
 					<DateRangePicker value={range} onChange={setRange} />
-					<p className="text-[12px] text-muted-foreground">
+					<p className="text-xs text-muted-foreground">
 						{range.from ?? "—"} ~ {range.to ?? "—"}
 					</p>
 				</Cell>
@@ -721,19 +719,19 @@ function ModuleGallery() {
 					    需要 form context / 重依赖的件才给签名卡,这里两种情况都没有,所以真跑 */}
 					<div className="flex flex-col gap-0">
 						<DetailRow label="ID">
-							<span className="font-mono text-[12px]">V1StGXR8Z5jdHi6B</span>
+							<span className="font-mono text-xs">V1StGXR8Z5jdHi6B</span>
 						</DetailRow>
 						<DetailRow label="分组">留存策略</DetailRow>
 						<DetailRow label="当前值">
 							<span className="tabular-nums">365</span>
 						</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-[13px]">软删除数据保留多少天</span>
+							<span className="text-sm">软删除数据保留多少天</span>
 						</DetailRow>
 					</div>
 					{/* 多值字段(部门 / 角色那种)用徽章列表,别拼成一串顿号分隔的文本 */}
 					<div className="space-y-1.5">
-						<div className="text-[12px] font-medium text-muted-foreground">角色(全局)</div>
+						<div className="text-xs font-medium text-muted-foreground">角色(全局)</div>
 						<BadgeList values={["系统管理员", "部门主管", "普通员工"]} layout="wrap" color="stable" />
 					</div>
 				</DetailDialog>
@@ -787,10 +785,10 @@ function ModuleGallery() {
 									return next;
 								})
 							}
-							renderRow={(node) => <span className="truncate text-[13px]">{node.label}</span>}
+							renderRow={(node) => <span className="truncate text-sm">{node.label}</span>}
 						/>
 					</div>
-					<p className="mt-2 text-[12px] text-muted-foreground">
+					<p className="mt-2 text-xs text-muted-foreground">
 						选中:<code className="font-mono">{treeSelected ?? "—"}</code>
 					</p>
 				</Cell>
@@ -823,7 +821,7 @@ function ModuleGallery() {
 				</Cell>
 
 				<Cell name="IconPicker / ExcelImportDialog" hint="这两件这里只给签名 —— 理由见下" wide>
-					<div className="space-y-2 text-[12.5px]">
+					<div className="space-y-2 text-xs">
 						<div>
 							<code className="font-mono text-foreground">shared/icon-picker</code> ·{" "}
 							<code className="font-mono">IconPicker</code> —— props:
@@ -853,7 +851,7 @@ function ModuleGallery() {
 				desc="客户端能跑的纯函数工具 —— 都能直接抄。服务端专用的（auth / sys-para）只给签名,import 它们会把 mysql2 打进浏览器包。"
 			>
 				<Cell name="time" hint="时间只走这里 —— 自己写 toISOString 会差 8 小时(踩过两次)">
-					<div className="space-y-1 font-mono text-[12.5px]">
+					<div className="space-y-1 font-mono text-xs">
 						<div>formatLocalDateTime → {formatLocalDateTime(new Date())}</div>
 						<div>formatLocalMinute&nbsp;&nbsp; → {formatLocalMinute(new Date())}</div>
 						<div>formatLocalDate&nbsp;&nbsp;&nbsp;&nbsp; → {formatLocalDate(new Date())}</div>
@@ -864,7 +862,7 @@ function ModuleGallery() {
 				</Cell>
 
 				<Cell name="ids" hint="主键(nanoid)+ 业务编号;派生项目先改 ID_PREFIX">
-					<div className="space-y-1 font-mono text-[12.5px]">
+					<div className="space-y-1 font-mono text-xs">
 						<div>newId() → {newId()}</div>
 						<div>formatCode("ENT") → {formatCode("ENT")}</div>
 						<div>ID_PREFIX.ENTITY = {ID_PREFIX.ENTITY}</div>
@@ -873,12 +871,12 @@ function ModuleGallery() {
 				</Cell>
 
 				<Cell name="format" hint="空值兜底 / JSON 展示 / 值归一 —— 表格单元格常用">
-					<div className="space-y-1 font-mono text-[12.5px]">
+					<div className="space-y-1 font-mono text-xs">
 						<div>orEmpty(null) = "{orEmpty(null)}"</div>
 						<div>orEmpty("") = "{orEmpty("")}"</div>
 						<div>normalizeValue("a、b;c") = {JSON.stringify(normalizeValue("a、b;c"))}</div>
 						<div>formatJson(JS 对象) =</div>
-						<pre className="ml-2 rounded bg-muted px-2 py-1 text-[11.5px]">{formatJson({ a: 1 })}</pre>
+						<pre className="ml-2 rounded bg-muted px-2 py-1 text-xs">{formatJson({ a: 1 })}</pre>
 					</div>
 				</Cell>
 
@@ -889,10 +887,10 @@ function ModuleGallery() {
 							onChange={(e) => setMultiValue(e.target.value)}
 							placeholder="试试 紧急、待审;hot"
 						/>
-						<div className="text-[12px] text-muted-foreground">
+						<div className="text-xs text-muted-foreground">
 							拆:<code className="font-mono text-foreground">{JSON.stringify(splitMultiValue(multiValue))}</code>
 						</div>
-						<div className="text-[12px] text-muted-foreground">
+						<div className="text-xs text-muted-foreground">
 							合:<code className="font-mono text-foreground">{joinMultiValue(splitMultiValue(multiValue))}</code>
 						</div>
 					</div>
@@ -913,7 +911,7 @@ function ModuleGallery() {
 							))}
 						</div>
 						<Input value={paraInput} onChange={(e) => setParaInput(e.target.value)} placeholder="输入值试试校验" />
-						<p className="text-[12px] text-muted-foreground">
+						<p className="text-xs text-muted-foreground">
 							{PARA_TYPE_META[asParaType(paraType)].hint} →{" "}
 							{paraError ? (
 								<span className="text-danger">{paraError}</span>
@@ -952,9 +950,9 @@ function ModuleGallery() {
 							{mockRows.map((row) => (
 								<li
 									key={row.id}
-									className="flex items-center gap-2 rounded border border-border bg-card/60 px-3 py-1.5 text-[13px]"
+									className="flex items-center gap-2 rounded border border-border bg-card/60 px-3 py-1.5 text-sm"
 								>
-									<code className="font-mono text-[11.5px] text-muted-foreground">{row.id}</code>
+									<code className="font-mono text-xs text-muted-foreground">{row.id}</code>
 									<span className="truncate">{String(row.title ?? "")}</span>
 								</li>
 							))}
@@ -964,7 +962,7 @@ function ModuleGallery() {
 
 				<Cell name="demo-store" hint="全局 store(@tanstack/store)—— useStore(store, selector) 订阅">
 					<div className="space-y-2">
-						<p className="text-[13px]">
+						<p className="text-sm">
 							firstName = <code className="font-mono text-foreground">{fullName}</code>
 						</p>
 						<div className="flex gap-2">
@@ -980,7 +978,7 @@ function ModuleGallery() {
 								写入
 							</Button>
 						</div>
-						<p className="text-[12px] text-muted-foreground">切到别的 Group 再回来值还在;刷新页面回种子。</p>
+						<p className="text-xs text-muted-foreground">切到别的 Group 再回来值还在;刷新页面回种子。</p>
 					</div>
 				</Cell>
 
@@ -990,7 +988,7 @@ function ModuleGallery() {
 					wide
 				>
 					<div className="grid gap-3 md:grid-cols-2">
-						<div className="space-y-1 font-mono text-[12.5px]">
+						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/auth.ts(服务端)</div>
 							<div>betterAuth(drizzleAdapter(db), emailAndPassword, plugins)</div>
 							<div className="font-sans text-muted-foreground">
@@ -999,7 +997,7 @@ function ModuleGallery() {
 								<code className="font-mono">auth-client</code>。
 							</div>
 						</div>
-						<div className="space-y-1 font-mono text-[12.5px]">
+						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/sys-para.ts(服务端)</div>
 							<div>getParaMap() / getParaInt() / getParaBool() / clearParaCache()</div>
 							<div className="font-sans text-muted-foreground">
@@ -1007,13 +1005,13 @@ function ModuleGallery() {
 								<code className="font-mono">lib/para-spec</code> 取(就是上面那张卡)。
 							</div>
 						</div>
-						<div className="space-y-1 font-mono text-[12.5px]">
+						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/auth-client.ts(客户端)</div>
 							<div>authClient.signIn.email(email, password)</div>
 							<div>authClient.signOut() / authClient.useSession()</div>
 							<div className="font-sans text-muted-foreground">全项目:登录页 + 顶栏用户菜单。</div>
 						</div>
-						<div className="space-y-1 font-mono text-[12.5px]">
+						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/excel.ts(重依赖)</div>
 							<div>readSheetTable(buf, opts) / writeSheet(columns, rows, fileName) / cellText(v)</div>
 							<div className="font-sans text-muted-foreground">
@@ -1024,7 +1022,7 @@ function ModuleGallery() {
 				</Cell>
 
 				<Cell name="其余封装一览(不单独给示例)" hint="一句话交代每个件是干什么的 —— 免得它们在仓库里没有入口" wide>
-					<ul className="space-y-1.5 text-[12.5px]">
+					<ul className="space-y-1.5 text-xs">
 						<li>
 							<code className="font-mono text-foreground">ui/sonner</code> —— Toast 的{" "}
 							<code className="font-mono">Toaster</code> 提供者。 已经在 <code className="font-mono">__root.tsx</code>{" "}

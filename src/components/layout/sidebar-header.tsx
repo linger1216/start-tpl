@@ -77,9 +77,9 @@ export function SidebarHeader({
 			<LinkComponent to={to} className="flex min-w-0 flex-1 items-center gap-2.5">
 				{tile}
 				<div className="min-w-0 flex-1">
-					<div className="truncate text-[14px] leading-tight font-semibold text-foreground">{title}</div>
+					<div className="truncate text-sm leading-tight font-semibold text-foreground">{title}</div>
 					{subtitle ? (
-						<div className="mt-0.5 truncate text-[10.5px] leading-tight text-muted-foreground">{subtitle}</div>
+						<div className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">{subtitle}</div>
 					) : null}
 				</div>
 			</LinkComponent>

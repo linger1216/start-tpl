@@ -16,7 +16,7 @@ import { logger } from "#/lib/logger";
 /** 级别决定图标与颜色(走 DESIGN 的语义色:`info` 中性 / `success` / `warn` / `danger`) */
 export type NoticeLevel = "info" | "success" | "warn" | "danger";
 
-export type NoticePayload = {
+type NoticePayload = {
 	title: string;
 	body?: string | null;
 	/** 点击后跳转的**站内路径**,如 `/settings/files`;不传则点击只标已读 */

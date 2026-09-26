@@ -62,7 +62,7 @@ function RateSlider({
 }) {
 	return (
 		<div className={cn("flex items-center gap-2", disabled && "opacity-60", className)}>
-			<span className="shrink-0 text-[11.5px] text-muted-foreground">{label}</span>
+			<span className="shrink-0 text-xs text-muted-foreground">{label}</span>
 			<div className="w-28">
 				<Slider
 					value={value}
@@ -76,7 +76,7 @@ function RateSlider({
 					}}
 				/>
 			</div>
-			<span className="w-9 shrink-0 text-right text-[11.5px] tabular-nums text-muted-foreground">{value}%</span>
+			<span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{value}%</span>
 		</div>
 	);
 }

@@ -31,10 +31,8 @@ export function ModuleOverview({ path }: { path: string }) {
 					{subgroups.map((group) => (
 						<section key={group.name} className="space-y-3">
 							<header className="flex items-baseline justify-between gap-2 border-b border-border pb-2">
-								<h3 className="text-[14px] font-medium tracking-[-0.005em] text-foreground">{group.name}</h3>
-								<span className="text-[11px] tabular-nums text-muted-foreground">
-									{group.children?.length ?? 0} 个页面
-								</span>
+								<h3 className="text-sm font-medium tracking-[-0.005em] text-foreground">{group.name}</h3>
+								<span className="text-xs tabular-nums text-muted-foreground">{group.children?.length ?? 0} 个页面</span>
 							</header>
 							<nav className="flex flex-col">
 								{group.children?.map((page) => (
@@ -47,8 +45,8 @@ export function ModuleOverview({ path }: { path: string }) {
 					{directPages.length > 0 && (
 						<section className="space-y-3">
 							<header className="flex items-baseline justify-between gap-2 border-b border-border pb-2">
-								<h3 className="text-[14px] font-medium tracking-[-0.005em] text-foreground">直达</h3>
-								<span className="text-[11px] tabular-nums text-muted-foreground">{directPages.length} 个页面</span>
+								<h3 className="text-sm font-medium tracking-[-0.005em] text-foreground">直达</h3>
+								<span className="text-xs tabular-nums text-muted-foreground">{directPages.length} 个页面</span>
 							</header>
 							<nav className="flex flex-col">
 								{directPages.map((page) => (
@@ -69,7 +67,7 @@ function NavLink({ node }: { node: NavNode }) {
 	return (
 		<Link
 			to={node.path}
-			className="group flex items-center gap-3 px-1 py-1.5 text-[13px] text-foreground/80 transition-colors duration-150 hover:text-foreground"
+			className="group flex items-center gap-3 px-1 py-1.5 text-sm text-foreground/80 transition-colors duration-150 hover:text-foreground"
 		>
 			{Icon && (
 				<Icon

@@ -30,7 +30,7 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 /** 当前登录用户(**带姓名** —— 审计要存姓名快照,账号将来被删也能读懂历史) */
-export type CurrentUser = { id: string; name: string };
+type CurrentUser = { id: string; name: string };
 
 /**
  * 读当前用户(id + 姓名)。与 `getCurrentUserId` 同样吞掉"没有请求上下文"的异常:

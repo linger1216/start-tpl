@@ -79,7 +79,7 @@ export function SettingsTagsFormDialog({
 							id="tag-label"
 							value={label}
 							spellCheck={false}
-							className="text-[13px]"
+							className="text-sm"
 							placeholder="如 场所风险等级 / 红色"
 							onChange={(event) => setLabel(event.target.value)}
 						/>
@@ -89,7 +89,7 @@ export function SettingsTagsFormDialog({
 							id="tag-value"
 							value={value}
 							spellCheck={false}
-							className="font-mono text-[12px]"
+							className="font-mono text-xs"
 							placeholder="可与名称不同,留空则同名称"
 							onChange={(event) => setValue(event.target.value)}
 						/>
@@ -99,7 +99,7 @@ export function SettingsTagsFormDialog({
 							id="tag-desc"
 							value={desc}
 							rows={3}
-							className="text-[12px]"
+							className="text-xs"
 							placeholder="这个标签代表什么,给人看的说明"
 							onChange={(event) => setDesc(event.target.value)}
 						/>

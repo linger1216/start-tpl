@@ -27,7 +27,7 @@ import { collectDescendantIds, findAncestorAtLevel } from "#/lib/tree";
  * 3. **统计 / 导出 / 多表 join 也必须调这里的辅助函数** —— 手写 where 就是绕过行级权限。
  */
 
-export type ScopeResolution = {
+type ScopeResolution = {
 	scope: DataScope;
 	/** 展开后的部门 id 集合(`all` / `self` 档为空 —— 它们不按部门过滤) */
 	departmentIds: string[];

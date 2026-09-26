@@ -78,7 +78,7 @@ export function FilterChipBar({
 			className={cn("rounded-xl border border-border bg-card px-3.5 py-3 shadow-raise-1", className)}
 		>
 			<div className="mb-2.5 flex items-center justify-between gap-3">
-				<div className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
+				<div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
 					<Filter className="size-3.5 text-muted-foreground" />
 					快速筛选
 					{note ? <span className="font-normal text-muted-foreground">· {note}</span> : null}
@@ -87,7 +87,7 @@ export function FilterChipBar({
 					<button
 						type="button"
 						onClick={onClearAll}
-						className="cursor-pointer text-[12px] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+						className="cursor-pointer text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
 					>
 						清除全部
 					</button>
@@ -100,7 +100,7 @@ export function FilterChipBar({
 					const current = active[group.key];
 					return (
 						<div key={group.key} className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
-							<div className="flex w-32 shrink-0 items-center gap-1.5 pt-1 text-[12px] text-muted-foreground">
+							<div className="flex w-32 shrink-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
 								{Icon ? <Icon className={cn("size-3.5", GROUP_ICON_TONE[group.tone])} /> : null}
 								<span className="font-medium text-foreground/80">{group.label}</span>
 							</div>
@@ -115,7 +115,7 @@ export function FilterChipBar({
 											aria-pressed={on}
 											onClick={() => onSelect(group.key, on ? undefined : option.value)}
 											className={cn(
-												"inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-[color,background-color,border-color,box-shadow] duration-150",
+												"inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-[color,background-color,border-color,box-shadow] duration-150",
 												on
 													? cn("border-transparent font-medium shadow-soft", activeChipClass(group.tone, index))
 													: "border-border bg-background text-muted-foreground hover:border-hue-blue-line hover:bg-secondary hover:text-foreground",
@@ -127,10 +127,7 @@ export function FilterChipBar({
 												// 计数也是显示值 → 用 Badge,别手拼小药丸(两态配色靠 className 覆盖)
 												<Badge
 													variant="secondary"
-													className={cn(
-														"ml-0.5 h-4 px-1.5 text-[10.5px] tabular-nums",
-														on && "bg-black/10 text-inherit",
-													)}
+													className={cn("ml-0.5 h-4 px-1.5 text-xs tabular-nums", on && "bg-black/10 text-inherit")}
 												>
 													{option.count}
 												</Badge>
@@ -143,7 +140,7 @@ export function FilterChipBar({
 									<button
 										type="button"
 										onClick={() => onSelect(group.key, undefined)}
-										className="ml-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded-full px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+										className="ml-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded-full px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
 									>
 										<X className="size-3" />
 										清除
@@ -174,12 +171,12 @@ export function ActiveFilterPills({
 
 	return (
 		<div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-			<span className="text-[12px] text-muted-foreground">已选筛选</span>
+			<span className="text-xs text-muted-foreground">已选筛选</span>
 			{items.map((item) => (
 				<span
 					key={item.key}
 					className={cn(
-						"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium",
+						"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
 						BADGE_THEMES[item.tone][0],
 					)}
 				>
@@ -198,7 +195,7 @@ export function ActiveFilterPills({
 			<button
 				type="button"
 				onClick={onClearAll}
-				className="ml-1 cursor-pointer text-[12px] text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+				className="ml-1 cursor-pointer text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
 			>
 				清除全部
 			</button>

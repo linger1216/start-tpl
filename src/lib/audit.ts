@@ -92,7 +92,7 @@ export function shouldAudit(input: { type: string; rawInput: unknown; skipPrefix
 	return !input.skipPrefixes.some((prefix) => prefix && key.startsWith(prefix));
 }
 
-export type AuditConfig = { enabled: boolean; skipPrefixes: string[] };
+type AuditConfig = { enabled: boolean; skipPrefixes: string[] };
 
 /**
  * 审计开关与跳过表来自参数管理(`log.enabled` / `log.skip_paths`)。
