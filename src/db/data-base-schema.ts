@@ -358,10 +358,12 @@ export const sysVerification = mysqlTable(
 // 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
 // (上海管理员 / 武汉管理员 / …)。全局定义 + 分配时带部门,4 种角色在 100 个部门里也只有 4 行。
 //
-// **行级数据权限已经落地**,载体是 `sys_role.data_scope` 那一列(四档:`all` / `dept_below` / `dept` / `self`),
-// 展开成"一批部门 id"后与业务表的**归属组织列**比较 —— 见 `doc/rbac-权限模型.md`。
-//   张三(挂「七宝镇网格组」)→ 角色 `duizhang`(`dept_below`) → 七宝镇网格组及其以下的数据
-// 下面这张 `sys_user_dept` 承载"我属于哪些组织";**跨部门 / 借调**靠把数据的归属组织指到对方所在节点解决。
+// **行级数据权限由下面那张 `sys_data_policy`(Casbin 的直白授权规则)承载** —— 角色只管功能权限,
+// 不再携带数据范围。规则长这样:「主体 `dept:<组织 id>` / `role:<角色 code>` / `user:<用户 id>`
+// 能访问资源 `*` / `<资源类型>` / `<资源类型>@org:<组织 id>` / `<资源类型>@<行 id>`(read / write)」。
+//   张三(挂「七宝镇网格组」)→ `user:张三 → demo_grid@org:七宝镇网格组` ⇒ 看到本网格组的全部网格
+// 下面这张 `sys_user_dept` 承载"我属于哪些组织"(真实项目里由区里**每天推送覆盖**);
+// **借调** = 给这个人再加一条指向对方的规则(不动编制,推送也冲不掉)—— 见 `doc/rbac-权限模型.md`。
 
 /** 部门树(数据权限的边界;形状对齐 `sys_menu` / `sys_tag`) */
 export const sysDept = mysqlTable(
@@ -394,19 +396,6 @@ export const sysRole = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
-		/**
-		 * **数据范围(行级数据权限的唯一载体)** —— 值就是一个"档位词":
-		 *
-		 *  · `all`         全部数据(默认;不按组织限制)
-		 *  · `dept_below`  本部门及以下(我所属部门 + 各自子树)
-		 *  · `dept`        本部门(只我所属那一层,不含下级)
-		 *  · `self`        仅本人(业务表的**负责人列** = 我)
-		 *
-		 * 校验 / 解析在 `lib/data-scope-spec.ts` 的 `parseScope()`,**值非法一律 fail-closed**。
-		 * ⚠️ 业务表的「归属组织」列要指向**人也会被挂上去的那类节点**,否则「本部门及以下」对不上;
-		 * 用户 / 组织由区里每天推送(`sys_user_dept` 是同步来的),跨部门靠数据侧的归属组织解决。
-		 */
-		data_scope: varchar("data_scope", { length: 32 }).notNull().default("all"),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
@@ -486,6 +475,53 @@ export const sysRoleMenu = mysqlTable(
 	(table) => [
 		uniqueIndex("uk_sys_role_menu").on(table.role_id, table.menu_id),
 		index("idx_sys_role_menu_menu").on(table.menu_id),
+	],
+);
+
+/**
+ * **数据权限(Casbin 的策略表)** —— 一行就是一条「谁 能访问 哪个资源」的直白规则。
+ *
+ * 角色**只管功能权限**(菜单 / 按钮 / 接口),数据范围不再挂在 `sys_role` 上:谁能看哪些行,
+ * 完全由这张表说了算。列名用 Casbin 的通用形状 `v0..v3`(规则行 = `ptype` + 一串值),
+ * 而不是 `sub/obj/act/eft`,因为灌进模型的是 `addPolicy(sec, ptype, rule)`:
+ *
+ * | 列 | 含义 |
+ * | --- | --- |
+ * | `v0` sub | 主体:`*` / `user:<用户 id>` / `role:<角色 code>` / `dept:<部门 id>` |
+ * | `v1` obj | 资源:`*` / `<资源类型>`(该类型全部)/ `<资源类型>@org:<部门 id>`(该组织及其子树)/ `<资源类型>@<行 id>`(单条) |
+ * | `v2` act | 动作:`read` / `write` / `*` |
+ * | `v3` eft | 效果:`allow` / `deny`(`deny` 一票否决) |
+ *
+ * ⚠️ 这里**刻意没有业务语义**(没有"本部门以下""仅本人"这种档位词):组织范围一律用**具体的组织节点**
+ * 表达 —— 各街镇层级深浅不一,数层数必然出错。也不留 `v4/v5` 空列、不写 Casbin 的 `g` 行
+ * (角色成员仍只在 `sys_user_role`,两处维护必漂移)。
+ *
+ * ⚠️ 表是「谁被授权看哪些资源」的唯一真源,**没有任何界面**;写入口只有三个:迁移脚本、
+ * 维护脚本、`demoGrid.assign`(指派负责人时同步那条按行的授权)。解析 / 编译见 `lib/data-policy{,-spec}.ts`。
+ */
+export const sysDataPolicy = mysqlTable(
+	"sys_data_policy",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** Casbin 的规则类型:目前只有 `p`(策略行) */
+		ptype: varchar("ptype", { length: 16 }).notNull().default("p"),
+		/** 主体:`*` / `user:<用户 id>` / `role:<角色 code>` / `dept:<部门 id>` */
+		v0: varchar("v0", { length: 80 }).notNull(),
+		/** 资源:`*` / `<资源类型>` / `<资源类型>@org:<部门 id>` / `<资源类型>@<行 id>` */
+		v1: varchar("v1", { length: 128 }).notNull(),
+		/** 动作:`read` / `write` / `*` */
+		v2: varchar("v2", { length: 16 }).notNull(),
+		/** 效果:`allow` / `deny` */
+		v3: varchar("v3", { length: 16 }).notNull().default("allow"),
+		/** 0 = 停用(适配器只装 `status = 1` 的行) */
+		status: tinyint("status").notNull().default(1),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_sys_data_policy_sub_obj_act").on(table.v0, table.v1, table.v2),
+		index("idx_sys_data_policy_sub").on(table.v0, table.status),
 	],
 );
 
@@ -576,8 +612,8 @@ export const sysLog = mysqlTable(
  * Demo:综合网格履职(**行级数据权限的第二个真实落点**)。
  *
  * 字段只保留方案里说的那几个 —— Excel 后面 17 列月度统计**不建**。
- * 两个"指向"是行级权限的关键:`group_id`(「管理单元」,`dept` / `dept_below` 档按它过滤)、
- * `owner_id`(负责人,`self` 档按它过滤 —— 也就是"队员只能看自己管辖的网格")。
+ * 两个"指向"是行级权限的关键:`group_id`(「管理单元」,规则 `demo_grid@org:<它>` 按它展开子树)、
+ * `owner_id`(负责人,规则 `demo_grid@<行 id>` 由「指派」同步维护 —— 也就是"队员只能看自己管辖的网格")。
  * `town_id` 只用于展示 / 筛选 / 统计,**不参与行级过滤**(见 `doc/rbac-权限模型.md`)。
  */
 export const sysDemoGrid = mysqlTable(
@@ -592,9 +628,10 @@ export const sysDemoGrid = mysqlTable(
 		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计,**不参与行级过滤**) */
 		town_id: varchar("town_id", { length: 32 }),
 		/**
-		 * 「管理单元」→ `sys_dept.id`(**行级数据范围按这一列过滤**)。
+		 * 「管理单元」→ `sys_dept.id`。规则 `demo_grid@org:<这个节点>` 按它展开**节点及其子树**,
+		 * 「走个人授权」的规则则直接按行 id 授权(`demo_grid@<行 id>`)。
 		 *
-		 * ⚠️ 必须指向**人也会被挂上去的那类节点**(这里是「××网格组」,`sys_user_dept` 挂的就是它),
+		 * ⚠️ 授权时优先指向**人也会被挂上去的那类节点**(这里是「××网格组」,`sys_user_dept` 挂的就是它),
 		 * 不要指向统计口径的节点(街镇 / 区)。理由见 `doc/rbac-权限模型.md`。
 		 */
 		group_id: varchar("group_id", { length: 32 }),

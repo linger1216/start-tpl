@@ -17,34 +17,11 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { type DataScope, parseScope } from "#/lib/data-scope-spec";
-
-/**
- * 数据范围四档 —— 文案用**人话**,按**由宽到窄**排(值域见 `lib/data-scope-spec.ts`)。
- *
- * 没有「往上到第 N 层」那一档了:各街镇的组织层级深浅不一,"填几层"既难解释也容易填错。
- * 跨部门 / 借调靠把数据的「归属组织」指到对方所在节点上解决,见 `doc/rbac-权限模型.md`。
- */
-export const SCOPE_ITEMS = [
-	{ value: "all", label: "全部数据" },
-	{ value: "dept_below", label: "本部门及以下" },
-	{ value: "dept", label: "本部门(不含下级)" },
-	{ value: "self", label: "仅本人" },
-];
-
-/** 选中某一档时補一句人话 —— 光看档位词容易猜错「到底能看到什么」 */
-const SCOPE_HINTS: Record<string, string> = {
-	all: "不按组织限制:这个角色的人能看到全部数据。",
-	dept_below: "看到「自己所属组织 + 它下面所有组织」的数据 —— 演示里队长是这一档(覆盖整个街镇)。",
-	dept: "只看到「自己所属组织」这一层,不含下级组织的数据。",
-	self: "只看自己负责的(业务表里负责人 = 自己)—— 演示里队员是这一档。",
-};
 
 export type RoleFormPayload = {
 	code: string;
@@ -53,8 +30,6 @@ export type RoleFormPayload = {
 	sort?: number;
 	status: boolean;
 	remark: string | null;
-	/** 数据范围 —— 见 lib/data-scope-spec.ts(all / dept_below / dept / self) */
-	dataScope: string;
 };
 
 type RoleUserRow = {
@@ -125,10 +100,6 @@ export function SettingsRolesForm({
 	const [remark, setRemark] = useState("");
 	const [sort, setSort] = useState("0");
 	const [status, setStatus] = useState(true);
-	/** 数据范围:四档里选一个(值域见 `lib/data-scope-spec.ts`) */
-	const [dataScope, setDataScope] = useState<DataScope>("all");
-	/** 原库存的是旧档位 / 非法值时,记下来在下面提示一句 */
-	const [legacyScope, setLegacyScope] = useState<string | null>(null);
 	const [tab, setTab] = useState<RoleFormTab>("basic");
 
 	// ── 菜单权限(与基本信息各自保存)─────────────────────────────
@@ -158,11 +129,6 @@ export function SettingsRolesForm({
 		setRemark(role?.remark ?? "");
 		setStatus(role ? role.status !== 0 : true);
 		setSort(role ? String(role.sort ?? 0) : "");
-		// 数据范围也要回填 —— 不回填的话打开旧角色会显示"全部数据",一保存就把原有的范围冲掉了
-		const saved = role?.dataScope ?? "all";
-		const parsed = parseScope(saved);
-		setDataScope(parsed ?? "dept_below");
-		setLegacyScope(parsed ? null : saved);
 		setTab(initialTab);
 		setDraft(null);
 	}, [open, role, initialTab]);
@@ -214,7 +180,7 @@ export function SettingsRolesForm({
 
 					{/* ── 基本信息 ─────────────────────────────────────────── */}
 					<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
-						{/* 两列紧凑排(5 个字段压成 3 行):字段区要在 214px 里装下,否则它会自己出滚动条 */}
+						{/* 字段区要在 214px 里装下,否则它会自己出滚动条(高度铁律:滚的只能是控件内部) */}
 						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
 							<DetailRow label="角色名" htmlFor="role-name">
 								<Input
@@ -254,27 +220,6 @@ export function SettingsRolesForm({
 									onChange={(event) => setSort(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow label="数据范围">
-								<Select items={SCOPE_ITEMS} value={dataScope} onValueChange={(next) => setDataScope(next as DataScope)}>
-									<SelectTrigger id="role-scope" size="sm" className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										{SCOPE_ITEMS.map((item) => (
-											<SelectItem key={item.value} value={item.value}>
-												{item.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								{/* 光看档位词容易猜错,选完就立刻用一句话说清"这个角色能看到什么" */}
-								<span className="mt-1 block text-xs text-muted-foreground">{SCOPE_HINTS[dataScope]}</span>
-								{legacyScope ? (
-									<span className="mt-1 block text-xs text-destructive">
-										原档位「{legacyScope}」已下线或无法识别,现在按「本部门及以下」显示;保存前请确认档位。
-									</span>
-								) : null}
-							</DetailRow>
 							<DetailRow label="启用">
 								<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 							</DetailRow>
@@ -284,7 +229,6 @@ export function SettingsRolesForm({
 								disabled={pending || invalid}
 								onClick={() =>
 									onSubmit({
-										dataScope,
 										name: name.trim(),
 										code: code.trim(),
 										sort: sort.trim() === "" ? undefined : Number(sort),

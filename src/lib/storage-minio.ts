@@ -10,6 +10,7 @@
  */
 import { Client } from "minio";
 
+import { logger } from "#/lib/logger";
 import { joinPublicUrl, type PresignedPut, type Storage, type StoredObject } from "#/lib/storage";
 
 export type MinioConfig = {
@@ -34,6 +35,20 @@ function isNotFound(error: unknown): boolean {
 	return code === "NotFound" || code === "NoSuchKey" || code === "NoSuchBucket";
 }
 
+/**
+ * 对象存储这条链路**不经过 tRPC 的日志**,失败必须自己留一声。
+ * 「上传签不出 URL / 确认时对象不在 / 删除失败」是线上最常见的三类问题,现象又都只是"操作没成功"。
+ */
+function logFailure(op: string, bucket: string, objectKey: string, error: unknown): never {
+	logger.warn("storage.failed", {
+		op,
+		bucket,
+		objectKey,
+		message: error instanceof Error ? error.message : String(error),
+	});
+	throw error;
+}
+
 export function createMinioStorage(config: MinioConfig, options: Options): Storage {
 	const client = new Client({
 		endPoint: config.endpoint,
@@ -52,8 +67,12 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 		): Promise<PresignedPut> {
 			// ⚠️ 预签名里**不绑 Content-Type**:绑了浏览器就得一模一样地发,少一个分号就 403。
 			// 真实类型在 `confirm` 阶段用 `stat` 回读并写库(见 doc/文件管理.md「两阶段」)。
-			const url = await client.presignedUrl("PUT", bucket, objectKey, expiresSeconds);
-			return { url, expiresIn: expiresSeconds };
+			try {
+				const url = await client.presignedUrl("PUT", bucket, objectKey, expiresSeconds);
+				return { url, expiresIn: expiresSeconds };
+			} catch (error) {
+				logFailure("presign_put", bucket, objectKey, error);
+			}
 		},
 
 		async stat(bucket, objectKey): Promise<StoredObject | null> {
@@ -67,7 +86,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 				};
 			} catch (error) {
 				if (isNotFound(error)) return null;
-				throw error;
+				logFailure("stat", bucket, objectKey, error);
 			}
 		},
 
@@ -85,7 +104,9 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 					"response-content-disposition": `attachment; filename="${ascii.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
 				};
 			}
-			return await client.presignedGetObject(bucket, objectKey, expiresSeconds, reqParams);
+			return await client.presignedGetObject(bucket, objectKey, expiresSeconds, reqParams).catch((error: unknown) => {
+				logFailure("presign_get", bucket, objectKey, error);
+			});
 		},
 
 		publicUrl(bucket, objectKey): string {
@@ -98,7 +119,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 				await client.removeObject(bucket, objectKey);
 			} catch (error) {
 				// 幂等:清理任务会对同一 key 反复调,不存在不是错误
-				if (!isNotFound(error)) throw error;
+				if (!isNotFound(error)) logFailure("remove", bucket, objectKey, error);
 			}
 		},
 	};

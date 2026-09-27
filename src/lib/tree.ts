@@ -115,7 +115,7 @@ export function bySortThenLabel<T extends { sort: number; label: string }>(left:
 }
 
 /**
- * 取这批节点的**所有后代**(含自己)—— 给"本部门及以下"用。
+ * 取这批节点的**所有后代**(含自己)—— 给策略里 `@org:<节点>` 这类规则用(该组织及其以下的资源)。
  *
  * 环保护同 `buildTree`:脏数据里出现 A→B→A 时靠 `out` 集合停住,不会无限递归。
  */
@@ -134,5 +134,30 @@ export function collectDescendantIds<T extends TreeRow>(rows: readonly T[], root
 		for (const child of byParent.get(id) ?? []) walk(child.id);
 	};
 	for (const id of rootIds) walk(id);
+	return [...out];
+}
+
+/**
+ * 取这批节点的**所有祖先**(不含自己)—— 给策略里 `dept:<节点>` 这类规则用:
+ * 规则写的是「七宝镇」,而人往往挂在更深的「七宝镇网格组」上,得能命中。
+ *
+ * 环保护同理:脏数据里出现 A→B→A 时靠 `out` 集合停住。
+ */
+export function collectAncestorIds<T extends TreeRow>(rows: readonly T[], ids: Iterable<string>): string[] {
+	const parentOf = new Map<string, string | null>();
+	for (const row of rows) parentOf.set(row.id, row.parentId ?? null);
+	// `seeds` 用来把"自己"摘掉:环状脏数据(A→B→A)下走一圈会绕回起点,
+	// 那样 A 会变成自己的祖先;`seen` 负责停住,`seeds` 负责不把自己算进来。
+	const seeds = new Set(ids);
+	const seen = new Set<string>();
+	const out = new Set<string>();
+	for (const id of seeds) {
+		let cursor = parentOf.get(id) ?? null;
+		while (cursor && !seen.has(cursor)) {
+			seen.add(cursor);
+			if (!seeds.has(cursor)) out.add(cursor);
+			cursor = parentOf.get(cursor) ?? null;
+		}
+	}
 	return [...out];
 }

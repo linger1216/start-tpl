@@ -117,7 +117,6 @@ const STATEMENTS: string[] = [
 		"sort" int default 0 not null,
 		"status" tinyint default 1 not null,
 		"remark" varchar(255),
-		"data_scope" varchar(32) default 'all' not null,
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
@@ -163,6 +162,23 @@ const STATEMENTS: string[] = [
 		constraint "fk_sys_role_menu_menu" foreign key ("menu_id") references ${S}."sys_menu" ("id") on delete cascade
 	)`,
 	`create index if not exists "idx_sys_role_menu_menu" on ${S}."sys_role_menu" ("menu_id")`,
+
+	// ── sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)────────────────
+	`create table if not exists ${S}."sys_data_policy" (
+		"id" varchar(32) not null,
+		"ptype" varchar(16) default 'p' not null,
+		"v0" varchar(80) not null,
+		"v1" varchar(128) not null,
+		"v2" varchar(16) not null,
+		"v3" varchar(16) default 'allow' not null,
+		"status" tinyint default 1 not null,
+		"remark" varchar(255),
+		"create_time" datetime default current_timestamp not null,
+		"update_time" datetime default current_timestamp not null,
+		primary key ("id"),
+		constraint "uk_sys_data_policy_sub_obj_act" unique ("v0", "v1", "v2")
+	)`,
+	`create index if not exists "idx_sys_data_policy_sub" on ${S}."sys_data_policy" ("v0", "status")`,
 
 	// ── sys_file(文件元数据;字节存 MinIO,见 doc/文件管理.md)─────────────────
 	`create table if not exists ${S}."sys_file" (
@@ -325,7 +341,6 @@ async function main() {
 	const columnUpgrades: Array<{ table: string; column: string; ddl: string }> = [
 		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
 		{ table: "sys_menu", column: "perm", ddl: "varchar(64)" },
-		{ table: "sys_role", column: "data_scope", ddl: "varchar(32) default 'all' not null" },
 		{ table: "demo_grid", column: "group_id", ddl: "varchar(32)" },
 	];
 	for (const upgrade of columnUpgrades) {

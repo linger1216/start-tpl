@@ -39,10 +39,10 @@ pnpm check            # biome check --write —— 格式化 + lint + 整理 imp
 pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生成物,不要手改)
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
-pnpm db:create        # 建系统表十四张(幂等;建完顺带对齐注释 / 索引名)
-pnpm db:dm:create-ba  # 达梦线:建认证四表 + 权限五表 + sys_file(幂等)
+pnpm db:create        # 建系统表十九张(幂等;建完顺带对齐注释 / 索引名)
+pnpm db:dm:create-ba  # 达梦线:建认证四表 + 权限六表 + sys_file(幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
-pnpm db:seed:menus / :dicts / :paras / :tags / :rbac   # 五个种子都幂等「只补不覆盖」
+pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo / :policies   # 七个种子都幂等「只补不覆盖」
 pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期
 ```
 
@@ -58,6 +58,10 @@ pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期
 - **接口只有 tRPC**:后端不要再开 REST 路由(唯一例外是 BA 的 `/api/auth/*`)。
   客户端一律 `useQuery(trpc.X.queryOptions(...))` / `useMutation(trpc.X.mutationOptions(...))` —— **严禁 `fetch` / axios / 自写 `queryFn`**;
   服务端 SSR loader 与 server function **不要绕过 HTTP 直调 procedure caller**(`createCallerFactory` 只归测试用)。
+- **每新增一个 procedure 都要在 `lib/rbac.ts` 里分类**:写接口登记 `sys:*` 权限点;**读接口(query)三选一** ——
+  登记成它所属页面的合成码 `page:<路径折算>:view` / 进 `UNMAPPED_QUERIES`(必须写理由)/ 值写成数组(任一页面可见即放行)。
+  忘了分类 `tests/auth.test.ts` 直接挂。页面级拦截在 `routes/(main)/route.tsx` 的 `beforeLoad`,
+  **没权限返回的是 404 不是 403**(框架对错误终态写死 500,只有 not-found 通道有 4xx)。详见 `doc/rbac-权限模型.md`。
 - **同类页面必须同形**:同一个动作全站只能有一种形态,而且同类页面必须都长出来。改通用功能前先把同类页面扫一遍。
 - **禁止薄封装**:新增组件前问一句「把它删掉,调用点能不能直接写出来?」—— 能就是薄封装,删。
   (保留的是「删掉后调用点会重复一段结构或逻辑」的件:如 `DetailRow` / `RefreshButton` / `TextCell` / `PageFrame`。)

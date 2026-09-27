@@ -206,6 +206,13 @@ async function main() {
 	if (日志MenuId) {
 		await upsertButton(日志MenuId, "查看审计日志", "sys:log:list", 90);
 	}
+	const 数据权限MenuId = byPath.get("/settings/data-policy")?.id;
+	if (数据权限MenuId) {
+		await upsertButton(数据权限MenuId, "查看数据权限", "sys:policy:list", 90);
+		await upsertButton(数据权限MenuId, "新增规则", "sys:policy:add", 91);
+		await upsertButton(数据权限MenuId, "修改规则", "sys:policy:edit", 92);
+		await upsertButton(数据权限MenuId, "删除规则", "sys:policy:remove", 93);
+	}
 	const 通知MenuId = byPath.get("/notices")?.id;
 	if (通知MenuId) {
 		await upsertButton(通知MenuId, "手动发通知", "sys:notice:add", 90);

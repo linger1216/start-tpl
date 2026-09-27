@@ -95,7 +95,7 @@ declare module "@tanstack/react-table" {
  *
  * 行集合变化(删除、覆盖导入)后自动剔除已消失的 id —— 这一步此前由各页自己维护
  * `useState<Set<string>>`,只有部分页面做了清理,漏掉就会出现「已选 N 条」虚高、
- * 批量删除删不到行。放在这里,55 处选中逻辑只留一个实现。
+ * 批量删除删不到行。放在这里,各页只留一份实现。
  */
 export function useRowSelection<T extends { id: string }>(rows: readonly T[]) {
 	const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -134,5 +134,5 @@ export function useRowSelection<T extends { id: string }>(rows: readonly T[]) {
 
 	const selectedRows = useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
 
-	return { selected, setSelected, selectedRows, toggleOne, toggleMany, clear };
+	return { selected, selectedRows, toggleOne, toggleMany, clear };
 }

@@ -2,7 +2,6 @@ import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
-import { scopeLabel } from "#/lib/data-scope-spec";
 import type { RoleRow } from "./settings-roles-table";
 
 /**
@@ -67,7 +66,6 @@ export function SettingsRolesDetail({
 							{row.memberCount} 人
 						</Badge>
 					</DetailRow>
-					<DetailRow label="数据范围">{scopeLabel(row?.dataScope)}</DetailRow>
 					<DetailRow label="说明">
 						<span className="text-sm">{row.remark || "—"}</span>
 					</DetailRow>

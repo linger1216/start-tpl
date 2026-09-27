@@ -1,6 +1,5 @@
 import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
-import { scopeLabel } from "#/lib/data-scope-spec";
 import { createAppColumnHelper } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
 
@@ -12,8 +11,6 @@ export type RoleRow = {
 	sort: number;
 	status: number;
 	remark: string | null;
-	/** 数据范围(all / dept_below / dept / self),见 lib/data-scope-spec.ts */
-	dataScope: string | null;
 	createTime: string | null;
 	updateTime: string | null;
 	/** 有多少条部门成员分配在用这个角色(由 `role.list` 聚合出来的派生字段,不是表里的列) */
@@ -73,11 +70,6 @@ export function roleColumns({
 			cell: (ctx) => (
 				<span className="block text-right tabular-nums text-xs text-muted-foreground">{ctx.getValue()}</span>
 			),
-		}),
-		columnHelper.accessor("dataScope", {
-			header: "数据范围",
-			size: 150,
-			cell: (ctx) => <span className="text-xs">{scopeLabel(ctx.getValue())}</span>,
 		}),
 		columnHelper.accessor("remark", {
 			header: "备注",

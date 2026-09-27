@@ -49,6 +49,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
 	sys_user_role: "用户 → 角色(全局;权限 = 这些角色授权的并集)",
 	sys_role_menu: "角色 → 菜单/按钮授权(一条表同时表达「菜单可见」与「按钮可用」)",
+	sys_data_policy: "行级数据权限(直白授权规则:谁 · 哪个资源 · 什么动作 · 允许 / 拒绝)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 };
 
@@ -161,7 +162,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
 	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_role", column: "remark", comment: "说明" },
-	{ table: "sys_role", column: "data_scope", comment: "数据范围:all / dept_below / dept / self" },
 	{ table: "sys_role", column: "create_time", comment: "创建时间" },
 	{ table: "sys_role", column: "update_time", comment: "更新时间" },
 	// sys_user_dept
@@ -183,6 +183,21 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role_menu", column: "menu_id", comment: "菜单/按钮 id → sys_menu.id(级联删除)" },
 	{ table: "sys_role_menu", column: "create_time", comment: "创建时间" },
 	{ table: "sys_role_menu", column: "update_time", comment: "更新时间" },
+	// sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)
+	{ table: "sys_data_policy", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_data_policy", column: "ptype", comment: "规则类型(Casbin 口径;目前只有 p = 策略行)" },
+	{ table: "sys_data_policy", column: "v0", comment: "主体:* / user:<用户 id> / role:<角色 code> / dept:<部门 id>" },
+	{
+		table: "sys_data_policy",
+		column: "v1",
+		comment: "资源:* / <类型> / <类型>@org:<部门 id>(该组织及以下) / <类型>@<行 id>",
+	},
+	{ table: "sys_data_policy", column: "v2", comment: "动作:read / write / *(读写都算)" },
+	{ table: "sys_data_policy", column: "v3", comment: "效果:allow / deny(deny 一票否决)" },
+	{ table: "sys_data_policy", column: "status", comment: "0 停用 / 1 启用(只有启用的行会被装载)" },
+	{ table: "sys_data_policy", column: "remark", comment: "备注" },
+	{ table: "sys_data_policy", column: "create_time", comment: "创建时间" },
+	{ table: "sys_data_policy", column: "update_time", comment: "更新时间" },
 	// todos(示例表)
 	{ table: "todos", column: "id", comment: "主键(自增;示例表)" },
 	{ table: "todos", column: "title", comment: "待办标题" },
@@ -225,9 +240,9 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "demo_grid", column: "name", comment: "网格名称(片区名)" },
 	{ table: "demo_grid", column: "town_name", comment: "所属街镇(文本)" },
 	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id(展示/统计用)" },
-	{ table: "demo_grid", column: "group_id", comment: "管理单元 → sys_dept.id(行级范围按它过滤)" },
+	{ table: "demo_grid", column: "group_id", comment: "归属组织 → sys_dept.id(策略里的 @org: 规则按它筛)" },
 	{ table: "demo_grid", column: "owner_name", comment: "网格长姓名" },
-	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(self 档用)" },
+	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(指派给他就自动写一条按行授权)" },
 	{ table: "demo_grid", column: "duty", comment: "工作职务" },
 	{ table: "demo_grid", column: "remark", comment: "备注" },
 	{ table: "demo_grid", column: "create_time", comment: "创建时间" },

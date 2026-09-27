@@ -12,10 +12,11 @@
  * 都从「当前菜单树」派生,不要在别处再维护第二份菜单或路径中文名映射。
  *
  * ── 本模板的菜单结构 ────────────────────────────────────────────
- *  工作台     `/`                    系统入口页:上手自检清单 + 各展示页入口
- *  组件展示   纯分组                  模板自带组件的「活文档」,按组件层级分 7 页
- *  框架能力   纯分组                  tRPC / Query / Form / Table / Drizzle / Auth / Store / Sentry
- *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(八个页面,完整 CRUD 骨架)
+ *  工作台     `/`                    系统入口页:上手自检清单 + 各展示页入口 + UI 原语示例
+ *  我的通知   `/notices`             通知中心
+ *  框架能力   纯分组                  6 个能力样例:tRPC / 表单 / 表格 / 数据库 / 登录认证 / 全局状态
+ *  Demo       `/demo/grid`           演示业务页「网格履职」
+ *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(十个页面,完整 CRUD 骨架)
  *
  * 派生新项目时:把「框架能力」这一枝删掉(连带 `routes/(main)/demo/`),
  * 再把「系统设置」按新业务改名 / 扩展即可;UI 原语的示例在工作台
@@ -145,7 +146,7 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"八个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
+			"十个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件、审计日志、数据权限(行级授权规则)—— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
 			{ name: "部门管理", path: "/settings/departments", icon: "contact" },
@@ -156,6 +157,7 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
 			{ name: "文件管理", path: "/settings/files", icon: "files" },
 			{ name: "审计日志", path: "/settings/logs", icon: "scroll-text" },
+			{ name: "数据权限", path: "/settings/data-policy", icon: "shield-alert" },
 		],
 	},
 ];

@@ -12,10 +12,11 @@
  */
 import assert from "node:assert/strict";
 
-import { eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, lt } from "drizzle-orm";
 
 import {
 	sysAccount,
+	sysDataPolicy,
 	sysDept,
 	sysUserDept,
 	sysDict,
@@ -30,6 +31,8 @@ import {
 	sysUserRole,
 } from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
+import { flushAuditWrites } from "../src/lib/audit.ts";
+import { clearDataPolicyCache } from "../src/lib/data-policy.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
 
@@ -56,6 +59,91 @@ export const caller = createCallerFactory(trpcRouter)({ user: TEST_USER });
 
 /** **未登录**的 caller —— 用来断言"必须被拒"(在这之前根本没法测这一条) */
 export const anonymousCaller = createCallerFactory(trpcRouter)({ user: null });
+
+/**
+ * 直接往 `sys_data_policy` 插一行策略(测试用)。
+ *
+ * 业务代码写策略只走 `lib/data-policy.ts` 的 `grantRow` / `grantOrg`(它们会清缓存);
+ * 这里是为了造"迁移脚本写出来的那种行"(角色规则 / 部门规则),并顺手清掉 30 秒缓存 ——
+ * 不清的话测试要等缓存过期才能看到效果。
+ */
+export async function putPolicyRow(v0: string, v1: string, v2 = "*", v3 = "allow", status = 1): Promise<string> {
+	const policyId = `${TEST_PREFIX}p-${uniqueSuffix()}`;
+	await db.insert(sysDataPolicy).values({ id: policyId, ptype: "p", v0, v1, v2, v3, status, remark: TEST_PREFIX, create_time: new Date(), update_time: new Date() });
+	clearDataPolicyCache();
+	return policyId;
+}
+
+/**
+ * 清掉测试留下的策略行 —— 三种写法都要清:按 id(`putPolicyRow` 返回的)、
+ * 按主体(测试账号)、按资源(测试网格,`grantRow` 写的是这种)。
+ */
+export async function deleteTestPolicies(ids: readonly string[], userIds: readonly string[] = [], gridIds: readonly string[] = []): Promise<void> {
+	if (ids.length > 0) await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.id, [...ids]));
+	if (userIds.length > 0) await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.v0, userIds.map((userId) => `user:${userId}`)));
+	if (gridIds.length > 0) await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.v1, gridIds.map((gridId) => `demo_grid@${gridId}`)));
+}
+
+/**
+ * 清掉**这些操作人**留下的审计行(测试身份写的那些)。
+ *
+ * 必须先 `await flushAuditWrites()`:审计是 fire-and-forget,`after()` 常常比写库还快 ——
+ * 不先等它落地,删的时候一行都查不到,然后就永久留在库里(实测漏过 14 行,
+ * `operator_id` 是 `__test__u-队员A-…`,`path` 是 `demoGrid.update/remove/assign`)。
+ * 按**精确 id** 删,不做模糊匹配:测试用户的 id 带唯一后缀,不可能撞到真实数据。
+ */
+export async function purgeTestAuditRows(operatorIds: readonly string[]): Promise<number> {
+	await flushAuditWrites();
+	const ids = [...operatorIds];
+	if (ids.length === 0) return 0;
+	const rows = await db.select({ id: sysLog.id }).from(sysLog).where(inArray(sysLog.operator_id, ids));
+	if (rows.length === 0) return 0;
+	await db.delete(sysLog).where(
+		inArray(
+			sysLog.id,
+			rows.map((row) => row.id),
+		),
+	);
+	return rows.length;
+}
+
+/**
+ * 给**合成的**管理员身份(`TEST_USER.id` 这个人在库里不存在)补一条无限制策略行。
+ *
+ * 为什么需要:策略表一旦「已启用」(库里真有启用中的行),引擎就是**失败关闭**的 —— 认不出的主体
+ * 一条数据都看不到 ⇒ 测试里 `(await caller.user.list()).find(...)` 这种取行的老写法会拿到 undefined。
+ * 引擎不校验主体里的人是否存在,所以给 `user:test-admin` 一条 `*` 恰好等于"不过滤"(与表空时一致)。
+ *
+ * 幂等:并行跑的文件可能同时走到这里,唯一键会挡下第二次插入 —— 确认行还在就当作成功。
+ */
+export async function ensureTestAdminPolicy(): Promise<void> {
+	const subject = `user:${TEST_USER.id}`;
+	const found = async (): Promise<boolean> => {
+		const [row] = await db
+			.select({ id: sysDataPolicy.id })
+			.from(sysDataPolicy)
+			.where(and(eq(sysDataPolicy.v0, subject), eq(sysDataPolicy.v1, "*"), eq(sysDataPolicy.status, 1)));
+		return row !== undefined;
+	};
+	if (await found()) return;
+	try {
+		await db.insert(sysDataPolicy).values({
+			id: "test-admin-policy",
+			ptype: "p",
+			v0: subject,
+			v1: "*",
+			v2: "*",
+			v3: "allow",
+			status: 1,
+			remark: "测试直调用注入的合成身份(见 tests/helpers.ts)",
+			create_time: new Date(),
+			update_time: new Date(),
+		});
+	} catch (error) {
+		if (!(await found())) throw error;
+	}
+	clearDataPolicyCache();
+}
 
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;
 
@@ -104,6 +192,19 @@ function startsWithPrefix(value: unknown): boolean {
 export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
 	let removed = 0;
+
+	// ── 数据权限策略行:测试写的两种都指向测试数据(按人授权的 `user:__test__…` / 资源 `demo_grid@__test__…`
+	//     或者是前缀打头的角色 code)⇒ 主体或资源里带前缀的就是测试留下的,先删(没有外键,顺序随便)──
+	const stalePolicies = (
+		await db
+			.select({ id: sysDataPolicy.id, v0: sysDataPolicy.v0, v1: sysDataPolicy.v1 })
+			.from(sysDataPolicy)
+			.where(lt(sysDataPolicy.create_time, cutoff))
+	).filter((row) => row.v0.includes(TEST_PREFIX) || row.v1.includes(TEST_PREFIX));
+	if (stalePolicies.length > 0) {
+		await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.id, stalePolicies.map((row) => row.id)));
+		removed += stalePolicies.length;
+	}
 
 	// ── 用户(先清引用它的会话 / 登录方式 / 角色分配 / 部门成员)──
 	const staleUsers = (
@@ -168,7 +269,7 @@ export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number>
 	}
 
 	// ── 审计日志:两类都要清 —— ① `operator_id = "test-admin"`(内部 caller 的标记,没有 __test__ 前缀);
-	//     ② operator 是**测试自己建的账号**(`__test__u-…`,demo-grid / data-scope 那些用例用的 caller)。
+	//     ② operator 是**测试自己建的账号**(`__test__u-…`,demo-grid / data-policy 那些用例用的 caller)。
 	//     审计是只增不改的表,漏一类就会一直堆(实测每跑一轮漏 ~6 行)。
 	const staleLogs = await db
 		.select({ id: sysLog.id, operatorId: sysLog.operator_id })

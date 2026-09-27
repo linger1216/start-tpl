@@ -1,9 +1,10 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
+import type { NotFoundRouteProps } from "@tanstack/react-router";
 import { createRootRouteWithContext, HeadContent, Link, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
-import { Compass } from "lucide-react";
+import { Compass, ShieldAlert } from "lucide-react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { buttonVariants } from "#/components/ui/button";
 import { Toaster } from "#/components/ui/sonner";
@@ -55,20 +56,57 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	notFoundComponent: NotFound,
 });
 
+/**
+ * 「这个 404 其实是没权限」—— 抛出方是 `routes/(main)/route.tsx` 的 `beforeLoad`。
+ *
+ * ⚠️ 为什么没权限要伪装成 404:框架对**任何错误边界**都写死 `status: 500`
+ * (`applyFailure` 的 ERROR 终态,`error.status` 不参与判定),想给出 4xx 就只能走
+ * not-found 通道(`status: 404`)。顺带还不多暴露"这个地址存在"这件事。
+ *
+ * ⚠️ 这里读的是 `notFound({ data })` 里那个**普通对象**,不是错误实例 ——
+ * 别改成 `instanceof`:错误对象要序列化给客户端做水合,`prototype` 会丢(踩过)。
+ */
+export type ForbiddenData = { forbidden: true; pageName: string | null };
+
+function forbiddenDataOf(data: unknown): ForbiddenData | null {
+	if (typeof data !== "object" || data === null) return null;
+	const candidate = data as { forbidden?: unknown; pageName?: unknown };
+	if (candidate.forbidden !== true) return null;
+	return { forbidden: true, pageName: typeof candidate.pageName === "string" ? candidate.pageName : null };
+}
+
 /** 404 —— 复用模板已有的 EmptyState,避免落到 TanStack 默认的裸 `<p>Not Found</p>` */
-function NotFound() {
+function NotFound({ data }: NotFoundRouteProps) {
+	const forbidden = forbiddenDataOf(data);
 	return (
 		<div className="flex min-h-screen items-center justify-center p-6">
-			<EmptyState
-				title="页面不存在"
-				description="你访问的地址没有对应的页面,可能是链接已过期或输入有误。"
-				icon={<Compass className="size-6" />}
-				actions={
-					<Link to="/" className={buttonVariants()}>
-						返回工作台
-					</Link>
-				}
-			/>
+			{forbidden ? (
+				<EmptyState
+					title="没有权限"
+					description={
+						forbidden.pageName
+							? `「${forbidden.pageName}」这个页面在你的角色里没有授权。需要用的话,让管理员在「角色管理」里给对应角色勾上它。`
+							: "这个页面在你的角色里没有授权。需要用的话,让管理员在「角色管理」里给对应角色勾上它。"
+					}
+					icon={<ShieldAlert className="size-6" />}
+					actions={
+						<Link to="/" className={buttonVariants()}>
+							返回工作台
+						</Link>
+					}
+				/>
+			) : (
+				<EmptyState
+					title="页面不存在"
+					description="你访问的地址没有对应的页面,可能是链接已过期或输入有误。"
+					icon={<Compass className="size-6" />}
+					actions={
+						<Link to="/" className={buttonVariants()}>
+							返回工作台
+						</Link>
+					}
+				/>
+			)}
 		</div>
 	);
 }

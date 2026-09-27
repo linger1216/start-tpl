@@ -31,7 +31,7 @@ import {
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
-import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, closeDb, ensureTestAdminPolicy, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const deptIds: string[] = [];
@@ -105,6 +105,8 @@ test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角�
  * 用 API 而不是直接 insert `sys_user_role`,这样测试同时覆盖了"保存角色"这条路径。
  */
 async function assignRoles(userId: string, roleIdList: string[]): Promise<void> {
+	// 策略表已启用 ⇒ 引擎失败关闭:合成的 test-admin 身份必须先补一条无限制策略,才读得到用户列表
+	await ensureTestAdminPolicy();
 	const row = (await caller.user.list()).find((item) => item.id === userId);
 	assert.ok(row, "用户应该存在");
 	// 角色与部门都是**覆盖式**:只想改角色,就得把当前部门原样传回去(不传会清掉)

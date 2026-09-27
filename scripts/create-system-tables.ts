@@ -199,7 +199,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0 comment '排序,越小越靠前',
 			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '说明',
-			\`data_scope\` varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / dept_below / dept / self',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -251,6 +250,24 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			constraint \`fk_sys_role_menu_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`) on delete cascade,
 			constraint \`fk_sys_role_menu_menu\` foreign key (\`menu_id\`) references \`sys_menu\` (\`id\`) on delete cascade
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色 → 菜单/按钮授权(同时表达「菜单可见」与「按钮可用」)'`,
+	},
+	{
+		name: "sys_data_policy",
+		ddl: `create table if not exists \`sys_data_policy\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
+			\`ptype\` varchar(16) collate utf8mb4_unicode_ci not null default 'p' comment '规则类型(Casbin 口径;目前只有 p)',
+			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment '主体:* / user:<用户 id> / role:<角色 code> / dept:<部门 id>',
+			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment '资源:* / <类型> / <类型>@org:<部门 id> / <类型>@<行 id>',
+			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null comment '动作:read / write / *(读写都算)',
+			\`v3\` varchar(16) collate utf8mb4_unicode_ci not null default 'allow' comment '效果:allow / deny(deny 一票否决)',
+			\`status\` tinyint not null default 1 comment '0 停用 / 1 启用(只有启用的行会被装载)',
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '备注',
+			\`create_time\` datetime not null default current_timestamp,
+			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_data_policy_sub_obj_act\` (\`v0\`, \`v1\`, \`v2\`),
+			key \`idx_sys_data_policy_sub\` (\`v0\`, \`status\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '行级数据权限(直白授权规则:谁 · 哪个资源 · 什么动作 · 允许 / 拒绝)'`,
 	},
 /** 文件元数据(字节存 MinIO;见 doc/文件管理.md) */
   {
@@ -393,11 +410,6 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		table: "sys_menu",
 		column: "perm",
 		ddl: "varchar(64) collate utf8mb4_unicode_ci default null comment '权限标识,如 sys:role:write;前端 useHasPerm() 认它'",
-	},
-	{
-		table: "sys_role",
-		column: "data_scope",
-		ddl: "varchar(32) collate utf8mb4_unicode_ci not null default 'all' comment '数据范围:all / self / dept / dept_below'",
 	},
 	{
 		table: "demo_grid",

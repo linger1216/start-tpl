@@ -33,7 +33,6 @@ function toRoleRow(row: typeof sysRole.$inferSelect, memberCount = 0) {
 		sort: Number(row.sort ?? 0),
 		status: Number(row.status ?? 1),
 		remark: row.remark ?? null,
-		dataScope: row.data_scope,
 		createTime: row.create_time ? row.create_time.toISOString() : null,
 		updateTime: row.update_time ? row.update_time.toISOString() : null,
 		memberCount,
@@ -77,8 +76,6 @@ export const roleRouter = createTRPCRouter({
 				/** 不传 = 自动排到最后 */
 				sort: z.number().int().optional(),
 				remark: z.string().max(255).nullable().default(null),
-				/** 数据范围(见 lib/data-scope.ts);值非法一律 fail-closed */
-				dataScope: z.string().max(32).default("all"),
 			}),
 		)
 		.mutation(async ({ input }) => {
@@ -95,7 +92,6 @@ export const roleRouter = createTRPCRouter({
 				sort,
 				status: 1,
 				remark: input.remark?.trim() || null,
-				data_scope: input.dataScope,
 				create_time: new Date(),
 				update_time: new Date(),
 			});
@@ -111,8 +107,6 @@ export const roleRouter = createTRPCRouter({
 				sort: z.number().int().optional(),
 				status: z.boolean(),
 				remark: z.string().max(255).nullable().default(null),
-				/** 数据范围(见 lib/data-scope.ts);值非法一律 fail-closed */
-				dataScope: z.string().max(32).default("all"),
 			}),
 		)
 		.mutation(async ({ input }) => {
@@ -127,7 +121,6 @@ export const roleRouter = createTRPCRouter({
 					...(input.sort !== undefined ? { sort: input.sort } : {}),
 					status: input.status ? 1 : 0,
 					remark: input.remark?.trim() || null,
-					data_scope: input.dataScope,
 					update_time: new Date(),
 				})
 				.where(eq(sysRole.id, input.id));

@@ -25,7 +25,7 @@ import {
 	sysUserRole,
 } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
-import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, closeDb, ensureTestAdminPolicy, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const EMAIL = `${TEST_PREFIX}created_${SUFFIX}@example.com`;
@@ -119,6 +119,8 @@ test("user.update:改姓名与邮箱,库里真的变了", async () => {
 	assert.equal(afterUpdate.emailVerified, true, "email_verified 应该已更新");
 
 	// 角色分配真的落库了(而且 `list` 能读回来)
+	// 策略表已启用 ⇒ 引擎失败关闭:合成的 test-admin 身份必须先补一条无限制策略,否则列表是空的
+	await ensureTestAdminPolicy();
 	const listed = (await caller.user.list()).find((row) => row.id === created.id);
 	assert.deepEqual(listed?.roleIds, [role.id], "角色分配应该被保存");
 	assert.deepEqual(listed?.roleNames, [role.name], "角色名也应该带出来");
@@ -220,6 +222,8 @@ test("user.update:部门是覆盖式 —— 加一个 / 去掉一个,传进去�
 		emailVerified: false,
 		roleIds: [] as string[],
 	};
+	// 同上:先补无限制策略,`list` 才读得到(合成身份在库里不存在)
+	await ensureTestAdminPolicy();
 	const readDeptIds = async () => {
 		const row = (await caller.user.list()).find((item) => item.id === created.id);
 		return [...(row?.departmentIds ?? [])].sort();

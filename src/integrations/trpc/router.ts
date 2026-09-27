@@ -1,4 +1,5 @@
 import { createTRPCRouter } from "./init";
+import { dataPolicyRouter } from "./routers/data-policy";
 import { demoGridRouter } from "./routers/demo-grid";
 import { departmentRouter } from "./routers/department";
 import { dictRouter } from "./routers/dict";
@@ -34,5 +35,7 @@ export const trpcRouter = createTRPCRouter({
 	user: userRouter,
 	/** 系统设置 ▸ 文件管理 —— 读写 `sys_file`(字节存 MinIO,见 doc/文件管理.md) */
 	file: fileRouter,
+	/** 系统设置 ▸ 数据权限 —— 读写 `sys_data_policy`(直白授权规则,见 doc/rbac-权限模型.md) */
+	policy: dataPolicyRouter,
 });
 export type TRPCRouter = typeof trpcRouter;

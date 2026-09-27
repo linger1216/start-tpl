@@ -24,7 +24,7 @@ import { db } from "#/db";
 import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
 import { auth } from "#/lib/auth";
 import { getCurrentUserId } from "#/lib/current-user";
-import { scopeOf, userIdsOfDepartments } from "#/lib/data-scope";
+import { dataScopeWhere, revokeUser } from "#/lib/data-policy";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, currentUserOf, protectedProcedure } from "../init";
 
@@ -35,11 +35,9 @@ export const userRouter = createTRPCRouter({
 	 * 一次查完所有分配再按 user 归组,**别在循环里逐人查**(N+1)。
 	 */
 	list: protectedProcedure.query(async ({ ctx }) => {
-		// ⚠️ 行级数据权限的**唯一落点**(见 lib/data-scope.ts):档位在角色上,范围在部门树上算
+		// ⚠️ 行级数据权限的落点之一(见 lib/data-policy.ts):谁能看哪些用户,由 sys_data_policy 的规则决定
 		const me = currentUserOf(ctx).id;
-		const { scope, departmentIds } = await scopeOf(me);
-		const scopeWhere =
-			scope === "all" ? undefined : scope === "self" ? eq(sysUser.id, me) : userIdsOfDepartments(departmentIds);
+		const scopeWhere = await dataScopeWhere(me, "sys_user", "read");
 
 		const users = await db.select().from(sysUser).where(scopeWhere).orderBy(asc(sysUser.name), asc(sysUser.email));
 		// 「属于哪些部门」和「有哪些角色」是两件事:前者是组织架构(sys_user_dept),
@@ -257,6 +255,8 @@ export const userRouter = createTRPCRouter({
 		await db.delete(sysAccount).where(eq(sysAccount.userId, input.id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, input.id));
 		await db.delete(sysUserRole).where(eq(sysUserRole.user_id, input.id));
+		// 人没了,指名给他的数据授权也没意义了(部门 / 角色规则不归他,不动)
+		await revokeUser(input.id);
 		await db.delete(sysUser).where(eq(sysUser.id, input.id));
 		return { id: input.id, success: true };
 	}),

@@ -87,10 +87,13 @@ export function log(level: LogLevel, event: string, fields: LogFields = {}): voi
 	if (silent()) return;
 	if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[currentLevel()]) return;
 	const line = {
+		// 字段先铺,`ts` / `level` / `event` 三个**保留名最后盖** ——
+		// 否则调用方传一个叫 `event` 的字段就能把日志自己的事件名顶掉(实测踩过:
+		// 认证端点想记 `auth.ok`,入参里的 `event: "auth.sign_in"` 把它覆盖了,ok / failed 两个分支看起来一模一样)
+		...((sanitize(fields) ?? {}) as LogFields),
 		ts: new Date().toISOString(),
 		level,
 		event,
-		...((sanitize(fields) ?? {}) as LogFields),
 	} as LogLine;
 	sink(line);
 }

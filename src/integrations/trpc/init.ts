@@ -12,7 +12,9 @@ const t = initTRPC.create({
 });
 
 /** 超过这个毫秒数记一条 warn(慢调用要能在日志里一眼看到) */
-const SLOW_MS = Number(process.env.LOG_SLOW_MS ?? 1500);
+function slowMs(): number {
+	return Number(process.env.LOG_SLOW_MS ?? 1500);
+}
 
 /**
  * **后端日志的底座**:所有 procedure 都经过这里 —— 于是"每次后端调用都有日志"是**结构性保证**,
@@ -21,15 +23,18 @@ const SLOW_MS = Number(process.env.LOG_SLOW_MS ?? 1500);
  * 每条记 3 行(debug 起 / 完成或失败 / 慢调用 warn),统一带 `traceId` / `path` / `type` / `ms`;
  * `ctx.traceId` 会传给 resolver,内部日志(sync / rule / entity …)都带上它,一次调用可串成一条时间线。
  * 入参只在 debug 级记,且经 `sanitize()` 脱敏截断(凭据字段一律 `***`)。
+ *
+ * **导出**:`tests/logging.test.ts` 拿它做同一性断言(每个 procedure 挂的都是这一个),进而保证
+ * 「所有后端调用都有日志」这件事有回归用例守着,而不只是注释里的一句话。
  */
-const loggingMiddleware = t.middleware(async ({ path, type, next, getRawInput, ctx }) => {
+export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawInput, ctx }) => {
 	const traceId = newTraceId();
 	const startedAt = Date.now();
 	logger.debug("trpc.start", { traceId, path, type, input: sanitize(await getRawInput()) });
 	try {
 		const result = await next({ ctx: { ...ctx, traceId } });
 		const ms = Date.now() - startedAt;
-		if (ms >= SLOW_MS) logger.warn("trpc.slow", { traceId, path, type, ms });
+		if (ms >= slowMs()) logger.warn("trpc.slow", { traceId, path, type, ms });
 		/**
 		 * 注意:`next()` 在 resolver 报错时**不抛**,而是 resolve 成 `{ ok: false, error }` ——
 		 * 不判它就会出现"调用失败却记成 ok"的假日志(实测踩到)。这里判一次,失败照常记 error,
@@ -94,8 +99,10 @@ const requireUser = t.middleware(async ({ ctx, next }) => {
  *  · **fire-and-forget**(`void writeAudit(...)`)—— 业务永远不等审计;
  *  · **只写一次** —— `next()` 在失败时**不抛**而是 resolve 成 `{ ok:false }`(与日志中间件同一个坑),
  *    所以这里把成败都收敛到一处再写,否则失败会被记成两条。
+ *
+ * **导出**:原因同 `loggingMiddleware` —— 覆盖率用例要断言每个 mutation 都经过它。
  */
-const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInput, next }) => {
+export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInput, next }) => {
 	const startedAt = Date.now();
 	const rawInput = await getRawInput();
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
@@ -139,19 +146,21 @@ const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInput, next
 
 /**
  * ④ 权限:按 **path 查表**(`PERM_BY_PATH`)而不是每个 procedure 手写权限码 ——
- * 漏写一个就静默放开,而查表天然全覆盖。表里没有登记的写接口只要求登录,
- * 由 `tests/auth.test.ts` 的分类守卫盯着(新增破坏性接口必须显式分类)。
+ * 漏写一个就静默放开,而查表天然全覆盖。表里既可以写一个码,也可以写一组码(命中任一即放行,
+ * 读接口被多个页面共用时用它);没有登记的接口只要求登录,由 `tests/auth.test.ts` 的分类守卫
+ * 盯着(新增接口必须显式归类到 `PERM_BY_PATH` 或两个 `UNMAPPED_*` 之一)。
  */
 const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
-	const code = PERM_BY_PATH[path];
-	if (!code) return next();
+	const mapped = PERM_BY_PATH[path];
+	if (!mapped) return next();
+	const codes = typeof mapped === "string" ? [mapped] : mapped;
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
 	if (user?.isSuper) return next();
 	const { perms } = await effectiveMenusFor(user?.id ?? null);
 	// `perms === null` = 权限体系未启用(菜单表是空的)⇒ 一律放行,与前端 `useHasPerm` 同口径
 	if (perms === null) return next();
-	const hit = [...perms].some((pattern) => permMatches(pattern, code));
-	if (!hit) throw new TRPCError({ code: "FORBIDDEN", message: `没有权限:${code}` });
+	const hit = perms.some((pattern) => codes.some((code) => permMatches(pattern, code)));
+	if (!hit) throw new TRPCError({ code: "FORBIDDEN", message: `没有权限:${codes.join(" 或 ")}` });
 	return next();
 });
 
