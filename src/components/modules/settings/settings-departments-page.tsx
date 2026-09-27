@@ -39,11 +39,15 @@ export function SettingsDepartmentsPage() {
 	const rows = (treeQuery.data ?? []) as DeptRow[];
 	const { tree, byId } = useMemo(() => buildTree(rows, { rootKey: "", compare: bySortThenName }), [rows]);
 
-	const usersQuery = useQuery(trpc.user.list.queryOptions());
-
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [values, setValues] = useState<DeptFormValues | null>(null);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+
+	// 候选人只在选中部门(右侧详情表单)时才拉 —— 与下面的成员查询同一个开关
+	const usersQuery = useQuery({
+		...trpc.user.list.queryOptions(),
+		enabled: Boolean(selectedId),
+	});
 
 	const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 	const dirty = Boolean(selected && values && JSON.stringify(values) !== JSON.stringify(deptFormValues(selected)));

@@ -17,9 +17,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.3.3(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))
-      '@tanstack/match-sorter-utils':
-        specifier: ^9.1.2
-        version: 9.1.2
       '@tanstack/react-devtools':
         specifier: ^0.10.12
         version: 0.10.12(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(csstype@3.2.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(solid-js@1.9.15)
@@ -1555,10 +1552,6 @@ packages:
     resolution: {integrity: sha512-Lemp3DJbzNqcin/nZpWxycDaEqySDbnIshDbyHJMMCapD4ZQMe57szRpBXOfzfP6fyWAtHNrLrcBUyANJ6Vlow==}
     engines: {node: '>=20.19'}
 
-  '@tanstack/match-sorter-utils@9.1.2':
-    resolution: {integrity: sha512-aPkUQctDzpXLSWhlx7jUDi3mInsI18xcnrK1hvIyIa88ab1ax88cACr7xU+BKMCGB4NZYNwh4SoNSEbv3RY2NA==}
-    engines: {node: '>=20'}
-
   '@tanstack/pacer-lite@0.1.1':
     resolution: {integrity: sha512-y/xtNPNt/YeyoVxE/JCx+T7yjEzpezmbb+toK8DDD1P4m7Kzs5YR956+7OKexG3f8aXgC3rLZl7b1V+yNUSy5w==}
     engines: {node: '>=18'}
@@ -2838,9 +2831,6 @@ packages:
   readdirp@5.1.1:
     resolution: {integrity: sha512-Kko+Y5XQ6fM+Ce3dq3m9YGxnacYZYl9cA1wZjaF3Vbry2L3i1qVg8+CAgNPsXRArPMUMCaOR7oa9Nqntc43JKA==}
     engines: {node: '>= 20.19.0'}
-
-  remove-accents@0.5.0:
-    resolution: {integrity: sha512-8g3/Otx1eJaVD12e31UbJj1YzdtVvzH85HV7t+9MJYk/u3XmkOUJ5Ys9wQrf9PCPK8+xn4ymzqYCiZl6QWKn+A==}
 
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
@@ -4373,10 +4363,6 @@ snapshots:
 
   '@tanstack/history@1.162.2': {}
 
-  '@tanstack/match-sorter-utils@9.1.2':
-    dependencies:
-      remove-accents: 0.5.0
-
   '@tanstack/pacer-lite@0.1.1': {}
 
   '@tanstack/query-core@5.102.8': {}
@@ -5543,8 +5529,6 @@ snapshots:
       util-deprecate: 1.0.2
 
   readdirp@5.1.1: {}
-
-  remove-accents@0.5.0: {}
 
   require-directory@2.1.1: {}
 

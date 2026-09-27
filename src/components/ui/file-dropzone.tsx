@@ -16,7 +16,7 @@ import { cn } from "#/lib/utils";
  * 不合规的文件已被逐个 toast 拒绝、不会混进来)。`fileName` / `onClear` 是单文件那套的展示位;
  * 多选时由调用方自己列表展示 —— 它更清楚每行的进度与失败原因。
  *
- * `validate` 返回错误文案即拒绝该文件并 toast 提示;不传则只做大小校验(多选时逐个校验)。
+ * 超过 `maxSizeMb` 的文件逐个 toast 拒绝,不会混进回调。
  */
 
 export function FileDropzone({
@@ -33,7 +33,6 @@ export function FileDropzone({
 	/** 副文案(格式 / 大小说明);不传则按 `accept` 与 `maxSizeMb` 自动生成 */
 	hint,
 	icon,
-	validate,
 	className,
 }: {
 	/** 校验通过后回调(单文件用这个) */
@@ -54,8 +53,6 @@ export function FileDropzone({
 	hint?: ReactNode;
 	/** 区内的提示图标,默认 `Upload` */
 	icon?: ReactNode;
-	/** 自定义校验:返回字符串表示拒绝(该字符串会 toast 出来) */
-	validate?: (file: File) => string | null;
 	className?: string;
 }) {
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -72,11 +69,6 @@ export function FileDropzone({
 		if (picked.length === 0) return;
 		const passed: File[] = [];
 		for (const file of picked) {
-			const rejected = validate?.(file);
-			if (rejected) {
-				toast.error(`${file.name}:${rejected}`);
-				continue;
-			}
 			if (maxSizeMb !== undefined && file.size > maxSizeMb * 1024 * 1024) {
 				toast.error(`${file.name}:不能超过 ${maxSizeMb}MB`);
 				continue;

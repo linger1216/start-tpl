@@ -8,7 +8,7 @@
  *
  * 规矩:
  *  - **给人看**用 `formatLocalDateTime` / `formatLocalMinute`(本地时区,`YYYY-MM-DD HH:mm:ss` / `…HH:mm`);
- *  - **给机器传**(接口参数、游标)用 `formatLocalSql`(与 MySQL `datetime` 同语义)或 `toISOString`(跨系统 ISO-8601);
+ *  - **给机器传**(接口参数、游标)用 `formatLocalDateTime`(与 MySQL `datetime` 同语义)或 `toISOString`(跨系统 ISO-8601);
  *  - **落库前**要 Date 就传 `Date` 对象,交给驱动按连接时区处理,不要自己拼字符串。
  */
 
@@ -39,12 +39,4 @@ export function formatLocalDate(value: Date | string | number | null | undefined
 	const date = asDate(value);
 	if (!date) return "";
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-/** 与 MySQL `datetime` 同语义的字符串(本地时区) —— 给 SQL 参数或游标用 */
-export const formatLocalSql = formatLocalDateTime;
-
-/** 当前时刻(集中一处,便于测试替换) */
-export function nowLocal(): Date {
-	return new Date();
 }

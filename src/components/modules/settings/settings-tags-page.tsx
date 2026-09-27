@@ -12,6 +12,7 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -252,26 +253,16 @@ export function SettingsTagsPage() {
 									</div>
 								</div>
 
-								<dl className="grid grid-cols-2 gap-3 text-xs">
-									<div>
-										<dt className="text-muted-foreground">含义</dt>
-										<dd className="mt-0.5 text-foreground">{selected.desc || "—"}</dd>
-									</div>
-									<div>
-										<dt className="text-muted-foreground">父级</dt>
-										<dd className="mt-0.5 text-foreground">
-											{selected.parentId ? ((byId.get(selected.parentId) ?? null)?.label ?? "(已删除)") : "— 顶层维度"}
-										</dd>
-									</div>
-									<div>
-										<dt className="text-muted-foreground">直接子节点</dt>
-										<dd className="mt-0.5 text-foreground">{selected.children.length} 个</dd>
-									</div>
-									<div>
-										<dt className="text-muted-foreground">节点 id</dt>
-										<dd className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{selected.id}</dd>
-									</div>
-								</dl>
+								<div className="flex flex-col gap-0">
+									<DetailRow label="含义">{selected.desc || "—"}</DetailRow>
+									<DetailRow label="父级">
+										{selected.parentId ? ((byId.get(selected.parentId) ?? null)?.label ?? "(已删除)") : "— 顶层维度"}
+									</DetailRow>
+									<DetailRow label="直接子节点">{selected.children.length} 个</DetailRow>
+									<DetailRow label="节点 id">
+										<span className="font-mono text-xs text-muted-foreground">{selected.id}</span>
+									</DetailRow>
+								</div>
 							</div>
 						)}
 					</CardContent>

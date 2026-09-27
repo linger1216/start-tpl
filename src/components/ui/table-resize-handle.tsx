@@ -33,14 +33,12 @@ export function TableResizeHandle({
 		const rect = th.getBoundingClientRect();
 		// 鼠标按下时,与 th 右边缘的偏移(按下偏左 → deltaOffset 为正)
 		const anchorRight = rect.right;
-		const initialWidth = rect.width;
 
 		const move = (ev: PointerEvent) => {
 			// 新右边缘 = 当前 clientX + 起始时鼠标到右边缘的偏移(保持按下相对位置)
 			const newRight = ev.clientX + (anchorRight - e.clientX);
 			const newLeft = rect.left;
 			const nextWidth = Math.max(20, Math.round(newRight - newLeft));
-			void initialWidth;
 			onChange((prev) => ({ ...prev, [columnId]: nextWidth }));
 		};
 		const stop = () => {

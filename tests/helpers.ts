@@ -11,6 +11,7 @@
  *  2. 测试之间不要依赖执行顺序 —— 每条用例自己建、自己删。
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import { and, eq, inArray, lt } from "drizzle-orm";
 
@@ -39,9 +40,40 @@ import { trpcRouter } from "../src/integrations/trpc/router.ts";
 /** 测试数据统一前缀:方便一眼认出、也方便误留时清理 */
 export const TEST_PREFIX = "__test__";
 
-/** 测试数据用的纳秒级唯一后缀(避免并行 / 重复跑互相冲掉) */
+/**
+ * 测试数据用的唯一后缀 —— **固定 10 字符**(毫秒戳 8 + 随机 2)。
+ *
+ * 为什么定长:`testId` 按列宽算「中间留多少字符给业务标签」,尾段必须是定长才能算预算。
+ * `Date.now().toString(36)` 已 8 位,随机段补 0 到 2 位,合起来恰好 10。冲突概率:
+ * 同毫秒内撞上同一随机段 ≈ 1/1296,作为 fixture 标识够用了 —— 实测重复跑不会撞。
+ */
 export function uniqueSuffix(): string {
-	return `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+	const t = Date.now().toString(36).padStart(8, "0").slice(-8);
+	const r = Math.floor(Math.random() * 1296).toString(36).padStart(2, "0");
+	return t + r;
+}
+
+/**
+ * 测试主键(`sys_dept.id`/`sys_user.id`/`sys_user_dept.id` …)。
+ *
+ * ⚠️ **必须守住列宽**:模板里这些 id 列多为 `varchar(32)`(`sys_user.*` 是 36)。
+ * 直接拼 `${TEST_PREFIX}${kind}-${label}-${suffix}` 会在 `label` 是中文长名(`角色规则-甲镇网格组`)
+ * 时超长,MySQL 报 `ER_DATA_TOO_LONG` ⇒ 这条 fixture 插不进库,整条用例就挂。
+ * 达梦上之所以"看起来过得了",只是因为那台库是早期更宽的字段版本 —— 不应该让测试依赖**库**的宽松。
+ *
+ * 策略:算清预算,中间段塞得下就用原文(读性好),塞不下就**截 + 短散列**(确定性去重,
+ * 同一个 label 在同一文件里截出来的结果一致)。
+ */
+export function testId(kind: string, label: string, suffix: string, maxLength = 32): string {
+	const head = `${TEST_PREFIX}${kind}-`;
+	const tail = `-${suffix}`;
+	const room = maxLength - head.length - tail.length;
+	if (label.length <= room) return `${head}${label}${tail}`;
+	// 截中间:`head + 截 label + 分隔 + 短散列 + tail`
+	const hashLen = 6;
+	const keep = Math.max(1, room - 1 - hashLen);
+	const hash = createHash("sha1").update(`${kind}|${label}|${suffix}`).digest("base64url").slice(0, hashLen);
+	return `${head}${label.slice(0, keep)}-${hash}${tail}`;
 }
 
 /**
@@ -189,7 +221,7 @@ function startsWithPrefix(value: unknown): boolean {
  * **并行安全**:只删**超过 30 分钟**的。`node --test` 按文件并行跑,同一次运行建的数据只有几秒大,
  * 另一个文件不可能误删它;而"上一次残留"必然早就超龄。要更保守就调大 `olderThanMinutes`。
  */
-export async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
+async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
 	let removed = 0;
 

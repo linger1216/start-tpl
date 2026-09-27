@@ -13,23 +13,19 @@ import {
 } from "#/components/modules/settings/settings-roles-form";
 import { type RoleRow, roleColumns } from "#/components/modules/settings/settings-roles-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import type { PermissionNode } from "#/components/modules/shared/permission-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { MENU_TYPE } from "#/lib/menu-spec";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 import { bySortThenName, groupByParent } from "#/lib/tree";
 
 /**
@@ -61,10 +57,7 @@ export function SettingsRolesPage() {
 	const queryClient = useQueryClient();
 
 	const rolesQuery = useQuery(trpc.role.list.queryOptions());
-
-	const menusQuery = useQuery(trpc.menu.list.queryOptions());
 	const roles = useMemo(() => (rolesQuery.data ?? []) as RoleRow[], [rolesQuery.data]);
-	const permTree = useMemo(() => buildPermTree(menusQuery.data ?? []), [menusQuery.data]);
 
 	/** 按钮级可见性:权限体系未启用时 `useHasPerm` 恒为 true */
 	const canAdd = useHasPerm("sys:role:add");
@@ -78,11 +71,14 @@ export function SettingsRolesPage() {
 	const [pendingDelete, setPendingDelete] = useState<RoleRow | null>(null);
 	const [viewing, setViewing] = useState<RoleRow | null>(null);
 
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return roles;
-		return roles.filter((row) => `${row.name} ${row.code}`.toLowerCase().includes(key));
-	}, [roles, keyword]);
+	// 权限树只在角色表单里用 —— 表单没开就不拉全量菜单(与下面的成员选择同一写法)
+	const menusQuery = useQuery({
+		...trpc.menu.list.queryOptions(),
+		enabled: creating || editing !== null,
+	});
+	const permTree = useMemo(() => buildPermTree(menusQuery.data ?? []), [menusQuery.data]);
+
+	const filtered = useMemo(() => roles.filter((row) => matchKeyword([row.name, row.code], keyword)), [roles, keyword]);
 
 	const columns = useMemo(
 		() =>
@@ -99,15 +95,11 @@ export function SettingsRolesPage() {
 		[canRemove],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.roles",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
-	const { persist: persistColumns } = useColumnPrefs("settings.roles", table);
 
 	const stats: StatItem[] = useMemo(() => {
 		const assigned = roles.reduce((sum, row) => sum + row.memberCount, 0);
@@ -248,31 +240,14 @@ export function SettingsRolesPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<KeyRound className="size-4 text-muted-foreground" />
-						角色清单
-					</CardTitle>
-					<Badge variant="outline" className="tabular-nums">
-						匹配 {filtered.length} 条
-					</Badge>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={rolesQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="没有符合条件的角色" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="角色清单"
+				Icon={KeyRound}
+				count={filtered.length}
+				busy={rolesQuery.isFetching}
+				emptyText="没有符合条件的角色"
+				table={table}
+			/>
 
 			<SettingsRolesDetail
 				row={viewing}

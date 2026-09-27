@@ -9,24 +9,21 @@ import { SettingsUsersForm, type UserFormPayload } from "#/components/modules/se
 import { type UserRow, userColumns } from "#/components/modules/settings/settings-users-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import type { MultiSelectOption } from "#/components/modules/shared/multi-select";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 用户管理 —— **台账布局**(与参数管理同一套):
@@ -41,10 +38,23 @@ import { useAppTable } from "#/lib/table";
 export function SettingsUsersPage() {
 	const trpc = useTRPC();
 	const usersQuery = useQuery(trpc.user.list.queryOptions());
-	const departmentsQuery = useQuery(trpc.department.tree.queryOptions());
-	const rolesQuery = useQuery(trpc.role.list.queryOptions());
-
 	const users = (usersQuery.data ?? []) as UserRow[];
+
+	const [keyword, setKeyword] = useState("");
+	const [detailFor, setDetailFor] = useState<UserRow | null>(null);
+	const [createOpen, setCreateOpen] = useState(false);
+	const [editing, setEditing] = useState<UserRow | null>(null);
+	const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
+
+	// 部门 / 角色只在账号表单里用 —— 表单没开就不拉全量候选(与角色页、通知页同一写法)
+	const departmentsQuery = useQuery({
+		...trpc.department.tree.queryOptions(),
+		enabled: createOpen || editing !== null,
+	});
+	const rolesQuery = useQuery({
+		...trpc.role.list.queryOptions(),
+		enabled: createOpen || editing !== null,
+	});
 	const departmentRows = departmentsQuery.data ?? [];
 	const roles = (rolesQuery.data ?? []).map((row) => ({
 		value: row.id,
@@ -59,12 +69,6 @@ export function SettingsUsersPage() {
 			hint: row.parentId ? (nameOf.get(row.parentId) ?? undefined) : undefined,
 		})) as MultiSelectOption[];
 	})();
-
-	const [keyword, setKeyword] = useState("");
-	const [detailFor, setDetailFor] = useState<UserRow | null>(null);
-	const [createOpen, setCreateOpen] = useState(false);
-	const [editing, setEditing] = useState<UserRow | null>(null);
-	const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
 
 	const queryClient = useQueryClient();
 	const updateMutation = useMutation(
@@ -100,25 +104,17 @@ export function SettingsUsersPage() {
 		}),
 	);
 
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return users;
-		return users.filter((row) => `${row.name} ${row.email}`.toLowerCase().includes(key));
-	}, [users, keyword]);
+	const filtered = useMemo(() => users.filter((row) => matchKeyword([row.name, row.email], keyword)), [users, keyword]);
 
 	const columns = useMemo(
 		() => userColumns({ onView: setDetailFor, onEdit: setEditing, onDelete: setPendingDelete }),
 		[],
 	);
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.users",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
-	const { persist: persistColumns } = useColumnPrefs("settings.users", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -181,31 +177,14 @@ export function SettingsUsersPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<Users className="size-4 text-muted-foreground" />
-						用户台账
-					</CardTitle>
-					<Badge variant="outline" className="tabular-nums">
-						匹配 {filtered.length} 条
-					</Badge>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={usersQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="没有符合条件的用户" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="用户台账"
+				Icon={Users}
+				count={filtered.length}
+				busy={usersQuery.isFetching}
+				emptyText="没有符合条件的用户"
+				table={table}
+			/>
 
 			<DetailDialog
 				open={detailFor !== null}

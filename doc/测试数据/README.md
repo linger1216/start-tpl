@@ -25,16 +25,12 @@
 
 ## 菜单这条线的两个坑(实测)
 
-1. **`Demo › 网格履职` 这种"纯分组"下的子节点不会进 `sys_menu`** ——
-   `scripts/seed-menus.ts` 的判重口径是「有 path 的按 path、纯分组按 name」,而表上
-   `path` 是 **not null + 唯一**,所以**没有 path 的分组会连同它的子树一起被跳过**(脚本会打印出来)。
-   后果:纯分组里的页面**不会出现在角色权限树**里,自然也授不了按钮权限。
-   ⇒ 本次是**手工补了一行菜单**(`/demo/grid`,顶层)才挂上 4 个权限点。
-   要让分组进树,得给分组行一个合成 path(如 `#group/demo`,与按钮的 `#perm/...` 同一套办法)—— 属于改进项,本轮没做。
-2. **`seeding` 演示数据会"复活"你删掉的东西** —— `pnpm db:seed:rbac` 会重新建出
+1. **纯分组靠合成 path 进 `sys_menu`** —— `NAV_NODES` 里「框架能力」「Demo」没有自己的路由,而表上 `path` 是 **not null + 唯一**;
+   `scripts/seed-menus.ts` 因此给分组合成 `#group/<名字>`(与按钮的 `#perm/<权限码>` 同一套办法),
+   判重口径是「有 `path` 的按 path、分组按合成 path」。本机现状:`#group/框架能力` · `#group/Demo`,`/demo/grid` 挂在 `Demo` 下。
+2. **演示数据曾经被种子"复活"过一次** —— `pnpm db:seed:rbac` 现在**不建**演示部门 / 演示账号,但早先的版本会重建
    上海公司 / 武汉公司 / 研发部 / 市场部 与 部门主管 / 普通员工。
-   **你已经删过它们一次,本轮我又踩了一次**(跑种子建按钮时),已还原:部门回到 **3700**(3687 原有 + 13 网格组),
-   `admin@ / zhangsan@` 的部门关联也回到「无」。
+   已还原:部门回到 **3700**(3687 原有 + 13 网格组),`admin@ / zhangsan@` 的部门关联也回到「无」。
    ⇒ 以后要建按钮类权限点,**别跑整个 `seed:rbac`**,单独插 `sys_menu` 行更安全。
 
 ---
@@ -45,9 +41,9 @@
 
 | 命令 | 造什么 | 幂等键 | 典型体量(本机) |
 | --- | --- | --- | --- |
-| `pnpm db:seed:menus` | 把静态 `NAV_NODES` 写进 `sys_menu`(含**纯分组的合成 path** `#group/…`) | 有 path 的按 path、分组按合成 path | 62 行 |
+| `pnpm db:seed:menus` | 把静态 `NAV_NODES` 写进 `sys_menu`(含**纯分组的合成 path** `#group/…`) | 有 path 的按 path、分组按合成 path | 67 行 |
 | `pnpm db:seed:dicts` | 演示字典 | 字典键 | 3 条 |
-| `pnpm db:seed:paras` | 系统参数默认值 | `para_key` | 16 条 |
+| `pnpm db:seed:paras` | 系统参数默认值 | `para_key` | 17 条 |
 | `pnpm db:seed:tags` | 标签维度 + 标签 | 维度名 / 标签名 | 17 维 + 120 标签 |
 | `pnpm db:seed:rbac` | **只造角色与权限点**:`系统管理员` + 各页按钮权限点(`sys:role:*` / `sys:file:*` / `sys:user:*` / `sys:grid:*` …)+ 隐藏运维组 + 给系统管理员 `*:*:*` 授权 | 角色 `code` / 按钮 `path` | 12 角色(含你自己的) |
 | `pnpm db:seed:demo` | **演示数据**:① 通知(某账号一条都没有时补 3 条,其中一条带 `path`);② 网格履职(从 `综合网格履职情况列表.xlsx` 导入) | 通知按「该账号是否有通知」;网格按 `name + town_name` | 通知按账号数 ×3;网格 71 行 |

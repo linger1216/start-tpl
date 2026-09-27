@@ -96,29 +96,26 @@ type AuditConfig = { enabled: boolean; skipPrefixes: string[] };
 
 /**
  * 审计开关与跳过表来自参数管理(`log.enabled` / `log.skip_paths`)。
- * **带 60 秒缓存** —— 否则每次写调用都要多查一次库(而它本身只是"记一笔"的旁路)。
+ * **不在这里重复缓存** —— `sys-para.ts` 的 `getParaMap()` 已有 30 秒缓存,
+ * 再加一层只会让参数改动慢一拍(而它本身只是"记一笔"的旁路)。
  */
-let cachedConfig: { at: number; value: AuditConfig } | null = null;
 export async function readAuditConfig(): Promise<AuditConfig> {
-	if (cachedConfig && Date.now() - cachedConfig.at < 60_000) return cachedConfig.value;
 	try {
 		const [enabled, paraMap] = await Promise.all([getParaBool("log.enabled", true), getParaMap()]);
-		const value: AuditConfig = {
+		return {
 			enabled,
 			skipPrefixes: (paraMap.get("log.skip_paths") ?? "page.")
 				.split(",")
 				.map((piece) => piece.trim())
 				.filter(Boolean),
 		};
-		cachedConfig = { at: Date.now(), value };
-		return value;
 	} catch {
 		// 参数表都读不到时**宁可记多**(默认开):审计缺记录比多记录严重
 		return { enabled: true, skipPrefixes: ["page."] };
 	}
 }
 
-export type AuditEntry = {
+type AuditEntry = {
 	traceId: string;
 	path: string;
 	label: string;

@@ -13,7 +13,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
 					"file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground " +
 					"placeholder:text-muted-foreground " +
 					// 悬停 / 焦点:边框刷主色 + 3px 蓝环(用户偏好,保留)
-					"hover:border-primary hover:ring-[3px] hover:ring-[color:var(--af-blue-ring)] focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-[color:var(--af-blue-ring)] " +
+					"hover:border-primary hover:ring-3 hover:ring-brand-ring focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-brand-ring " +
 					"disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 " +
 					"aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
 				className,

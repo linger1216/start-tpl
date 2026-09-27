@@ -5,7 +5,7 @@ import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
-import { useTreePrefs } from "#/hooks/use-tree-prefs";
+import { useTreePrefs } from "#/hooks/use-para-prefs";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { MENU_TYPE } from "#/lib/menu-spec";
 

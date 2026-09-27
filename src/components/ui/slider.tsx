@@ -30,8 +30,8 @@ function Slider({ className, defaultValue, value, min = 0, max = 100, ...props }
 					<SliderPrimitive.Thumb
 						data-slot="slider-thumb"
 						key={`thumb-${idx}-${value}`}
-						className="relative block size-4 shrink-0 rounded-full border-2 border-sky-500 bg-background shadow-sm
-            ring-sky-500/40 transition-[color,box-shadow] select-none after:absolute after:-inset-2
+						className="relative block size-4 shrink-0 rounded-full border-2 border-primary bg-background shadow-sm
+            ring-primary/40 transition-[color,box-shadow] select-none after:absolute after:-inset-2
             hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden active:ring-4 disabled:pointer-events-none
             disabled:opacity-50"
 					/>

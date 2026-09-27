@@ -859,51 +859,6 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     margin-left: 3px;
     letter-spacing: 0;
   }
-  .trend {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-variant-numeric: tabular-nums;
-  }
-  .trend.up {
-    color: var(--success-fg);
-    background: var(--success-soft);
-  }
-  .trend.down {
-    color: var(--danger-fg);
-    background: var(--danger-soft);
-  }
-  .trend.flat {
-    color: var(--muted-foreground);
-    background: var(--muted);
-  }
-  .spark {
-    width: 56px;
-    height: 18px;
-    margin-left: auto;
-  }
-  .spark polyline {
-    fill: none;
-    stroke-width: 1.5;
-    stroke-linejoin: round;
-  }
-  .spark.blue polyline {
-    stroke: var(--af-blue);
-  }
-  .spark.red polyline {
-    stroke: var(--danger);
-  }
-  .spark.green polyline {
-    stroke: var(--success);
-  }
-  .spark.amber polyline {
-    stroke: var(--warn);
-  }
-
   /* 筛选条 chip:带状态点 + 箭头 */
   .chip {
     display: inline-flex;
@@ -927,52 +882,6 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     background: var(--af-selected);
     border-color: color-mix(in oklch, var(--af-blue) 30%, var(--border));
     color: var(--af-blue);
-  }
-
-  /* 搜索框:左侧图标 + 右侧快捷键占位 */
-  .search-input {
-    position: relative;
-    width: 280px;
-  }
-  .search-input input {
-    width: 100%;
-    height: 36px;
-    padding: 0 36px 0 36px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--background);
-    font-size: 13px;
-    transition:
-      border-color var(--t-base) var(--ease-brand),
-      box-shadow var(--t-base) var(--ease-brand);
-  }
-  .search-input input:focus {
-    outline: none;
-    border-color: var(--af-blue);
-    box-shadow: 0 0 0 3px var(--af-blue-ring);
-  }
-  .search-input > svg {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 14px;
-    height: 14px;
-    color: var(--muted-foreground);
-    pointer-events: none;
-  }
-  .search-input .shortcut {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 10px;
-    color: var(--muted-foreground);
-    padding: 2px 5px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--muted);
-    pointer-events: none;
   }
 
   .detail-row {

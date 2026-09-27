@@ -27,7 +27,7 @@ export function DetailRow({
 			<Label htmlFor={htmlFor} className="text-xs font-normal text-muted-foreground">
 				{label}
 			</Label>
-			<div className="min-w-0 wrap-break-words text-sm text-foreground">{children}</div>
+			<div className="min-w-0 wrap-break-word text-sm text-foreground">{children}</div>
 		</div>
 	);
 }

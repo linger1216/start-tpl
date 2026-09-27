@@ -13,7 +13,7 @@ import { cn } from "#/lib/utils";
  * 三件事都在这里:
  *  1. **勾选 / 取消**某列(取消后**表头和数据一起消失**,由 `DataTable` 的 `getVisibleCells` 保证);
  *  2. **拖动排序**(行首那个把手;HTML5 拖放,和树用的是同一套原生行为);
- *  3. 把结果**回调出去**,由页面写进 `sys_para` 的 `page.columns`(见 `hooks/use-column-prefs.ts`)——
+ *  3. 把结果**回调出去**,由页面写进 `sys_para` 的 `page.columns`(见 `hooks/use-para-prefs.ts`)——
  *     组件本身不认识 tRPC,这样它才能在工作台里当纯展示件用。
  *
  * 为什么用 Popover 而不是 DropdownMenu:菜单项是"点一下就走"的语义,而这里要在浮层里**持续拖动**,

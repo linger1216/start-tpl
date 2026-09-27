@@ -8,18 +8,15 @@ import { PageHeader } from "#/components/layout/page-header";
 import { NoticeForm, type NoticeFormPayload } from "#/components/modules/notice/notice-form";
 import { type NoticeRow, noticeColumns } from "#/components/modules/notice/notice-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 
 /** 一次最多拉 500 条(接口上限);拉回来在客户端分页 —— 与其它台账页同口径 */
 const PAGE_LIMIT = 500;
@@ -67,11 +64,10 @@ export function NoticePage() {
 
 	const rows = useMemo<NoticeRow[]>(() => listQuery.data?.items ?? [], [listQuery.data]);
 	const unread = listQuery.data?.unread ?? 0;
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return rows;
-		return rows.filter((row) => `${row.title} ${row.body ?? ""} ${row.path ?? ""}`.toLowerCase().includes(key));
-	}, [rows, keyword]);
+	const filtered = useMemo(
+		() => rows.filter((row) => matchKeyword([row.title, row.body, row.path], keyword)),
+		[rows, keyword],
+	);
 
 	const userOptions = useMemo(
 		() => (usersQuery.data ?? []).map((user) => ({ value: user.id, label: user.name || user.email, hint: user.email })),
@@ -90,15 +86,12 @@ export function NoticePage() {
 		[readMutation, router],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "notices",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	const { persist: persistColumns } = useColumnPrefs("notices", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -172,29 +165,14 @@ export function NoticePage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<Bell className="size-4 text-muted-foreground" />
-						通知清单
-					</CardTitle>
-					<span className="text-xs text-muted-foreground tabular-nums">匹配 {filtered.length} 条</span>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="还没有通知" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="通知清单"
+				Icon={Bell}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="还没有通知"
+				table={table}
+			/>
 
 			<NoticeForm
 				open={composing}

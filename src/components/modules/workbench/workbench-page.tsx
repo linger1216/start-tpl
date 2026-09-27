@@ -313,7 +313,7 @@ export function WorkbenchPage() {
 						<code className="font-mono text-foreground">components/modules/settings/</code> 与{" "}
 						<code className="font-mono text-foreground">routes/(main)/settings/</code> 以及对应的
 						<code className="font-mono text-foreground">trpc/routers/{`{menu,dict,para,tag}`}</code> +{" "}
-						<code className="font-mono text-foreground">mocks/{`{tags,dicts}`}</code> +{" "}
+						<code className="font-mono text-foreground">scripts/{`{seed-tags,tag-seed-data}`}</code> +{" "}
 						<code className="font-mono text-foreground">db/data-base-schema.ts</code>。保留前先把真实业务模块的字段接上,
 						别直接整盘删。
 					</p>

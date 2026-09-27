@@ -4,9 +4,6 @@
  * 当前 helper 列表:
  *   - `formatJson`:      unknown → 格式化 JSON 文本,不可序列化时降级
  *   - `normalizeValue`:  unknown → 字符串数组(任意值归一)
- *   - `singleText`:      unknown → 字符串数组(单值字段,空值归一为空数组)
- *   - `jsonText`:        unknown → 可展示文本(字符串原样,null/对象等 → 占位符)
- *   - `orEmpty`:         null | undefined → 占位符
  *   - `formatBytes`:     字节数 → `1.5 KB`(文件 / 附件展示用)
  *
  * ⚠️ **日期格式化不在这里,在 `lib/time.ts`。**
@@ -18,11 +15,6 @@
  */
 
 import { PLACEHOLDER_EMPTY } from "./constants";
-
-/** 空值兜底:null / undefined → 占位符(空串不受影响) */
-export function orEmpty(value: string | null | undefined): string {
-	return value ?? PLACEHOLDER_EMPTY;
-}
 
 /**
  * 把任意 JSON 值 → 缩进 2 空格的字符串。
@@ -95,24 +87,4 @@ export function normalizeValue(value: unknown): string[] {
 		return [];
 	}
 	return [];
-}
-
-/**
- * 单值字段归一:把单个值归一为长度 0 或 1 的字符串数组。
- * 用于"所属区划"这类只有一个字符串的单元格 —— 空值(null / undefined / 空串)归一为 []。
- * 非 string/number/boolean 的值(如对象)一律归一为 [],避免 [object Object]。
- */
-export function singleText(value: unknown): string[] {
-	if (value == null) return [];
-	if (typeof value === "string") return value.trim() ? [value.trim()] : [];
-	if (typeof value === "number" || typeof value === "boolean") return [String(value)];
-	return [];
-}
-
-/**
- * JSON 任意值 → 可展示文本:字符串原样返回;null / 对象 / 数组等 → 占位符。
- * 用于库里的 JSON 列(如 communities.alias)在列表/详情的展示。
- */
-export function jsonText(v: unknown): string {
-	return typeof v === "string" ? v : PLACEHOLDER_EMPTY;
 }

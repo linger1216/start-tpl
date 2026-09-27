@@ -17,16 +17,10 @@ import { auth } from "#/lib/auth";
 /**
  * 当前会话的用户 id;没有会话(或不在请求上下文里,比如脚本 / 单测直调 procedure)返回 `null`。
  *
- * 吞掉异常是刻意的:`createCallerFactory` 直调时根本没有 request 上下文,`getRequestHeaders()`
- * 会抛 —— 那时"没有用户"就是正确结论,不该让整个查询炸掉。
+ * 直接复用下面的 `getCurrentUser()`(它同样吞掉"没有 request 上下文"的异常)—— 语义与原来一致。
  */
 export async function getCurrentUserId(): Promise<string | null> {
-	try {
-		const session = await auth.api.getSession({ headers: getRequestHeaders() });
-		return session?.user.id ?? null;
-	} catch {
-		return null;
-	}
+	return (await getCurrentUser())?.id ?? null;
 }
 
 /** 当前登录用户(**带姓名** —— 审计要存姓名快照,账号将来被删也能读懂历史) */

@@ -2,7 +2,7 @@ import { Folder, Plus, Tag, Trash2 } from "lucide-react";
 
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
-import { useTreePrefs } from "#/hooks/use-tree-prefs";
+import { useTreePrefs } from "#/hooks/use-para-prefs";
 import type { TreeNode } from "#/lib/tree";
 
 /** 标签树节点(前端拼树后的形状)—— 行字段 + 树特有字段(与部门树同构,别再逐字段抄一遍) */

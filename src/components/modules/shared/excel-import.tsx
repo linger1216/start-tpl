@@ -11,7 +11,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
-import { toErrorMessage } from "#/lib/api/error";
+import { toApiError } from "#/lib/api/error";
 import { type ImportField, type ImportResult, type ImportRow, writeTemplate } from "#/lib/excel";
 
 // 类型已归拢到 lib/excel;此处 re-export 保持既有 import 路径兼容
@@ -64,7 +64,7 @@ function parseWorkbook(buffer: ArrayBuffer, fields: ImportField[]): Parsed {
 	} catch (err) {
 		return {
 			rows: [],
-			warnings: [`Excel 解析失败: ${toErrorMessage(err)}`],
+			warnings: [`Excel 解析失败: ${toApiError(err).message}`],
 		};
 	}
 }

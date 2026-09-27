@@ -91,6 +91,22 @@ declare module "@tanstack/react-table" {
 }
 
 /**
+ * 台账列表的关键词匹配 —— 统一口径:**本项目列表搜索一律大小写不敏感**。
+ *
+ * 关键词先去掉首尾空白;空关键词一律命中(`null` / `undefined` 字段按空串算)。
+ * 字段集合由调用方给(只搜它列出来的那几列,不隐式搜整行)。
+ */
+export function matchKeyword(fields: readonly unknown[], keyword: string): boolean {
+	const needle = keyword.trim().toLowerCase();
+	if (!needle) return true;
+	return fields.some((field) =>
+		String(field ?? "")
+			.toLowerCase()
+			.includes(needle),
+	);
+}
+
+/**
  * 台账多选:选中集合 + 单个/批量切换。
  *
  * 行集合变化(删除、覆盖导入)后自动剔除已消失的 id —— 这一步此前由各页自己维护

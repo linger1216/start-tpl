@@ -1,8 +1,12 @@
 /**
- * **系统表**的 drizzle 定义 —— 十五张:
+ * **系统表**的 drizzle 定义 —— 十九张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
- *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`。
+ *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
+ *  - 权限六张:`sys_dept` / `sys_role` / `sys_user_dept` / `sys_user_role` / `sys_role_menu` /
+ *    **`sys_data_policy`**(行级数据权限规则,语义见 `doc/rbac-权限模型.md`);
+ *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
+ *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
  * 为什么单独一个文件、而不是并进 `src/db/schema.ts`:
  *   这几张表的 DDL 由**建表脚本**维护(`scripts/create-system-tables.ts`,幂等

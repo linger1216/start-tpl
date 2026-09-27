@@ -14,9 +14,9 @@
  * 约定:`event` 用 `域.动作` 命名(`trpc.ok` / `sync.finish` / `rule.batch` / `entity.import` …),
  * 告警与错误用 `warn` / `error`,`debug` 用来记"高频但排查时要看"的入口(如 list/detail)。
  */
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
-export type LogFields = Record<string, unknown>;
+type LogFields = Record<string, unknown>;
 
 export type LogLine = { ts: string; level: LogLevel; event: string } & LogFields;
 
@@ -72,7 +72,7 @@ const defaultSink: Sink = (line) => {
 let sink: Sink = defaultSink;
 
 /** 换出口(测试用);不传参数 = 恢复默认(stdout) */
-export function setLogSink(next?: Sink): void {
+function setLogSink(next?: Sink): void {
 	sink = next ?? defaultSink;
 }
 

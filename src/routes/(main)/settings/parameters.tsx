@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsParametersPage } from "#/components/modules/settings/settings-parameters-page";
-import { PAGE_SIZE_KEY } from "#/hooks/use-page-size";
+import { PAGE_SIZE_KEY } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/parameters")({
 	loader: ({ context }) =>

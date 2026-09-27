@@ -12,8 +12,6 @@
  * 客户端组件需要类型名或校验时,从 `lib/para-spec.ts` 取 —— 那条界线是踩过坑的:
  * 从客户端 import 本文件会把 mysql2 打进浏览器包,参数管理页直接白屏。
  */
-import { eq } from "drizzle-orm";
-
 import { db } from "#/db";
 import { sysPara } from "#/db/data-base-schema";
 import { PARA_TYPE, type ParaType } from "./para-spec";
@@ -77,7 +75,7 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "界面偏好",
 		remark: "侧边栏收起后的样子:rail = 收成 60px 图标栏(默认),hidden = 整条隐藏、内容区铺满;填错按 rail 处理",
 	},
-	// 各页表格的「列顺序 + 隐藏项」—— 由每页工具条上的「列」按钮写入(见 hooks/use-column-prefs.ts)。
+	// 各页表格的「列顺序 + 隐藏项」—— 由每页工具条上的「列」按钮写入(见 hooks/use-para-prefs.ts)。
 	// 键是页面标识(如 settings.roles),值是 { order: string[], hidden: string[] }。
 	// 放在 sys_para 而不是 localStorage:换台机器 / 换浏览器,列设置跟着账号走。
 	"page.columns": {
@@ -87,7 +85,7 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		remark:
 			'各页表格的列顺序与隐藏列:{"<页面键>":{"order":["列id",…],"hidden":["列id",…]}};页面上点工具条的「列」即可改',
 	},
-	// 各页树的「展开到哪」—— 由三棵树折叠 / 展开时写入(见 hooks/use-tree-prefs.ts)。
+	// 各页树的「展开到哪」—— 由三棵树折叠 / 展开时写入(见 hooks/use-para-prefs.ts)。
 	// 键是页面标识(如 settings.menus),值是 { expanded: string[] }(只记已展开的节点 id;
 	// 没设置过 = 全部折叠)。与 page.columns 一样存 sys_para,换机器跟着账号走。
 	"page.tree": {
@@ -97,7 +95,7 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		remark:
 			'各页树的展开节点:{"<页面键>":{"expanded":["节点id",…]}};在页面上折叠 / 展开树即可改;删掉某个页面键 = 该树回到默认(全部折叠)',
 	},
-	// 列表页默认每页多少条 —— 由 hooks/use-page-size.ts 读取(每个列表路由的 loader 都 prefetch 它)。
+	// 列表页默认每页多少条 —— 由 hooks/use-para-prefs.ts 读取(每个列表路由的 loader 都 prefetch 它)。
 	"page.size": {
 		value: "20",
 		type: PARA_TYPE.INT,
@@ -165,11 +163,4 @@ export async function getParaBool(key: string, fallback: boolean): Promise<boole
 	const raw = (await getParaMap()).get(key) ?? PARA_DEFAULTS[key]?.value;
 	if (raw === undefined) return fallback;
 	return raw === "true" || raw === "1";
-}
-
-/** 某个参数是否允许在界面上改(库里标了 editable=0 就不允许) */
-export async function isParaEditable(key: string): Promise<boolean> {
-	const [row] = await db.select().from(sysPara).where(eq(sysPara.para_key, key)).limit(1);
-	if (!row) return true;
-	return Number(row.editable ?? 1) !== 0;
 }

@@ -12,20 +12,16 @@ import {
 } from "#/components/modules/settings/settings-parameters-form";
 import { type ParameterRow, parameterColumns } from "#/components/modules/settings/settings-parameters-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 参数管理 —— 运维口径不写死在代码里。
@@ -110,11 +106,10 @@ export function SettingsParametersPage() {
 		}
 	}
 
-	const filtered = useMemo(() => {
-		const key = keyword.trim();
-		if (!key) return rows;
-		return rows.filter((row) => `${row.key} ${row.group} ${row.remark}`.includes(key));
-	}, [rows, keyword]);
+	const filtered = useMemo(
+		() => rows.filter((row) => matchKeyword([row.key, row.group, row.remark], keyword)),
+		[rows, keyword],
+	);
 
 	const columns = useMemo(
 		() =>
@@ -129,17 +124,13 @@ export function SettingsParametersPage() {
 		[],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		// 行标识用 `para_key`(`sys_para.id` 是库里的无意义短串,且"纯代码内置"的参数压根没落库)
 		getRowId: (row) => row.key,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.parameters",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
-	const { persist: persistColumns } = useColumnPrefs("settings.parameters", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -209,31 +200,14 @@ export function SettingsParametersPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<SlidersHorizontal className="size-4 text-muted-foreground" />
-						参数清单
-					</CardTitle>
-					<Badge variant="outline" className="tabular-nums">
-						匹配 {filtered.length} 条
-					</Badge>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="没有符合条件的参数" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="参数清单"
+				Icon={SlidersHorizontal}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="没有符合条件的参数"
+				table={table}
+			/>
 
 			<SettingsParametersForm
 				row={editing}

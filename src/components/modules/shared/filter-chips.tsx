@@ -17,7 +17,7 @@ import { cn } from "#/lib/utils";
  *   <FilterChipBar groups={GROUPS} active={active} onSelect={handleSelect} onClearAll={clearAll} />
  */
 
-export type FilterChipTone = keyof typeof BADGE_THEMES;
+type FilterChipTone = keyof typeof BADGE_THEMES;
 
 /** 组图标的着色:与 `BADGE_THEMES` 同一色系(走点缀色 token,不再是高饱和的 `*-600`) */
 const GROUP_ICON_TONE: Record<FilterChipTone, string> = {
@@ -30,13 +30,13 @@ const GROUP_ICON_TONE: Record<FilterChipTone, string> = {
 	stone: "text-muted-foreground",
 };
 
-export type FilterChipOption = {
+type FilterChipOption = {
 	value: string;
 	/** 命中条数(由调用方按真实数据算好;不传则不显示计数) */
 	count?: number;
 };
 
-export type FilterChipGroup = {
+type FilterChipGroup = {
 	/** 列 id,`onSelect` 用它回传 */
 	key: string;
 	label: string;

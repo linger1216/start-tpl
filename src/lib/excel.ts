@@ -273,7 +273,7 @@ export type ImportResult = {
  *  2. **数值/布尔/日期原样透传** —— 不能一律 `String()`,否则数字列会落成文本单元格
  *     (左对齐、不能求和、SUM 得到 0)。只有真正的字符串才需要转成字符串。
  */
-export function cellText(value: unknown): string | number | boolean | Date {
+function cellText(value: unknown): string | number | boolean | Date {
 	if (value === undefined || value === null) return "";
 	if (Array.isArray(value)) return value.join("、");
 	if (typeof value === "number" || typeof value === "boolean" || value instanceof Date) return value;

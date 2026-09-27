@@ -128,7 +128,7 @@ export function policyRuleProblem(rule: PolicyRule): string | null {
 
 /** 策略行的动作是否覆盖调用方要求的动作 */
 /** 动作是否命中(`*` 对任何动作都算命中)—— 引擎的 matcher 与草稿预览共用这一份 */
-export function matchesAction(policyAct: string, action: string): boolean {
+function matchesAction(policyAct: string, action: string): boolean {
 	const value = policyAct.trim();
 	return value === "*" || value === action;
 }

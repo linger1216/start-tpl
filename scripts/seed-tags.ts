@@ -1,5 +1,5 @@
 /**
- * 标签种子脚本 —— 把 `mocks/tags.ts` 的维度 + 标签写成 `sys_tag` 表的行(幂等,只补不覆盖)。
+ * 标签种子脚本 —— 把同目录 `tag-seed-data.ts` 的维度 + 标签写成 `sys_tag` 表的行(幂等,只补不覆盖)。
  *
  * 标签体系是两级树:**维度**(一级,`parent_id` 为 null)→ **标签**(叶子)。
  * 这里把 `TAG_DIMENSION_SEED` 写成维度行、`TAG_SEED` 写成对应维度下的标签行。
@@ -15,7 +15,7 @@ import "dotenv/config";
 import { sysTag } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
-import { TAG_DIMENSION_SEED, TAG_SEED } from "../src/mocks/tags.ts";
+import { TAG_DIMENSION_SEED, TAG_SEED } from "./tag-seed-data.ts";
 
 type ExistingRow = { id: string; parent_id: string | null; label: string };
 

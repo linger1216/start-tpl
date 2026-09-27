@@ -31,9 +31,9 @@ type NoticePayload = {
  */
 // ⚠️ `(?!\/)` 不能省:`//evil.example/x` 也是「以 / 开头 + 只含安全字符」,
 //    但浏览器把它当**外部主机** —— 那就是开放跳转(实测被用例抓到)。
-export const NOTICE_PATH_RE = /^\/(?!\/)[A-Za-z0-9\-/_.[\]]*$/;
+const NOTICE_PATH_RE = /^\/(?!\/)[A-Za-z0-9\-/_.[\]]*$/;
 
-export function normalizePath(path: string | null | undefined): string | null {
+function normalizePath(path: string | null | undefined): string | null {
 	if (!path) return null;
 	const trimmed = path.trim();
 	return NOTICE_PATH_RE.test(trimmed) ? trimmed : null;

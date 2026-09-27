@@ -9,7 +9,7 @@ export const store = new Store({
 	lastName: "Smith",
 });
 
-export type DemoStoreState = typeof store.state;
+type DemoStoreState = typeof store.state;
 
 /** 派生值用普通函数算即可,不必再建一个 Store 再手动保持同步。 */
 export function selectFullName(state: DemoStoreState): string {

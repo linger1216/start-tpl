@@ -107,8 +107,9 @@ import {
 import { TagInput } from "#/components/ui/tag-input";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { store as demoStore, selectFullName } from "#/lib/demo-store";
-import { formatJson, normalizeValue, orEmpty } from "#/lib/format";
+import { formatJson, normalizeValue } from "#/lib/format";
 import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
 import { createMockTable } from "#/lib/mock-table";
 import { joinMultiValue, splitMultiValue } from "#/lib/multi-value";
@@ -116,6 +117,13 @@ import { asParaType, PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, valid
 import type { MockRow } from "#/lib/table";
 import { formatLocalDate, formatLocalDateTime, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
+
+/**
+ * 空值兜底演示数据 —— `?? PLACEHOLDER_EMPTY` 只兜 null / undefined。
+ * 用带类型的变量而不是字面量:字面量会被 TS 判成「恒空」(TS2871)。
+ */
+const MISSING_TEXT: string | null = null;
+const EMPTY_TEXT: string | null = "";
 
 /** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
 /**
@@ -348,11 +356,11 @@ export function UiGallery() {
 				<Cell name="Skeleton" hint="骨架块">
 					<Skeleton className="h-4 w-24" />
 				</Cell>
-				<Cell name="StatCards" hint="指标条 —— 同一个 items,两种 variant:strip 横向分隔条(默认)/ cards 独立小卡" wide>
-					<p className="text-xs text-muted-foreground">variant="strip"(默认)—— 一条横向分隔,适合作页面顶部指标条</p>
+				<Cell name="StatCards" hint="指标条 —— 一行铺开的指标格,适合作页面顶部指标条" wide>
+					<p className="text-xs text-muted-foreground">
+						一格一个指标;`unit`(如「人」)与 `description`(如「全局定义」)都是可选的补充文案。
+					</p>
 					<StatCards items={DEMO_STATS} />
-					<p className="pt-2 text-xs text-muted-foreground">variant="cards" —— 各自独立的小卡片,适合作网格里的指标区</p>
-					<StatCards variant="cards" items={DEMO_STATS} />
 				</Cell>
 				<Cell name="StatCardsSkeleton" hint="指标卡骨架">
 					<StatCardsSkeleton />
@@ -872,8 +880,8 @@ function ModuleGallery() {
 
 				<Cell name="format" hint="空值兜底 / JSON 展示 / 值归一 —— 表格单元格常用">
 					<div className="space-y-1 font-mono text-xs">
-						<div>orEmpty(null) = "{orEmpty(null)}"</div>
-						<div>orEmpty("") = "{orEmpty("")}"</div>
+						<div>MISSING_TEXT ?? PLACEHOLDER_EMPTY = "{MISSING_TEXT ?? PLACEHOLDER_EMPTY}"</div>
+						<div>EMPTY_TEXT ?? PLACEHOLDER_EMPTY = "{EMPTY_TEXT ?? PLACEHOLDER_EMPTY}"</div>
 						<div>normalizeValue("a、b;c") = {JSON.stringify(normalizeValue("a、b;c"))}</div>
 						<div>formatJson(JS 对象) =</div>
 						<pre className="ml-2 rounded bg-muted px-2 py-1 text-xs">{formatJson({ a: 1 })}</pre>

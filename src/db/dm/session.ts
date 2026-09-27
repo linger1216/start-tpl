@@ -75,7 +75,7 @@ function coerceForField(field: unknown, value: unknown): unknown {
 }
 
 /** 一次查询的原始结果形状 */
-export type DmRawResult = {
+type DmRawResult = {
 	rows: DmResultRow[];
 	insertId?: number;
 	affectedRows?: number;

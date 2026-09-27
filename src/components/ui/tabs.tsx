@@ -37,23 +37,23 @@ const TabVariantContext = createContext<TabVariant>("underline");
 /** 每种形态的容器 */
 const LIST_STYLE: Record<TabVariant, string> = {
 	// 底部 1px 浅灰基线:所有 tab 共享的视觉基线
-	underline: "inline-flex max-w-full flex-wrap items-stretch gap-0 border-b border-[color:var(--border)]",
+	underline: "inline-flex max-w-full flex-wrap items-stretch gap-0 border-b border-border",
 	// 浅灰底轨道 + 内边距,选中项浮在轨道上
-	segmented: "inline-flex max-w-full items-center gap-0.5 rounded-xl bg-[color:var(--muted)] p-1",
+	segmented: "inline-flex max-w-full items-center gap-0.5 rounded-xl bg-muted p-1",
 	// 无容器,只有药丸之间的间隙
 	pill: "inline-flex max-w-full flex-wrap items-center gap-1.5",
 	// 与内容区相接的文件夹页签
-	card: "inline-flex max-w-full flex-wrap items-end gap-1 border-b border-[color:var(--border)]",
+	card: "inline-flex max-w-full flex-wrap items-end gap-1 border-b border-border",
 };
 
 /** 每种形态的未选中态(几何 + hover 提示) */
 const TRIGGER_BASE: Record<TabVariant, string> = {
 	underline:
-		"relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 	segmented:
-		"relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	pill: "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-[color:var(--muted)] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+	pill: "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 };
 
 /** 每种形态的选中态 —— 全部写成带 `data-active:` 前缀的字面量(见文件头) */
@@ -62,7 +62,7 @@ const TRIGGER_ACTIVE: Record<TabVariant, string> = {
 	segmented:
 		"data-active:bg-background data-active:font-semibold data-active:text-foreground data-active:shadow-(--af-raise-1)",
 	pill: "data-active:border-primary data-active:bg-primary data-active:font-semibold data-active:text-primary-foreground data-active:shadow-(--shadow-glow)",
-	card: "data-active:border-[color:var(--border)] data-active:bg-background data-active:font-semibold data-active:text-foreground",
+	card: "data-active:border-border data-active:bg-background data-active:font-semibold data-active:text-foreground",
 };
 
 /** 计数胶囊的选中态(同样必须是字面量) */
@@ -141,7 +141,7 @@ export function TabsTrigger({
 				<>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-[color:var(--border)] opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
+						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-border opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
 					/>
 					<span
 						aria-hidden

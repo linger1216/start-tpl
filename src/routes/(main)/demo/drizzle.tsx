@@ -106,8 +106,8 @@ function DemoDrizzle() {
 						<EmptyState
 							className="py-8"
 							icon={<Database className="size-5" />}
-							title={result.ok ? "还没有记录" : "数据库不可用"}
-							description={result.ok ? "用下面的输入框写入第一条 todo。" : "配好 DATABASE_URL 后跑 pnpm db:push。"}
+							title="数据库不可用"
+							description="配好 DATABASE_URL 后跑 pnpm db:push。"
 						/>
 					)}
 

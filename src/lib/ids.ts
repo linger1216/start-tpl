@@ -44,14 +44,16 @@ export const ID_PREFIX = {
 /** 编号格式说明(界面占位提示 / 文档用) */
 export const ID_PATTERN = `${ID_PREFIX.ENTITY}-YYMMDD-HHMMSS`;
 
-const pad = (value: number) => String(value).padStart(2, "0");
-
 /**
  * `前缀-YYMMDD-HHMMSS`。**只负责格式化,不保证唯一** ——
  * 同一秒要发两个编号时,由调用方把 `when` 往后顺延 1 秒。
  */
 export function formatCode(prefix: string, when: Date = new Date()): string {
-	const date = `${pad(when.getFullYear() % 100)}${pad(when.getMonth() + 1)}${pad(when.getDate())}`;
-	const time = `${pad(when.getHours())}${pad(when.getMinutes())}${pad(when.getSeconds())}`;
-	return `${prefix}-${date}-${time}`;
+	const yy = String(when.getFullYear() % 100).padStart(2, "0");
+	const mm = String(when.getMonth() + 1).padStart(2, "0");
+	const dd = String(when.getDate()).padStart(2, "0");
+	const hh = String(when.getHours()).padStart(2, "0");
+	const mi = String(when.getMinutes()).padStart(2, "0");
+	const ss = String(when.getSeconds()).padStart(2, "0");
+	return `${prefix}-${yy}${mm}${dd}-${hh}${mi}${ss}`;
 }

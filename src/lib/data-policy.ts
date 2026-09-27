@@ -385,7 +385,7 @@ async function upsertPolicy(v0: string, v1: string, v2: string, v3: string, rema
  * **写之前按同一套解析规则校验一遍**(`policyRuleProblem`):写进去的行要是引擎认不出来的,
  * 那份授权会**静默失效**(装载时按"不合法"跳过),到时候"明明配了却看不到"最难查。
  */
-export async function grantRule(sub: string, obj: string, act = "*", remark = "手工授权"): Promise<void> {
+async function grantRule(sub: string, obj: string, act = "*", remark = "手工授权"): Promise<void> {
 	const problem = policyRuleProblem({ sub, obj, act, eft: "allow" });
 	if (problem) throw new Error(`策略不合法(${problem}):${sub} → ${obj}`);
 	await upsertPolicy(sub, obj, act, "allow", remark);

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { ChevronRight, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
+import { ChevronRight, LogOut, Menu, Moon, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
@@ -13,7 +13,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
-import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { findNavTrailIn, type NavNode } from "./nav-config";
@@ -51,22 +50,14 @@ function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
 		];
 	}
 
-	// 未登记在菜单里的路径兜底:已知段落用中文名,其余按原始段落显示
-	const map: Record<string, string> = {
-		settings: "设置",
-		demo: "示例",
-		table: "数据表格",
-		form: "表单",
-		store: "状态",
-		drizzle: "数据库",
-	};
+	// 未登记在菜单里的路径兜底:按原始段落显示。
+	// 路径的中文名**只认菜单树**(见 nav-config.ts:不要在别处再维护第二份映射)
 	const parts = pathname.split("/").filter(Boolean);
 	if (parts.length === 0) return [{ label: "工作台" }];
 	const out: Crumb[] = [{ label: "首页", href: "/" }];
 	parts.forEach((p, i) => {
-		const label = map[p] ?? p;
 		const href = i === parts.length - 1 ? undefined : `/${parts.slice(0, i + 1).join("/")}`;
-		out.push({ label, href });
+		out.push({ label: p, href });
 	});
 	return out;
 }
@@ -156,18 +147,8 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 				</nav>
 			</div>
 
-			{/* ── 右:搜索 + 主操作 + 通知 + 主题 + 用户 ──────────────────── */}
+			{/* ── 右:通知 + 主题 + 用户 ────────────────────────────────── */}
 			<div className="flex items-center gap-1.5">
-				{/* 搜索 —— 蓝调聚焦环 + 快捷键徽标 */}
-				<div className="search-input hidden md:block">
-					<Search aria-hidden="true" />
-					<Input
-						placeholder="搜索页面 / 档案 / 主体"
-						className="h-9 w-[280px] border-transparent bg-secondary pr-12 pl-9 text-sm transition-[border-color,box-shadow,background-color] duration-150 focus-visible:border-hue-blue focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-brand-ring"
-					/>
-					<span className="shortcut">⌘ K</span>
-				</div>
-
 				{/* 通知:未读数 + 点开看最近 10 条 + 点一条跳到对应页面(见 doc/通知中心.md) */}
 				<NotificationBell />
 

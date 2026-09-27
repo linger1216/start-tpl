@@ -31,14 +31,11 @@ import { cn } from "#/lib/utils";
 export function DataTable<TRow extends MockRow>({
 	table,
 	emptyText = "暂无数据",
-	/** 行集合本身为空时的文案(与「筛选后无结果」区分开);不传则与 `emptyText` 同文案 */
-	emptyDataText,
 	className,
 	rowClassName,
 }: {
 	table: ReturnType<typeof useAppTable<TRow>>;
 	emptyText?: string;
-	emptyDataText?: string;
 	className?: string;
 	/** 每行的附加 class(典型用法:选中行高亮)。拿到原始行数据,由调用方自己算 */
 	rowClassName?: (row: TRow) => string | undefined;
@@ -84,7 +81,7 @@ export function DataTable<TRow extends MockRow>({
 				{rows.length === 0 ? (
 					<TableRow>
 						<TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">
-							{noFilteredResult ? (emptyDataText ?? emptyText) : "没有匹配的数据"}
+							{noFilteredResult ? emptyText : "没有匹配的数据"}
 						</TableCell>
 					</TableRow>
 				) : (

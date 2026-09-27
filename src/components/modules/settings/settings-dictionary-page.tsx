@@ -14,20 +14,16 @@ import {
 	type SettingsDictRow,
 } from "#/components/modules/settings/settings-dictionary-types";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 字典管理 —— `sys_dict`(全系统共用字典表)的维护页。
@@ -71,8 +67,6 @@ export function SettingsDictionaryPage() {
 		trpc.dict.update.mutationOptions({
 			onSuccess: async () => {
 				await invalidate();
-				// 规则表单的「写入档案」下拉也读这个字典,顺手让它失效(revalidate 一次)
-				await queryClient.invalidateQueries(trpc.dict.pathFilter());
 				setForm(null);
 				toast.success("已保存字典");
 			},
@@ -94,15 +88,16 @@ export function SettingsDictionaryPage() {
 	);
 
 	/** 关键词过滤:名称 / 编码 / 说明 / 字典项(label 与 value) */
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return rows;
-		return rows.filter((row) =>
-			[row.name, row.code, row.remark ?? "", ...row.items.flatMap((item) => [item.label, item.value])].some((text) =>
-				text.toLowerCase().includes(key),
+	const filtered = useMemo(
+		() =>
+			rows.filter((row) =>
+				matchKeyword(
+					[row.name, row.code, row.remark, ...row.items.flatMap((item) => [item.label, item.value])],
+					keyword,
+				),
 			),
-		);
-	}, [rows, keyword]);
+		[rows, keyword],
+	);
 
 	const total = filtered.length;
 
@@ -174,15 +169,11 @@ export function SettingsDictionaryPage() {
 
 	const busyId = deleteMutation.isPending ? (deleteMutation.variables?.code ?? null) : null;
 	const columns = useMemo(() => dictionaryColumns({ callbacks, busyId }), [callbacks, busyId]);
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.dictionary",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(换机器也跟着账号走)
-	const { persist: persistColumns } = useColumnPrefs("settings.dictionary", table);
 
 	function openCreate() {
 		setFormError(null);
@@ -231,38 +222,14 @@ export function SettingsDictionaryPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<Library className="size-4 text-muted-foreground" />
-						字典清单
-					</CardTitle>
-					<div className="flex flex-wrap items-center gap-1.5">
-						{listQuery.isFetching ? (
-							<Badge variant="secondary" className="tabular-nums">
-								读取中…
-							</Badge>
-						) : null}
-						<Badge variant="outline" className="tabular-nums">
-							匹配 {total} 个
-						</Badge>
-					</div>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="没有符合条件的字典" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="字典清单"
+				Icon={Library}
+				count={total}
+				busy={listQuery.isFetching}
+				emptyText="没有符合条件的字典"
+				table={table}
+			/>
 
 			<p className="text-xs text-muted-foreground">
 				说明:字典项顺序就是下拉里的顺序(编辑弹窗里可上移/下移);停用的字典不参与下拉,但不影响已存在的数据。

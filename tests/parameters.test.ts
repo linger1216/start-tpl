@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { PAGE_SIZE_KEY, parsePageSize } from "../src/hooks/use-page-size.ts";
+import { PAGE_SIZE_KEY, parsePageSize } from "../src/hooks/use-para-prefs.ts";
 import { PAGE_SIZES } from "../src/lib/constants.ts";
 import { PARA_TYPE } from "../src/lib/para-spec.ts";
 import { PARA_DEFAULTS } from "../src/lib/sys-para.ts";

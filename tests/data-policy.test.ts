@@ -29,7 +29,7 @@ import {
 	resourceUnder,
 } from "../src/lib/data-policy-spec.ts";
 import { collectAncestorIds, collectDescendantIds } from "../src/lib/tree.ts";
-import { TEST_PREFIX, caller, closeDb, deleteTestPolicies, putPolicyRow, uniqueSuffix } from "./helpers.ts";
+import { TEST_PREFIX, caller, closeDb, deleteTestPolicies, putPolicyRow, testId, uniqueSuffix } from "./helpers.ts";
 
 /**
  * 行级数据权限(Casbin 策略行)。
@@ -46,7 +46,7 @@ const userIds: string[] = [];
 const gridIds: string[] = [];
 const policyIds: string[] = [];
 
-const id = (kind: string, name: string) => `${TEST_PREFIX}${kind}-${name}-${S}`;
+const id = (kind: string, name: string) => testId(kind, name, S, kind === "u" ? 36 : 32);
 
 async function makeDept(name: string, parentId: string | null): Promise<string> {
 	const deptId = id("d", name);

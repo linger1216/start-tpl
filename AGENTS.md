@@ -40,7 +40,7 @@ pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生�
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
 pnpm db:create        # 建系统表十九张(幂等;建完顺带对齐注释 / 索引名)
-pnpm db:dm:create-ba  # 达梦线:建认证四表 + 权限六表 + sys_file(幂等)
+pnpm db:dm:create-ba  # 达梦线:建 15 张表(逐张清单见 doc/达梦支持.md,幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
 pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo / :policies   # 七个种子都幂等「只补不覆盖」
 pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期

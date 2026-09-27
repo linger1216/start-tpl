@@ -34,10 +34,10 @@ export type MenuRow = {
 };
 
 /** icon 认不出来时的兜底图标 */
-export const DEFAULT_MENU_ICON: NavIcon = "file-text";
+const DEFAULT_MENU_ICON: NavIcon = "file-text";
 
 /** 图标名 → 已登记的图标;不认识的退回默认 */
-export function menuIconOf(icon: string | null | undefined): NavIcon {
+function menuIconOf(icon: string | null | undefined): NavIcon {
 	if (icon && icon in NAV_ICON_MAP) return icon as NavIcon;
 	return DEFAULT_MENU_ICON;
 }

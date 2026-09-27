@@ -16,12 +16,12 @@ import { toApiError } from "#/lib/api/error";
  * 这里表现为 `instant: true`、**一个字节都不发**。
  */
 
-export type UploadKind = "public" | "private";
+type UploadKind = "public" | "private";
 
-export type UploadResult = { ok: true; instant: boolean; row: FileRow } | { ok: false; message: string };
+type UploadResult = { ok: true; instant: boolean; row: FileRow } | { ok: false; message: string };
 
 /** 算文件内容的 sha256(64 位十六进制)。失败返回 undefined —— hash 是可选元数据,不该拦住上传 */
-export async function sha256Of(file: File): Promise<string | undefined> {
+async function sha256Of(file: File): Promise<string | undefined> {
 	try {
 		const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
 		return Array.from(new Uint8Array(digest))
@@ -36,7 +36,7 @@ export async function sha256Of(file: File): Promise<string | undefined> {
  * 直传并回报进度 —— **必须用 XHR**(`fetch` 没有上传进度事件)。
  * 导出给"想自己排队"的调用方也用得上。
  */
-export function putWithProgress(url: string, file: File, onPercent: (percent: number) => void): Promise<void> {
+function putWithProgress(url: string, file: File, onPercent: (percent: number) => void): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
 		xhr.open("PUT", url);

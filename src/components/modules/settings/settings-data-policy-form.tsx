@@ -46,7 +46,7 @@ const ALL_RESOURCES = "__all__";
  * 为什么不是一个平铺字段集:一个主体要 A B C D 四份授权,这四份常常**类型 / 范围 / 动作都不一样**
  * (整类只读 + 某几行可写…),平铺字段一次只能表达一种,界面就得"保存 → 关弹窗 → 再选一次主体"。
  */
-export type PolicyResourceCard = {
+type PolicyResourceCard = {
 	/** `null` = 全部资源(`*`) */
 	resourceType: string | null;
 	scopeKind: PolicyScopeKind;

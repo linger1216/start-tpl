@@ -6,7 +6,7 @@
  */
 
 /** 归一后的错误形态(code 为业务错误码,msg 可展示,data 透传 zodError 等) */
-export class ApiError extends Error {
+class ApiError extends Error {
 	code: number;
 	data: unknown;
 	constructor(code: number, msg: string, data: unknown = null) {
@@ -31,13 +31,8 @@ const FALLBACK_MSG = "未知错误";
 const HTML_RESPONSE_PATTERN = /unexpected token '<?'|is not valid json|<!doctype html/i;
 
 /** 命中「拿到 HTML」时给出的可操作文案 */
-export const HTML_RESPONSE_HINT =
+const HTML_RESPONSE_HINT =
 	"接口返回的是 HTML 而不是 JSON:当前访问的域名没有被转发到本应用(或代理没放行 POST /api/trpc)。本机开发请直接用 http://localhost:3000 打开;用自定义域名时,需把 /api/trpc 一并代理到 dev 服务。";
-
-/** 统一提取 Error 信息(避免到处 err instanceof Error);不构造 ApiError,只取文案 */
-export function toErrorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
 
 /** 任意错误 → ApiError */
 export function toApiError(e: unknown): ApiError {

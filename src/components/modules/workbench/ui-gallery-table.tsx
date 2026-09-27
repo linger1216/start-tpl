@@ -164,8 +164,6 @@ export function UiGalleryTable() {
 				label: "合计金额",
 				value: yuan(ROWS.reduce((sum, row) => sum + row.amount, 0)),
 				description: "本月累计",
-				trend: "up",
-				delta: "12.4%",
 				Icon: Download,
 				tone: "bg-hue-teal-soft text-hue-teal-fg",
 			},

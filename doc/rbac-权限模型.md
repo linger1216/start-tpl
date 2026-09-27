@@ -5,7 +5,8 @@
 
 **"部门当组织用",但走的不是 Better Auth 的 organization 插件** —— 那套是"选中一个当前组织 + 租户隔离",
 而这里要的是"**同时属于多个部门 + 角色给权限**",语义不同(而且它会往 session 上加一个用不上的
-`active_organization_id`)。所以是项目自己的五张表:
+`active_organization_id`)。所以是项目自己的六张表(下面五张管组织 / 角色 / 菜单可见性,第六张
+`sys_data_policy` 是行级数据权限的载体,见下文「行级数据权限」):
 
 ```
 sys_dept(树)                         上海公司 / 武汉公司(可嵌套)—— 纯组织架构
@@ -253,8 +254,9 @@ await ensureRule(sub, obj, act?, remark?);     // 同上,但**只补不覆盖**(
 
 ```bash
 pnpm db:create                # 建出 sys_data_policy(-- 达梦线是 pnpm db:dm:create-ba)
-pnpm db:migrate:data-scope    # 读旧的 sys_role.data_scope → 写规则 → **自己把旧列删掉**
 ```
+
+`sys_role.data_scope` 的迁移已经执行完毕(旧列已删),那个一次性迁移脚本已随迁移一起移除。
 
 映射口径(实测 12 个角色 ⇒ 88 条规则,与手算逐条相等):
 
@@ -349,5 +351,4 @@ where p.v1 like 'demo_grid@%' and p.v1 not like '%@org:%' and g.id is null;
 | --- | --- |
 | **`custom` 指定若干部门**(跨互不从属的组织) | 角色表单里做部门多选 ⇒ 落成多条 `dept:` / `@org:` 规则(表不用改) |
 | **组织类型表 / 非组织维度的资源** | 现在只认 `@org:` 一个轴;要多轴(比如"按街镇"+"按片区")就得给资源加维度列 |
-| **规则的可视化管理页** | ~~现在规则只由脚本 / 指派流程写~~ **已实现**:`/settings/data-policy` 台账 + 叉积登记 + 试算 |
 | **跨轴精确并集**(多角色时应把组织条件与按行条件 OR 起来,现在只取"最宽的一档") | 引擎侧小改(`compileScopePlan` 已按并集编译,缺的是"多主体各自判定再并集"),要有真实诉求再动 |

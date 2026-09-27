@@ -122,7 +122,6 @@ export function BadgeList({
 	layout = "stack",
 	justify = "start",
 	onRemove,
-	onBadgeClick,
 	emptyPlaceholder,
 	color = "brand",
 }: {
@@ -130,7 +129,6 @@ export function BadgeList({
 	layout?: "wrap" | "stack";
 	justify?: "center" | "start";
 	onRemove?: (index: number) => void;
-	onBadgeClick?: (value: string, index: number) => void;
 	emptyPlaceholder?: ReactNode;
 	color?: BadgeColor;
 }) {
@@ -160,24 +158,7 @@ export function BadgeList({
 	};
 
 	const badges = values.map((value, i) => (
-		<Badge
-			key={`${value}-${i}`}
-			className={cn("p-2.5 gap-1", resolveColor(i), onBadgeClick && "cursor-pointer")}
-			variant="outline"
-			role={onBadgeClick ? "button" : undefined}
-			tabIndex={onBadgeClick ? 0 : undefined}
-			onClick={onBadgeClick ? () => onBadgeClick(value, i) : undefined}
-			onKeyDown={
-				onBadgeClick
-					? (e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								onBadgeClick(value, i);
-							}
-						}
-					: undefined
-			}
-		>
+		<Badge key={`${value}-${i}`} className={cn("p-2.5 gap-1", resolveColor(i))} variant="outline">
 			<span>{value}</span>
 			{onRemove && (
 				<button

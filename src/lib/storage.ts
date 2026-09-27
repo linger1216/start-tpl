@@ -42,12 +42,12 @@ export interface Storage {
 }
 
 /** 桶的用途 —— 决定"公开直链"还是"预签名" */
-export type BucketKind = "public" | "private";
+type BucketKind = "public" | "private";
 
 const DEFAULT_EXPIRES_PUT = 600; // 10 分钟:够慢网传一个大文件,又不至于被拿去长期占用
 const DEFAULT_EXPIRES_GET = 300; // 5 分钟:够打开一个预览,泄漏窗口也小
 
-export function readStorageConfig() {
+function readStorageConfig() {
 	const endpoint = process.env.MINIO_ENDPOINT;
 	const accessKey = process.env.MINIO_ACCESS_KEY;
 	const secretKey = process.env.MINIO_SECRET_KEY;
@@ -122,11 +122,6 @@ export async function getStorage(): Promise<Storage> {
 		defaultExpiresPut: DEFAULT_EXPIRES_PUT,
 	});
 	return cached;
-}
-
-/** 测试用:清掉单例(改了 env / mock 之后) */
-export function resetStorage(): void {
-	cached = null;
 }
 
 export { DEFAULT_EXPIRES_GET, DEFAULT_EXPIRES_PUT };

@@ -17,23 +17,19 @@ import {
 } from "#/components/modules/settings/settings-data-policy-form";
 import { policyColumns } from "#/components/modules/settings/settings-data-policy-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import type { PolicyRowView } from "#/lib/data-policy-spec";
-import { useAppTable, useRowSelection } from "#/lib/table";
+import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 数据权限 —— 行级数据权限的**管理页**。
@@ -163,15 +159,16 @@ export function SettingsDataPolicyPage() {
 		updateManyMutation.mutate({ ids: selectedRows.map((row) => row.id), ...payload });
 	}
 
-	const filtered = useMemo(() => {
-		const key = keyword.trim();
-		if (!key) return rows;
-		return rows.filter((row) =>
-			`${row.subjectLabel} ${row.subjectRaw} ${row.resourceTypeLabel} ${row.resourceDetail} ${row.resourceRaw} ${row.remark}`.includes(
-				key,
+	const filtered = useMemo(
+		() =>
+			rows.filter((row) =>
+				matchKeyword(
+					[row.subjectLabel, row.subjectRaw, row.resourceTypeLabel, row.resourceDetail, row.resourceRaw, row.remark],
+					keyword,
+				),
 			),
-		);
-	}, [rows, keyword]);
+		[rows, keyword],
+	);
 
 	const columns = useMemo(
 		() =>
@@ -193,15 +190,12 @@ export function SettingsDataPolicyPage() {
 		[selected, toggleOne, toggleMany],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.data-policy",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	const { persist: persistColumns } = useColumnPrefs("settings.data-policy", table);
 
 	const stats: StatItem[] = useMemo(() => {
 		const enabled = rows.filter((row) => row.status === 1);
@@ -292,60 +286,40 @@ export function SettingsDataPolicyPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<ShieldCheck className="size-4 text-muted-foreground" />
-						规则清单
-					</CardTitle>
-					<Badge variant="outline" className="tabular-nums">
-						匹配 {filtered.length} 条
-					</Badge>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					{selected.size > 0 ? (
-						<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-							<span className="text-xs text-foreground">
-								已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
-								<span className="ml-2 text-muted-foreground">
-									(
-									{selectedRows
-										.map((row) => row.subjectLabel)
-										.slice(0, 3)
-										.join("、")}
-									{selected.size > 3 ? " …" : ""})
-								</span>
+			<LedgerCard
+				title="规则清单"
+				Icon={ShieldCheck}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="还没有任何数据权限规则 —— 此时所有列表都不做范围过滤(空表 = 未启用)"
+				table={table}
+				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
+			>
+				{selected.size > 0 ? (
+					<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
+						<span className="text-xs text-foreground">
+							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
+							<span className="ml-2 text-muted-foreground">
+								(
+								{selectedRows
+									.map((row) => row.subjectLabel)
+									.slice(0, 3)
+									.join("、")}
+								{selected.size > 3 ? " …" : ""})
 							</span>
-							<div className="flex items-center gap-2">
-								<ActionButton onClick={clear}>清空选择</ActionButton>
-								{canEdit ? <ActionButton onClick={() => setBatching(true)}>批量修改</ActionButton> : null}
-								{canRemove ? (
-									<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
-										批量删除
-									</ActionButton>
-								) : null}
-							</div>
+						</span>
+						<div className="flex items-center gap-2">
+							<ActionButton onClick={clear}>清空选择</ActionButton>
+							{canEdit ? <ActionButton onClick={() => setBatching(true)}>批量修改</ActionButton> : null}
+							{canRemove ? (
+								<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
+									批量删除
+								</ActionButton>
+							) : null}
 						</div>
-					) : null}
-
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable
-							table={table}
-							emptyText="还没有任何数据权限规则 —— 此时所有列表都不做范围过滤(空表 = 未启用)"
-							rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
-						/>
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
 					</div>
-				</CardContent>
-			</Card>
+				) : null}
+			</LedgerCard>
 
 			<SettingsDataPolicyForm
 				row={editing}

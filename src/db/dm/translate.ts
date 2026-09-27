@@ -13,7 +13,7 @@
  */
 export type DmResultRow = Record<string, unknown>;
 
-export interface DmExecResult {
+interface DmExecResult {
 	rows: DmResultRow[];
 	insertId?: number;
 	affectedRows?: number;
@@ -239,7 +239,7 @@ export function bindDmExec(poolLike: DmPoolLike): DmExec {
 	};
 }
 
-export type DmTxExec = DmExec & {
+type DmTxExec = DmExec & {
 	release: () => Promise<void>;
 	commit: () => Promise<void>;
 	rollback: () => Promise<void>;

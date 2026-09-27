@@ -28,14 +28,14 @@ import { log } from "#/lib/logger";
 import { type DmPreparedQueryHKT, type DmQueryResultHKT, drizzleDm } from "./session";
 import { bindDmExec, type DmPool } from "./translate";
 
-export interface DmConfig {
+interface DmConfig {
 	/** dm://user:password@host:port[?schema=xxx][&loginEncrypt=false] */
 	url: string;
 	poolMax?: number;
 	poolTimeout?: number;
 }
 
-export function parseDmUrl(url: string): { user: string; password: string; host: string } {
+function parseDmUrl(url: string): { user: string; password: string; host: string } {
 	const m = url.match(/^dm:\/\/(.+?):(.+)@(.+:\d+)(\?.*)?$/);
 	if (!m) throw new Error(`[dm] DM_URL 格式应是 dm://user:password@host:port[?schema=xxx],实际收到: ${url}`);
 	const [, user = "", password = "", host = ""] = m;
@@ -46,7 +46,7 @@ export function parseDmUrl(url: string): { user: string; password: string; host:
  * 没写 `loginEncrypt` 就补 `=false`(原因见文件头);显式写 true 时给一条告警,
  * 因为那条路需要 `--openssl-legacy-provider`,否则会静默挂住。
  */
-export function withLoginEncryptDefault(url: string): string {
+function withLoginEncryptDefault(url: string): string {
 	const explicit = url.match(/[?&]loginEncrypt=([^&]*)/i);
 	if (explicit) {
 		if (/^(true|1|yes)$/i.test(explicit[1] ?? "")) {

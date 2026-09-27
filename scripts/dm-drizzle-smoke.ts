@@ -2,7 +2,8 @@
  * drizzle → DM(dmdb)整链路冒烟:
  *   db.select() / db.insert().values().returning() / db.update() / db.delete() / db.transaction()
  *
- * 与 dm-poc.ts 的区别:那个是直连 dmdb 验 SQL 翻译,这个是**走 drizzle 查询构造器**,
+ * 早先那个直连 dmdb、逐条打方言翻译的验证脚本已随本轮收敛移除 —— 方言翻译本身留在
+ * `src/db/dm/translate.ts`,不再单开验证脚本;这个是**走 drizzle 查询构造器**,
  * 证明 `db.select().from(sysPara)` 这种业务写法在 DM 上能跑。
  *
  * 跑法:`NODE_OPTIONS=--openssl-legacy-provider dotenv -e .env.local -- tsx scripts/dm-drizzle-smoke.ts`

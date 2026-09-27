@@ -22,7 +22,7 @@ import { cn } from "#/lib/utils";
  * 类型上就先过不去(要加图标就该想想它是不是该用 `Button`)。
  */
 const actionButtonVariants = cva(
-	"inline-flex items-center whitespace-nowrap rounded-sm text-xs leading-none underline-offset-2 transition-colors duration-[160ms] ease-brand outline-none select-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45 disabled:no-underline",
+	"inline-flex items-center whitespace-nowrap rounded-sm text-xs leading-none underline-offset-2 transition-colors duration-[160ms] ease-brand outline-none select-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45 disabled:no-underline",
 	{
 		variants: {
 			tone: {

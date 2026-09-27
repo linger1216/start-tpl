@@ -17,12 +17,7 @@
  */
 
 /** 参数化菜单路径的前缀 —— 改这一行即可换成新项目的约定 */
-export const MENU_DETAIL_PATH_PREFIX = "/data/raw/";
-
-/** 记录 id → 明细页路径(服务端派生 path、前端拼链接、测试断言都用它) */
-export function menuDetailPath(recordId: string): string {
-	return `${MENU_DETAIL_PATH_PREFIX}${recordId}`;
-}
+const MENU_DETAIL_PATH_PREFIX = "/data/raw/";
 
 /** 明细页路径 → 记录 id;不是这种路径(或没有后缀)时返回 `null` */
 export function recordIdFromMenuDetailPath(path: string | null | undefined): string | null {

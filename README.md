@@ -15,7 +15,7 @@
 ```bash
 pnpm install
 cp .env.example .env.local     # 然后按需填写 DATABASE_URL 等
-pnpm db:create                 # 建 19 张 sys_* 系统表(幂等)
+pnpm db:create                 # 建 19 张系统表(18 张 sys_* + demo 用的 demo_grid,幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
 pnpm db:seed:demo              # 可选:26 个演示账号 + 71 条网格数据
 pnpm dev                       # http://localhost:3000
@@ -51,7 +51,7 @@ src/
 │   ├── (main)/                   # 无路径布局组(URL 中不出现 "(main)")
 │   │   ├── route.tsx             # 后台外壳 + 页面级权限守卫(beforeLoad 读会话 / 判页面权限)
 │   │   ├── index.tsx             # 工作台(入口页 + UI 示例)
-│   │   ├── blank.tsx             # 空白页占位(StubPage)
+│   │   ├── blank.tsx             # 空白页(PageHeader + EmptyState 手写占位)
 │   │   ├── notices.tsx           # 通知中心
 │   │   ├── demo/                 # 框架能力样例(7 页)
 │   │   └── settings/             # 系统设置(11 个路由文件 = 索引 + 10 页)
@@ -62,11 +62,11 @@ src/
 │   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 + nav-config / nav-menu / nav-data
 │   ├── modules/shared/           # 14 个领域无关展示件(表格套件 / 工具栏 / 详情 / 树 / 标签 / 权限树 / Excel…)
 │   ├── modules/workbench/        # 工作台 + UI 示例(ui-gallery)
-│   ├── modules/settings/         # 系统设置十页的页面 / 表格 / 表单 / 详情件(38 个文件)
+│   ├── modules/settings/         # 系统设置十页的页面 / 表格 / 表单 / 详情件(40 个文件)
 │   ├── modules/demo/             # 框架能力样例的页面件
 │   └── modules/notice/           # 通知中心件
 ├── lib/
-│   ├── api/error.ts              # ApiError / toApiError / toErrorMessage
+│   ├── api/error.ts              # ApiError / toApiError
 │   ├── table.ts                  # TanStack Table v9 的 app hook(useAppTable + useRowSelection)
 │   ├── excel.ts                  # Excel 列类型 + 唯一写盘点 writeSheet / cellText
 │   ├── rbac.ts                   # 权限码判定 + PERM_BY_PATH(接口 → 权限点的唯一字典)
@@ -78,20 +78,19 @@ src/
 │   ├── storage.ts / storage-minio.ts / menu-detail-path.ts / mock-table.ts / demo-store.ts / utils.ts
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 19 张 sys_* 表(系统设置、认证、日志、数据权限…)
+│   ├── data-base-schema.ts       # 19 张系统表(18 张 sys_* + demo_grid:设置 / 认证 / 权限 / 日志…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
 │   ├── trpc/                     # init.ts / router.ts / react.ts + routers/(12 个域)
 │   └── tanstack-query/           # root-provider.tsx(getContext + TRPCProvider)
-├── hooks/                        # use-dict / use-page-size / use-perms / use-column-prefs / use-file-upload / use-tree-prefs / use-stable-keys / demo.form*
-├── mocks/tags.ts                 # 标签种子(`pnpm db:seed:tags` 的数据源)
+├── hooks/                        # use-dict / use-para-prefs / use-perms / use-file-upload / use-ledger-table / use-stable-keys / demo.form*
 ├── router.tsx                    # ★ createRouter + SSR Query 集成(按约定路径被插件加载,别删)
 ├── routeTree.gen.ts              # 生成物,不要手改
 └── styles.css                    # Tailwind v4 入口 + 设计 token
 ```
 
-`lib/` 的 28 个文件、`ui/` 的 41 个原语、`shared/` 的 14 个展示件,当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只有 Excel 那一组(`lib/excel.ts` + `shared/ledger-excel.tsx` + `shared/excel-import.tsx`),理由见下文「随模板分发、当前没有调用方的件」。
+`lib/` 的 28 个文件、`ui/` 的 41 个原语、`shared/` 的 15 个展示件,当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只有两组:Excel 那一组(`lib/excel.ts` + `shared/ledger-excel.ts` + `shared/excel-import.tsx`)与 `hooks/use-dict.ts`(字典读取器;目前只有管理页在写字典,没有页面在读),理由见下文「随模板分发、当前没有调用方的件」。
 
 ---
 
@@ -181,7 +180,7 @@ src/
 
 ## 可用脚本
 
-**日常三条**(`typecheck` + `check` + `generate-routes`),`check` / `lint` / `format` 都带 `--write`:
+**日常三条**(`typecheck` + `check` + `generate-routes`),`check` 带 `--write`:
 
 | 命令 | 实际执行 | 说明 |
 | --- | --- | --- |
@@ -191,7 +190,6 @@ src/
 | `pnpm preview` | `vite preview` | Vite 自带预览。产物是 Nitro 服务,验证生产请用 `build && start` |
 | `pnpm typecheck` | `tsc --noEmit` | 类型检查,只报告不写文件 |
 | `pnpm check` | `biome check --write .` | 格式化 + lint + 整理 import,**会写回文件** |
-| `pnpm lint` / `pnpm format` | `biome lint/format --write .` | 只跑其中一项 |
 | `pnpm generate-routes` | `tsr generate` | 扫描 `src/routes/` 重新生成 `routeTree.gen.ts` |
 | `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 15 个测试文件,直连真库;跑完会清掉自己造的 `__test__*` 数据 |
 | `pnpm test:cov` | 同上 + `--experimental-test-coverage` | 覆盖率是 Node 自带的(**没有 c8 / vitest**)。口径见下文「覆盖率怎么读」 |
@@ -202,11 +200,10 @@ src/
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit;只管 `src/db/schema.ts`(当前是 `todos`) |
-| `pnpm db:create` | 建 **19 张 `sys_*`** 系统表(`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:create` | 建 **19 张**系统表(18 张 `sys_*` + `demo_grid`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
 | `pnpm db:sync:meta` | 只对齐列注释与索引名(老库升级用,**幂等**;第二次必须打印「无需改动」) |
 | `pnpm db:migrate:ids` | 把自增 id 迁成 nanoid(一次性) |
-| `pnpm db:migrate:data-scope` | 把 `sys_role.data_scope` 迁成 `sys_data_policy` 规则,并删掉那一列(一次性) |
-| `pnpm db:dm:poc` / `db:dm:smoke` / `db:dm:defaults` | 达梦专项:可行性验证 / drizzle 冒烟 / 默认值对齐 |
+| `pnpm db:dm:smoke` / `db:dm:defaults` | 达梦专项:drizzle 冒烟 / 默认值对齐 |
 | `pnpm db:dm:create-ba` | 在达梦上建 Better Auth 四表 |
 
 **种子**(都幂等、只补不覆盖):
@@ -215,7 +212,7 @@ src/
 | --- | --- |
 | `pnpm db:seed:menus` | 把 `NAV_NODES` 写进 `sys_menu`(按 path 去重) |
 | `pnpm db:seed:dicts` / `db:seed:paras` | 字典种子 / `PARA_DEFAULTS` → `sys_para` |
-| `pnpm db:seed:tags` | 标签种子(`src/mocks/tags.ts` 的数据源) |
+| `pnpm db:seed:tags` | 标签种子(`scripts/tag-seed-data.ts`:17 维度 / 120 标签) |
 | `pnpm db:seed:rbac` | 角色 / 菜单权限点 / 按钮级权限点 |
 | `pnpm db:seed:policies` | 行级数据权限的**基线策略**(88 行:队长按组织、队员按行) |
 | `pnpm db:minio:init` | 建 MinIO 桶 |
@@ -236,7 +233,7 @@ cp .env.example .env.local
 | `DATABASE_URL` | **是** | `mysql://user:pass@host:3306/db` 或 `dm://user:pass@host:5236?schema=eg`(协议决定用哪个驱动)。`src/db/index.ts` 与 `drizzle.config.ts` 在缺失时**直接抛错** |
 | `BETTER_AUTH_URL` | 否 | 默认 `http://localhost:3000` |
 | `BETTER_AUTH_SECRET` | 否 | 用 `pnpm dlx @better-auth/cli secret` 生成 |
-| `VITE_SENTRY_DSN` | 否 | 留空则不启用 Sentry(`instrument.server.mjs` 打印一条提示);`VITE_SENTRY_ORG` / `VITE_SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` 只有上传 source map 时才需要 |
+| `VITE_SENTRY_DSN` | 否 | 留空则不启用 Sentry(`instrument.server.mjs` 打印一条提示)。只有这一个键:**没有** source map 上传 |
 | `VITE_TRPC_STREAM` | 否 | 设 `1` 换成流式(`httpBatchStreamLink`);留空用非流式,响应是完整 JSON,DevTools 里能直接读 |
 | `MINIO_*` | 否 | 文件管理用:`MINIO_ENDPOINT` / `PORT` / `USE_SSL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_PUBLIC` / `BUCKET_PRIVATE` / `PUBLIC_URL`,见 `doc/文件管理.md` |
 | `LOG_LEVEL` / `LOG_SILENT` / `LOG_SLOW_MS` | 否 | 默认 `info`;`LOG_SILENT=1` 全关(测试用);单个 procedure 超过 `LOG_SLOW_MS`(默认 1500)会打慢日志 |
@@ -265,7 +262,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **19 张 `sys_*` 系统表**:菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 部门 / 角色 / 用户-部门 / 用户-角色 / 角色-菜单 / 数据权限 / 通知 / 日志 / 演示网格 / 文件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **19 张系统表**(18 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 部门 / 角色 / 用户-部门 / 用户-角色 / 角色-菜单 / 数据权限 / 通知 / 日志 / 演示网格 / 文件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -366,7 +363,7 @@ function UsersPage() {
 2. 跑 `pnpm generate-routes`
 3. 在 `src/components/layout/nav-config.ts` 的 `NAV_NODES` 里注册菜单(支持子菜单,`icon` 用 `NAV_ICON_MAP` 里登记的 kebab-case 名)
 
-页面骨架未定时用 `StubPage` 占位(`src/components/layout/stub-page.tsx`,`src/routes/(main)/blank.tsx` 是范例)。想脱离后台外壳(如独立登录页)就放到 `src/routes/` 根下。
+页面骨架未定时照 `src/routes/(main)/blank.tsx` 那样用 `PageHeader` + `EmptyState` 拼一个占位页(它就是范例)。想脱离后台外壳(如独立登录页)就放到 `src/routes/` 根下。
 
 **改完必跑** `pnpm generate-routes && pnpm typecheck`。
 
@@ -383,7 +380,7 @@ function UsersPage() {
 3. **权限点** —— 每个写接口都要在 `src/lib/rbac.ts` 的 `PERM_BY_PATH` 里登记 `域:资源:动作`,否则 `tests/auth.test.ts` 直接拦(读接口三选一,见 `doc/后端接口约定.md`)
 4. **页面骨架** —— 复制 `settings-parameters-page.tsx` 的结构:`PageFrame` → `PageHeader`(actions 放 `RefreshButton` + 新增 `Button`)→ `StatCards` → `LedgerToolbar` + `ColumnToggle` → `Card` → `TableLoadingShell` → `DataTable` → `PaginationControl`;分页大小统一读 `usePageSize()`(`sys_para` 的 `page.size`),列偏好用 `useColumnPrefs("<页面键>", table)`
 5. **表格** —— `src/lib/table.ts` 的 `useAppTable` + `createAppColumnHelper`(排序 / 筛选 / 分页 / 分组 / 列宽 / 列固定 / 行选择都内置),配 `shared/table-kit` 的 `DataTable` / `selectColumn` / `actionsColumn` / `TextCell`
-6. **mutation** —— 每个动作单独一个 `useMutation(mutationOptions())`,成功后按需 `invalidateQueries`;删除走 `ConfirmDialog`;错误提示走 `lib/api/error.ts` 的 `toApiError` / `toErrorMessage`
+6. **mutation** —— 每个动作单独一个 `useMutation(mutationOptions())`,成功后按需 `invalidateQueries`;删除走 `ConfirmDialog`;错误提示走 `lib/api/error.ts` 的 `toApiError`(取 `.message`)
 7. **详情 / Excel(可选)** —— 详情用 `shared/detail-dialog.tsx`(`DetailRow` 的 label 只给纯描述;时间放 `meta` 不放 fields);导入用 `shared/excel-import.tsx` 的 `ExcelImportDialog`,导出用 `shared/ledger-excel.ts`,写盘点只有 `lib/excel.ts` 一处
 
 可复用的展示件都在 `src/components/modules/shared/`:表格套件 / 工具栏 / 筛选 chip / 分页 / 指标卡 / 详情弹窗 / 可拖拽树 / 权限树 / 多选 / 成员区 / 图标选择 / 列切换 / Excel 导入导出。**先看工作台**,它就是拼装说明书。
@@ -392,9 +389,9 @@ function UsersPage() {
 
 ## 刻意留着、但业务页还没接的件
 
-实测:仓里**没有无调用方的死件**。`lib/` 28 个文件、`ui/` 41 个原语、`shared/` 14 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-tree`(角色授权弹窗)、`use-dict`(字段管理/标签页)、`formatCode`(业务编号)也都有真实调用方。
+实测:仓里**没有无调用方的死件**。`lib/` 28 个文件、`ui/` 41 个原语、`shared/` 15 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-tree`(角色授权弹窗)、`formatCode`(业务编号)也都有真实调用方。
 
-唯一刻意保留、业务页尚未接的是 **Excel 那一组** —— 模板自带导出 / 导入能力,新项目做台账时几乎一定用得上:
+刻意保留、业务页尚未接的是下面两组(其余件都有调用方):
 
 | 件 | 位置 | 说明 |
 | --- | --- | --- |
@@ -402,6 +399,8 @@ function UsersPage() {
 | 台账导出 | `src/components/modules/shared/ledger-excel.ts` | 拉全量 → 行映射 → XLSX → 下载 |
 | 导入弹窗 | `src/components/modules/shared/excel-import.tsx` | 解析 → 校验 → 提交 mutation 的对话框 |
 | 运行示例 | 工作台 `/` 页 | 三者的最小可用示例 |
+
+**`hooks/use-dict.ts`(字典读取器)** 也属于这一类:接口是现成的(`dict.byCode`),但目前只有字典管理页在**写**字典,还没有页面**读**它做下拉 —— 留着当模板件,新项目做业务表单时会第一个用到。
 
 **约定**:新增可复用件时,**要么给它一个真实调用方,要么在工作台 UI 示例里展示,要么登记进本节** —— 三者都不做,它会被下一轮清理当成死代码删掉。
 
@@ -473,12 +472,9 @@ pnpm check
 | 新件 | 位置 | 由什么合并而来 |
 | --- | --- | --- |
 | `table-kit.tsx` | `shared/` | 三份同构的表壳实现(治理明细表 / 档案关联表 / 随访子表)+ 原 `table-loading.tsx` |
-| `readonly-table.tsx` | `shared/` | 声明式只读子表(带搜索 / 排序 / 分页 / 导出) |
-| `detail-profile.tsx` | `shared/` | 「主体摘要 + 关联业务 tab」详情页版式 |
-| `stat-kit.ts` / `op-result.tsx` / `sheet-parse-options.tsx` / `sortable-tree.tsx` | `shared/` | 指标口径、操作结果反馈、导入解析选项、同级拖拽树 |
+| `sortable-tree.tsx` | `shared/` | 同级拖拽树 |
 | `file-dropzone.tsx` | `ui/` | 文件拖放区 |
 | `menu-detail-path.ts` | `lib/` | 从 651 行的业务文件里抽出的「参数化菜单路径」约定 |
-| `status-badge.tsx` | `ui/(重写)` | 两套重复的状态徽章合并为一个,支持 `variants` 传域内词表 |
 
 **删除**:12 个业务域目录(约 500 个文件)、80 条业务路由、29 个业务 lib、27 个业务 mocks、6 个业务 tRPC 路由、18 个业务脚本。`trpc/router.ts` 从 9 个命名空间收窄到 3 个(menu / dict / config)+ `todos` 示例。
 
@@ -490,13 +486,13 @@ pnpm check
 
 | 类别 | 发现 | 处理 |
 | --- | --- | --- |
-| **被抽出来但没人用的件** | `op-result` / `sheet-parse-options` / `file-dropzone` / `use-column-visibility` / `stat-kit` / `table-resize-handle` / `TagFieldInput` 抽完就没了调用方,也没进展示页 | 全部补进展示页(当时叫 `/showcase/*`,现在就是工作台 `/`;看不见 = 不存在) |
+| **被抽出来但没人用的件** | `file-dropzone` / `table-resize-handle` 抽完就没了调用方,也没进展示页 | 补进展示页(当时叫 `/showcase/*`,现在就是工作台 `/`;看不见 = 不存在) |
 | **重复实现** | 三个授权弹窗各自手写「标题 + 计数 + 搜索 + 全选/清空 + 权限树」;而 `PermissionPicker` 早就是这块的封装 | 三处改用 `PermissionPicker`,顺手去掉 `keyword` state 与 `visibleIds` 派生 |
 | **重复实现** | `lib/time.ts`(0 引用)与 `lib/format.ts` 各有一套日期格式化 | 日期函数只留 `lib/time.ts`,`format.ts` 只管值 / JSON 归一 |
 | **正面冲突的 ui 原语** | `ui/sidebar`(与 `layout/sidebar` + `SidebarProvider` 同名冲突)、`ui/pagination`(与 `shared/pagination-control` 重复)、`hooks/use-mobile`(只服务前者) | 三件一起删;其余通用原语在工作台的 UI 示例里点名 |
 | **死导出** | `NAV_PERMISSION_POINTS` / `NAV_PERMISSION_IDS` / `findNavTrail` / `findNavNode` / `flattenNavNodes` / `TruncateCell` / `moveWithinSiblings` / `countMultiValueHits` / `SHEET_DROPZONE_PROPS` / `UI_PRIMITIVE_COUNT` | 删除;另有 `visiblePermissionIds*` / `menuIconOf` / `trpcClient` 等只在本文件内用到的,收回模块内部 |
-| **业务语汇残留** | `需求清单 #NN` / `应标点` / `浦锦街道` / 各业务域名词散在 25+ 个文件(含可见 UI 文案) | 全部泛化;`mocks/shared.ts` 从 299 行收到 91 行(只留真正被用到的 9 个原语;这份 mock 后来随业务清空一并删除) |
-| **功能性 bug** | 角色种子的权限点匹配式还写着已删的域名(`re:enterprise\|visit\|works` 等),而权限树已从新 `NAV_NODES` 派生 → **6 个角色匹配到 0 个权限点**(页面显示 0 项,且不报错) | 重写 8 个角色 / 8 个用户组的匹配式对齐新菜单,并加注释提醒「改菜单要回来核对」。(那批角色 / 用户组种子随后已在「用户 / 用户组 / 角色三页去掉 mock」一轮**整体删除**) |
+| **业务语汇残留** | 各业务域名词散在 25+ 个文件(含可见 UI 文案) | 全部泛化;`mocks/shared.ts` 从 299 行收到 91 行(只留真正被用到的 9 个原语;这份 mock 后来随业务清空一并删除) |
+| **功能性 bug** | 角色种子的权限点匹配式还写着已删的域名,而权限树已从新 `NAV_NODES` 派生 → **6 个角色匹配到 0 个权限点**(页面显示 0 项,且不报错) | 重写 8 个角色 / 8 个用户组的匹配式对齐新菜单,并加注释提醒「改菜单要回来核对」。(那批角色 / 用户组种子随后已在「用户 / 用户组 / 角色三页去掉 mock」一轮**整体删除**) |
 | **孤儿基础设施** | `src/router.tsx` 不在任何 import 图里(TanStack Start 按约定路径加载),被清理脚本误判为死代码删掉 | 从构建产物反推恢复,并在 `AGENTS.md` 里加了显式警告 |
 
 审计后基线:`pnpm typecheck` 0 error · `pnpm check` 0 error / 4 warning · `vite build` 通过 · 产物内容校验 0 问题。
@@ -530,13 +526,31 @@ pnpm check
 | **重复实现审计 + 收敛重构** | 删掉通用 CRUD 套件(`lib/crud/*`)、查询参数 store、`lib/validators/common.ts` 等"配置式"封装 —— 字段一多,配置对象开始打架,读代码还得两处跳。UI 组件**一件没删**(有调用方或在工作台有实例),Excel 那一组刻意留着 |
 | **行级数据权限(ABAC)** | 权限从 `sys_role.data_scope` 一列搬进 `sys_data_policy`(`ptype/v0/v1/v2/v3/status`),主体 `*/user:/role:/dept:` × 资源 `*/type/type@org:/type@rowId` × 动作 `read/write/*` × 效果 `allow/deny`;未命中即 `1 = 0`(失败关闭),表空则不过滤。引擎分两半:`lib/data-policy-spec.ts`(纯逻辑,客户端可 import)+ `lib/data-policy.ts`(casbin + 编译成 SQL) |
 | **权限拦两层** | ① 页面级:`(main)/route.tsx` 的 `beforeLoad` 服务端读会话 + 判页面权限,**没权限返回 404 不是 403**(详情见 `doc/已知陷阱.md`);② 接口级:每个写接口进 `lib/rbac.ts` 的 `PERM_BY_PATH`,读接口三选一登记,`write` 才放行 |
-| **日志 100% 覆盖** | 每个 procedure 一条 `trpc.start` / `trpc.ok` / `trpc.err`,失败在 `trpc.err` 带错误码;附 25 条事件的**日志字典**(`doc/审计日志.md` §七),30 分钟清理测试残留 |
+| **日志 100% 覆盖** | 每个 procedure 一条 `trpc.start` / `trpc.ok` / `trpc.err`,失败在 `trpc.err` 带错误码;附 28 条事件的**日志字典**(`doc/审计日志.md` §七),30 分钟清理测试残留 |
 | **数据权限管理页** | `/settings/data-policy`:规则 CRUD + 「这条规则对某人算出什么」的命中解释(直接跑一遍真实查询数出可见行数) |
 | **两份化石文档重写** | `README.md`(本文)与 `doc/后端接口约定.md`:前者还写着 47 个原语 / 7 个占位页 / 未接认证,后者整篇是已删业务(`lib/fusion-lane.ts` / `entity.*` / `source.*`)与不存在的脚本 |
 
-清空业务后的基线:`pnpm typecheck` 0 · `pnpm check` 0 error / 4 warning / 1 info · `pnpm build` 通过 · `pnpm test` **154 / 154**(15 个测试文件)。
+清空业务后的基线:`pnpm typecheck` 0 · `pnpm check` 0 error / 4 warning / 1 info · `pnpm build` 通过 · `pnpm test` **158 / 158**(15 个测试文件)。
 
 **覆盖率怎么读**(`pnpm test:cov`):Node 自带的 `--experimental-test-coverage`,**没有** c8 / vitest。两个坑:① 别加 `--test-reporter=dot`,它会吞掉覆盖率报告;② `--test-coverage-include=src/**` **补不进**"测试从未 import 的文件"。所以这份数字的口径是**测试运行中加载过的文件**:`src/lib` 与接口层约 93% line,而 `src/components/*` 与 `src/routes/*` 是**零测量**(服务端测试从不 import 它们)。要抬界面层,得先引 jsdom / playwright —— 那是另一件事。
+
+### 第五轮:「面向收敛」精简重构(2026-09)
+
+这一轮只用一个判据动刀:**同一个东西是否存在第二个实现**。删除优先于新增,但**只有逐字相同**的部分才允许上升为共用件 —— 凡是要靠加开关才能通用的,一律不抽。
+
+| 改了什么 | 说明 |
+| --- | --- |
+| **偏好契约三合一** | `use-column-prefs` / `use-tree-prefs` / `use-page-size` → `hooks/use-para-prefs.ts`(179 行)。三个 `sys_para` 键(`page.columns` / `page.tree` / `page.size`)的名字与 JSON 形状**一字未改**,存量账号偏好零迁移 |
+| **台账装配抽件** | 9 个台账页逐字手抄的「卡 + 匹配 N 条 + 表 + 空态 + 页器」→ `shared/ledger-card.tsx`(72 行)+ `hooks/use-ledger-table.ts`;页头 / 统计卡 / 工具条 / 批量条仍归页面(它们各页不同,抽出来只能靠开关区分 = 假抽象) |
+| **过滤收敛** | 9 处各写一遍的 `useMemo` → `lib/table.ts` 的 `matchKeyword(fields, keyword)`;顺手统一大小写口径(**行为差异**:原先 parameters / dictionary / logs 三页是大小写敏感的) |
+| **UI 原语只精简、不删** | 41 件一件未删:删掉 9 个零调用点的死 prop(`skeleton` / `tag-input` / `file-dropzone` / `badge-list` / `table-kit`),`stat-cards` 去掉 `trend` / `spark` / `variant="cards"`,7 处任意值类名改回真 token —— 其中 `wrap-break-words` 是**只有引用、从未生效**的写法(正确类是 `wrap-break-word`) |
+| **死件与配置面** | 删 5 个跑不通的脚本 + 4 条僵尸 script + 1 个死依赖(`@tanstack/match-sorter-utils`)+ 137 行只在假控件上生效的 CSS;`StubPage` 内联进 `blank.tsx` 后删除;topbar 那个**没有 handler 的假搜索框**与写死的路径→标签表一并去掉;`.env.example` 41 → 38 行 |
+| **文档叙事** | `doc/界面约定.md` 951 → 454 行(删掉与末尾备选表重复的整块 + 迁移期的合并注释);6 份文档的件数 / 事件数 / 过程数 / 表数逐条按实测改,并把本轮新抽的两个件写进「列表页版式」节(新页面照 `LedgerCard` + `useLedgerTable`,不再手抄某个页面) |
+| **刻意不做** | 不并 sheet/dialog;不内联 9 个单调用方页面件(page/table/form/detail 的「后缀即契约」是既定口径);不抽 `selection-bar`(三页动作集不同)、`use-ledger-mutations`、`prefetchPageSize`;保留 `logger` 与 `log` 两套 API;Excel 三件与 `hooks/use-dict.ts` 登记为「已实现、无业务调用方」但保留 |
+
+体量:92 files, **+677 / −2644**,加 3 个新件(+278 行)⇒ **净减约 1689 行**,删除 9 个文件。
+
+基线:`pnpm typecheck` 0 · `pnpm check` Checked 215 files / **0 error / 4 warning / 1 info**(与上一轮一字不差)· `pnpm build` 通过 · `pnpm test` **158 / 158**。行为验收用生产服 + 带 cookie 的 SSR 请求:12 个页面全 200 且匹配数与改前逐条一致(参数 17 / 用户 38 / 角色 12 / 文件 7 / 字典 3 / 日志 200 / 数据权限 89),权限四态不变(队长 `/settings/data-policy` = 404「没有权限」、队员 `/settings/users` = 200、未登录 = 307 带 `redirect`、未知路径 = 404「页面不存在」)。
 
 ---
 
@@ -555,7 +569,6 @@ pnpm check
 - `doc/测试数据/README.md` —— 七个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)
 - `DESIGN.md` —— 视觉规范(品牌 7 色 + 点缀 6 色相 + 间距 / 圆角 / 阴影 / 动效原语清单)
-- `doc/archive/` —— 原业务系统的设计文档(表结构设计、需求清单、测试方案…),**仅供追溯,与新项目无关**
 - `doc/archive/` —— 原业务系统的设计文档(表结构设计、需求清单、测试方案…),**仅供追溯,与新项目无关**
 
 外部资料:

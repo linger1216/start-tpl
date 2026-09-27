@@ -35,7 +35,7 @@ const isDm = url.startsWith("dm://");
  * 这个信息已经骗过我们两次,日志里一眼可辨最省事。
  * **不打印凭据**:只留方言 + 主机端口 + 库名/模式。
  */
-function describeTarget(raw: string): string {
+function describeConn(raw: string): string {
 	try {
 		const parsed = new URL(raw);
 		const parts = [parsed.host, parsed.pathname.replace(/^\//, "")];
@@ -46,7 +46,7 @@ function describeTarget(raw: string): string {
 		return "(连接串无法解析)";
 	}
 }
-log("info", "db.dialect", { dialect: isDm ? "dm(达梦)" : "mysql", target: describeTarget(url) });
+log("info", "db.dialect", { dialect: isDm ? "dm(达梦)" : "mysql", target: describeConn(url) });
 
 function buildMysqlDb() {
 	return drizzleMysql(url, { schema, mode: "default" });

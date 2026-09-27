@@ -9,14 +9,11 @@ import { GridForm, type GridFormPayload, type Option } from "#/components/module
 import { type GridRow, gridColumns } from "#/components/modules/demo/grid-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -29,12 +26,11 @@ import {
 } from "#/components/ui/dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { useAppTable, useRowSelection } from "#/lib/table";
+import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
  * Demo:综合网格履职 —— 行级数据权限的**演示页**。
@@ -111,15 +107,10 @@ export function GridPage() {
 	);
 
 	const rows = useMemo<GridRow[]>(() => listQuery.data ?? [], [listQuery.data]);
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return rows;
-		return rows.filter((row) =>
-			`${row.name} ${row.townName ?? ""} ${row.ownerName ?? ""} ${row.duty ?? ""} ${row.remark ?? ""}`
-				.toLowerCase()
-				.includes(key),
-		);
-	}, [rows, keyword]);
+	const filtered = useMemo(
+		() => rows.filter((row) => matchKeyword([row.name, row.townName, row.ownerName, row.duty, row.remark], keyword)),
+		[rows, keyword],
+	);
 
 	/** `owner_id` → 名字(列表里显示"负责人是谁") */
 	const ownerNameOf = useCallback(
@@ -189,15 +180,12 @@ export function GridPage() {
 		[selected, toggleOne, toggleMany, ownerNameOf, canEdit, canRemove],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "demo.grid",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	const { persist: persistColumns } = useColumnPrefs("demo.grid", table);
 
 	const assigned = rows.filter((row) => row.ownerId).length;
 	const stats: StatItem[] = useMemo(
@@ -268,67 +256,40 @@ export function GridPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<Grid3x3 className="size-4 text-muted-foreground" />
-						网格清单
-					</CardTitle>
-					<div className="flex items-center gap-2">
-						{listQuery.isFetching ? (
-							<Badge variant="secondary" className="tabular-nums">
-								读取中…
-							</Badge>
-						) : null}
-						<Badge variant="outline" className="tabular-nums">
-							匹配 {filtered.length} 条
-						</Badge>
-					</div>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					{selected.size > 0 ? (
-						<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-							<span className="text-xs text-foreground">
-								已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
-								<span className="ml-2 text-muted-foreground">
-									(
-									{selectedRows
-										.map((row) => row.name)
-										.slice(0, 3)
-										.join("、")}
-									{selected.size > 3 ? " …" : ""})
-								</span>
+			<LedgerCard
+				title="网格清单"
+				Icon={Grid3x3}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="没有你看得到的网格 —— 要么超出你的数据范围,要么还没把网格的「负责人」指派给你"
+				table={table}
+				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
+			>
+				{selected.size > 0 ? (
+					<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
+						<span className="text-xs text-foreground">
+							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
+							<span className="ml-2 text-muted-foreground">
+								(
+								{selectedRows
+									.map((row) => row.name)
+									.slice(0, 3)
+									.join("、")}
+								{selected.size > 3 ? " …" : ""})
 							</span>
-							<div className="flex items-center gap-2">
-								<ActionButton onClick={clear}>清空选择</ActionButton>
-								{canAssign ? <ActionButton onClick={() => setAssignOpen(true)}>批量指派负责人</ActionButton> : null}
-								{canRemove ? (
-									<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
-										批量删除
-									</ActionButton>
-								) : null}
-							</div>
+						</span>
+						<div className="flex items-center gap-2">
+							<ActionButton onClick={clear}>清空选择</ActionButton>
+							{canAssign ? <ActionButton onClick={() => setAssignOpen(true)}>批量指派负责人</ActionButton> : null}
+							{canRemove ? (
+								<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
+									批量删除
+								</ActionButton>
+							) : null}
 						</div>
-					) : null}
-
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable
-							table={table}
-							emptyText="没有你看得到的网格 —— 要么超出你的数据范围,要么还没把网格的「负责人」指派给你"
-							rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
-						/>
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
 					</div>
-				</CardContent>
-			</Card>
+				) : null}
+			</LedgerCard>
 
 			<GridForm
 				open={creating || editing !== null}

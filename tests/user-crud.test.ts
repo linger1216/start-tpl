@@ -36,14 +36,20 @@ const createdIds: string[] = [];
 const tempDeptIds: string[] = [];
 
 after(async () => {
-	// 登录步骤会再建会话 → 按外键顺序清:session → account → user
-	for (const id of tempDeptIds) {
-		await db.delete(sysDept).where(eq(sysDept.id, id));
-	}
+	// 清库顺序必须「子表 → 父表 → 部门」:`sys_user_dept` / `sys_user_role` 的外键
+	// 是 NO ACTION(MySQL 建表时真下手,达梦那套 DDL 没有),先删部门会被
+	// `fk_sys_dm_department` 拦住 —— 拦一次后面全不执行,残留就攒下来了。
+	// 登录步骤还会再建会话,所以 session 也要照清。
 	for (const id of createdIds) {
 		await db.delete(sysSession).where(eq(sysSession.userId, id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
+		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, id));
+		await db.delete(sysUserRole).where(eq(sysUserRole.user_id, id));
 		await db.delete(sysUser).where(eq(sysUser.id, id));
+	}
+	for (const id of tempDeptIds) {
+		await db.delete(sysUserDept).where(eq(sysUserDept.department_id, id));
+		await db.delete(sysDept).where(eq(sysDept.id, id));
 	}
 	await closeDb();
 });

@@ -10,23 +10,19 @@ import { SettingsFilesForm } from "#/components/modules/settings/settings-files-
 import { type FileRow, fileColumns } from "#/components/modules/settings/settings-files-table";
 import { SettingsFilesUpload } from "#/components/modules/settings/settings-files-upload";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { formatBytes } from "#/lib/format";
-import { useAppTable, useRowSelection } from "#/lib/table";
+import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
  * 系统设置 ▸ 文件管理 —— 文件元数据台账(`sys_file`),字节存 MinIO(见 `doc/文件管理.md`)。
@@ -89,11 +85,10 @@ export function SettingsFilesPage() {
 		}),
 	);
 
-	const filtered = useMemo(() => {
-		const key = keyword.trim();
-		if (!key) return rows;
-		return rows.filter((row) => `${row.originName} ${row.objectKey} ${row.bucket} ${row.ext ?? ""}`.includes(key));
-	}, [rows, keyword]);
+	const filtered = useMemo(
+		() => rows.filter((row) => matchKeyword([row.originName, row.objectKey, row.bucket, row.ext], keyword)),
+		[rows, keyword],
+	);
 
 	/**
 	 * 下载:现签一个**带 `Content-Disposition`** 的地址,再让浏览器自己去取。
@@ -141,16 +136,12 @@ export function SettingsFilesPage() {
 		[canRemove, handleDownload, selected, toggleOne, toggleMany],
 	);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.files",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(与参数 / 用户 / 字典页同一套)
-	const { persist: persistColumns } = useColumnPrefs("settings.files", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -214,67 +205,41 @@ export function SettingsFilesPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<Files className="size-4 text-muted-foreground" />
-						文件清单
-					</CardTitle>
-					<div className="flex items-center gap-2">
-						{listQuery.isFetching ? (
-							<Badge variant="secondary" className="tabular-nums">
-								读取中…
-							</Badge>
-						) : null}
-						<Badge variant="outline" className="tabular-nums">
-							匹配 {filtered.length} 条
-						</Badge>
-					</div>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					{/* 批量操作条:只在选中时出现,长在表格正上方(动作与选择对象挨着) */}
-					{selected.size > 0 ? (
-						<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-							<span className="text-xs text-foreground">
-								已选 <span className="font-semibold tabular-nums">{selected.size}</span> 个
-								<span className="ml-2 text-muted-foreground">
-									(
-									{selectedRows
-										.map((row) => row.originName)
-										.slice(0, 3)
-										.join("、")}
-									{selected.size > 3 ? " …" : ""})
-								</span>
+			<LedgerCard
+				title="文件清单"
+				Icon={Files}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="还没有文件,点右上角上传一个"
+				table={table}
+				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
+			>
+				{/* 批量操作条:只在选中时出现,长在表格正上方(动作与选择对象挨着) */}
+				{selected.size > 0 ? (
+					<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
+						<span className="text-xs text-foreground">
+							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 个
+							<span className="ml-2 text-muted-foreground">
+								(
+								{selectedRows
+									.map((row) => row.originName)
+									.slice(0, 3)
+									.join("、")}
+								{selected.size > 3 ? " …" : ""})
 							</span>
-							<div className="flex items-center gap-2">
-								<ActionButton onClick={clear}>清空选择</ActionButton>
-								<ActionButton
-									tone="danger"
-									onClick={() => (canRemove ? setPendingDelete(selectedRows) : toast.error("没有删除文件的权限"))}
-								>
-									批量删除
-								</ActionButton>
-							</div>
+						</span>
+						<div className="flex items-center gap-2">
+							<ActionButton onClick={clear}>清空选择</ActionButton>
+							<ActionButton
+								tone="danger"
+								onClick={() => (canRemove ? setPendingDelete(selectedRows) : toast.error("没有删除文件的权限"))}
+							>
+								批量删除
+							</ActionButton>
 						</div>
-					) : null}
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable
-							table={table}
-							emptyText="还没有文件,点右上角上传一个"
-							rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
-						/>
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
 					</div>
-				</CardContent>
-			</Card>
+				) : null}
+			</LedgerCard>
 
 			<SettingsFilesUpload open={uploading} onOpenChange={setUploading} onDone={() => setUploading(false)} />
 

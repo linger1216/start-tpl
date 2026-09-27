@@ -6,17 +6,13 @@ import { PageHeader } from "#/components/layout/page-header";
 import { SettingsLogsDetail } from "#/components/modules/settings/settings-logs-detail";
 import { type LogRow, logColumns } from "#/components/modules/settings/settings-logs-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { useColumnPrefs } from "#/hooks/use-column-prefs";
-import { usePageSize } from "#/hooks/use-page-size";
+import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
-import { useAppTable } from "#/lib/table";
+import { matchKeyword } from "#/lib/table";
 
 /**
  * 审计日志(只读台账)—— `/settings/logs`。
@@ -35,28 +31,19 @@ export function SettingsLogsPage() {
 	const listQuery = useQuery(trpc.log.list.queryOptions());
 
 	const rows = useMemo<LogRow[]>(() => listQuery.data ?? [], [listQuery.data]);
-	const filtered = useMemo(() => {
-		const key = keyword.trim().toLowerCase();
-		if (!key) return rows;
-		return rows.filter((row) =>
-			`${row.label ?? ""} ${row.path} ${row.target ?? ""} ${row.operatorName ?? ""} ${row.traceId ?? ""}`
-				.toLowerCase()
-				.includes(key),
-		);
-	}, [rows, keyword]);
+	const filtered = useMemo(
+		() => rows.filter((row) => matchKeyword([row.label, row.path, row.target, row.operatorName, row.traceId], keyword)),
+		[rows, keyword],
+	);
 
 	const columns = useMemo(() => logColumns({ onView: setViewing }), []);
 
-	const defaultPageSize = usePageSize();
-	const table = useAppTable({
+	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
 		getRowId: (row) => row.id,
-		initialState: { pagination: { pageIndex: 0, pageSize: defaultPageSize } },
+		prefKey: "settings.logs",
 	});
-	const { pageIndex, pageSize } = table.state.pagination;
-	// 列顺序 / 隐藏项存进参数 `page.columns`(与参数 / 用户 / 字典 / 文件页同一套)
-	const { persist: persistColumns } = useColumnPrefs("settings.logs", table);
 
 	const stats: StatItem[] = useMemo(
 		() => [
@@ -115,38 +102,14 @@ export function SettingsLogsPage() {
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 
-			<Card className="flex min-h-104 flex-1 flex-col gap-4">
-				<CardHeader className="flex-row items-center justify-between gap-3">
-					<CardTitle className="flex items-center gap-2">
-						<ScrollText className="size-4 text-muted-foreground" />
-						操作记录
-					</CardTitle>
-					<div className="flex items-center gap-2">
-						{listQuery.isFetching ? (
-							<Badge variant="secondary" className="tabular-nums">
-								读取中…
-							</Badge>
-						) : null}
-						<Badge variant="outline" className="tabular-nums">
-							匹配 {filtered.length} 条
-						</Badge>
-					</div>
-				</CardHeader>
-				<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-					<TableLoadingShell fill busy={listQuery.isFetching} minHeight={240}>
-						<DataTable table={table} emptyText="这段时间还没有写操作" />
-					</TableLoadingShell>
-					<div className="shrink-0 border-t border-border pt-1">
-						<PaginationControl
-							page={pageIndex + 1}
-							pageSize={pageSize}
-							total={table.getFilteredRowModel().rows.length}
-							onPageChange={(next) => table.setPageIndex(next - 1)}
-							onPageSizeChange={(next) => table.setPageSize(next)}
-						/>
-					</div>
-				</CardContent>
-			</Card>
+			<LedgerCard
+				title="操作记录"
+				Icon={ScrollText}
+				count={filtered.length}
+				busy={listQuery.isFetching}
+				emptyText="这段时间还没有写操作"
+				table={table}
+			/>
 
 			<SettingsLogsDetail
 				row={viewing}

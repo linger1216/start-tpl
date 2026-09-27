@@ -13,7 +13,7 @@ import { Client } from "minio";
 import { logger } from "#/lib/logger";
 import { joinPublicUrl, type PresignedPut, type Storage, type StoredObject } from "#/lib/storage";
 
-export type MinioConfig = {
+type MinioConfig = {
 	endpoint: string;
 	port: number;
 	useSSL: boolean;

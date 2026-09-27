@@ -11,7 +11,6 @@ import {
 	SettingsMenusForm,
 } from "#/components/modules/settings/settings-menus-form";
 import { SettingsMenusTree } from "#/components/modules/settings/settings-menus-tree";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -197,13 +196,6 @@ export function SettingsMenusPage() {
 							<FolderTree className="size-4 text-muted-foreground" />
 							菜单树
 						</CardTitle>
-						<div className="flex items-center gap-2">
-							{listQuery.isFetching ? (
-								<Badge variant="secondary" className="tabular-nums">
-									读取中…
-								</Badge>
-							) : null}
-						</div>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
 						<p className="text-xs text-muted-foreground">

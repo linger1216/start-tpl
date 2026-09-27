@@ -23,7 +23,7 @@ export type PermissionNode = {
 };
 
 /** 单个节点子树里的全部权限点 id */
-export function permissionIdsIn(node: PermissionNode, out: string[] = []): string[] {
+function permissionIdsIn(node: PermissionNode, out: string[] = []): string[] {
 	out.push(node.id);
 	for (const child of node.children ?? []) permissionIdsIn(child, out);
 	return out;
@@ -105,7 +105,7 @@ function PermissionTreeNode({
  * 整棵权限树的内容(节点 + 空态提示)。
  * 滚动容器(max-h / border / p-3)由调用方提供,因为各处的容器尺寸由各自布局决定。
  */
-export function PermissionTree({
+function PermissionTree({
 	nodes,
 	keyword,
 	selected,

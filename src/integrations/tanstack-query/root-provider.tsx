@@ -55,7 +55,7 @@ const trpcFetch = createIsomorphicFn()
 const trpcLinkOptions = { transformer: superjson, url: getUrl(), fetch: trpcFetch };
 const trpcUseStream = import.meta.env.VITE_TRPC_STREAM === "1";
 
-export const trpcClient = createTRPCClient<TRPCRouter>({
+const trpcClient = createTRPCClient<TRPCRouter>({
 	links: [trpcUseStream ? httpBatchStreamLink(trpcLinkOptions) : httpBatchLink(trpcLinkOptions)],
 });
 

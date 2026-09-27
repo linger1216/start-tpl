@@ -15,7 +15,7 @@
 /** 「系统设置 ▸ 参数管理」里决定侧边栏收起形态的参数名 */
 export const SIDEBAR_MODE_CONFIG_KEY = "ui.sidebar.collapsed_mode";
 
-export const SIDEBAR_COLLAPSE_MODES = ["rail", "hidden"] as const;
+const SIDEBAR_COLLAPSE_MODES = ["rail", "hidden"] as const;
 
 export type SidebarCollapseMode = (typeof SIDEBAR_COLLAPSE_MODES)[number];
 
