@@ -97,7 +97,7 @@ const SETTINGS_PAGES = [
 		name: "角色管理",
 		path: "/settings/roles",
 		source: "sys_role",
-		desc: "角色**全局定义**(不随部门复制)+ 权限点勾选;sys_role_menu 同时决定菜单可见与按钮可用",
+		desc: "角色**全局定义**(不随部门复制)+ 权限点勾选;casbin_rule 的 p 行同时决定菜单可见与按钮可用",
 	},
 ];
 

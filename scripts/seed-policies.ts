@@ -23,7 +23,8 @@ import "dotenv/config";
 import { asc, eq, isNotNull } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import { sysDataPolicy, sysDemoGrid, sysRole, sysUser, sysUserDept, sysUserRole } from "../src/db/data-base-schema.ts";
+import { sysDataPolicy, sysDemoGrid, sysRole, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
+import { allUserRoles } from "../src/lib/casbin.ts";
 import { ensureRule, REGISTERED_RESOURCE_TYPES } from "../src/lib/data-policy.ts";
 
 /** 只拿到"被指派的活儿"的角色;其余启用角色 = 不受限 */
@@ -51,12 +52,13 @@ type Plan = {
 
 async function build(): Promise<Plan> {
 	const roles = await db
-		.select({ id: sysRole.id, code: sysRole.code, name: sysRole.name })
+		.select({ code: sysRole.code, name: sysRole.name })
 		.from(sysRole)
 		.where(eq(sysRole.status, 1))
 		.orderBy(asc(sysRole.sort), asc(sysRole.code));
 	const [assignments, memberships, ownedGrids, users] = await Promise.all([
-		db.select({ userId: sysUserRole.user_id, roleId: sysUserRole.role_id }).from(sysUserRole),
+		// 角色分配现在是策略表里的 `g` 行,读出来**直接带角色 code**
+		allUserRoles(),
 		db.select({ userId: sysUserDept.user_id, deptId: sysUserDept.department_id }).from(sysUserDept),
 		db
 			.select({ id: sysDemoGrid.id, ownerId: sysDemoGrid.owner_id })
@@ -64,13 +66,12 @@ async function build(): Promise<Plan> {
 			.where(isNotNull(sysDemoGrid.owner_id)),
 		db.select({ id: sysUser.id, name: sysUser.name, email: sysUser.email }).from(sysUser).orderBy(asc(sysUser.createdAt)),
 	]);
-	const roleById = new Map(roles.map((role) => [role.id, role]));
+	const enabledCodes = new Set(roles.map((role) => role.code));
 	const roleCodesOf = new Map<string, string[]>();
 	for (const row of assignments) {
 		// 停用的角色不算有效角色(与 rbac.ts 的 enabledRolesOf 同口径)
-		const role = roleById.get(row.roleId);
-		if (!role) continue;
-		roleCodesOf.set(row.userId, [...(roleCodesOf.get(row.userId) ?? []), role.code]);
+		if (!enabledCodes.has(row.roleCode)) continue;
+		roleCodesOf.set(row.userId, [...(roleCodesOf.get(row.userId) ?? []), row.roleCode]);
 	}
 	const deptIdsOf = new Map<string, string[]>();
 	for (const row of memberships) {
@@ -92,7 +93,7 @@ async function build(): Promise<Plan> {
 		if (ASSIGNED_ROLE_CODES.has(role.code)) continue;
 		push({ sub: `role:${role.code}`, obj: "*", act: "*", remark: REMARK.role, why: `角色 ${role.name}` });
 		for (const row of assignments) {
-			if (row.roleId === role.id) coveredByRole.add(row.userId);
+			if (row.roleCode === role.code) coveredByRole.add(row.userId);
 		}
 	}
 

@@ -17,11 +17,12 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
-import { sysDept, sysRole, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
+import { sysDept, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
+import { allUserRoles } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -219,17 +220,19 @@ export const departmentRouter = createTRPCRouter({
 			.orderBy(asc(sysUser.name));
 
 		const userIds = rows.map((row) => row.userId);
-		const roleRows = userIds.length
-			? await db
-					.select({ userId: sysUserRole.user_id, roleName: sysRole.name })
-					.from(sysUserRole)
-					.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id))
-					.where(inArray(sysUserRole.user_id, userIds))
-			: [];
+		// 角色成员关系在策略表的 `g` 行里(存的是**角色 code**)—— 一次拉全再按本部门的人筛,不 N+1
+		const wanted = new Set(userIds);
+		const memberRows = (await allUserRoles()).filter((row) => wanted.has(row.userId));
+		// 认不出的 code(角色刚被删、`g` 行还没清)跳过,与装载时「跳过孤儿菜单」同一口径
+		const roleNames = new Map(
+			(await db.select({ code: sysRole.code, name: sysRole.name }).from(sysRole)).map((row) => [row.code, row.name]),
+		);
 		const rolesOf = new Map<string, string[]>();
-		for (const row of roleRows) {
+		for (const row of memberRows) {
+			const name = roleNames.get(row.roleCode);
+			if (!name) continue;
 			const list = rolesOf.get(row.userId) ?? [];
-			list.push(row.roleName);
+			list.push(name);
 			rolesOf.set(row.userId, list);
 		}
 		return rows.map((row) => ({

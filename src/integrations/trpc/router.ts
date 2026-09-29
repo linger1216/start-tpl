@@ -29,7 +29,7 @@ export const trpcRouter = createTRPCRouter({
 	tag: tagRouter,
 	/** 系统设置 ▸ 部门管理 —— 读写 `sys_dept`(自关联树)+ 成员/角色分配 */
 	department: departmentRouter,
-	/** 系统设置 ▸ 角色管理 —— 读写 `sys_role` + `sys_role_menu`(菜单/按钮授权) */
+	/** 系统设置 ▸ 角色管理 —— 读写 `sys_role` + `casbin_rule`(`p` 行 = 菜单/按钮授权,`g` 行 = 成员) */
 	role: roleRouter,
 	/** 系统设置 ▸ 用户管理 —— 只读 `sys_user` + 读写部门/角色分配 */
 	user: userRouter,

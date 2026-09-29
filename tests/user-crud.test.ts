@@ -13,18 +13,19 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
+	casbinRule,
 	sysAccount,
 	sysDept,
 	sysUserDept,
 	sysSession,
 	sysUser,
-	sysUserRole,
 } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { assertRejects, caller, closeDb, ensureTestAdminPolicy, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
@@ -36,21 +37,23 @@ const createdIds: string[] = [];
 const tempDeptIds: string[] = [];
 
 after(async () => {
-	// 清库顺序必须「子表 → 父表 → 部门」:`sys_user_dept` / `sys_user_role` 的外键
-	// 是 NO ACTION(MySQL 建表时真下手,达梦那套 DDL 没有),先删部门会被
-	// `fk_sys_dm_department` 拦住 —— 拦一次后面全不执行,残留就攒下来了。
+	// 清库顺序必须「子表 → 父表 → 部门」:`sys_user_dept` 的外键是 NO ACTION
+	// (MySQL 建表时真下手,达梦那套 DDL 没有),先删部门会被 `fk_sys_dm_department` 拦住
+	// —— 拦一次后面全不执行,残留就攒下来了。角色那层现在是策略表的 `g` 行(没有外键,顺手删)。
 	// 登录步骤还会再建会话,所以 session 也要照清。
 	for (const id of createdIds) {
 		await db.delete(sysSession).where(eq(sysSession.userId, id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, id));
-		await db.delete(sysUserRole).where(eq(sysUserRole.user_id, id));
+		await db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${id}`)));
 		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
 	for (const id of tempDeptIds) {
 		await db.delete(sysUserDept).where(eq(sysUserDept.department_id, id));
 		await db.delete(sysDept).where(eq(sysDept.id, id));
 	}
+	// 上面是直接删表,绕过了 `lib/casbin.ts` 的领域函数 → 判定缓存要手动刷
+	clearCasbinCache();
 	await closeDb();
 });
 
@@ -196,9 +199,12 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 		"部门成员行应该被清掉",
 	);
 	assert.equal(
-		(await db.select().from(sysUserRole).where(eq(sysUserRole.user_id, created.id))).length,
+		(await db
+			.select()
+			.from(casbinRule)
+			.where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${created.id}`)))).length,
 		0,
-		"角色分配行也应该被清掉",
+		"角色分配行(策略表的 `g` 行)也应该被清掉",
 	);
 	await caller.department.remove({ id: dept.id });
 	tempDeptIds.pop();

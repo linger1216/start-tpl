@@ -1,33 +1,33 @@
 /**
- * 角色 API(`sys_role` + `sys_role_menu`)与**权限并集的计算** —— 集成测试。
+ * 角色 API(`sys_role` + `casbin_rule` 的 `p` / `g` 行)与**权限并集的计算** —— 集成测试。
  *
  * 覆盖:
  *  1. 角色台账:`code` 唯一 / `list` 带成员数 / 被部门成员引用时不让删;
  *  2. 授权:`setMenus` **自动补全祖先链**(只勾子节点也能看见)、`menuIds` 往返;
  *  3. **并集语义**(部门 → 角色 → 授权):张三在上海是 A、在武汉是 B,可见菜单与权限都是两者的并集;
- *  4. 两种兜底:未启用(`sys_role_menu` 一条都没有)→ `perms = null` 一律放行,不把管理员锁在门外;
+ *  4. 两种兜底:未启用(`casbin_rule` 一条 `p` 行都没有)→ `perms = null` 一律放行,不把管理员锁在门外;
  *     已启用但没有角色的人 → 失败关闭(`rows = null` + `perms = []`);
  *  5. 按钮(`type = 3`):**不进可见菜单**,但它的 `perm` 进权限集合。
  *
  * ⚠️ 会读写真实库;数据用 `__test__` 前缀,`after` 清干净。
- * ⚠️ **这个文件是 `sys_role_menu` 唯一的写入方** —— 第 4 条断言依赖"那张表此刻是空的",
- * 而 `node --test` 按文件并行跑;别的文件不碰授权表,这条才不会飘。
+ * ⚠️ 第 4 条断言**按库的当前状态分支**,不假设授权表是空的:授权是 `casbin_rule` 的 `p` 行,
+ * 跑过演示种子之后它就不空了,而 `node --test` 按文件并行跑 —— 分支比"跳过"更稳。
  */
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
+	casbinRule,
 	sysDept,
 	sysUserDept,
 	sysMenu,
 	sysRole,
-	sysRoleMenu,
 	sysUser,
-	sysUserRole,
 } from "../src/db/data-base-schema.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
@@ -61,14 +61,27 @@ async function makeMenu(label: string, parentId: string | null, type: number, pe
 		visible: 1,
 		status: 1,
 	});
+	// 断言紧接着就读判定结果,而这里是**直接写表**、绕过了领域函数 ⇒ 要手动刷缓存
+	// (「通配授权:以后新增的自动包含」那条用例正是靠它 —— 新建权限点后必须重新装载才看得见)
+	clearCasbinCache();
 	menuIds.push(id);
 	return id;
 }
 
 after(async () => {
-	// 先清「谁有哪些角色」再删角色 —— 否则 fk_sys_ur_role 会拦住(角色还有人用着就不让删)
-	if (roleIds.length > 0) await db.delete(sysUserRole).where(inArray(sysUserRole.role_id, roleIds));
-	if (roleIds.length > 0) await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, roleIds));
+	// 先清策略表里指向测试数据的行 —— 授权是 `p` 行(客体是测试菜单),成员关系是 `g` 行(主体是测试用户)。
+	// 直接删表绕过了 `lib/casbin.ts` 的领域函数,所以末尾要手动刷判定缓存。
+	if (menuIds.length > 0) {
+		await db
+			.delete(casbinRule)
+			.where(and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v1, menuIds.map((id) => `menu:${id}`))));
+	}
+	if (userIds.length > 0) {
+		await db
+			.delete(casbinRule)
+			.where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, userIds.map((id) => `user:${id}`))));
+	}
+	clearCasbinCache();
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
 	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
 	for (const id of [...deptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, id));
@@ -77,10 +90,14 @@ after(async () => {
 });
 
 test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角色 → 空 + 空集合", async () => {
-	// ⚠️ 这条**按当前库的状态分支**,不假设 `sys_role_menu` 是空的:
+	// ⚠️ 这条**按当前库的状态分支**,不假设授权表是空的:
 	// 空库(或没跑过 `pnpm db:seed:rbac`)验"未启用不过滤";跑过演示种子之后则验"没有角色的人看不到任何菜单"。
 	// 两种状态都是真实存在且必须成立的,所以分支比"跳过"更有价值。
-	const grants = await db.select({ id: sysRoleMenu.id }).from(sysRoleMenu);
+	const grants = await db
+		.select({ id: casbinRule.id })
+		.from(casbinRule)
+		.where(eq(casbinRule.ptype, "p"))
+		.limit(1);
 	const someone = await makeUser("nobody");
 
 	if (grants.length === 0) {
@@ -102,7 +119,7 @@ test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角�
 
 /**
  * 把角色分配给某个用户 —— 走真实的 `user.update`(角色是全局的,与部门无关)。
- * 用 API 而不是直接 insert `sys_user_role`,这样测试同时覆盖了"保存角色"这条路径。
+ * 用 API 而不是直接往 `casbin_rule` 插 `g` 行,这样测试同时覆盖了"保存角色"这条路径。
  */
 async function assignRoles(userId: string, roleIdList: string[]): Promise<void> {
 	// 策略表已启用 ⇒ 引擎失败关闭:合成的 test-admin 身份必须先补一条无限制策略,才读得到用户列表
@@ -288,7 +305,7 @@ test("通配授权:一条 `test:thing:*` = 该资源下全部权限,而且**以�
 	const write = await makeMenu("通配写", null, MENU_TYPE.BUTTON, "test:thing:write");
 	const after = await effectiveMenusFor(user);
 	assert.ok(write, "夹具存在");
-	assert.ok(after.perms?.includes("test:thing:write"), "新增的权限点自动被覆盖(读的时候展开,不是写死)");
+	assert.ok(after.perms?.includes("test:thing:write"), "新增的权限点自动被覆盖(装载时展开,不是写死)");
 	assert.ok(!after.perms?.includes("test:other:read"), "仍然不越界");
 });
 

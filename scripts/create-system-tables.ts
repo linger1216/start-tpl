@@ -1,6 +1,6 @@
 /**
- * **系统表的建表脚本**(设置五张 + 认证四张 + 权限六张 + `sys_file` / `sys_log` / `sys_notice` +
- * `demo_grid` = 19 张)—— 幂等,可重复执行。
+ * **系统表的建表脚本**(设置五张 + 认证四张 + 权限五张 + `sys_file` / `sys_log` / `sys_notice` +
+ * `demo_grid` = 18 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -204,7 +204,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_role_code\` (\`code\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 sys_user_role)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 casbin_rule 的 g 行)'`,
 	},
 	{
 		name: "sys_user_dept",
@@ -219,38 +219,23 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_dm_user\` (\`user_id\`),
 			constraint \`fk_sys_dm_department\` foreign key (\`department_id\`) references \`sys_dept\` (\`id\`) on delete cascade,
 			constraint \`fk_sys_dm_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(谁在哪个部门;角色是全局的,见 sys_user_role)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(谁在哪个部门;角色是全局的,见 casbin_rule 的 g 行)'`,
 	},
 	{
-		name: "sys_user_role",
-		ddl: `create table if not exists \`sys_user_role\` (
+		name: "casbin_rule",
+		ddl: `create table if not exists \`casbin_rule\` (
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '用户 id → sys_user.id(级联删除)',
-			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(还有人用着就不让删)',
+			\`ptype\` varchar(8) collate utf8mb4_unicode_ci not null comment '规则类型:p(角色 → 权限)/ g(用户 → 角色、角色 → 角色)',
+			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment 'p:role:<角色 code>;g:user:<用户 id> 或 role:<角色 code>',
+			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment 'p:menu:<菜单/按钮 id>;g:role:<角色 code>',
+			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null default '' comment 'p:access;g:空串',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
-			unique key \`uk_sys_ur_unique\` (\`user_id\`, \`role_id\`),
-			key \`idx_sys_ur_user\` (\`user_id\`),
-			key \`idx_sys_ur_role\` (\`role_id\`),
-			constraint \`fk_sys_ur_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade,
-			constraint \`fk_sys_ur_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '用户 → 角色(全局;权限取这些角色授权的并集)'`,
-	},
-	{
-		name: "sys_role_menu",
-		ddl: `create table if not exists \`sys_role_menu\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`role_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色 id → sys_role.id(级联删除)',
-			\`menu_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '菜单/按钮 id → sys_menu.id(级联删除)',
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
-			primary key (\`id\`),
-			unique key \`uk_sys_role_menu\` (\`role_id\`, \`menu_id\`),
-			key \`idx_sys_role_menu_menu\` (\`menu_id\`),
-			constraint \`fk_sys_role_menu_role\` foreign key (\`role_id\`) references \`sys_role\` (\`id\`) on delete cascade,
-			constraint \`fk_sys_role_menu_menu\` foreign key (\`menu_id\`) references \`sys_menu\` (\`id\`) on delete cascade
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色 → 菜单/按钮授权(同时表达「菜单可见」与「按钮可用」)'`,
+			unique key \`uk_casbin_rule\` (\`ptype\`, \`v0\`, \`v1\`, \`v2\`),
+			key \`idx_casbin_rule_v0\` (\`ptype\`, \`v0\`),
+			key \`idx_casbin_rule_v1\` (\`ptype\`, \`v1\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '功能权限策略(Casbin;判定与存储同一处,见 src/lib/casbin.ts)'`,
 	},
 	{
 		name: "sys_data_policy",
@@ -431,6 +416,46 @@ for (const upgrade of COLUMN_UPGRADES) {
 	}
 	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add column \`${upgrade.column}\` ${upgrade.ddl}`));
 	console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}`);
+}
+
+/**
+ * **老库改列型** —— `create table if not exists` 既不加列、也**不会**改已存在列的型。
+ *
+ * 与 `COLUMN_UPGRADES` 的分工:那个补**新列**,这个修**旧列的型**。什么时候需要:
+ * 库里的型与 `data-base-schema.ts` / 上面的 DDL 对不上 —— 最典型的是 `sys_dict.items`:
+ * 老库里是 `text`,而 schema 声明 `json(...)`。MySQL 驱动**只对真正的 json 列**做解析,
+ * 声明成 `json()` 却落在 `text` 列上,读出来是**字符串**而不是数组 —— `items.length` 成了字符个数,
+ * 字典下拉会在运行时炸(测试里表现为 `actual: 53, expected: 2`)。
+ *
+ * 幂等:`data_type` 已是目标型就跳过。注意改型前库里必须都是合法 JSON,否则 MySQL 会拒绝。
+ */
+const COLUMN_TYPE_FIXES: Array<{ table: string; column: string; type: string; ddl: string }> = [
+	{
+		table: "sys_dict",
+		column: "items",
+		type: "json",
+		ddl: "json default null comment '字典项:[{label,value}]'",
+	},
+];
+
+for (const fix of COLUMN_TYPE_FIXES) {
+	const cols = (
+		await db.execute(
+			sql`select data_type as type from information_schema.columns
+				where table_schema = database() and table_name = ${fix.table} and column_name = ${fix.column}`,
+		)
+	)[0] as unknown as Array<{ type: string }>;
+	const current = cols[0]?.type;
+	if (current === undefined) {
+		console.log(`· ${fix.table}.${fix.column} 不存在,跳过`);
+		continue;
+	}
+	if (current === fix.type) {
+		console.log(`· ${fix.table}.${fix.column} 已是 ${fix.type},跳过`);
+		continue;
+	}
+	await db.execute(sql.raw(`alter table \`${fix.table}\` modify column \`${fix.column}\` ${fix.ddl}`));
+	console.log(`✓ ${fix.table}.${fix.column} 列型 ${current} → ${fix.type}`);
 }
 
 /**

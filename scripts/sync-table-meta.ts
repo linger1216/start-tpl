@@ -45,10 +45,9 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
 	sys_verification: "验证码 / 一次性令牌(邮箱验证、改密、二次验证都用它)",
 	sys_dept: "部门树(组织架构;谁是成员见 sys_user_dept)",
-	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_user_role)",
+	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
-	sys_user_role: "用户 → 角色(全局;权限 = 这些角色授权的并集)",
-	sys_role_menu: "角色 → 菜单/按钮授权(一条表同时表达「菜单可见」与「按钮可用」)",
+	casbin_rule: "功能权限策略(p = 角色 → 权限码;g = 用户 → 角色 / 角色 → 角色继承;见 doc/rbac-权限模型.md)",
 	sys_data_policy: "行级数据权限(直白授权规则:谁 · 哪个资源 · 什么动作 · 允许 / 拒绝)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 };
@@ -171,18 +170,22 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_user_dept", column: "create_time", comment: "创建时间" },
 	{ table: "sys_user_dept", column: "update_time", comment: "更新时间" },
 
-	// sys_user_role
-	{ table: "sys_user_role", column: "id", comment: "主键(nanoid,由代码生成)" },
-	{ table: "sys_user_role", column: "user_id", comment: "用户 id → sys_user.id(级联删除)" },
-	{ table: "sys_user_role", column: "role_id", comment: "角色 id → sys_role.id(还有人用着就不让删)" },
-	{ table: "sys_user_role", column: "create_time", comment: "创建时间" },
-	{ table: "sys_user_role", column: "update_time", comment: "更新时间" },
-	// sys_role_menu
-	{ table: "sys_role_menu", column: "id", comment: "主键(nanoid,由代码生成)" },
-	{ table: "sys_role_menu", column: "role_id", comment: "角色 id → sys_role.id(级联删除)" },
-	{ table: "sys_role_menu", column: "menu_id", comment: "菜单/按钮 id → sys_menu.id(级联删除)" },
-	{ table: "sys_role_menu", column: "create_time", comment: "创建时间" },
-	{ table: "sys_role_menu", column: "update_time", comment: "更新时间" },
+	// casbin_rule(功能权限策略;见 src/lib/casbin.ts)
+	{ table: "casbin_rule", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{
+		table: "casbin_rule",
+		column: "ptype",
+		comment: "规则类型:p(角色 → 权限)/ g(用户 → 角色、角色 → 角色)",
+	},
+	{
+		table: "casbin_rule",
+		column: "v0",
+		comment: "p:role:<角色 code>;g:user:<用户 id> 或 role:<角色 code>",
+	},
+	{ table: "casbin_rule", column: "v1", comment: "p:menu:<菜单/按钮 id>;g:role:<角色 code>" },
+	{ table: "casbin_rule", column: "v2", comment: "p:access;g:空串" },
+	{ table: "casbin_rule", column: "create_time", comment: "创建时间" },
+	{ table: "casbin_rule", column: "update_time", comment: "更新时间" },
 	// sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)
 	{ table: "sys_data_policy", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_data_policy", column: "ptype", comment: "规则类型(Casbin 口径;目前只有 p = 策略行)" },

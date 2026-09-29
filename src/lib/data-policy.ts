@@ -11,7 +11,7 @@
  * 3. **失败关闭**:认不出人 / 有策略但一条都没命中 ⇒ `1 = 0`,绝不是"不过滤"。
  *
  * 唯一的例外是**策略表一条启用规则都没有**:那时整套数据权限视为未启用,一律不过滤 ——
- * 与「`sys_role_menu` 空 = 菜单不启用」同一个口径(空表 = 这项能力没开)。
+ * 与「`casbin_rule` 里一条 `p` 行都没有 = 功能权限不启用」同一个口径(空表 = 这项能力没开)。
  */
 
 import { type Adapter, Enforcer, type Model, newModelFromString } from "casbin";

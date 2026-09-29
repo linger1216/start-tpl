@@ -9,7 +9,11 @@
  * | `update` | mutation | 改一个节点的名称 / 路径 / 图标 / 上下线(`path` 冲突回 `CONFLICT`) |
  * | `reorder` | mutation | **同级**重排:传入父节点 + 该父下的完整 id 顺序,逐行写 `sort` |
  * | `create` | mutation | 新增(父节点 + 名称,可选路径 / 图标);排序追加到同级末尾 |
- * | `delete` | mutation | 删除;**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
+ * | `delete` | mutation | 删除(**连带清掉这个菜单上的角色授权**);**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
+ *
+ * 写接口末尾为什么要 `clearCasbinCache()`:判定用的策略是 `lib/casbin.ts` 装载时**展开**出来的,
+ * 菜单的 `perm` / `path` / 父子关系一变,展开结果就变 —— 哪怕 `casbin_rule` 一行都没动。
+ * (`reorder` 只改 `sort`,`sort` 不参与展开,所以那里不用刷。)
  *
  * 树为什么不在这里拼:渲染层要的是 `NavNode[](带图标组件映射)`,而图标映射属于前端资产;
  * 服务端只回"事实"(平铺行),拼树 + 过滤是纯函数,放前端更好测。
@@ -21,6 +25,7 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysMenu } from "#/db/data-base-schema";
+import { clearCasbinCache, removeMenuPolicies } from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
 import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
@@ -135,6 +140,8 @@ export const menuRouter = createTRPCRouter({
 					update_time: new Date(),
 				})
 				.where(eq(sysMenu.id, input.id));
+			// `perm` / `path` 变了,装载时的展开结果就变 —— 哪怕策略表一行没动
+			clearCasbinCache();
 			return toMenuRow(await getMenuRow(input.id));
 		}),
 
@@ -214,6 +221,8 @@ export const menuRouter = createTRPCRouter({
 				type: input.type,
 				perm: input.perm?.trim() || null,
 			});
+			// 新菜单可能落进某个 `*:*:*` 的覆盖范围 —— 立刻重装
+			clearCasbinCache();
 			return toMenuRow(await getMenuRow(id));
 		}),
 
@@ -226,7 +235,11 @@ export const menuRouter = createTRPCRouter({
 				message: `它下面还有 ${children.length} 个菜单,请先删子菜单(避免误删整枝)`,
 			});
 		}
+		// 这个菜单上的角色授权要显式清掉 —— `sys_role_menu` 连同它的 cascade 外键一起没了,
+		// 现在授权是 `casbin_rule` 的行(没有外键可依),必须自己按 `menu:<id>` 清
+		await removeMenuPolicies(input.id);
 		await db.delete(sysMenu).where(eq(sysMenu.id, input.id));
+		clearCasbinCache();
 		return { success: true };
 	}),
 });

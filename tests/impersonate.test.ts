@@ -17,8 +17,9 @@ import { after, test } from "node:test";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import { sysAccount, sysMenu, sysRole, sysRoleMenu, sysSession, sysUser, sysUserRole } from "../src/db/data-base-schema.ts";
+import { casbinRule, sysAccount, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { closeDb, TEST_PREFIX } from "./helpers.ts";
@@ -27,6 +28,8 @@ const SUFFIX = `${Date.now().toString(36)}`;
 const PASSWORD = "Passw0rd!123";
 const createdUserIds: string[] = [];
 const createdRoleIds: string[] = [];
+/** 策略表的 `p` / `g` 行认的是角色 **code**(不是 id)⇒ 清理时得有它 */
+const createdRoleCodes: string[] = [];
 const createdMenuIds: string[] = [];
 
 /** 从 set-cookie 里抠出 `name=value` 那一截 */
@@ -93,28 +96,41 @@ async function impersonateMenuId(): Promise<string> {
 async function grantImpersonate(userId: string): Promise<void> {
 	const roleId = newId();
 	createdRoleIds.push(roleId);
+	// code 必须唯一(`uk_sys_role_code`),而这个夹具会被多次调用 → 带上 userId 的尾巴
+	const roleCode = `${TEST_PREFIX}imp_${SUFFIX}_${userId.slice(-6)}`;
+	createdRoleCodes.push(roleCode);
 	await db.insert(sysRole).values({
 		id: roleId,
-		// code 必须唯一(`uk_sys_role_code`),而这个夹具会被多次调用 → 带上 userId 的尾巴
-		code: `${TEST_PREFIX}imp_${SUFFIX}_${userId.slice(-6)}`,
+		code: roleCode,
 		name: `${TEST_PREFIX}切换用户`,
 		sort: 0,
 		status: 1,
 	});
-	const now = new Date();
-	await db.insert(sysRoleMenu).values({
+	// 授权与成员关系现在都是策略表的行:授权 = `p` 行(客体是菜单),成员 = `g` 行(主体是人)
+	await db.insert(casbinRule).values({
 		id: newId(),
-		role_id: roleId,
-		menu_id: await impersonateMenuId(),
-		create_time: now,
-		update_time: now,
+		ptype: "p",
+		v0: `role:${roleCode}`,
+		v1: `menu:${await impersonateMenuId()}`,
+		v2: "access",
 	});
-	await db.insert(sysUserRole).values({ id: newId(), user_id: userId, role_id: roleId, create_time: now, update_time: now });
+	await db.insert(casbinRule).values({
+		id: newId(),
+		ptype: "g",
+		v0: `user:${userId}`,
+		v1: `role:${roleCode}`,
+		v2: "",
+	});
+	// 直接写表、绕过了 `lib/casbin.ts` 的领域函数 ⇒ 手动刷缓存,否则判定还停在旧策略上
+	clearCasbinCache();
 }
 
 /** 把某人的「切换用户」授权撤掉(删掉那条用户-角色关联)—— 验证例外不会变成永久通行证 */
 async function revokeImpersonate(userId: string): Promise<void> {
-	await db.delete(sysUserRole).where(eq(sysUserRole.user_id, userId));
+	await db
+		.delete(casbinRule)
+		.where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${userId}`)));
+	clearCasbinCache();
 }
 
 /**
@@ -139,17 +155,31 @@ after(async () => {
 		await cleanupStep("删除会话", () => db.delete(sysSession).where(inArray(sysSession.userId, createdUserIds)));
 		await cleanupStep("删除 account", () => db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds)));
 		await cleanupStep("删除 user_role", () =>
-			db.delete(sysUserRole).where(inArray(sysUserRole.user_id, createdUserIds)),
+			db
+				.delete(casbinRule)
+				.where(
+					and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, createdUserIds.map((userId) => `user:${userId}`))),
+				),
+		);
+	}
+	if (createdRoleCodes.length > 0) {
+		const subjects = createdRoleCodes.map((code) => `role:${code}`);
+		await cleanupStep("删除 role_menu", () =>
+			db.delete(casbinRule).where(and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v0, subjects))),
+		);
+		await cleanupStep("删除角色继承", () =>
+			db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v1, subjects))),
 		);
 	}
 	if (createdRoleIds.length > 0) {
-		await cleanupStep("删除 role_menu", () => db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, createdRoleIds)));
 		await cleanupStep("删除 role", () => db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds)));
 	}
 	if (createdUserIds.length > 0)
 		await cleanupStep("删除 user", () => db.delete(sysUser).where(inArray(sysUser.id, createdUserIds)));
 	if (createdMenuIds.length > 0)
 		await cleanupStep("删除 menu", () => db.delete(sysMenu).where(inArray(sysMenu.id, createdMenuIds)));
+	// 上面都是直接删表,绕过了 `lib/casbin.ts` 的领域函数 → 判定缓存要手动刷
+	clearCasbinCache();
 	await cleanupStep("关闭连接", () => closeDb());
 });
 

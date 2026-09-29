@@ -32,7 +32,7 @@ import { matchKeyword } from "#/lib/table";
  * 账号由 Better Auth 管:这里能开新账号(转调它的 `signUpEmail`),也能改姓名 / 邮箱;
  * 但**密码与邮箱验证**走 BA 自己的流程,不在这里代改。
  *
- * 这一页还管**角色分配** —— 角色是全局的(与部门无关,见表 `sys_user_role`),
+ * 这一页还管**角色分配** —— 角色是全局的(与部门无关,见表 `casbin_rule` 的 `g` 行),
  * 在「编辑」里用多选框挑;部门归属是组织架构,同一个弹窗里也用多选框维护(与角色互不影响)。
  */
 export function SettingsUsersPage() {

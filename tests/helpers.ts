@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, lt } from "drizzle-orm";
 
 import {
+	casbinRule,
 	sysAccount,
 	sysDataPolicy,
 	sysDept,
@@ -24,15 +25,14 @@ import {
 	sysMenu,
 	sysPara,
 	sysRole,
-	sysRoleMenu,
 	sysLog,
 	sysSession,
 	sysTag,
 	sysUser,
-	sysUserRole,
 } from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
 import { flushAuditWrites } from "../src/lib/audit.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { clearDataPolicyCache } from "../src/lib/data-policy.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -246,20 +246,24 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		const ids = staleUsers.map((row) => row.id);
 		await db.delete(sysSession).where(inArray(sysSession.userId, ids));
 		await db.delete(sysAccount).where(inArray(sysAccount.userId, ids));
-		await db.delete(sysUserRole).where(inArray(sysUserRole.user_id, ids));
+		await db.delete(casbinRule).where(
+			and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, ids.map((id) => `user:${id}`))),
+		);
 		await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, ids));
 		await db.delete(sysUser).where(inArray(sysUser.id, ids));
 		removed += ids.length;
 	}
 
-	// ── 角色(先清授权与分配:两张表的外键都是 restrict)──
+	// ── 角色(先清策略表里指向它的行:授权是 `p` 行的 v0,成员关系与角色继承是 `g` 行的 v1 / v0)──
 	const staleRoles = (
 		await db.select({ id: sysRole.id, code: sysRole.code }).from(sysRole).where(lt(sysRole.create_time, cutoff))
 	).filter((row) => startsWithPrefix(row.code));
 	if (staleRoles.length > 0) {
 		const ids = staleRoles.map((row) => row.id);
-		await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.role_id, ids));
-		await db.delete(sysUserRole).where(inArray(sysUserRole.role_id, ids));
+		const subjects = staleRoles.map((row) => `role:${row.code}`);
+		await db.delete(casbinRule).where(and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v0, subjects)));
+		await db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v1, subjects)));
+		await db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, subjects)));
 		await db.delete(sysRole).where(inArray(sysRole.id, ids));
 		removed += ids.length;
 	}
@@ -270,7 +274,9 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleMenus.length > 0) {
 		const ids = staleMenus.map((row) => row.id);
-		await db.delete(sysRoleMenu).where(inArray(sysRoleMenu.menu_id, ids));
+		await db.delete(casbinRule).where(
+			and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v1, ids.map((id) => `menu:${id}`))),
+		);
 		await db.delete(sysMenu).where(inArray(sysMenu.id, ids));
 		removed += ids.length;
 	}
@@ -343,6 +349,8 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		removed += staleTags.length;
 	}
 
+	// 上面删的都是**裸 SQL 或直接删表**,绕过了 `lib/casbin.ts` 的领域函数 ⇒ 判定缓存可能还留着旧策略
+	if (removed > 0) clearCasbinCache();
 	return removed;
 }
 

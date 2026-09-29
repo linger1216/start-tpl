@@ -19,16 +19,11 @@
  */
 import "dotenv/config";
 
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import {
-	sysMenu,
-	sysRole,
-	sysRoleMenu,
-	sysUser,
-	sysUserRole,
-} from "../src/db/data-base-schema.ts";
+import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
+import { addUserRole, grantedMenuIdsOf, roleCodesOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
@@ -43,6 +38,9 @@ import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
 
 /** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
 const ADMIN_EMAIL = "admin@example.com";
+
+/** 系统管理员角色码 —— 策略表(`casbin_rule`)里存的是**角色 code**,不是角色 id */
+const ADMIN_ROLE_CODE = "sys_admin";
 
 const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
 
@@ -100,41 +98,31 @@ async function upsertHiddenGroup(name: string, path: string, sort: number): Prom
 	return id;
 }
 
-async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise<void> {
-	const existing = await db.select({ id: sysRoleMenu.id }).from(sysRoleMenu).where(eq(sysRoleMenu.role_id, roleId));
+async function grantIfEmpty(roleCode: string, menuIds: readonly string[]): Promise<void> {
+	// 判据是**这个角色在策略表里还一条授权都没有**(不是"这次要加的这几条在不在")
+	const existing = await grantedMenuIdsOf(roleCode);
 	if (existing.length > 0) return;
 	const ids = await withAncestorIds(menuIds);
 	if (ids.length === 0) return;
-	const now = new Date();
-	await db.insert(sysRoleMenu).values(ids.map((menuId) => ({ id: newId(), role_id: roleId, menu_id: menuId, create_time: now, update_time: now })));
+	await setRoleMenus(roleCode, ids);
 	created.grant += ids.length;
 }
 
-/** 分配**全局角色**(userId × roleId)—— 已存在就不动 */
-async function assignRoleIfAbsent(userId: string, roleId: string, label: string): Promise<void> {
-	const [existing] = await db
-		.select({ id: sysUserRole.id })
-		.from(sysUserRole)
-		.where(and(eq(sysUserRole.user_id, userId), eq(sysUserRole.role_id, roleId)))
-		.limit(1);
-	if (existing) {
+/** 分配**全局角色**(userId × 角色 code)—— 已存在就不动 */
+async function assignRoleIfAbsent(userId: string, roleCode: string, label: string): Promise<void> {
+	const codes = await roleCodesOf(userId);
+	if (codes.includes(roleCode)) {
 		console.log(`  · ${label} 已有这个角色,不动`);
 		return;
 	}
-	await db.insert(sysUserRole).values({
-		id: newId(),
-		user_id: userId,
-		role_id: roleId,
-		create_time: new Date(),
-		update_time: new Date(),
-	});
+	await addUserRole(userId, roleCode);
 	created.assign += 1;
 	console.log(`  + ${label}(角色)`);
 }
 
 async function main() {
 
-	const adminRole = await upsertRole("sys_admin", "系统管理员", 1, "示例:能看见全部菜单与按钮");
+	await upsertRole(ADMIN_ROLE_CODE, "系统管理员", 1, "示例:能看见全部菜单与按钮");
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
 	// 否则下面"给系统管理员全部授权"的那份清单会漏掉刚建的两个按钮(实测踩过)。
@@ -241,9 +229,9 @@ async function main() {
 	console.log(`  *:*:* / ${IMPERSONATE_PERM};本次新增 ${created.menu} 个`);
 
 	console.log("── 授权(只在角色还没有任何授权时写入)→ 权限体系从此启用 ──");
-	// 系统管理员:**一条 `*:*:*` 就够** —— 通配模式在读取时展开(见 lib/rbac.ts),
+	// 系统管理员:**一条 `*:*:*` 就够** —— 通配模式在**装载时**展开(见 lib/casbin.ts),
 	// 所以"全部菜单 + 全部按钮 + **以后新增的**"都自动在内,不用每加一个菜单就回来补勾。
-	await grantIfEmpty(adminRole, [superPermId]);
+	await grantIfEmpty(ADMIN_ROLE_CODE, [superPermId]);
 
 	// 部门主管:**只给菜单、不给按钮** —— 这样切到演示账号能直接看到
 	// 「页面进得去,但页里的新增 / 删除按钮不可见」(按钮级可见性)
@@ -253,7 +241,7 @@ async function main() {
 	console.log("── 部门成员 + 全局角色 ──");
 	const [admin] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, ADMIN_EMAIL)).limit(1);
 	if (admin) {
-		await assignRoleIfAbsent(admin.id, adminRole, `${ADMIN_EMAIL} → 系统管理员`);
+		await assignRoleIfAbsent(admin.id, ADMIN_ROLE_CODE, `${ADMIN_EMAIL} → 系统管理员`);
 	}
 
 
@@ -276,7 +264,7 @@ async function main() {
 	);
 	if (created.grant > 0) {
 		console.log(
-			"⚠️ 权限体系现在**已启用**(sys_role_menu 不再是空的):没有被分配部门与角色的账号将看不到任何菜单。",
+			"⚠️ 权限体系现在**已启用**(`casbin_rule` 里已经有授权行了):没有被分配部门与角色的账号将看不到任何菜单。",
 		);
 	}
 	process.exit(0);

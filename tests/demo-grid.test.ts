@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
-import { sysDataPolicy, sysDemoGrid, sysDept, sysRole, sysUser, sysUserDept, sysUserRole } from "../src/db/data-base-schema.ts";
+import { casbinRule, sysDataPolicy, sysDemoGrid, sysDept, sysRole, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { grantRow } from "../src/lib/data-policy.ts";
 import { TEST_PREFIX, assertRejects, closeDb, deleteTestPolicies, purgeTestAuditRows, putPolicyRow, uniqueSuffix } from "./helpers.ts";
 
@@ -58,7 +59,21 @@ async function makeBareUser(name: string, roleId: string | null): Promise<string
 	await db
 		.insert(sysUser)
 		.values({ id: userId, name: `${TEST_PREFIX}${name}`, email: `${userId}@example.com`, emailVerified: false, createdAt: new Date(), updatedAt: new Date() });
-	if (roleId) await db.insert(sysUserRole).values({ id: id("ur", name), user_id: userId, role_id: roleId });
+	if (roleId) {
+		// 成员关系在策略表里是 `g` 行,认角色 **code**(不是 id)—— 所以先查一下
+		const [role] = await db.select({ code: sysRole.code }).from(sysRole).where(eq(sysRole.id, roleId));
+		if (role) {
+			await db.insert(casbinRule).values({
+				id: id("g", name),
+				ptype: "g",
+				v0: `user:${userId}`,
+				v1: `role:${role.code}`,
+				v2: "",
+			});
+			// 直接写表、绕过了领域函数 ⇒ 手动刷缓存
+			clearCasbinCache();
+		}
+	}
 	return userId;
 }
 async function makeUser(name: string, deptId: string, roleId: string | null): Promise<string> {
@@ -96,17 +111,21 @@ after(async () => {
 	await purgeTestAuditRows(userIds);
 	if (userIds.length) {
 		await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, userIds));
-		await db.delete(sysUserRole).where(inArray(sysUserRole.user_id, userIds));
+		// 成员关系是策略表的 `g` 行,主体是 `user:<id>`
+		await db
+			.delete(casbinRule)
+			.where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, userIds.map((userId) => `user:${userId}`))));
 		await db.delete(sysUser).where(inArray(sysUser.id, userIds));
 	}
 	if (roleIds.length) {
-		await db.delete(sysUserRole).where(inArray(sysUserRole.role_id, roleIds));
 		await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
 	}
 	if (deptIds.length) {
 		await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
 		for (const deptId of [...deptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, deptId));
 	}
+	// 上面是直接删表,绕过了 `lib/casbin.ts` 的领域函数 → 判定缓存要手动刷
+	clearCasbinCache();
 	await closeDb();
 });
 

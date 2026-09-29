@@ -1,23 +1,24 @@
 # RBAC 权限模型(部门 / 角色 / 菜单可见性)
 
-> 本文原在 `AGENTS.md` 里,2026-09 按「精简 AGENTS」的约定搬到这里(**内容一字未改**)。
-> 什么时候看它:动权限判定、`sys_user_role` / `sys_role_menu`,或 `/settings/{roles,users,departments}` 三页时。
+> 本文原在 `AGENTS.md` 里,2026-09 按「精简 AGENTS」的约定搬到这里
+> (2026-09 功能权限改由 Casbin 承载后,表名与存储位置已同步更新)。
+> 什么时候看它:动权限判定、`casbin_rule`,或 `/settings/{roles,users,departments}` 三页时。
 
 **"部门当组织用",但走的不是 Better Auth 的 organization 插件** —— 那套是"选中一个当前组织 + 租户隔离",
 而这里要的是"**同时属于多个部门 + 角色给权限**",语义不同(而且它会往 session 上加一个用不上的
-`active_organization_id`)。所以是项目自己的六张表(下面五张管组织 / 角色 / 菜单可见性,第六张
+`active_organization_id`)。所以是项目自己的五张表(下面四张管组织 / 角色 / 功能权限,第五张
 `sys_data_policy` 是行级数据权限的载体,见下文「行级数据权限」):
 
 ```
 sys_dept(树)                         上海公司 / 武汉公司(可嵌套)—— 纯组织架构
 sys_role(全局定义)                          管理员 / 员工 / 开发 …   ← 不随部门数增长
 sys_user_dept(user_id, department_id)  张三 ∈ 上海公司、武汉公司(**不带角色**)
-sys_user_role(user_id, role_id)                张三 → 管理员、普通员工(**权限 = 这些角色的并集**)
-sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能用哪些按钮
+casbin_rule:g(user, role)                      张三 → 管理员、普通员工(**权限 = 这些角色的并集**)
+casbin_rule:p(role, menu)                      角色能看见哪些菜单 / 能用哪些按钮
 ```
 
 **权限标识 = `域:资源:动作`(三段小写),每段可整段写 `*` 通配。** 例:`sys:role:add` / `sys:role:*` / `sys:*:*` / `*:*:*`(全部权限,**含以后新增的菜单**)。
-- **通配在读取时展开**,只改一处:`lib/rbac.ts` 把模式命中的菜单行当成"被授权"再走同一套祖先补全 —— 所以
+- **通配在装载时展开**(唯一实现处 `lib/casbin.ts`):把模式命中的菜单行当成"被授权"再走同一套祖先补全 —— 所以
   `use-perms.ts` 与各页面**一行都不用改**,`*:*:*` 也自动覆盖未来新增的域/菜单(不用回来补勾);想收窄再加一条模式行。
 - **域 = 一级模块 key**,允许长新域;受控的是**形状不是取值** —— 菜单接口的 `perm` 用 `PERM_FORMAT` 挡住
   两段 / 大写 / 半截通配(`sys:ro*`)。⚠️ 段数不符的模式**永远匹配不到**,症状是"勾了没权限",极难查。
@@ -28,7 +29,7 @@ sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能
   结果是"同一个人在不同部门才能有不同角色",那是没必要的复杂度 —— `sys_user_dept.role_id`
   已经删掉,分配入口收在「用户管理 ▸ 编辑」里)。
 - **并集**:一个人所有**角色**的授权取并集 —— **没有"当前部门",也不需要切换**。
-  计算在 `lib/rbac.ts` 的 `effectiveMenusFor(userId)`(它只 join `sys_user_role` + `sys_role`,不看部门):它**只吃 `userId`**,与"怎么拿 userId(会话)"解耦,
+  计算在 `lib/rbac.ts` 的 `effectiveMenusFor(userId)`(它只读 `casbin_rule` 的 `g` 行 + `sys_role`,不看部门):它**只吃 `userId`**,与"怎么拿 userId(会话)"解耦,
   所以单测可以直接喂一个 id,不必造 HTTP 会话。
 - **菜单与按钮同一张表**:`sys_menu.type` = 1 目录 / 2 菜单 / 3 按钮,`perm` 是权限标识(如 `sys:role:write`)。
   按钮**不进侧边栏**(`buildNavTree` 会过滤),但作为叶子出现在角色授权树里
@@ -37,7 +38,7 @@ sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能
   (沿用"纯分组也给占位 path"的既有约定,`path` 保持 not null + 唯一)。
 - **勾子节点要自动补全祖先**:侧边栏是按 `parentId` 拼树的,只授权一个深层子菜单会让那一枝无处安放
   ("勾了却看不见")。写入(`role.setMenus`)与读取(`rbac.ts`)用同一份 `withAncestorIds()`。
-- **未启用不过滤**:`sys_role_menu` **一条都没有** → 全部菜单可见 + `perms = null`(一律放行)。
+- **未启用不过滤**:`casbin_rule` 里**一条 `p` 行都没有** → 全部菜单可见 + `perms = null`(一律放行)。
   这是刻意的兜底:新项目/新库还没配权限时,不能把管理员自己锁在门外。配了第一条授权就立即生效。
 - **认不到人 → 失败关闭**:权限体系开着但拿不到会话 → 空菜单 + `perms = []`(不是 `null`)。
 - **隐藏 ≠ 禁止,所以拦两层**:侧边栏可见性只是"看不见入口",服务端另有两道判定 ——
@@ -67,8 +68,8 @@ sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能
 > 本机另外手工准备了一批**街镇演示账号**(13 个街镇 × 队长 / 队员,密码同 `Passw0rd123`),
 > 用来实际看数据范围的效果;它们**不在种子里**,清单与命名规则见 `doc/测试数据/README.md`。
 
-⚠️ **跑过它之后权限体系就"启用"了**(`sys_role_menu` 不再为空):**没有任何角色的账号将看不到任何菜单**(部门归属不影响权限)。
-要回到"未启用、全放行"的状态,把 `sys_role_menu` 清空即可。
+⚠️ **跑过它之后权限体系就"启用"了**(`casbin_rule` 里有了 `p` 行):**没有任何角色的账号将看不到任何菜单**(部门归属不影响权限)。
+要回到"未启用、全放行"的状态,把 `casbin_rule` 的 `p` 行清空即可。
 
 ---
 
@@ -83,7 +84,7 @@ sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能
 
 - 合成码 **`page:<路径折算>:view`**(`pagePermOf()`:非字母数字折成 `_`,小写,去前导斜杠)
   —— `/settings/data-policy` → `page:settings_data_policy:view`。语义就是"这个人在菜单里能不能看见这一页"。
-- 放行的三种情况:**权限体系未启用**(`sys_role_menu` 空 ⇒ `perms === null`)、
+- 放行的三种情况:**权限体系未启用**(一条 `p` 行都没有 ⇒ `perms === null`)、
   `ALWAYS_VIEWABLE_PATHS`(`/`、`/notices`)、**不在菜单表里的地址**(demo 页、`/blank` 等)。
 - 拿不到会话 → `redirect` 到 `/login?redirect=<原地址>`;有会话但没授权 →
   `notFound({ data: { forbidden: true, pageName } })`。
@@ -196,7 +197,7 @@ sys_role_menu(role_id, menu_id)                角色能看见哪些菜单 / 能
 **理解范围的三个模式**(和功能权限一一对应):
 
 1. **未启用 → 不过滤**:`sys_data_policy` 里**一条生效行都没有** ⇒ `dataScopeWhere` 返回 `undefined`(不收窄)。
-   与「`sys_role_menu` 空 = 菜单未启用」**同口径**。新库开箱即用,不会一上来就把人锁死。
+   与「`casbin_rule` 里一条 `p` 行都没有 = 功能权限未启用」**同口径**。新库开箱即用,不会一上来就把人锁死。
 2. **已启用 + 认不出我 → 空**:表里已经有规则,而"我是谁"一个主体都没命中 ⇒ `1 = 0`。
    ⚠️ 这一条曾把老测试全打挂(`user.list` 带范围后,合成的 test-admin 读不到任何用户),
    修法是给测试注入一条 `user:test-admin → *, *` 的规则,见 `tests/helpers.ts` 的 `ensureTestAdminPolicy()`。

@@ -1,9 +1,9 @@
 /**
  * **权限并集的计算** —— 角色 → 菜单/按钮。
  *
- * 模型(见 `db/data-base-schema.ts` 的注释):
+ * 模型(策略表见 `db/data-base-schema.ts` 的 `casbin_rule`,引擎见 `lib/casbin.ts`):
  *
- *   用户 --(sys_user_role, 一人多角色)--> 角色 --(sys_role_menu)--> 菜单 / 按钮
+ *   用户 --(casbin_rule 的 `g` 行,一人多角色)--> 角色 --(casbin_rule 的 `p` 行)--> 菜单 / 按钮
  *
  * 所以「这个用户能看到什么」= **他所有角色的授权取并集** —— 角色与部门无关(部门只是组织架构),
  * 没有"当前部门"这个概念,也不需要切换。
@@ -12,62 +12,28 @@
  * 与"怎么拿到 userId(会话)"解耦 —— 单测可以直接喂一个 id,不必造 HTTP 会话。
  *
  * ⚠️ 这里是**全站唯一的权限计算处**(服务端只有 `menu.mine`、`(main)` 的路由守卫与 tRPC 权限中间件调它,
- * 客户端只有 `hooks/use-perms.ts` 读结果)。所以通配符(`*:*:*`)的展开也放在这一处 ——
- * 展开之后,`use-perms.ts` 和各页面**一行都不用改**。
+ * 客户端只有 `hooks/use-perms.ts` 读结果)。通配符(`*:*:*`)的展开在 `lib/casbin.ts` 的**装载时**
+ * 算完(不是在这里每次现算) —— 展开之后,`use-perms.ts` 和各页面**一行都不用改**。
+ *
+ * 判决策本身在 `lib/casbin.ts`(`enforce`):本文件只负责把 Casbin 的结论**翻译成菜单树 + 权限码集合**。
  */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "#/db";
-import { sysMenu, sysRole, sysRoleMenu, sysUserRole } from "#/db/data-base-schema";
+import { sysMenu, sysRole } from "#/db/data-base-schema";
+import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX, roleCodesOf } from "#/lib/casbin";
 import { MENU_TYPE } from "#/lib/menu-spec";
+import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
+
+/**
+ * 权限码的**形状与比较**住在 `lib/perm-code.ts` —— 功能权限的引擎(`lib/casbin.ts`)与本文件
+ * 都要用它,而两者互相依赖,语法抽到最底层就没有环。这里**原样再导出**,老调用方一行都不用改
+ * (`routers/menu.ts` / `trpc/init.ts` / `tests/*` 都从本文件 import)。
+ */
+export { PERM_FORMAT, pagePermOf, permMatches };
 
 /** `sys_menu` 的一行 */
 type MenuRow = typeof sysMenu.$inferSelect;
-
-/**
- * 权限标识(`perm`)的格式:**`域:资源:动作`**,三段小写;每段可以用一个**整段的 `*`** 通配。
- *
- * 域 = 一级模块的 key(如 `sys`),**允许长出新的域**(派生项目加模块就会多一个域)——
- * 受控的是**形状**,不是取值:菜单接口用这条规则校验,挡住两段 / 大写 / 半截通配(`sys:ro*`)这类脏值。
- */
-export const PERM_FORMAT = /^(?:[a-z][a-z0-9_]*|\*):(?:[a-z][a-z0-9_]*|\*):(?:[a-z][a-z0-9_]*|\*)$/;
-
-/** 这条 perm 是不是**模式**(含通配段)—— 只在 `effectiveMenusFor` 里用,不外传 */
-function isPermPattern(perm: string): boolean {
-	return perm.includes("*");
-}
-
-/**
- * 模式与权限点**逐段比较**:某段相等、或模式那一段是 `*`,即算匹配。
- *
- * 段数必须一致 —— 所以 `sys:role`(两段)匹配不到任何东西(不放行,也不报错)。
- * 只支持**整段**通配(`sys:role:*`),不支持半截(`sys:ro*`)—— 后者在接口层就被 `PERM_FORMAT` 挡住。
- */
-export function permMatches(pattern: string, code: string): boolean {
-	const p = pattern.split(":");
-	const c = code.split(":");
-	return p.length === c.length && p.every((seg, i) => seg === "*" || seg === c[i]);
-}
-
-/**
- * **菜单路径 → 合成权限码**:`/settings/data-policy` → `page:settings_data_policy:view`。
- *
- * 为什么用合成码而不是给每个页面再建一个按钮权限点:页面可见性**就是菜单授权**——
- * "勾了这个菜单" = "能进这个页面 + 能调它用的读接口"。合成码让读接口能复用同一份判据,
- * 又不用在 `sys_menu` 里造 `page:*` 按钮(那会多出一批**没人能被授予**的假权限点)。
- *
- * 形状守规矩:非字母数字一律折算成 `_`,所以三段都满足 `PERM_FORMAT`、也能被 `permMatches` 逐段比较;
- * `page` 是新的域 —— 与 `sys:*` 的段值天然不同,不会互相误匹配。
- * 根路径 `/` 折算成 `page:root:view`(它落在 `ALWAYS_VIEWABLE_PATHS` 里,守卫对它直接放行,这个码只是占位)。
- */
-export function pagePermOf(pathname: string): string {
-	const key =
-		pathname
-			.replace(/^\//, "")
-			.replace(/[^a-zA-Z0-9]+/g, "_")
-			.toLowerCase() || "root";
-	return `page:${key}:view`;
-}
 
 /**
  * **只要求登录、不需要菜单授权**的页面路径。
@@ -106,23 +72,12 @@ type MenuAccess = EffectiveMenus & {
 };
 
 /**
- * `sys_role_menu` 是否**一条都没有** —— 这是「权限体系是否启用」的唯一判据。
- *
- * 为什么要有这个开关:模板/新项目刚建好时没有任何授权记录,如果没有这个兜底,
- * 每个人(包括管理员自己)登录后都会看到空侧边栏 —— 把自己锁在外面。
- * 一旦配了第一条授权,过滤立即生效。
- */
-async function isPermissionConfigured(): Promise<boolean> {
-	const [row] = await db.select({ n: sql<number>`count(*)` }).from(sysRoleMenu);
-	return Number(row?.n ?? 0) > 0;
-}
-
-/**
  * 补全祖先链 —— 授权只勾了子节点时,把它的父/祖父也一并算上。
  *
  * 为什么必须有:侧边栏是**按 parentId 拼树**的,只授权一个深层的子菜单、
  * 父节点没授权 → 那一枝在树上根本无处安放,结果是"勾了却看不见"。
- * 写入时(`role.setMenus`)与读取时(这里)都用同一份逻辑,避免两处口径漂移。
+ * 写入时(`role.setMenus`)与装载时(`lib/casbin.ts` 的 `loadPolicy`)都用同一份口径,
+ * 避免两处漂移 —— 这里这份是给**写入**用的。
  */
 export async function withAncestorIds(ids: readonly string[]): Promise<string[]> {
 	if (ids.length === 0) return [];
@@ -143,19 +98,23 @@ export async function withAncestorIds(ids: readonly string[]): Promise<string[]>
 }
 
 /**
- * 该用户**启用的角色**(角色是全局的,与部门无关 —— 见 `sys_user_role`)。
+ * 该用户**启用的角色**(角色是全局的,与部门无关 —— 成员关系在 `casbin_rule` 的 `g` 行)。
  *
- * 单独抽出来是因为**功能权限**与**数据权限**都要用它:菜单侧只要 `id`(`sys_role_menu` 按角色授权),
+ * 单独抽出来是因为**功能权限**与**数据权限**都要用它:菜单侧只要 `id`,
  * 数据权限侧还要 `code`(`sys_data_policy` 里的主体写成 `role:<code>`)。全站原本只有一处这个 join,
  * 再抄一遍必然漂。
+ *
+ * ⚠️ `sys_role.status = 1` 的过滤留在这一层(`g` 行照旧存着):角色停用后权限立即消失,
+ * 但成员关系不丢 —— 重新启用时不用再配一遍。判决策本身在 `lib/casbin.ts`。
  */
 export async function enabledRolesOf(userId: string): Promise<{ id: string; code: string }[]> {
+	const codes = await roleCodesOf(userId);
+	if (codes.length === 0) return [];
 	const rows = await db
 		.select({ id: sysRole.id, code: sysRole.code })
-		.from(sysUserRole)
-		.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id))
-		.where(and(eq(sysUserRole.user_id, userId), eq(sysRole.status, 1)));
-	// 去重:同一个角色只会有一条 sys_user_role,但脏数据下也别让下游算两遍
+		.from(sysRole)
+		.where(and(inArray(sysRole.code, codes), eq(sysRole.status, 1)));
+	// 去重:同一个角色只会有一条 g 行,但脏数据下也别让下游算两遍
 	return [...new Map(rows.map((row) => [row.id, row])).values()];
 }
 
@@ -212,51 +171,31 @@ async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 		return { rows: null, perms: [], pages };
 	}
 
-	const roleIds = (await enabledRolesOf(userId)).map((role) => role.id);
-	if (roleIds.length === 0) return { rows: null, perms: [], pages };
-
-	const granted = await db
-		.select({ menuId: sysRoleMenu.menu_id })
-		.from(sysRoleMenu)
-		.where(inArray(sysRoleMenu.role_id, roleIds));
-
-	const grantedIds = granted.map((row) => row.menuId);
-	const grantedSet = new Set(grantedIds);
-
 	/**
-	 * **通配模式在这里展开**(`*:*:*` / `sys:*:*` / `sys:role:*`)。
+	 * 判决策在 `lib/casbin.ts`(`implicitObjsOf`):它把"这个用户直接或经角色间接拿到的
+	 * 全部 obj"算完并**展开**好了 —— 每组授权三条 obj(`menu:<id>`、该菜单的 `perm`、
+	 * 页面路径折算的 `page:*:view`),通配模式也在**装载时**摊平成具体码。
 	 *
-	 * 做法:把"被模式命中的菜单行"当成**被授权**的行,再走同一套祖先补全 ——
-	 * 于是一个模式的效果和"手勾上这些行"完全一样,没有第二套可见性规则。
-	 * 因为是**读的时候**算,`*:*:*` 自动覆盖**以后新增的域 / 菜单 / 按钮**(不用回来补勾)——
-	 * 这正是"不用一个一个赋权限"的价值所在。
+	 * 所以这里只做翻译:留下 `menu:` 前缀的拿去选菜单,**其余的直接当权限码**
+	 * (不能再出现通配模式 —— `hooks/use-perms.ts` 是 `perms.includes(code)` 的精确匹配,
+	 * 留下模式会让所有按钮都判不过)。
 	 */
-	const grantedPerms = all.filter((row) => grantedSet.has(row.id) && row.perm).map((row) => row.perm as string);
-	const activePatterns = [...new Set(grantedPerms.filter((perm) => isPermPattern(perm)))];
-	const patternHitIds =
-		activePatterns.length === 0
-			? []
-			: all
-					.filter((row) => row.perm && activePatterns.some((p) => permMatches(p, row.perm as string)))
-					.map((row) => row.id);
-
-	// 并集 + 祖先补全(**一次**算完所有授权的祖先,别在循环里逐条查)
-	const allowed = new Set(await withAncestorIds([...grantedIds, ...patternHitIds]));
+	const objs = await implicitObjsOf(userId);
+	const allowed = new Set(
+		objs.filter((obj) => obj.startsWith(MENU_PREFIX)).map((obj) => obj.slice(MENU_PREFIX.length)),
+	);
+	if (allowed.size === 0) return { rows: null, perms: [], pages };
 
 	const rows = navigable(all).filter((row) => allowed.has(row.id));
 	/**
-	 * 权限集合 = ① 授权行自带的按钮码 + ② **可见页面**折算出来的 `page:*:view` 合成码。
+	 * 权限集合 = ① Casbin 判定里那些非 `menu:` 的 obj(按钮码 + 页面合成码)+
+	 * ② **可见页面**再折算一遍 `page:*:view`。
 	 *
 	 * ② 是页面级判据:读接口的 `PERM_BY_PATH` 就登记这些码(一个读接口被多个页面用时取"或"),
 	 * 于是"菜单勾上 = 页面进得去 = 它的读接口调得动",三处口径永远一致。
 	 */
 	const pageCodes = rows.flatMap((row) => (row.path?.startsWith("/") ? [pagePermOf(row.path)] : []));
-	const perms = [
-		...new Set([
-			...all.filter((row) => allowed.has(row.id) && row.perm).map((row) => row.perm as string),
-			...pageCodes,
-		]),
-	];
+	const perms = [...new Set([...objs.filter((obj) => !obj.startsWith(MENU_PREFIX)), ...pageCodes])];
 	// 可见菜单为空 → 返回 null(区别于"菜单表为空"),展示层据此决定"什么都不显示"
 	return { rows: rows.length > 0 ? rows : null, perms, pages };
 }

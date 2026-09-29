@@ -1,9 +1,10 @@
 /**
- * **系统表**的 drizzle 定义 —— 十九张:
+ * **系统表**的 drizzle 定义 —— 十八张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
- *  - 权限六张:`sys_dept` / `sys_role` / `sys_user_dept` / `sys_user_role` / `sys_role_menu` /
+ *  - 权限五张:`sys_dept` / `sys_role` / `sys_user_dept` /
+ *    **`casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`)/
  *    **`sys_data_policy`**(行级数据权限规则,语义见 `doc/rbac-权限模型.md`);
  *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
@@ -356,8 +357,9 @@ export const sysVerification = mysqlTable(
 //
 //   sys_dept(树)                                    上海公司 / 武汉公司(可嵌套)
 //   sys_role(全局定义)                                     管理员 / 员工 / 开发 …  ← 不随部门数增长
-//   sys_user_dept(user_id, department_id, role_id)  张三:上海=管理员、武汉=员工
-//   sys_role_menu(role_id, menu_id)                        角色能看见哪些菜单 / 能用哪些按钮
+//   sys_user_dept(user_id, department_id)            张三:上海、武汉(角色不在这里)
+//   casbin_rule:g(user, role)                        张三 → 管理员(**权限 = 这些角色的并集**)
+//   casbin_rule:p(role, menu)                        角色能看见哪些菜单 / 能用哪些按钮
 //
 // 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
 // (上海管理员 / 武汉管理员 / …)。全局定义 + 分配时带部门,4 种角色在 100 个部门里也只有 4 行。
@@ -410,7 +412,7 @@ export const sysRole = mysqlTable(
  * 部门成员 —— "谁在哪个部门"。**只管组织架构,不携带角色**。
  *
  * 角色是**全局定义**的,和人属于哪个部门无关 —— 所以这里没有 `role_id`,
- * 用户与角色的关系在下面的 `sys_user_role`。
+ * 用户与角色的关系在 `casbin_rule` 的 `g` 行(`user:<id>` → `role:<code>`)。
  * `uk_sys_dm_unique(department_id, user_id)`:一个人不能重复加入同一个部门
  * (两个列都 not null,所以这个唯一键是真实生效的)。
  */
@@ -434,51 +436,46 @@ export const sysUserDept = mysqlTable(
 );
 
 /**
- * 用户 → 角色(全局)。**这张表就是权限的来源**。
+ * **功能权限(Casbin 的策略表)** —— 「谁有哪些角色」与「角色能进哪些菜单 / 按哪些按钮」
+ * 共用这一张表,Casbin 同时充当**策略存储**与**判定引擎**(模型与领域函数见 `lib/casbin.ts`)。
  *
- * 一个用户可以有多个角色,能看到的菜单 / 能用的按钮 = 这些角色授权的**并集**
- * (`lib/rbac.ts` 的 `effectiveMenusFor`)。
+ * 列名用 Casbin 的通用形状(`ptype` + 一串值),因为装载走 `loadPolicy`、
+ * 写入走 `addPolicy(sec, ptype, rule)`:一行 = 一个 `ptype` + 若干值。
  *
- * `role_id` **不加 cascade**:角色还有人用着就不该被删掉 —— procedure 先查引用数给友好报错,
- * DB 的 restrict 当兜底。
+ * | 列 | `p`(角色 → 权限) | `g`(用户 → 角色 / 角色 → 角色) |
+ * | --- | --- | --- |
+ * | `v0` sub | `role:<角色 code>` | `user:<用户 id>` 或 `role:<角色 code>` |
+ * | `v1` obj | `menu:<菜单/按钮 id>` | `role:<角色 code>` |
+ * | `v2` act | `access` | 空串 |
+ *
+ * ⚠️ **为什么 `v1` 存的是 `menu:<id>` 而不是权限码**:`sys_menu` 里目录 / 菜单 / 按钮
+ * 是同一棵树、同一张表(`type` 1/2/3),勾选态必须按菜单 id 回读;而判定要的是权限码
+ * (`sys:user:add` / `page:settings_users:view`)。两件事在 `loadPolicy` 里**当场展开**
+ * (一个 `menu:<id>` 展开成 `menu:<id>` + 该行 `perm` + `pagePermOf(path)` 三条候选 obj,
+ * 只在内存里,不落库),所以库里始终只有菜单 id 这一种写法 —— 改菜单 `perm` 不用回刷策略行。
+ *
+ * ⚠️ 因此**菜单增 / 删 / 改 / 排序后必须 `clearCasbinCache()`**(`lib/casbin.ts`):
+ * 展开结果跟着 `sys_menu` 变,而这张表一行没动,不刷缓存就会拿旧快照判定。
+ *
+ * ⚠️ 删菜单时**没有外键兜底**(Casbin 的行不是关系行,MySQL 也不会替我们级联)——
+ * `routers/menu.ts` 的 `delete` 必须显式调 `removeMenuPolicies(id)`。
  */
-export const sysUserRole = mysqlTable(
-	"sys_user_role",
+export const casbinRule = mysqlTable(
+	"casbin_rule",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
-		user_id: varchar("user_id", { length: 32 })
-			.notNull()
-			.references(() => sysUser.id, { onDelete: "cascade" }),
-		role_id: varchar("role_id", { length: 32 })
-			.notNull()
-			.references(() => sysRole.id),
+		/** 规则类型:`p`(策略行)/ `g`(角色成员与继承) */
+		ptype: varchar("ptype", { length: 8 }).notNull(),
+		v0: varchar("v0", { length: 80 }).notNull(),
+		v1: varchar("v1", { length: 128 }).notNull(),
+		v2: varchar("v2", { length: 16 }).notNull().default(""),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		uniqueIndex("uk_sys_ur_unique").on(table.user_id, table.role_id),
-		index("idx_sys_ur_user").on(table.user_id),
-		index("idx_sys_ur_role").on(table.role_id),
-	],
-);
-
-/** 角色 → 菜单/按钮授权(一条表同时表达「菜单可见」与「按钮可用」) */
-export const sysRoleMenu = mysqlTable(
-	"sys_role_menu",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		role_id: varchar("role_id", { length: 32 })
-			.notNull()
-			.references(() => sysRole.id, { onDelete: "cascade" }),
-		menu_id: varchar("menu_id", { length: 32 })
-			.notNull()
-			.references(() => sysMenu.id, { onDelete: "cascade" }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_sys_role_menu").on(table.role_id, table.menu_id),
-		index("idx_sys_role_menu_menu").on(table.menu_id),
+		uniqueIndex("uk_casbin_rule").on(table.ptype, table.v0, table.v1, table.v2),
+		index("idx_casbin_rule_v0").on(table.ptype, table.v0),
+		index("idx_casbin_rule_v1").on(table.ptype, table.v1),
 	],
 );
 
@@ -497,8 +494,8 @@ export const sysRoleMenu = mysqlTable(
  * | `v3` eft | 效果:`allow` / `deny`(`deny` 一票否决) |
  *
  * ⚠️ 这里**刻意没有业务语义**(没有"本部门以下""仅本人"这种档位词):组织范围一律用**具体的组织节点**
- * 表达 —— 各街镇层级深浅不一,数层数必然出错。也不留 `v4/v5` 空列、不写 Casbin 的 `g` 行
- * (角色成员仍只在 `sys_user_role`,两处维护必漂移)。
+ * 表达 —— 各街镇层级深浅不一,数层数必然出错。也不留 `v4/v5` 空列、不写 `casbin_rule` 的 `g` 行
+ * (角色成员只在 `casbin_rule`,两处维护必漂移)。
  *
  * ⚠️ 表是「谁被授权看哪些资源」的唯一真源,**没有任何界面**;写入口只有三个:迁移脚本、
  * 维护脚本、`demoGrid.assign`(指派负责人时同步那条按行的授权)。解析 / 编译见 `lib/data-policy{,-spec}.ts`。

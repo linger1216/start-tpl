@@ -7,7 +7,7 @@ import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 用户台账的一行(tRPC `user.list` 出参)—— **与 `sys_user` 的列一一对应**,
- * 外加三个派生字段:部门(来自 `sys_user_dept`)、角色名与角色 id(来自 `sys_user_role`)。
+ * 外加三个派生字段:部门(来自 `sys_user_dept`)、角色名与角色 id(来自 `casbin_rule` 的 `g` 行)。
  */
 export type UserRow = {
 	id: string;
@@ -21,7 +21,7 @@ export type UserRow = {
 	departmentNames: string[];
 	/** 部门 id —— 编辑弹窗里的部门多选框要按 id 回填 */
 	departmentIds: string[];
-	/** 这个人的角色名(全局)—— 派生自 `sys_user_role` */
+	/** 这个人的角色名(全局)—— 派生自 `casbin_rule` 的 `g` 行 */
 	roleNames: string[];
 	/** 角色 id,与 `roleNames` 同序 —— 编辑弹窗里的角色多选框按 id 回填 */
 	roleIds: string[];

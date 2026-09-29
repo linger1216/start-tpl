@@ -136,32 +136,20 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_dm_user" on ${S}."sys_user_dept" ("user_id")`,
 
-	`create table if not exists ${S}."sys_user_role" (
+	// ── casbin_rule(功能权限策略:Casbin 判定 + 存储;见 src/lib/casbin.ts)────────
+	`create table if not exists ${S}."casbin_rule" (
 		"id" varchar(32) not null,
-		"user_id" varchar(32) not null,
-		"role_id" varchar(32) not null,
+		"ptype" varchar(8) not null,
+		"v0" varchar(80) not null,
+		"v1" varchar(128) not null,
+		"v2" varchar(16) default '' not null,
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
-		constraint "uk_sys_ur_unique" unique ("user_id", "role_id"),
-		constraint "fk_sys_ur_user" foreign key ("user_id") references ${S}."sys_user" ("id") on delete cascade,
-		constraint "fk_sys_ur_role" foreign key ("role_id") references ${S}."sys_role" ("id")
+		constraint "uk_casbin_rule" unique ("ptype", "v0", "v1", "v2")
 	)`,
-	`create index if not exists "idx_sys_ur_user" on ${S}."sys_user_role" ("user_id")`,
-	`create index if not exists "idx_sys_ur_role" on ${S}."sys_user_role" ("role_id")`,
-
-	`create table if not exists ${S}."sys_role_menu" (
-		"id" varchar(32) not null,
-		"role_id" varchar(32) not null,
-		"menu_id" varchar(32) not null,
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
-		primary key ("id"),
-		constraint "uk_sys_role_menu" unique ("role_id", "menu_id"),
-		constraint "fk_sys_role_menu_role" foreign key ("role_id") references ${S}."sys_role" ("id") on delete cascade,
-		constraint "fk_sys_role_menu_menu" foreign key ("menu_id") references ${S}."sys_menu" ("id") on delete cascade
-	)`,
-	`create index if not exists "idx_sys_role_menu_menu" on ${S}."sys_role_menu" ("menu_id")`,
+	`create index if not exists "idx_casbin_rule_v0" on ${S}."casbin_rule" ("ptype", "v0")`,
+	`create index if not exists "idx_casbin_rule_v1" on ${S}."casbin_rule" ("ptype", "v1")`,
 
 	// ── sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)────────────────
 	`create table if not exists ${S}."sys_data_policy" (

@@ -3,9 +3,10 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
 import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
+import { enforceAny, isPermissionConfigured } from "#/lib/casbin";
 import { getCurrentUser } from "#/lib/current-user";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
-import { effectiveMenusFor, PERM_BY_PATH, permMatches } from "#/lib/rbac";
+import { PERM_BY_PATH } from "#/lib/rbac";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -149,18 +150,24 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
  * 漏写一个就静默放开,而查表天然全覆盖。表里既可以写一个码,也可以写一组码(命中任一即放行,
  * 读接口被多个页面共用时用它);没有登记的接口只要求登录,由 `tests/auth.test.ts` 的分类守卫
  * 盯着(新增接口必须显式归类到 `PERM_BY_PATH` 或两个 `UNMAPPED_*` 之一)。
+ *
+ * 判决策在 `lib/casbin.ts`:`enforceAny` 对一组码逐个 `enforce`、命中任一即可 ——
+ * 与数组语义一一对应(不是"全都要")。这里不再取 `effectiveMenusFor`,因为那要**译成菜单树**,
+ * 而接口守卫只关心"这个码放不放行",少一层翻译就少一处漂移。
  */
 const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	const mapped = PERM_BY_PATH[path];
 	if (!mapped) return next();
-	const codes = typeof mapped === "string" ? [mapped] : mapped;
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	// 超级管理员短路 —— 测试与脚本注入的用户走这条(HTTP 路径拿不到注入,见上面 `requireUser` 的注释)
 	if (user?.isSuper) return next();
-	const { perms } = await effectiveMenusFor(user?.id ?? null);
-	// `perms === null` = 权限体系未启用(菜单表是空的)⇒ 一律放行,与前端 `useHasPerm` 同口径
-	if (perms === null) return next();
-	const hit = perms.some((pattern) => codes.some((code) => permMatches(pattern, code)));
-	if (!hit) throw new TRPCError({ code: "FORBIDDEN", message: `没有权限:${codes.join(" 或 ")}` });
+	// `p` 行一条都没有 = 权限体系未启用 ⇒ 一律放行,与前端 `useHasPerm` 同口径
+	if (!(await isPermissionConfigured())) return next();
+	const codes = typeof mapped === "string" ? [mapped] : mapped;
+	// 认不到人时失败关闭(`enforceAny` 拿空主体必然不命中);正常路径上 `requireUser` 已保证有用户
+	if (!user || !(await enforceAny(user.id, codes))) {
+		throw new TRPCError({ code: "FORBIDDEN", message: `没有权限:${codes.join(" 或 ")}` });
+	}
 	return next();
 });
 

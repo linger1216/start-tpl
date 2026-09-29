@@ -412,8 +412,8 @@ function UsersPage() {
 
 | 页面 | 路由 | 数据来源 | 演示的骨架 |
 | --- | --- | --- | --- |
-| 用户管理 | `/settings/users` | `sys_user` + `sys_user_role` + `sys_user_dept` | 台账 CRUD + 角色 / 部门分配 |
-| 角色管理 | `/settings/roles` | `sys_role` + `sys_role_menu` | 台账 CRUD + 权限树勾选(`PermissionTree`) |
+| 用户管理 | `/settings/users` | `sys_user` + `sys_user_dept` + `casbin_rule`(`g` 行) | 台账 CRUD + 角色 / 部门分配 |
+| 角色管理 | `/settings/roles` | `sys_role` + `casbin_rule`(`p` / `g` 行) | 台账 CRUD + 权限树勾选(`PermissionTree`) |
 | 部门管理 | `/settings/departments` | `sys_dept` + `sys_user_dept` | 可拖拽树 + 成员管理 |
 | 菜单管理 | `/settings/menus` | `sys_menu` | 可排序树 + 右侧编辑表单(改完即时生效) |
 | 字典管理 | `/settings/dictionary` | `sys_dict` | 字典 CRUD + 条目编辑 |

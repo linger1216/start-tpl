@@ -21,8 +21,9 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
-import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept, sysUserRole } from "#/db/data-base-schema";
+import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { auth } from "#/lib/auth";
+import { allUserRoles, removeAllRolesOfUser, roleCodesOf, setUserRoles } from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
 import { dataScopeWhere, revokeUser } from "#/lib/data-policy";
 import { newId } from "#/lib/ids";
@@ -41,7 +42,7 @@ export const userRouter = createTRPCRouter({
 
 		const users = await db.select().from(sysUser).where(scopeWhere).orderBy(asc(sysUser.name), asc(sysUser.email));
 		// 「属于哪些部门」和「有哪些角色」是两件事:前者是组织架构(sys_user_dept),
-		// 后者是全局角色(sys_user_role)。各查一次再按 user 归组,依旧不 N+1。
+		// 后者是全局角色(casbin_rule 的 `g` 行)。各查一次再按 user 归组,依旧不 N+1。
 		const memberships = await db
 			.select({
 				userId: sysUserDept.user_id,
@@ -50,10 +51,10 @@ export const userRouter = createTRPCRouter({
 			})
 			.from(sysUserDept)
 			.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id));
-		const roleRows = await db
-			.select({ userId: sysUserRole.user_id, roleId: sysUserRole.role_id, roleName: sysRole.name })
-			.from(sysUserRole)
-			.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id));
+		// 策略表里存的是**角色 code**,所以这里要拿 code 回 `sys_role` 换 id 与名字(一次查全,按 code 索引)
+		const memberRows = await allUserRoles();
+		const roles = await db.select({ id: sysRole.id, code: sysRole.code, name: sysRole.name }).from(sysRole);
+		const roleByCode = new Map(roles.map((row) => [row.code, row]));
 		const groupBy = (rows: Array<{ userId: string; value: string }>) => {
 			const map = new Map<string, string[]>();
 			for (const row of rows) {
@@ -65,8 +66,13 @@ export const userRouter = createTRPCRouter({
 		};
 		const departmentOf = groupBy(memberships.map((row) => ({ userId: row.userId, value: row.departmentName })));
 		const departmentIdOf = groupBy(memberships.map((row) => ({ userId: row.userId, value: row.departmentId })));
-		const roleNameOf = groupBy(roleRows.map((row) => ({ userId: row.userId, value: row.roleName })));
-		const roleIdOf = groupBy(roleRows.map((row) => ({ userId: row.userId, value: row.roleId })));
+		// 认不出的 code(角色刚被删、`g` 行还没清干净)直接跳过 —— 与装载时「跳过孤儿菜单」同一口径
+		const known = memberRows.flatMap((row) => {
+			const role = roleByCode.get(row.roleCode);
+			return role ? [{ userId: row.userId, id: role.id, name: role.name }] : [];
+		});
+		const roleNameOf = groupBy(known.map((row) => ({ userId: row.userId, value: row.name })));
+		const roleIdOf = groupBy(known.map((row) => ({ userId: row.userId, value: row.id })));
 		return users.map((row) => ({
 			// 与 sys_user 的列一一对应(账号字段归 Better Auth,这里是只读镜像)
 			id: row.id,
@@ -146,13 +152,11 @@ export const userRouter = createTRPCRouter({
 			}
 
 			const roleIds = [...new Set(input.roleIds)];
-			const knownRoles = roleIds.length
-				? new Set(
-						(await db.select({ id: sysRole.id }).from(sysRole).where(inArray(sysRole.id, roleIds))).map(
-							(row) => row.id,
-						),
-					)
-				: new Set<string>();
+			// 策略表里存的是**角色 code**,所以这里连 code 一起取回来(验的还是**角色 id**)
+			const roleRows = roleIds.length
+				? await db.select({ id: sysRole.id, code: sysRole.code }).from(sysRole).where(inArray(sysRole.id, roleIds))
+				: [];
+			const knownRoles = new Set(roleRows.map((row) => row.id));
 			// 显式报错,不静默丢弃未知 id
 			const unknownRoles = roleIds.filter((id) => !knownRoles.has(id));
 			if (unknownRoles.length > 0) {
@@ -161,6 +165,8 @@ export const userRouter = createTRPCRouter({
 					message: `这些角色不存在(可能刚被删掉):${unknownRoles.join("、")}`,
 				});
 			}
+			// 去重后交给 `setUserRoles`(全量替换)—— 顺序按传进来的顺序,与旧行为一致
+			const roleCodes = [...new Set(roleRows.map((row) => row.code))];
 
 			const departmentIds = [...new Set(input.departmentIds)];
 			const knownDepartments = departmentIds.length
@@ -177,13 +183,6 @@ export const userRouter = createTRPCRouter({
 					message: `这些部门不存在(可能刚被删掉):${unknownDepartments.join("、")}`,
 				});
 			}
-
-			const existingRoles = await db
-				.select({ id: sysUserRole.id, roleId: sysUserRole.role_id })
-				.from(sysUserRole)
-				.where(eq(sysUserRole.user_id, input.id));
-			const wantedRoles = new Set(roleIds);
-			const haveRoles = new Set(existingRoles.map((row) => row.roleId));
 
 			const existingDepts = await db
 				.select({ id: sysUserDept.id, departmentId: sysUserDept.department_id })
@@ -205,19 +204,9 @@ export const userRouter = createTRPCRouter({
 						updatedAt: new Date(),
 					})
 					.where(eq(sysUser.id, input.id));
-				for (const row of existingRoles.filter((item) => !wantedRoles.has(item.roleId))) {
-					await tx.delete(sysUserRole).where(eq(sysUserRole.id, row.id));
-				}
-				for (const roleId of roleIds) {
-					if (haveRoles.has(roleId)) continue;
-					await tx.insert(sysUserRole).values({
-						id: newId(),
-						user_id: input.id,
-						role_id: roleId,
-						create_time: new Date(),
-						update_time: new Date(),
-					});
-				}
+				// 角色**全量替换**,并把 `tx` 传进去 —— 与账号列 / 部门共用一个事务
+				// (策略写入自己再开一个事务会与这个事务互相等锁)
+				await setUserRoles(input.id, roleCodes, tx);
 				for (const row of existingDepts.filter((item) => !wantedDepts.has(item.departmentId))) {
 					await tx.delete(sysUserDept).where(eq(sysUserDept.id, row.id));
 				}
@@ -254,20 +243,22 @@ export const userRouter = createTRPCRouter({
 		await db.delete(sysSession).where(eq(sysSession.userId, input.id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, input.id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, input.id));
-		await db.delete(sysUserRole).where(eq(sysUserRole.user_id, input.id));
+		// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
+		await removeAllRolesOfUser(input.id);
 		// 人没了,指名给他的数据授权也没意义了(部门 / 角色规则不归他,不动)
 		await revokeUser(input.id);
 		await db.delete(sysUser).where(eq(sysUser.id, input.id));
 		return { id: input.id, success: true };
 	}),
 
-	/** 这个人的所有角色(全局 —— 与部门无关,见 sys_user_role) */
+	/** 这个人的所有角色(全局 —— 与部门无关,成员关系在 `casbin_rule` 的 `g` 行) */
 	roles: protectedProcedure.input(z.object({ userId: z.string().min(1) })).query(async ({ input }) => {
+		const codes = await roleCodesOf(input.userId);
+		if (codes.length === 0) return [];
 		return db
-			.select({ roleId: sysUserRole.role_id, roleName: sysRole.name })
-			.from(sysUserRole)
-			.innerJoin(sysRole, eq(sysRole.id, sysUserRole.role_id))
-			.where(eq(sysUserRole.user_id, input.userId))
+			.select({ roleId: sysRole.id, roleName: sysRole.name })
+			.from(sysRole)
+			.where(inArray(sysRole.code, codes))
 			.orderBy(asc(sysRole.sort), asc(sysRole.name));
 	}),
 });
