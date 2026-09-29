@@ -231,7 +231,7 @@ cp .env.example .env.local
 | 变量 | 必需 | 说明 |
 | --- | --- | --- |
 | `DATABASE_URL` | **是** | `mysql://user:pass@host:3306/db` 或 `dm://user:pass@host:5236?schema=eg`(协议决定用哪个驱动)。`src/db/index.ts` 与 `drizzle.config.ts` 在缺失时**直接抛错** |
-| `BETTER_AUTH_URL` | 否 | 默认 `http://localhost:3000` |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | 否 | **额外**放行的 origin,逗号分隔。代码内置 `http://localhost:3000`、`http://localhost:4811`;portless 用 `https://*.localhost`,自建域名写全量 origin。通配符只匹配单段主机名(见 `src/lib/auth.ts` 的注释) |
 | `BETTER_AUTH_SECRET` | 否 | 用 `pnpm dlx @better-auth/cli secret` 生成 |
 | `VITE_SENTRY_DSN` | 否 | 留空则不启用 Sentry(`instrument.server.mjs` 打印一条提示)。只有这一个键:**没有** source map 上传 |
 | `VITE_TRPC_STREAM` | 否 | 设 `1` 换成流式(`httpBatchStreamLink`);留空用非流式,响应是完整 JSON,DevTools 里能直接读 |
@@ -245,14 +245,14 @@ cp .env.example .env.local
 `pnpm dev` 用 `dotenv -e .env.local` 显式加载;`pnpm start` **不加载任何 env 文件** —— 生产的环境变量必须由平台 / 容器注入。本地验证生产产物要先 `export`:
 
 ```bash
-export DATABASE_URL='mysql://user:pass@host:3306/db' BETTER_AUTH_URL='https://your.domain' BETTER_AUTH_SECRET='...'
+export DATABASE_URL='mysql://user:pass@host:3306/db' BETTER_AUTH_TRUSTED_ORIGINS='https://your.domain' BETTER_AUTH_SECRET='...'
 pnpm build && pnpm start
 ```
 
 两种缺配置的表现(都实测过):
 
 - **缺 `DATABASE_URL`** —— `src/db/index.ts` 在**模块导入时**就抛错,依赖库的页面(如 `/settings/menus`)会落到路由错误边界,而不是页面内那个"数据库不可用"的降级面板。
-- **缺 `BETTER_AUTH_URL`** —— Better Auth 首次请求时打印 `Base URL is not set` 警告;baseURL 会改为从请求头推导,回调和重定向可能不正确。生产务必显式设置。
+- **缺 `BETTER_AUTH_TRUSTED_ORIGINS`** —— 不算错:代码内置了两条 localhost,线上把自建域名漏进白名单时,表现是登录 POST 被拦成 `403` 并在服务端打 `Invalid origin: <origin>`(这条日志就是排查入口)。
 
 ---
 
@@ -429,7 +429,30 @@ function UsersPage() {
 
 ## 派生新项目
 
-> ⚠️ 本 README 早先描述的 `new-project.sh` 在当前工作区里**不存在**(可能随仓库分发、未随目录带过来)。没有它也不影响:直接 `cp -r` 整个目录 → 改 `package.json` 的 `name` → 删掉 `.env.local` 即可。模板没有任何"必须由脚本生成"的东西。
+模板自带 `new-project.sh`(在仓库根目录),按下面的方式派生一个干净的新项目:
+
+```bash
+./new-project.sh my-app              # 派生到 ../my-app
+./new-project.sh my-app --into ~/src # 指定父目录
+./new-project.sh my-app --strict     # 模板有未提交改动时直接中止
+```
+
+它做的事(都是纯文件操作,没有代码生成):
+
+| 步骤 | 行为 |
+| --- | --- |
+| 名称规范化 | `My Cool APP!!` → `my-cool-app`(会提示已规范化) |
+| 目标已存在 | 报 `Error: 目标已存在: <path>` 并 exit 1,**绝不覆盖** |
+| 同名校验 | 只在**同一父目录**下才拦你(比较的是绝对路径,换个 `--into` 就能同名) |
+| 复制 | rsync 主路径,失败回落到 `find`;排除 `node_modules` / `.git` / `.output` / `dist` / `.vite` / `.tanstack` / `.turbo` / `coverage` / `new-project.sh` / 真实 `.env*` |
+| 带走的东西 | `.env.example`(**唯一的 env 文件**)、`pnpm-lock.yaml`(让 `pnpm install` 命中锁) |
+| 改写 | `package.json` 的 `name`、`.cta.json` 的 `projectName` |
+| 生成 env | 由 `.env.example` 复制出 `.env.local`,随机填 32 字节 base64 的 `BETTER_AUTH_SECRET`,权限 600 |
+| 修权限 | 模板里 600 的文件归一成 644(否则新项目里 Git 会不认识) |
+
+`--strict` 的两种边界:模板有未提交改动 → 列出脏文件并中止;模板**不是 git 仓库** → 打印「无从判断'未提交改动',本次已跳过该检查」而不是静默跳过。
+
+不想用脚本也行:`cp -r` 整个目录 → 改 `package.json` 的 `name` → 删掉 `.env.local`。模板没有任何"必须由脚本生成"的东西。
 
 ### 派生时删什么
 
@@ -558,6 +581,7 @@ pnpm check
 
 项目内文档:
 
+- `doc/后端代码导读.md` —— **后端代码怎么读**:目录结构 → 设计理念 → 公共路由与对外入口 → tRPC 中间件链 → 数据层 → lib 模块地图 + 三条阅读路线(要通读后端就从这份开始)
 - `doc/界面约定.md` —— **版式骨架 + 目录与文件角色约定、公共复用件与封装边界(必读)**
 - `doc/后端接口约定.md` —— 接口口径:一件只允许一个实现、批与单、列表四种形状、权限与审计、自检清单
 - `doc/rbac-权限模型.md` —— 菜单可见 → 页面级拦截 → 行级数据权限(casbin 规则)三层,含直白授权口径与排查 SQL

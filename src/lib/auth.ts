@@ -7,6 +7,46 @@ import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base
 import { userSwitchPlugin } from "#/lib/auth-debug";
 
 /**
+ * Better Auth 的 origin 校验白名单。
+ *
+ * 浏览器 POST `/api/auth/*` 时,Better Auth 会比请求 `Origin` 头和这个列表:
+ * - 不在列表里 → `Invalid origin: <origin>` → 403(也就是 portless 的
+ *   `https://xxx.localhost`、自定义域名、自定义端口等场景的报错来源)
+ * - 在列表里 → 放行
+ *
+ * 默认列表:
+ * - `http://localhost:3000`:`pnpm dev` 默认端口(直连)
+ * - `http://localhost:4811`:`pnpm dev` 在 3000 被占时 Vite 飘到的端口(常见;
+ *   portless 自己也会挑端口)
+ *
+ * 端口形如 `http://localhost:4811` 已经够用,**不需要** `localhost:3000` 这种单值
+ * 列举若干端口 —— 后续 `BETTER_AUTH_TRUSTED_ORIGINS` 才是扩展入口。
+ *
+ * better-auth 1.7.4 的 `matchesOriginPattern`:
+ * - 形如 `https://*.localhost`(含 `://` 与 `*`)→ 通配单段主机名;`**` 才能跨段。
+ * - 因此 `https://*.localhost` 能覆盖 portless 的所有 `https://xxx.localhost`。
+ * - 没有 `://` 的纯主机 glob(`*.localhost`)只比 host 不比 scheme,**不建议**用。
+ */
+const DEFAULT_TRUSTED_ORIGINS = ["http://localhost:3000", "https://*.localhost"];
+
+function loadTrustedOrigins(): string[] {
+	const extra = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+	// 去重 + 保序,避免相同 origin 在列表里出现两次。
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const o of [...DEFAULT_TRUSTED_ORIGINS, ...extra]) {
+		if (!seen.has(o)) {
+			seen.add(o);
+			out.push(o);
+		}
+	}
+	return out;
+}
+
+/**
  * Better Auth 服务端实例 —— 认证的唯一入口。
  *
  * 本文件**只跑在服务端**:
@@ -48,6 +88,7 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 	},
+	trustedOrigins: loadTrustedOrigins(),
 	// `userSwitchPlugin` = 运维用的「切换用户」端点(见 lib/auth-debug.ts 的注释:为什么必须是插件)
 	plugins: [tanstackStartCookies(), userSwitchPlugin()],
 });
