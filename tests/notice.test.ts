@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysNotice } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
 import { notify } from "../src/lib/notice.ts";
-import { TEST_USER, anonymousCaller, assertRejects, caller, closeDb, uniqueSuffix } from "./helpers.ts";
+import { anonymousCaller, assertRejects, caller, closeDb, TEST_USER, uniqueSuffix } from "./helpers.ts";
 
 /**
  * 站内通知。最关键的一条是**越权**:B 看不到、也改不动 A 的通知 ——

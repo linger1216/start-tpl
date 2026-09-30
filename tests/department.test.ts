@@ -13,9 +13,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-
+import { sysDept, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { sysDept, sysUserDept, sysUser } from "../src/db/data-base-schema.ts";
 import { newId } from "../src/lib/ids.ts";
 import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
@@ -34,7 +33,6 @@ async function makeUser(label: string): Promise<string> {
 	userIds.push(id);
 	return id;
 }
-
 
 after(async () => {
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));

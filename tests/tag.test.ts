@@ -12,10 +12,9 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysTag } from "../src/db/data-base-schema.ts";
-import { assertNanoid, assertRejects, caller, TEST_PREFIX, uniqueSuffix, closeDb } from "./helpers.ts";
+import { db } from "../src/db/index.ts";
+import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const DIM_LABEL = `${TEST_PREFIX}维度_${SUFFIX}`;
@@ -57,17 +56,19 @@ test("建维度:主键是 nanoid", async () => {
 
 test("建标签:挂在维度下,parent_id 是维度的 nanoid", async () => {
 	assert.ok(created.dimId, "上一条用例应先建好维度");
-	const tag = await caller.tag.create({ parentId: created.dimId, label: TAG_LABEL, value: TAG_LABEL, desc: "集成测试标签" });
+	const tag = await caller.tag.create({
+		parentId: created.dimId,
+		label: TAG_LABEL,
+		value: TAG_LABEL,
+		desc: "集成测试标签",
+	});
 	created.tagId = tag.id;
 	assertNanoid(tag.id, "标签 id");
 	assert.equal(tag.parentId, created.dimId);
 });
 
 test("同一父下不允许重名", async () => {
-	await assertRejects(
-		() => caller.tag.create({ parentId: created.dimId ?? null, label: TAG_LABEL }),
-		"已经有",
-	);
+	await assertRejects(() => caller.tag.create({ parentId: created.dimId ?? null, label: TAG_LABEL }), "已经有");
 });
 
 test("list 拿得到两级节点", async () => {

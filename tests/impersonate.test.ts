@@ -15,9 +15,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { and, eq, inArray } from "drizzle-orm";
-
+import { sysAccount, sysCasbinRule, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { sysCasbinRule, sysAccount, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
@@ -123,9 +122,7 @@ async function grantImpersonate(userId: string): Promise<void> {
 
 /** 把某人的「切换用户」授权撤掉(删掉那条用户-角色关联)—— 验证例外不会变成永久通行证 */
 async function revokeImpersonate(userId: string): Promise<void> {
-	await db
-		.delete(sysCasbinRule)
-		.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${userId}`)));
+	await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${userId}`)));
 	clearCasbinCache();
 }
 
@@ -151,11 +148,15 @@ after(async () => {
 		await cleanupStep("删除会话", () => db.delete(sysSession).where(inArray(sysSession.userId, createdUserIds)));
 		await cleanupStep("删除 account", () => db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds)));
 		await cleanupStep("删除 user_role", () =>
-			db
-				.delete(sysCasbinRule)
-				.where(
-					and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, createdUserIds.map((userId) => `user:${userId}`))),
+			db.delete(sysCasbinRule).where(
+				and(
+					eq(sysCasbinRule.ptype, "g"),
+					inArray(
+						sysCasbinRule.v0,
+						createdUserIds.map((userId) => `user:${userId}`),
+					),
 				),
+			),
 		);
 	}
 	if (createdRoleIds.length > 0) {
@@ -256,7 +257,7 @@ test("切换用户:切成没有该权限的人之后,仍然能切回原身(否�
 		asResponse: true,
 	});
 	assert.equal(onward.status, 200, "原身份有权限时,可以继续切到别人");
-	
+
 	// 强不变量:把原身份的权限**撤掉**,例外就只剩「切回原身」,不能再切别人
 	await revokeImpersonate(operator.id);
 	const denied = await auth.api.switchUser({

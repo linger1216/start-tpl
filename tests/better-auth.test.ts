@@ -15,9 +15,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { eq } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysAccount, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
 import { closeDb, TEST_PREFIX } from "./helpers.ts";
 
@@ -67,14 +66,15 @@ test("注册:落 user 行 + credential 账号行,密码是哈希不是明文", a
 
 test("登录:生成 session 行,token 与 cookie 一致", async () => {
 	const stored = await findUser();
+	assert.ok(stored, "user 表里应有这一行");
 	// 注意:`signUpEmail` 会自动签一次(顺手建了会话),所以这里断言"增量 +1"而不是"恰好 1 条"
-	const beforeCount = (await db.select().from(sysSession).where(eq(sysSession.userId, stored!.id))).length;
+	const beforeCount = (await db.select().from(sysSession).where(eq(sysSession.userId, stored.id))).length;
 
 	const res = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true });
 	const cookie = cookieOf(res.headers as Headers);
 	assert.ok(cookie, "登录应下发 session cookie");
 
-	const sessions = await db.select().from(sysSession).where(eq(sysSession.userId, stored!.id));
+	const sessions = await db.select().from(sysSession).where(eq(sysSession.userId, stored.id));
 	assert.equal(sessions.length, beforeCount + 1, "登录应新增一条会话");
 	// 时间往返:DDL 是 datetime,驱动 + drizzle 要解成 Date
 	assert.ok(sessions[0]?.expiresAt instanceof Date, `expiresAt 应是 Date,实际 ${typeof sessions[0]?.expiresAt}`);
@@ -83,7 +83,9 @@ test("登录:生成 session 行,token 与 cookie 一致", async () => {
 	// 「拿回来的是 BA 的会话 cookie 且非空」;"这个 cookie 确实对应这条会话"由下面那条
 	// getSession 用例负责(它才是端到端证据)。
 	assert.match(cookie, /session_token=/, `应是 BA 的会话 cookie,实际:${cookie.slice(0, 40)}`);
-	assert.ok(sessions[0]!.token.length > 10, "库里应存了会话 token");
+	const first = sessions[0];
+	assert.ok(first, "应能查回这条会话");
+	assert.ok(first.token.length > 10, "库里应存了会话 token");
 });
 
 test("取会话:带 cookie 能拿到当前用户", async () => {
@@ -96,14 +98,15 @@ test("取会话:带 cookie 能拿到当前用户", async () => {
 
 test("密码错误:被拒且不新增会话", async () => {
 	const before = await findUser();
-	const beforeSessions = await db.select().from(sysSession).where(eq(sysSession.userId, before!.id));
+	assert.ok(before, "user 表里应有这一行");
+	const beforeSessions = await db.select().from(sysSession).where(eq(sysSession.userId, before.id));
 
 	await assert.rejects(
 		() => auth.api.signInEmail({ body: { email: EMAIL, password: "wrong-password-xxx" } }),
 		"错密码应抛错",
 	);
 
-	const afterSessions = await db.select().from(sysSession).where(eq(sysSession.userId, before!.id));
+	const afterSessions = await db.select().from(sysSession).where(eq(sysSession.userId, before.id));
 	assert.equal(afterSessions.length, beforeSessions.length, "失败的登录不应留下会话");
 });
 
@@ -112,12 +115,13 @@ test("登出:会话从库里消失", async () => {
 	const headers = new Headers({ cookie: cookieOf(signIn.headers as Headers) });
 
 	const stored = await findUser();
-	const before = await db.select().from(sysSession).where(eq(sysSession.userId, stored!.id));
+	assert.ok(stored, "user 表里应有这一行");
+	const before = await db.select().from(sysSession).where(eq(sysSession.userId, stored.id));
 	assert.ok(before.length >= 1, "登出前应至少有一条会话(注册/登录留下的)");
 
 	await auth.api.signOut({ headers });
 
-	const afterSignOut = await db.select().from(sysSession).where(eq(sysSession.userId, stored!.id));
+	const afterSignOut = await db.select().from(sysSession).where(eq(sysSession.userId, stored.id));
 	assert.equal(afterSignOut.length, before.length - 1, "登出应恰好删掉这一条会话");
 	assert.equal(await auth.api.getSession({ headers }), null, "登出后原 cookie 应取不到会话");
 });

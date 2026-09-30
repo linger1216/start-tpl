@@ -18,9 +18,8 @@
 import "dotenv/config";
 
 import { eq, sql } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysPara } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
 import { PARA_TYPE, type ParaType, validateParaValue } from "../src/lib/para-spec.ts";
 
@@ -116,20 +115,34 @@ console.log("── 2) sys_dict: 补 code 列 + id → nanoid ──");
 if (!(await columns("sys_dict")).has("code")) {
 	// 旧库没有 code:先加列(允许为空),把旧 id 回填进去,再由下面的迁移保证非空
 	await db.execute(
-		sql.raw("alter table `sys_dict` add column `code` varchar(64) character set utf8mb4 collate utf8mb4_unicode_ci null comment '字典编码(业务键)' after `id`"),
+		sql.raw(
+			"alter table `sys_dict` add column `code` varchar(64) character set utf8mb4 collate utf8mb4_unicode_ci null comment '字典编码(业务键)' after `id`",
+		),
 	);
 	console.log("✓ 已新增 sys_dict.code 列");
 }
 await db.execute(sql.raw("update `sys_dict` set `code` = `id` where `code` is null or `code` = ''"));
 console.log("  ", await migrateIds({ table: "sys_dict" }));
-await db.execute(sql.raw("alter table `sys_dict` modify column `code` varchar(64) character set utf8mb4 collate utf8mb4_unicode_ci not null comment '字典编码(业务键)'"));
+await db.execute(
+	sql.raw(
+		"alter table `sys_dict` modify column `code` varchar(64) character set utf8mb4 collate utf8mb4_unicode_ci not null comment '字典编码(业务键)'",
+	),
+);
 
 console.log("── 3) sys_tag: id / parent_id → nanoid ──");
 console.log("  ", await migrateIds({ table: "sys_tag", parentColumn: "parent_id" }));
 
 console.log("── 4) 补唯一索引 ──");
-await ensureUniqueIndex("sys_dict", "uk_sys_dict_code", "alter table `sys_dict` add unique key `uk_sys_dict_code` (`code`)");
-await ensureUniqueIndex("sys_menu", "uk_sys_menu_path", "alter table `sys_menu` add unique key `uk_sys_menu_path` (`path`)");
+await ensureUniqueIndex(
+	"sys_dict",
+	"uk_sys_dict_code",
+	"alter table `sys_dict` add unique key `uk_sys_dict_code` (`code`)",
+);
+await ensureUniqueIndex(
+	"sys_menu",
+	"uk_sys_menu_path",
+	"alter table `sys_menu` add unique key `uk_sys_menu_path` (`path`)",
+);
 
 // ── 5) 修 para_type:类型码装不下自己的值 → 按值重新推断 ──
 console.log("── 5) 修正 sys_para.para_type 与值不匹配的行 ──");

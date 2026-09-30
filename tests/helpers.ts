@@ -16,24 +16,24 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, lt } from "drizzle-orm";
 
 import {
-	sysCasbinRule,
 	sysAccount,
+	sysCasbinRule,
 	sysDept,
-	sysUserDept,
 	sysDict,
+	sysLog,
 	sysMenu,
 	sysPara,
 	sysRole,
-	sysLog,
 	sysSession,
 	sysTag,
 	sysUser,
+	sysUserDept,
 } from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
-import { flushAuditWrites } from "../src/lib/audit.ts";
-import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
+import { flushAuditWrites } from "../src/lib/audit.ts";
+import { clearCasbinCache } from "../src/lib/casbin.ts";
 
 /** 测试数据统一前缀:方便一眼认出、也方便误留时清理 */
 export const TEST_PREFIX = "__test__";
@@ -47,7 +47,9 @@ export const TEST_PREFIX = "__test__";
  */
 export function uniqueSuffix(): string {
 	const t = Date.now().toString(36).padStart(8, "0").slice(-8);
-	const r = Math.floor(Math.random() * 1296).toString(36).padStart(2, "0");
+	const r = Math.floor(Math.random() * 1296)
+		.toString(36)
+		.padStart(2, "0");
 	return t + r;
 }
 
@@ -183,7 +185,13 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		await db.delete(sysSession).where(inArray(sysSession.userId, ids));
 		await db.delete(sysAccount).where(inArray(sysAccount.userId, ids));
 		await db.delete(sysCasbinRule).where(
-			and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, ids.map((id) => `user:${id}`))),
+			and(
+				eq(sysCasbinRule.ptype, "g"),
+				inArray(
+					sysCasbinRule.v0,
+					ids.map((id) => `user:${id}`),
+				),
+			),
 		);
 		await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, ids));
 		await db.delete(sysUser).where(inArray(sysUser.id, ids));
@@ -212,7 +220,13 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	if (staleMenus.length > 0) {
 		const ids = staleMenus.map((row) => row.id);
 		await db.delete(sysCasbinRule).where(
-			and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v1, ids.map((id) => `menu:${id}`))),
+			and(
+				eq(sysCasbinRule.ptype, "p"),
+				inArray(
+					sysCasbinRule.v1,
+					ids.map((id) => `menu:${id}`),
+				),
+			),
 		);
 		await db.delete(sysMenu).where(inArray(sysMenu.id, ids));
 		removed += ids.length;
@@ -263,18 +277,25 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		await db.select({ key: sysPara.para_key }).from(sysPara).where(lt(sysPara.create_time, cutoff))
 	).filter((row) => startsWithPrefix(row.key));
 	if (staleParas.length > 0) {
-		await db.delete(sysPara).where(inArray(sysPara.para_key, staleParas.map((row) => row.key)));
+		await db.delete(sysPara).where(
+			inArray(
+				sysPara.para_key,
+				staleParas.map((row) => row.key),
+			),
+		);
 		removed += staleParas.length;
 	}
 
 	const staleDicts = (
-		await db
-			.select({ code: sysDict.code, name: sysDict.name })
-			.from(sysDict)
-			.where(lt(sysDict.create_time, cutoff))
+		await db.select({ code: sysDict.code, name: sysDict.name }).from(sysDict).where(lt(sysDict.create_time, cutoff))
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleDicts.length > 0) {
-		await db.delete(sysDict).where(inArray(sysDict.code, staleDicts.map((row) => row.code)));
+		await db.delete(sysDict).where(
+			inArray(
+				sysDict.code,
+				staleDicts.map((row) => row.code),
+			),
+		);
 		removed += staleDicts.length;
 	}
 
@@ -282,7 +303,12 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		await db.select({ id: sysTag.id, label: sysTag.label }).from(sysTag).where(lt(sysTag.create_time, cutoff))
 	).filter((row) => startsWithPrefix(row.label));
 	if (staleTags.length > 0) {
-		await db.delete(sysTag).where(inArray(sysTag.id, staleTags.map((row) => row.id)));
+		await db.delete(sysTag).where(
+			inArray(
+				sysTag.id,
+				staleTags.map((row) => row.id),
+			),
+		);
 		removed += staleTags.length;
 	}
 

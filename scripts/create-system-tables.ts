@@ -236,10 +236,10 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_casbin_rule_v1\` (\`ptype\`, \`v1\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '功能权限策略(Casbin;判定与存储同一处,见 src/lib/casbin.ts)'`,
 	},
-/** 文件元数据(字节存 MinIO;见 doc/文件管理.md) */
-  {
-    name: "sys_file",
-    ddl: `create table if not exists \`sys_file\` (
+	/** 文件元数据(字节存 MinIO;见 doc/文件管理.md) */
+	{
+		name: "sys_file",
+		ddl: `create table if not exists \`sys_file\` (
       \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
       \`bucket\` varchar(64) collate utf8mb4_unicode_ci not null comment '桶名(app-public 公开 / app-private 私有)',
       \`object_key\` varchar(512) collate utf8mb4_unicode_ci not null comment '对象键:{yyyy}/{MM}/{nanoid}.{ext}',
@@ -256,11 +256,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
       key \`idx_sys_file_status\` (\`status\`, \`create_time\`),
       key \`idx_sys_file_hash\` (\`hash\`)
     ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '文件元数据(字节存 MinIO,见 doc/文件管理.md)'`,
-  },
-/** 审计日志(谁在什么时候对什么做了什么;只增不改,见 doc/审计日志.md) */
-{
-	name: "sys_log",
-	ddl: `create table if not exists \`sys_log\` (
+	},
+	/** 审计日志(谁在什么时候对什么做了什么;只增不改,见 doc/审计日志.md) */
+	{
+		name: "sys_log",
+		ddl: `create table if not exists \`sys_log\` (
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
     \`trace_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '与后端日志同值的追踪号',
     \`path\` varchar(64) collate utf8mb4_unicode_ci not null comment 'tRPC 路径(如 role.create)',
@@ -281,11 +281,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_sys_log_operator\` (\`operator_id\`, \`create_time\`),
     key \`idx_sys_log_path\` (\`path\`, \`create_time\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '审计日志(只增不改;见 doc/审计日志.md)'`,
-},
-/** 站内通知(一条通知一个收件人;已读 = read_at,见 doc/通知中心.md) */
-{
-	name: "sys_notice",
-	ddl: `create table if not exists \`sys_notice\` (
+	},
+	/** 站内通知(一条通知一个收件人;已读 = read_at,见 doc/通知中心.md) */
+	{
+		name: "sys_notice",
+		ddl: `create table if not exists \`sys_notice\` (
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
     \`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '收件人 id',
     \`title\` varchar(128) collate utf8mb4_unicode_ci not null comment '标题',
@@ -297,11 +297,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     primary key (\`id\`),
     key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`create_time\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '站内通知(一条一个收件人,见 doc/通知中心.md)'`,
-},
-/** Demo:综合网格履职(见 doc/测试数据/README.md) */
-{
-	name: "demo_grid",
-	ddl: `create table if not exists \`demo_grid\` (
+	},
+	/** Demo:综合网格履职(见 doc/测试数据/README.md) */
+	{
+		name: "demo_grid",
+		ddl: `create table if not exists \`demo_grid\` (
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
     \`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '网格名称(片区名)',
     \`town_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇(文本)',
@@ -318,8 +318,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_demo_grid_group\` (\`group_id\`),
     key \`idx_demo_grid_owner\` (\`owner_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = 'Demo:综合网格履职'`,
-},
-];;
+	},
+];
 
 /**
  * **老库改表名** —— 必须跑在**建表之前**,否则必然失效:
@@ -341,9 +341,7 @@ const TABLE_RENAMES: Array<{ from: string; to: string }> = [
 
 for (const rename of TABLE_RENAMES) {
 	const present = (
-		await db.execute(
-			sql`select table_name as name from information_schema.tables where table_schema = database()`,
-		)
+		await db.execute(sql`select table_name as name from information_schema.tables where table_schema = database()`)
 	)[0] as unknown as Array<{ name: string }>;
 	const names = new Set(present.map((row) => row.name));
 	if (!names.has(rename.from)) {

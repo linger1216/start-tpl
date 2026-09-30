@@ -5,8 +5,8 @@ import { inArray, sql } from "drizzle-orm";
 
 import { sysLog } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { type LogLine, collectLogs, logger, sanitize } from "../src/lib/logger.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
+import { collectLogs, type LogLine, logger, sanitize } from "../src/lib/logger.ts";
 import { anonymousCaller, caller, closeDb } from "./helpers.ts";
 
 /**
@@ -76,10 +76,7 @@ const countOf = (lines: LogLine[], event: string) => lines.filter((line) => line
 async function purgeAuditRows(traceIds: string[]): Promise<number> {
 	for (let attempt = 0; attempt < 10; attempt += 1) {
 		await db.delete(sysLog).where(inArray(sysLog.trace_id, traceIds));
-		const [row] = await db
-			.select({ n: sql<number>`count(*)` })
-			.from(sysLog)
-			.where(inArray(sysLog.trace_id, traceIds));
+		const [row] = await db.select({ n: sql<number>`count(*)` }).from(sysLog).where(inArray(sysLog.trace_id, traceIds));
 		const left = Number(row?.n ?? 0);
 		if (left === 0) return 0;
 		await new Promise((resolve) => setTimeout(resolve, 100));

@@ -68,9 +68,7 @@ async function main() {
 	})) as unknown as { getConnection: (cb: (e: unknown, c: Conn) => void) => void; close: () => Promise<void> };
 
 	const withConn = async <T>(fn: (conn: Conn) => Promise<T>): Promise<T> => {
-		const conn = await new Promise<Conn>((res, rej) =>
-			pool.getConnection((e, c) => (e ? rej(e as Error) : res(c))),
-		);
+		const conn = await new Promise<Conn>((res, rej) => pool.getConnection((e, c) => (e ? rej(e as Error) : res(c))));
 		try {
 			return await fn(conn);
 		} finally {
@@ -108,7 +106,8 @@ async function main() {
 				console.log(`⚠️  ${table}.${column} 不存在,跳过`);
 				continue;
 			}
-			const current = row.DATA_DEFAULT === null || row.DATA_DEFAULT === undefined ? "" : String(row.DATA_DEFAULT).trim();
+			const current =
+				row.DATA_DEFAULT === null || row.DATA_DEFAULT === undefined ? "" : String(row.DATA_DEFAULT).trim();
 			// 已经等价(不同驱动回显格式略不同,做一次宽松比较)
 			const same =
 				current !== "" &&

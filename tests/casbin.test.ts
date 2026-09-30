@@ -21,9 +21,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysCasbinRule, sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import {
 	addRoleMenus,
 	addUserRole,
@@ -116,14 +115,26 @@ async function inherit(childRoleId: string, parentRoleId: string): Promise<void>
 after(async () => {
 	// 先清策略表里指向测试数据的行,再删业务表(策略行没有外键,顺序随便,但清缓存要在最后)
 	if (menuIds.length > 0) {
-		await db
-			.delete(sysCasbinRule)
-			.where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v1, menuIds.map((id) => `menu:${id}`))));
+		await db.delete(sysCasbinRule).where(
+			and(
+				eq(sysCasbinRule.ptype, "p"),
+				inArray(
+					sysCasbinRule.v1,
+					menuIds.map((id) => `menu:${id}`),
+				),
+			),
+		);
 	}
 	if (userIds.length > 0) {
-		await db
-			.delete(sysCasbinRule)
-			.where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, userIds.map((id) => `user:${id}`))));
+		await db.delete(sysCasbinRule).where(
+			and(
+				eq(sysCasbinRule.ptype, "g"),
+				inArray(
+					sysCasbinRule.v0,
+					userIds.map((id) => `user:${id}`),
+				),
+			),
+		);
 	}
 	if (roleIds.length > 0) {
 		const subjects = roleIds.map((id) => `role:${id}`);
@@ -240,10 +251,7 @@ test("⑤ 兜底:认不出人失败关闭;isPermissionConfigured 与库里的 p 
 	assert.deepEqual(await implicitObjsOf(somebody), [], "认不出人 ⇒ 客体集合是空的");
 
 	// 未启用(库里一条 p 行都没有)的哨兵由调用方(isPermissionConfigured)负责,不吃 30 秒 TTL
-	const [row] = await db
-		.select({ n: sql<number>`count(*)` })
-		.from(sysCasbinRule)
-		.where(eq(sysCasbinRule.ptype, "p"));
+	const [row] = await db.select({ n: sql<number>`count(*)` }).from(sysCasbinRule).where(eq(sysCasbinRule.ptype, "p"));
 	assert.equal(
 		await isPermissionConfigured(),
 		Number(row?.n ?? 0) > 0,

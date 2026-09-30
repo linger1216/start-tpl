@@ -103,7 +103,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_tag_relation", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_tag_relation", column: "tag_id", comment: "标签 id → sys_tag.id(只允许叶子标签)" },
 	{ table: "sys_tag_relation", column: "obj_id", comment: "业务对象主键(字符串,兼容 nanoid / 编号)" },
-	{ table: "sys_tag_relation", column: "obj_type", comment: "业务对象类型(tinyint 码,各业务自己约定;如 1 档案 / 2 数据源)" },
+	{
+		table: "sys_tag_relation",
+		column: "obj_type",
+		comment: "业务对象类型(tinyint 码,各业务自己约定;如 1 档案 / 2 数据源)",
+	},
 	{ table: "sys_tag_relation", column: "create_time", comment: "创建时间" },
 	{ table: "sys_tag_relation", column: "update_time", comment: "更新时间" },
 	// sys_user(Better Auth 内核)
@@ -134,7 +138,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_account", column: "access_token_expires_at", comment: "访问令牌过期时间" },
 	{ table: "sys_account", column: "refresh_token_expires_at", comment: "刷新令牌过期时间" },
 	{ table: "sys_account", column: "scope", comment: "OAuth 授权范围" },
-	{ table: "sys_account", column: "password", comment: "密码哈希(better-auth 自己的 scrypt;**不可与其它系统的哈希混用**)" },
+	{
+		table: "sys_account",
+		column: "password",
+		comment: "密码哈希(better-auth 自己的 scrypt;**不可与其它系统的哈希混用**)",
+	},
 	{ table: "sys_account", column: "created_at", comment: "创建时间(better-auth 口径)" },
 	{ table: "sys_account", column: "updated_at", comment: "更新时间(better-auth 口径)" },
 	// sys_verification
@@ -259,17 +267,36 @@ const INDEX_RENAMES: Array<{ table: string; from: string; to: string }> = [
  * 现在 `buildMySqlColumnDef()` 会保留 `EXTRA`,不会再制造新的同类损坏。
  */
 const COLUMN_REPAIRS: Array<{ table: string; column: string; ddl: string }> = [
-	{ table: "sys_menu", column: "update_time", ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)" },
-	{ table: "sys_dict", column: "update_time", ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)" },
-	{ table: "sys_para", column: "update_time", ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)" },
-	{ table: "sys_tag", column: "update_time", ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)" },
-	{ table: "sys_tag_relation", column: "update_time", ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)" },
+	{
+		table: "sys_menu",
+		column: "update_time",
+		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
+	},
+	{
+		table: "sys_dict",
+		column: "update_time",
+		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
+	},
+	{
+		table: "sys_para",
+		column: "update_time",
+		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
+	},
+	{
+		table: "sys_tag",
+		column: "update_time",
+		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
+	},
+	{
+		table: "sys_tag_relation",
+		column: "update_time",
+		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
+	},
 ];
 
 const IS_DM = (process.env.DATABASE_URL ?? "").startsWith("dm://");
 /** 达梦:注释语句要带模式名,从连接串的 `?schema=` 取 */
-const DM_SCHEMA =
-	new URLSearchParams((process.env.DATABASE_URL ?? "").split("?")[1] ?? "").get("schema") ?? "eg";
+const DM_SCHEMA = new URLSearchParams((process.env.DATABASE_URL ?? "").split("?")[1] ?? "").get("schema") ?? "eg";
 
 /** 单引号转义 + 压成单行(注释里不该有换行,换行会让某些客户端显示错乱) */
 const q = (text: string) => text.replace(/'/g, "''").replace(/\s+/g, " ").trim();
@@ -286,7 +313,12 @@ async function mysqlColumnMeta(table: string): Promise<Map<string, ColMeta>> {
 				from information_schema.columns where table_schema = database() and table_name = ${table}`,
 		)
 	)[0] as unknown as Array<{ name: string } & ColMeta>;
-	return new Map(rows.map((row) => [row.name, { type: row.type, nullable: row.nullable, def: row.def, extra: row.extra, coll: row.coll }]));
+	return new Map(
+		rows.map((row) => [
+			row.name,
+			{ type: row.type, nullable: row.nullable, def: row.def, extra: row.extra, coll: row.coll },
+		]),
+	);
 }
 
 /**
@@ -299,7 +331,9 @@ function buildMySqlColumnDef(meta: ColMeta, comment: string, extraOverride?: str
 	const coll = meta.coll ? ` collate ${meta.coll}` : "";
 	let def = "";
 	if (meta.def !== null) {
-		def = /^(current_timestamp|now\(\))/i.test(meta.def) ? ` default ${meta.def}` : ` default '${String(meta.def).replace(/'/g, "''")}'`;
+		def = /^(current_timestamp|now\(\))/i.test(meta.def)
+			? ` default ${meta.def}`
+			: ` default '${String(meta.def).replace(/'/g, "''")}'`;
 	}
 	const parts: string[] = [];
 	const raw = `${meta.extra ?? ""}${extraOverride ? ` ${extraOverride}` : ""}`;
@@ -313,7 +347,9 @@ function buildMySqlColumnDef(meta: ColMeta, comment: string, extraOverride?: str
 async function currentTableComments(): Promise<Map<string, string>> {
 	if (IS_DM) {
 		const rows = (
-			await db.execute(sql.raw(`select TABLE_NAME as t, COMMENTS as c from SYS.ALL_TAB_COMMENTS where OWNER='${DM_SCHEMA}'`))
+			await db.execute(
+				sql.raw(`select TABLE_NAME as t, COMMENTS as c from SYS.ALL_TAB_COMMENTS where OWNER='${DM_SCHEMA}'`),
+			)
 		)[0] as unknown as Array<{ t: string; c: string | null }>;
 		return new Map(rows.map((row) => [row.t, row.c ?? ""]));
 	}
@@ -329,7 +365,9 @@ async function currentColumnComments(table: string): Promise<Map<string, string>
 	if (IS_DM) {
 		const rows = (
 			await db.execute(
-				sql.raw(`select COLUMN_NAME as c, COMMENTS as m from SYS.ALL_COL_COMMENTS where SCHEMA_NAME='${DM_SCHEMA}' and TABLE_NAME='${table}'`),
+				sql.raw(
+					`select COLUMN_NAME as c, COMMENTS as m from SYS.ALL_COL_COMMENTS where SCHEMA_NAME='${DM_SCHEMA}' and TABLE_NAME='${table}'`,
+				),
 			)
 		)[0] as unknown as Array<{ c: string; m: string | null }>;
 		return new Map(rows.map((row) => [row.c, row.m ?? ""]));
@@ -361,12 +399,22 @@ async function setTableComment(table: string, comment: string): Promise<void> {
 }
 
 /** 写一条列注释(MySQL 要把列定义整条重写;达梦只需要 comment on) */
-async function setColumnComment(table: string, column: string, comment: string, meta?: ColMeta, extraOverride?: string): Promise<void> {
+async function setColumnComment(
+	table: string,
+	column: string,
+	comment: string,
+	meta?: ColMeta,
+	extraOverride?: string,
+): Promise<void> {
 	if (IS_DM) {
 		await db.execute(sql.raw(`comment on column "${DM_SCHEMA}"."${table}"."${column}" is '${q(comment)}'`));
 		return;
 	}
-	await db.execute(sql.raw(`alter table \`${table}\` modify column \`${column}\` ${buildMySqlColumnDef(meta as ColMeta, comment, extraOverride)}`));
+	await db.execute(
+		sql.raw(
+			`alter table \`${table}\` modify column \`${column}\` ${buildMySqlColumnDef(meta as ColMeta, comment, extraOverride)}`,
+		),
+	);
 }
 
 export async function syncTableMeta(): Promise<void> {

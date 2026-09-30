@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { and, eq } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysLog, sysMenu } from "../src/db/data-base-schema.ts";
-import { UNMAPPED_MUTATIONS, UNMAPPED_QUERIES, PERM_BY_PATH, pagePermOf } from "../src/lib/rbac.ts";
+import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
-import { TEST_PREFIX, TEST_USER, anonymousCaller, assertRejects, caller, closeDb, uniqueSuffix } from "./helpers.ts";
+import { PERM_BY_PATH, pagePermOf, UNMAPPED_MUTATIONS, UNMAPPED_QUERIES } from "../src/lib/rbac.ts";
+import { anonymousCaller, assertRejects, caller, closeDb, TEST_PREFIX, TEST_USER, uniqueSuffix } from "./helpers.ts";
 
 /**
  * 服务端鉴权 + 审计。
@@ -25,9 +24,7 @@ const typeOf = (path: string) => (def.procedures[path] as { _def?: { type?: stri
 /** `PERM_BY_PATH` 里所有的码(值可以是单个码,也可以是"任一页面可见即放行"的页面码数组) */
 function mappedCodes(): string[] {
 	return [
-		...new Set(
-			Object.values(PERM_BY_PATH).flatMap((mapped) => (typeof mapped === "string" ? [mapped] : [...mapped])),
-		),
+		...new Set(Object.values(PERM_BY_PATH).flatMap((mapped) => (typeof mapped === "string" ? [mapped] : [...mapped]))),
 	];
 }
 /**
@@ -91,9 +88,7 @@ describe("服务端鉴权", () => {
 		const mutations = PROCEDURES.filter((path) => typeOf(path) === "mutation");
 		// 先确认守卫本身没有失效:写接口数量掉到 30 以下说明 router 结构变了,得回来看这里
 		assert.ok(mutations.length >= 30, `写接口数量异常(${mutations.length}),守卫可能已失效`);
-		const unclassified = mutations.filter(
-			(path) => !PERM_BY_PATH[path] && !UNMAPPED_MUTATIONS.includes(path),
-		);
+		const unclassified = mutations.filter((path) => !PERM_BY_PATH[path] && !UNMAPPED_MUTATIONS.includes(path));
 		assert.deepEqual(
 			unclassified,
 			[],
@@ -129,17 +124,11 @@ describe("服务端鉴权", () => {
 	});
 
 	it("合成的页面码必须对应真实的菜单路由(防页面路径拼错)", async () => {
-		const paths = await db
-			.select({ path: sysMenu.path })
-			.from(sysMenu);
+		const paths = await db.select({ path: sysMenu.path }).from(sysMenu);
 		if (paths.length === 0) return;
 		const known = new Set(paths.map((row) => pagePermOf(row.path)));
 		const orphan = mappedCodes().filter((code) => code.startsWith("page:") && !known.has(code));
-		assert.deepEqual(
-			orphan,
-			[],
-			`这些页面码没有对应的菜单路由,登记它的读接口永远没人调得动:${orphan.join(", ")}`,
-		);
+		assert.deepEqual(orphan, [], `这些页面码没有对应的菜单路由,登记它的读接口永远没人调得动:${orphan.join(", ")}`);
 	});
 
 	it("权限映射里登记的路径都必须真实存在(防拼错路径名)", () => {

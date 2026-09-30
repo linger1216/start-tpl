@@ -28,7 +28,9 @@ async function probe(name: string, fn: () => Promise<string>): Promise<void> {
 
 async function main() {
 	console.log(`DATABASE_URL = ${(process.env.DATABASE_URL ?? "").replace(/:[^:@/]+@/, ":***@")}`);
-	console.log(`驱动 = ${process.env.DATABASE_URL?.startsWith("dm://") ? "达梦(dmdb + rewriteForDm)" : "MySQL(mysql2)"}\n`);
+	console.log(
+		`驱动 = ${process.env.DATABASE_URL?.startsWith("dm://") ? "达梦(dmdb + rewriteForDm)" : "MySQL(mysql2)"}\n`,
+	);
 
 	await probe("1. db.select().from(sysPara) —— 全表 + limit", async () => {
 		const rows = await db.select().from(sysPara).limit(3);
@@ -85,9 +87,28 @@ async function main() {
 		const id2 = `__dm_tx2_${Date.now()}`;
 		const NOW = new Date();
 		const out = await db.transaction(async (tx) => {
-			await tx.insert(sysTag).values({ id: id1, parent_id: null, label: "__dm_tx__", value: null, sort: 0, create_time: NOW, update_time: NOW });
-			await tx.insert(sysTag).values({ id: id2, parent_id: null, label: "__dm_tx__", value: null, sort: 0, create_time: NOW, update_time: NOW });
-			const inner = await tx.select().from(sysTag).where(inArray(sysTag.id, [id1, id2]));
+			await tx.insert(sysTag).values({
+				id: id1,
+				parent_id: null,
+				label: "__dm_tx__",
+				value: null,
+				sort: 0,
+				create_time: NOW,
+				update_time: NOW,
+			});
+			await tx.insert(sysTag).values({
+				id: id2,
+				parent_id: null,
+				label: "__dm_tx__",
+				value: null,
+				sort: 0,
+				create_time: NOW,
+				update_time: NOW,
+			});
+			const inner = await tx
+				.select()
+				.from(sysTag)
+				.where(inArray(sysTag.id, [id1, id2]));
 			return inner.length;
 		});
 		// 收尾
@@ -100,7 +121,15 @@ async function main() {
 		const NOW = new Date();
 		try {
 			await db.transaction(async (tx) => {
-				await tx.insert(sysTag).values({ id, parent_id: null, label: "__dm_rb__", value: null, sort: 0, create_time: NOW, update_time: NOW });
+				await tx.insert(sysTag).values({
+					id,
+					parent_id: null,
+					label: "__dm_rb__",
+					value: null,
+					sort: 0,
+					create_time: NOW,
+					update_time: NOW,
+				});
 				throw new Error("故意失败,验证回滚");
 			});
 		} catch {

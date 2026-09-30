@@ -24,9 +24,8 @@
 import "dotenv/config";
 
 import { asc, eq } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import { addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
@@ -53,7 +52,9 @@ async function upsertRoleByName(name: string, sort: number, remark: string): Pro
 	const [existing] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.name, name)).limit(1);
 	if (existing) return existing.id;
 	const id = newId();
-	await db.insert(sysRole).values({ id, name, sort, status: 1, remark, create_time: new Date(), update_time: new Date() });
+	await db
+		.insert(sysRole)
+		.values({ id, name, sort, status: 1, remark, create_time: new Date(), update_time: new Date() });
 	created.role += 1;
 	return id;
 }
@@ -125,7 +126,6 @@ async function assignRoleIfAbsent(userId: string, roleId: string, label: string)
 }
 
 async function main() {
-
 	const adminRoleId = await upsertRoleByName(ADMIN_ROLE_NAME, 1, "示例:能看见全部菜单与按钮");
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
@@ -241,12 +241,9 @@ async function main() {
 		await assignRoleIfAbsent(admin.id, adminRoleId, `${ADMIN_EMAIL} → ${ADMIN_ROLE_NAME}`);
 	}
 
-
 	// ── 收尾:把两个账号的实际可见菜单算出来,一眼能看出"并集" ──
 	console.log("\n── 效果 ──");
-	for (const [email, id] of [
-		[ADMIN_EMAIL, admin?.id],
-	] as const) {
+	for (const [email, id] of [[ADMIN_EMAIL, admin?.id]] as const) {
 		if (!id) continue;
 		const effective = await effectiveMenusFor(id);
 		const names = effective.rows?.map((row) => row.name) ?? null;

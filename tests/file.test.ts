@@ -54,10 +54,7 @@ test("presign 拒绝白名单外的后缀", async () => {
 });
 
 test("presign 拒绝超过大小上限的文件", async () => {
-	await assertRejects(
-		() => caller.file.presign({ name: NAME, size: 999 * 1024 * 1024, kind: "private" }),
-		"超过上限",
-	);
+	await assertRejects(() => caller.file.presign({ name: NAME, size: 999 * 1024 * 1024, kind: "private" }), "超过上限");
 });
 
 test("两阶段上传:presign → PUT → confirm(大小以 MinIO 回的为准)", async () => {
@@ -191,7 +188,12 @@ test("秒传:后缀不同不命中(对象键里带着后缀,复用会永远对�
 
 test("秒传:桶不同不命中(对象在桶里,public 不能复用 private 的对象)", async () => {
 	const hash = fakeHash(`ddd${SUFFIX}`);
-	const priv = await caller.file.presign({ name: `${TEST_PREFIX}bucket.${SUFFIX}.png`, size: 12, kind: "private", hash });
+	const priv = await caller.file.presign({
+		name: `${TEST_PREFIX}bucket.${SUFFIX}.png`,
+		size: 12,
+		kind: "private",
+		hash,
+	});
 	created.push(priv.objectKey);
 	await put(priv.uploadUrl, "bucket-body", "image/png");
 	await caller.file.confirm({ bucket: priv.bucket, objectKey: priv.objectKey, hash });
@@ -210,7 +212,12 @@ test("秒传:已删除的行不参与命中(它的对象可能已经被清理)",
 	const aRow = await caller.file.confirm({ bucket: a.bucket, objectKey: a.objectKey, hash });
 	await caller.file.remove({ ids: [aRow.id] });
 
-	const again = await caller.file.presign({ name: `${TEST_PREFIX}gone2.${SUFFIX}.png`, size: 12, kind: "private", hash });
+	const again = await caller.file.presign({
+		name: `${TEST_PREFIX}gone2.${SUFFIX}.png`,
+		size: 12,
+		kind: "private",
+		hash,
+	});
 	created.push(again.objectKey);
 	assert.equal(again.instant, false, "只剩已删除的行 → 不能秒传");
 	assert.ok(again.uploadUrl, "应当照常走一遍真实上传");

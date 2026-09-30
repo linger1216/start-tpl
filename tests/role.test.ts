@@ -17,16 +17,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { and, eq, inArray } from "drizzle-orm";
-
+import { sysCasbinRule, sysDept, sysMenu, sysRole, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import {
-	sysCasbinRule,
-	sysDept,
-	sysUserDept,
-	sysMenu,
-	sysRole,
-	sysUser,
-} from "../src/db/data-base-schema.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
@@ -41,11 +33,12 @@ const menuIds: string[] = [];
 
 async function makeUser(label: string): Promise<string> {
 	const id = newId();
-	await db.insert(sysUser).values({ id, name: `${TEST_PREFIX}${label}`, email: `${TEST_PREFIX}${label}_${SUFFIX}@example.com` });
+	await db
+		.insert(sysUser)
+		.values({ id, name: `${TEST_PREFIX}${label}`, email: `${TEST_PREFIX}${label}_${SUFFIX}@example.com` });
 	userIds.push(id);
 	return id;
 }
-
 
 /** 直接插一条测试菜单(菜单表是"人手工维护的配置表",这里造父子与按钮节点) */
 async function makeMenu(label: string, parentId: string | null, type: number, perm: string | null): Promise<string> {
@@ -72,14 +65,26 @@ after(async () => {
 	// 先清策略表里指向测试数据的行 —— 授权是 `p` 行(客体是测试菜单),成员关系是 `g` 行(主体是测试用户)。
 	// 直接删表绕过了 `lib/casbin.ts` 的领域函数,所以末尾要手动刷判定缓存。
 	if (menuIds.length > 0) {
-		await db
-			.delete(sysCasbinRule)
-			.where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v1, menuIds.map((id) => `menu:${id}`))));
+		await db.delete(sysCasbinRule).where(
+			and(
+				eq(sysCasbinRule.ptype, "p"),
+				inArray(
+					sysCasbinRule.v1,
+					menuIds.map((id) => `menu:${id}`),
+				),
+			),
+		);
 	}
 	if (userIds.length > 0) {
-		await db
-			.delete(sysCasbinRule)
-			.where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, userIds.map((id) => `user:${id}`))));
+		await db.delete(sysCasbinRule).where(
+			and(
+				eq(sysCasbinRule.ptype, "g"),
+				inArray(
+					sysCasbinRule.v0,
+					userIds.map((id) => `user:${id}`),
+				),
+			),
+		);
 	}
 	clearCasbinCache();
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
@@ -215,7 +220,10 @@ test("停用的角色不贡献权限", async () => {
 	// 角色恢复 → 权限回来
 	await caller.role.update({ id: role.id, name: role.name, status: true, remark: null });
 	const backOn = await effectiveMenusFor(user);
-	assert.ok(backOn.rows?.some((row) => row.id === menu), "角色恢复 → 菜单跟着回来");
+	assert.ok(
+		backOn.rows?.some((row) => row.id === menu),
+		"角色恢复 → 菜单跟着回来",
+	);
 });
 
 test("按钮(type = 3):不进可见菜单,但它的 perm 进权限集合", async () => {

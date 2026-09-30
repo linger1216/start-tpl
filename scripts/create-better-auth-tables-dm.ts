@@ -168,8 +168,8 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_file_status" on ${S}."sys_file" ("status", "create_time")`,
 	`create index if not exists "idx_sys_file_hash" on ${S}."sys_file" ("hash")`,
-    // ── sys_log(审计日志;只增不改,见 doc/审计日志.md)────────────────────
-    `create table if not exists ${S}."sys_log" (
+	// ── sys_log(审计日志;只增不改,见 doc/审计日志.md)────────────────────
+	`create table if not exists ${S}."sys_log" (
       "id" varchar(32) not null,
       "trace_id" varchar(32),
       "path" varchar(64) not null,
@@ -187,11 +187,11 @@ const STATEMENTS: string[] = [
       "create_time" datetime default current_timestamp not null,
       primary key ("id")
     )`,
-    `create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("create_time")`,
-    `create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "create_time")`,
-    `create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "create_time")`,
-    // ── sys_notice(站内通知;一条一个收件人,见 doc/通知中心.md)────────────
-    `create table if not exists ${S}."sys_notice" (
+	`create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("create_time")`,
+	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "create_time")`,
+	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "create_time")`,
+	// ── sys_notice(站内通知;一条一个收件人,见 doc/通知中心.md)────────────
+	`create table if not exists ${S}."sys_notice" (
       "id" varchar(32) not null,
       "user_id" varchar(32) not null,
       "title" varchar(128) not null,
@@ -202,9 +202,9 @@ const STATEMENTS: string[] = [
       "create_time" datetime default current_timestamp not null,
       primary key ("id")
     )`,
-    `create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
-    // ── demo_grid(Demo:综合网格履职)──────────────────
-    `create table if not exists ${S}."demo_grid" (
+	`create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
+	// ── demo_grid(Demo:综合网格履职)──────────────────
+	`create table if not exists ${S}."demo_grid" (
       "id" varchar(32) not null,
       "name" varchar(64) not null,
       "town_name" varchar(32),
@@ -218,9 +218,9 @@ const STATEMENTS: string[] = [
       "update_time" datetime default current_timestamp not null,
       primary key ("id")
     )`,
-    `create index if not exists "idx_demo_grid_town" on ${S}."demo_grid" ("town_id")`,
-    `create index if not exists "idx_demo_grid_group" on ${S}."demo_grid" ("group_id")`,
-    `create index if not exists "idx_demo_grid_owner" on ${S}."demo_grid" ("owner_id")`,
+	`create index if not exists "idx_demo_grid_town" on ${S}."demo_grid" ("town_id")`,
+	`create index if not exists "idx_demo_grid_group" on ${S}."demo_grid" ("group_id")`,
+	`create index if not exists "idx_demo_grid_owner" on ${S}."demo_grid" ("owner_id")`,
 
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (
@@ -248,7 +248,9 @@ async function main() {
 	const q = (sql: string) =>
 		new Promise<Array<Record<string, unknown>>>((res, rej) =>
 			conn.execute(sql, [], { outFormat: 4002 }, (e, r) =>
-				e ? rej(e as Error) : res((r as { rows: Array<Record<string, unknown>> }).rows ?? [])));
+				e ? rej(e as Error) : res((r as { rows: Array<Record<string, unknown>> }).rows ?? []),
+			),
+		);
 
 	// ── 老库改表名必须在**建表之前**跑 ──
 	// 否则 `create table if not exists` 会先把**新名字**那张空表建出来,改名随即看到「新旧同时存在」
@@ -262,7 +264,9 @@ async function main() {
 	];
 	let renamed = 0;
 	const existingTables = new Set(
-		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) => String(r.TABLE_NAME).toLowerCase()),
+		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) =>
+			String(r.TABLE_NAME).toLowerCase(),
+		),
 	);
 	for (const rename of tableRenames) {
 		if (!existingTables.has(rename.from)) {
@@ -308,7 +312,9 @@ async function main() {
 			console.log(`${action} ${sql.replace(/\s+/g, " ").slice(0, 78)}`);
 		} catch (e) {
 			failed += 1;
-			console.log(`✗ 失败:${sql.replace(/\s+/g, " ").slice(0, 60)}\n    ${(e as Error).message?.slice(0, 120).replace(/\n/g, " ")}`);
+			console.log(
+				`✗ 失败:${sql.replace(/\s+/g, " ").slice(0, 60)}\n    ${(e as Error).message?.slice(0, 120).replace(/\n/g, " ")}`,
+			);
 		}
 	}
 
@@ -360,7 +366,9 @@ async function main() {
 		}
 	}
 
-	const after = (await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}' order by TABLE_NAME`)).map((r) => String(r.TABLE_NAME));
+	const after = (await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}' order by TABLE_NAME`)).map(
+		(r) => String(r.TABLE_NAME),
+	);
 	console.log(`\n${SCHEMA} 模式现在的表:${after.join(", ")}`);
 	console.log(failed === 0 ? "\n✓ 全部就绪(幂等,可重复跑)" : `\n⚠️ 有 ${failed} 条语句失败,见上`);
 	console.log("提示:表注释 / 列注释用 `pnpm db:sync:meta` 对齐(达梦支持 comment on,和 MySQL 共用一份真源)。");

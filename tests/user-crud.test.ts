@@ -15,24 +15,21 @@ import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 
 import { and, eq, like } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import {
-	sysCasbinRule,
 	sysAccount,
+	sysCasbinRule,
 	sysDept,
+	sysMenu,
 	sysRole,
-	sysUserDept,
 	sysSession,
 	sysUser,
+	sysUserDept,
 } from "../src/db/data-base-schema.ts";
+import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
-import { addUserRole, setRoleMenus } from "../src/lib/casbin.ts";
+import { addUserRole, clearCasbinCache, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
-import { sysMenu } from "../src/db/data-base-schema.ts";
-import { callerAs } from "./helpers.ts";
-import { clearCasbinCache } from "../src/lib/casbin.ts";
-import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, callerAs, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const EMAIL = `${TEST_PREFIX}created_${SUFFIX}@example.com`;
@@ -123,10 +120,7 @@ test("user.create:建完之后**不留下会话**(否则会把当前管理员顶
 });
 
 test("user.create:邮箱重复时拒绝,并给出中文提示", async () => {
-	await assertRejects(
-		() => caller.user.create({ name: "重复", email: EMAIL, password: PASSWORD }),
-		"已经被占用",
-	);
+	await assertRejects(() => caller.user.create({ name: "重复", email: EMAIL, password: PASSWORD }), "已经被占用");
 });
 
 test("user.update:改姓名与邮箱,库里真的变了", async () => {
@@ -173,8 +167,16 @@ test("user.update:改姓名与邮箱,库里真的变了", async () => {
 });
 
 test("user.update:邮箱撞上别人时拒绝(不静默改坏唯一键)", async () => {
-	const a = await caller.user.create({ name: "甲", email: `${TEST_PREFIX}dup_a_${SUFFIX}@example.com`, password: PASSWORD });
-	const b = await caller.user.create({ name: "乙", email: `${TEST_PREFIX}dup_b_${SUFFIX}@example.com`, password: PASSWORD });
+	const a = await caller.user.create({
+		name: "甲",
+		email: `${TEST_PREFIX}dup_a_${SUFFIX}@example.com`,
+		password: PASSWORD,
+	});
+	const b = await caller.user.create({
+		name: "乙",
+		email: `${TEST_PREFIX}dup_b_${SUFFIX}@example.com`,
+		password: PASSWORD,
+	});
 	createdIds.push(a.id, b.id);
 
 	await assertRejects(
@@ -225,18 +227,28 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	await caller.user.remove({ id: created.id });
 
 	assert.equal((await db.select().from(sysUser).where(eq(sysUser.id, created.id))).length, 0, "sys_user 应该没了");
-	assert.equal((await db.select().from(sysSession).where(eq(sysSession.userId, created.id))).length, 0, "会话应该被清掉");
-	assert.equal((await db.select().from(sysAccount).where(eq(sysAccount.userId, created.id))).length, 0, "account 应该被清掉");
+	assert.equal(
+		(await db.select().from(sysSession).where(eq(sysSession.userId, created.id))).length,
+		0,
+		"会话应该被清掉",
+	);
+	assert.equal(
+		(await db.select().from(sysAccount).where(eq(sysAccount.userId, created.id))).length,
+		0,
+		"account 应该被清掉",
+	);
 	assert.equal(
 		(await db.select().from(sysUserDept).where(eq(sysUserDept.user_id, created.id))).length,
 		0,
 		"部门成员行应该被清掉",
 	);
 	assert.equal(
-		(await db
-			.select()
-			.from(sysCasbinRule)
-			.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${created.id}`)))).length,
+		(
+			await db
+				.select()
+				.from(sysCasbinRule)
+				.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${created.id}`)))
+		).length,
 		0,
 		"角色分配行(策略表的 `g` 行)也应该被清掉",
 	);
@@ -372,7 +384,9 @@ test("user.update:被改的人是 admin 时,非 admin 操作员被 FORBIDDEN 拦
 	const nonAdmin = await createPlainUser("non-admin-operator");
 
 	// target 持「系统管理员」
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
+		(r) => r.name === "系统管理员",
+	);
 	assert.ok(adminRoleRow, "前置条件:库里要有「系统管理员」角色(由 seed-rbac 建)");
 	await addUserRole(target.id, adminRoleRow.id);
 
@@ -402,7 +416,9 @@ test("user.update:被改的人是 admin 时,非 admin 操作员被 FORBIDDEN 拦
 
 test("user.update:被改的人是 admin 时,admin 操作员放行", async () => {
 	const target = await createPlainUser("admin-target-2");
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
+		(r) => r.name === "系统管理员",
+	);
 	assert.ok(adminRoleRow);
 	await addUserRole(target.id, adminRoleRow.id);
 
@@ -442,7 +458,9 @@ test("user.update:被改的人是普通用户时,非 admin 操作员也能改(�
 test("user.remove:被删的人是 admin 时拒", async () => {
 	const target = await createPlainUser("admin-remove-target");
 	const nonAdmin = await createPlainUser("non-admin-remover");
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
+		(r) => r.name === "系统管理员",
+	);
 	assert.ok(adminRoleRow);
 	await addUserRole(target.id, adminRoleRow.id);
 

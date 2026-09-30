@@ -16,7 +16,7 @@
  */
 import "dotenv/config";
 
-import { type NavNode, NAV_NODES } from "../src/components/layout/nav-config.ts";
+import { NAV_NODES, type NavNode } from "../src/components/layout/nav-config.ts";
 import { sysMenu } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
@@ -37,7 +37,12 @@ type DraftRow = { key: string; parentKey: string | null; name: string; path: str
  * 合成 path 不会被当成跳转目标:`sidebar.tsx` 判断顺序是「先看有没有 children,再看 path」,
  * 有子节点的行永远渲染成可展开分组。
  */
-function flatten(nodes: readonly NavNode[], parentKey: string | null, out: DraftRow[] = [], renamed: string[] = []): DraftRow[] {
+function flatten(
+	nodes: readonly NavNode[],
+	parentKey: string | null,
+	out: DraftRow[] = [],
+	renamed: string[] = [],
+): DraftRow[] {
 	const used = new Set(out.map((row) => row.key));
 	nodes.forEach((node) => {
 		let key = node.path;
@@ -92,6 +97,6 @@ if (toInsert.length > 0) await db.insert(sysMenu).values(toInsert);
 const all = await db.select({ id: sysMenu.id }).from(sysMenu);
 console.log(
 	`✓ 菜单种子完成:配置里 ${drafts.length} 个有路由的节点,本次新增 ${toInsert.length} 行,表内共 ${all.length} 行(已存在的未覆盖)` +
-			(grouped.length > 0 ? `\n  把 ${grouped.length} 个纯分组用合成 path 并进了菜单树:${grouped.join("、")}` : ""),
+		(grouped.length > 0 ? `\n  把 ${grouped.length} 个纯分组用合成 path 并进了菜单树:${grouped.join("、")}` : ""),
 );
 process.exit(0);

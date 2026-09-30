@@ -12,10 +12,9 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { eq } from "drizzle-orm";
-
-import { db } from "../src/db/index.ts";
 import { sysDict } from "../src/db/data-base-schema.ts";
-import { assertNanoid, assertRejects, caller, TEST_PREFIX, uniqueSuffix, closeDb } from "./helpers.ts";
+import { db } from "../src/db/index.ts";
+import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 /**
  * 字典编码规则是 `^[a-z][a-z0-9_]*$`(**必须字母开头**)—— 所以测试编码不能直接用 `__test__` 前缀,
@@ -54,7 +53,10 @@ test("按 code 读:byCode 拿得到,list 里也在", async () => {
 	assert.equal(row.status, 1);
 
 	const list = await caller.dict.list();
-	assert.ok(list.some((item) => item.code === CODE), "list 里应包含它");
+	assert.ok(
+		list.some((item) => item.code === CODE),
+		"list 里应包含它",
+	);
 });
 
 test("编码必须唯一:重复新建报 CONFLICT", async () => {
@@ -65,14 +67,8 @@ test("编码必须唯一:重复新建报 CONFLICT", async () => {
 });
 
 test("编码格式受约束:大写 / 数字开头都不行", async () => {
-	await assertRejects(
-		() => caller.dict.create({ code: "BadCode", name: "大写", remark: "", items: [] }),
-		"小写字母",
-	);
-	await assertRejects(
-		() => caller.dict.create({ code: "1st", name: "数字开头", remark: "", items: [] }),
-		"小写字母",
-	);
+	await assertRejects(() => caller.dict.create({ code: "BadCode", name: "大写", remark: "", items: [] }), "小写字母");
+	await assertRejects(() => caller.dict.create({ code: "1st", name: "数字开头", remark: "", items: [] }), "小写字母");
 });
 
 test("字典项取值不能重复", async () => {
@@ -113,7 +109,8 @@ test("更新:改名 / 换字典项 / 停用 —— code 不变,主键不变", as
 
 test("更新不存在的编码 → NOT_FOUND", async () => {
 	await assertRejects(
-		() => caller.dict.update({ code: `t_missing_x_${uniqueSuffix()}`, name: "无", remark: "", status: true, items: [] }),
+		() =>
+			caller.dict.update({ code: `t_missing_x_${uniqueSuffix()}`, name: "无", remark: "", status: true, items: [] }),
 		"不存在",
 	);
 });

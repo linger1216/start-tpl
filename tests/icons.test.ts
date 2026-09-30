@@ -12,11 +12,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { NAV_ICON_MAP, NAV_NODES } from "../src/components/layout/nav-config.ts";
-import { ICON_KEYS, ICON_NAMES, PINNED_ICONS, resolveLucideIconKey, toKebabCase } from "../src/components/modules/shared/icons-list.ts";
+import {
+	ICON_KEYS,
+	ICON_NAMES,
+	PINNED_ICONS,
+	resolveLucideIconKey,
+	toKebabCase,
+} from "../src/components/modules/shared/icons-list.ts";
 
 test("导航节点的每个 icon 都能解析到清单里", () => {
-	const missing = NAV_NODES.map((node) => node.icon as string)
-		.filter((name) => resolveLucideIconKey(name) === null);
+	const missing = NAV_NODES.map((node) => node.icon as string).filter((name) => resolveLucideIconKey(name) === null);
 	assert.deepEqual(missing, [], `这些导航图标不在 ICON_NAMES 里:${missing.join(", ")}`);
 });
 

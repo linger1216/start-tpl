@@ -12,15 +12,19 @@
  */
 import { eq } from "drizzle-orm";
 import * as XLSXNS from "xlsx";
-
-import { db, dmPool } from "../src/db/index.ts";
 import { sysDemoGrid, sysDept, sysNotice, sysUser } from "../src/db/data-base-schema.ts";
+import { db, dmPool } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
 import { notify } from "../src/lib/notice.ts";
 
 // ── 一、演示通知 ────────────────────────────────────────────────
 
-const DEMO_NOTICES: Array<{ title: string; body: string; path: string | null; level: "info" | "success" | "warn" | "danger" }> = [
+const DEMO_NOTICES: Array<{
+	title: string;
+	body: string;
+	path: string | null;
+	level: "info" | "success" | "warn" | "danger";
+}> = [
 	{
 		title: "欢迎使用后台模板",
 		body: "这条通知带跳转,点一下就跳到文件管理",
@@ -45,7 +49,11 @@ async function seedNotices(): Promise<void> {
 	const users = await db.select({ id: sysUser.id, email: sysUser.email }).from(sysUser);
 	let created = 0;
 	for (const user of users) {
-		const existing = await db.select({ id: sysNotice.id }).from(sysNotice).where(eq(sysNotice.user_id, user.id)).limit(1);
+		const existing = await db
+			.select({ id: sysNotice.id })
+			.from(sysNotice)
+			.where(eq(sysNotice.user_id, user.id))
+			.limit(1);
 		if (existing.length > 0) continue;
 		for (const item of DEMO_NOTICES) {
 			await notify(user.id, item);

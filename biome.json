@@ -9,6 +9,8 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**/src/**/*",
+			"**/tests/**/*",
+			"**/scripts/**/*",
 			"**/vite.config.ts",
 			"**/drizzle.config.ts",
 			"!**/src/routeTree.gen.ts",
