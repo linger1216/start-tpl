@@ -1,15 +1,15 @@
 /**
- * **一次性迁移:把 `sys_user_role` / `sys_role_menu` 搬进 `casbin_rule`。**
+ * **一次性迁移:把 `sys_user_role` / `sys_role_menu` 搬进 `sys_casbin_rule`。**
  *
  * 功能权限从"自家两张关系表"换成 Casbin 之后,策略表里存的是:
  *
- *   p, role:<角色 code>, menu:<菜单 id>, access      ← 原 `sys_role_menu`
- *   g, user:<用户 id>,  role:<角色 code>             ← 原 `sys_user_role`
+ *   p, role:<角色 id>, menu:<菜单 id>, access      ← 原 `sys_role_menu`
+ *   g, user:<用户 id>,  role:<角色 id>             ← 原 `sys_user_role`
  *
  * 形状变了,老数据得搬一次。三条纪律:
  *
  *   ① **先查再插**(不用 `on duplicate key update` —— 达梦不认),所以跑第二遍不会多出行;
- *   ② **只加不删**:`casbin_rule` 里已有的行(手工加的、上一轮搬过的)一行都不动;
+ *   ② **只加不删**:`sys_casbin_rule` 里已有的行(手工加的、上一轮搬过的)一行都不动;
  *   ③ **不自动删老表**:要删得显式带 `--drop`。不删也不影响运行(schema 里已经没有这两张表了),
  *      留着只是让 `sys_user` / `sys_role` / `sys_menu` 上还挂着几条没人用的外键。
  *
@@ -54,7 +54,7 @@ async function readRows<T>(query: string): Promise<T[]> {
 /** 策略表里 `p` / `g` 各有多少行(用来报"这一趟搬进去多少") */
 async function policyCounts(): Promise<{ p: number; g: number }> {
 	const [row] = await readRows<{ p?: unknown; g?: unknown }>(
-		"select sum(case when ptype = 'p' then 1 else 0 end) as p, sum(case when ptype = 'g' then 1 else 0 end) as g from casbin_rule",
+		"select sum(case when ptype = 'p' then 1 else 0 end) as p, sum(case when ptype = 'g' then 1 else 0 end) as g from sys_casbin_rule",
 	);
 	return { p: Number(row?.p ?? 0), g: Number(row?.g ?? 0) };
 }
@@ -66,45 +66,46 @@ async function main(): Promise<void> {
 		sys_role_menu: await tableExists("sys_role_menu"),
 	};
 	if (!exists.sys_user_role && !exists.sys_role_menu) {
-		console.log("✓ 两张老表都不在 —— 没有要搬的东西(`casbin_rule` 里已有的行保持不动)");
+		console.log("✓ 两张老表都不在 —— 没有要搬的东西(`sys_casbin_rule` 里已有的行保持不动)");
 		process.exit(0);
 	}
 
 	const before = await policyCounts();
 
-	// ① 用户 ↔ 角色:源表存的是 role_id,策略表要的是**角色 code**(角色改了 code,老行就认不出来了)
+	// ① 用户 ↔ 角色:源表存的是 role_id,策略表要的是**角色 id**(已无 code 列 —— 这一脚本是历史上 code 列还在时写的,
+	// 保留 `join sys_role` 是为了让"角色已删、还在 sys_user_role 里挂着的悬挂行"在阶段被跳过)
 	if (exists.sys_user_role) {
-		const list = await readRows<{ user_id: string; code: string | null }>(
-			"select r.user_id as user_id, o.code as code from sys_user_role r join sys_role o on o.id = r.role_id",
+		const list = await readRows<{ user_id: string; role_id: string | null }>(
+			"select r.user_id as user_id, o.id as role_id from sys_user_role r join sys_role o on o.id = r.role_id",
 		);
-		const matched = list.filter((row) => row.code);
-		for (const row of matched) await addUserRole(row.user_id, row.code as string);
+		const matched = list.filter((row) => row.role_id);
+		for (const row of matched) await addUserRole(row.user_id, row.role_id as string);
 		console.log(`  sys_user_role  → g 行:读出 ${list.length} 条,角色还在的 ${matched.length} 条`);
 		if (list.length > matched.length) console.log(`      ⚠️ ${list.length - matched.length} 条指向的角色已不存在,跳过`);
 	}
 
-	// ② 角色 ↔ 菜单 / 按钮授权:同理,源表存 role_id → 策略表要角色 code
+	// ② 角色 ↔ 菜单 / 按钮授权:同理,源表存 role_id → 策略表要角色 id
 	if (exists.sys_role_menu) {
-		const list = await readRows<{ code: string | null; menu_id: string }>(
-			"select o.code as code, m.menu_id as menu_id from sys_role_menu m join sys_role o on o.id = m.role_id",
+		const list = await readRows<{ role_id: string | null; menu_id: string }>(
+			"select o.id as role_id, m.menu_id as menu_id from sys_role_menu m join sys_role o on o.id = m.role_id",
 		);
 		const byRole = new Map<string, string[]>();
 		let orphan = 0;
 		for (const row of list) {
-			if (!row.code) {
+			if (!row.role_id) {
 				orphan += 1;
 				continue;
 			}
-			byRole.set(row.code, [...(byRole.get(row.code) ?? []), row.menu_id]);
+			byRole.set(row.role_id, [...(byRole.get(row.role_id) ?? []), row.menu_id]);
 		}
-		for (const [roleCode, menuIds] of byRole) await addRoleMenus(roleCode, menuIds);
+		for (const [roleId, menuIds] of byRole) await addRoleMenus(roleId, menuIds);
 		console.log(`  sys_role_menu  → p 行:读出 ${list.length} 条 → ${byRole.size} 个角色`);
 		if (orphan > 0) console.log(`      ⚠️ ${orphan} 条指向的角色已不存在,跳过`);
 	}
 
 	const after = await policyCounts();
 	console.log(
-		`\n✓ 迁移完成:casbin_rule 的 g 行 ${before.g} → ${after.g}(+${after.g - before.g})、` +
+		`\n✓ 迁移完成:sys_casbin_rule 的 g 行 ${before.g} → ${after.g}(+${after.g - before.g})、` +
 			`p 行 ${before.p} → ${after.p}(+${after.p - before.p})`,
 	);
 	// 指向已删菜单的 `p` 行这里不校验 —— `lib/casbin.ts` 装载时会 warn(`casbin.menu_missing`)并跳过

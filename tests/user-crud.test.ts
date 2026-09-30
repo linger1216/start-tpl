@@ -11,30 +11,55 @@
  * ⚠️ 会读写 `.env.local` 指向的库;数据用 `__test__` 前缀,`after` 里清干净。
  */
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { randomBytes } from "node:crypto";
+import { after, before, test } from "node:test";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
-	casbinRule,
+	sysCasbinRule,
 	sysAccount,
 	sysDept,
+	sysRole,
 	sysUserDept,
 	sysSession,
 	sysUser,
 } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
+import { addUserRole, setRoleMenus } from "../src/lib/casbin.ts";
+import { newId } from "../src/lib/ids.ts";
+import { sysMenu } from "../src/db/data-base-schema.ts";
+import { callerAs } from "./helpers.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
-import { assertRejects, caller, closeDb, ensureTestAdminPolicy, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const EMAIL = `${TEST_PREFIX}created_${SUFFIX}@example.com`;
 const PASSWORD = "Passw0rd!123";
 
+/**
+ * 上次跑测试崩在某个 admin-guard 用例中段,`after()` 没机会清 `createdRoleIds`,
+ * 库里就留下一行 `__test__adm-ed_...` —— 下次再跑就撞 `uk_sys_role_name`。
+ * 在 `before()` 里按**名字前缀**主动扫一次,跟 `createdRoleIds` 的 after 清扫形成双保险。
+ */
+before(async () => {
+	const leftover = await db
+		.select({ id: sysRole.id })
+		.from(sysRole)
+		.where(like(sysRole.name, `${TEST_PREFIX}adm-ed_%`));
+	for (const row of leftover) {
+		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v1, `role:${row.id}`)));
+		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), eq(sysCasbinRule.v0, `role:${row.id}`)));
+		await db.delete(sysRole).where(eq(sysRole.id, row.id));
+	}
+});
+
 const createdIds: string[] = [];
 /** 用例里临时建的部门(失败时也要清掉,别留在库里 —— 真的漏过一次) */
 const tempDeptIds: string[] = [];
+/** admin 守卫测试里直插的角色 —— 走 `db.insert(sysRole)`,`after` 要清,否则下次撞 `uk_sys_role_name` */
+const createdRoleIds: string[] = [];
 
 after(async () => {
 	// 清库顺序必须「子表 → 父表 → 部门」:`sys_user_dept` 的外键是 NO ACTION
@@ -45,12 +70,19 @@ after(async () => {
 		await db.delete(sysSession).where(eq(sysSession.userId, id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, id));
-		await db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${id}`)));
+		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${id}`)));
 		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
 	for (const id of tempDeptIds) {
 		await db.delete(sysUserDept).where(eq(sysUserDept.department_id, id));
 		await db.delete(sysDept).where(eq(sysDept.id, id));
+	}
+	// admin 守卫测试里直插的 role —— `setRoleMenus` 写过 `p` 行,挂过 `g` 行(给测试用户),
+	// 三类一并清掉(顺序:`g` → `p` → `sys_role`),否则 `uk_sys_role_name` 下次撞
+	for (const id of createdRoleIds) {
+		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v1, `role:${id}`)));
+		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), eq(sysCasbinRule.v0, `role:${id}`)));
+		await db.delete(sysRole).where(eq(sysRole.id, id));
 	}
 	// 上面是直接删表,绕过了 `lib/casbin.ts` 的领域函数 → 判定缓存要手动刷
 	clearCasbinCache();
@@ -106,9 +138,12 @@ test("user.update:改姓名与邮箱,库里真的变了", async () => {
 	createdIds.push(created.id);
 
 	const nextEmail = `${TEST_PREFIX}upd_after_${SUFFIX}@example.com`;
-	// 角色是全局的:编辑用户时一并覆盖保存(这里顺便给它一个角色)
-	const role = (await caller.role.list())[0];
-	assert.ok(role, "前置条件:库里至少要有一个角色");
+	// 角色是全局的:编辑用户时一并覆盖保存(这里顺便给它一个角色)。
+	// **不能用 `list()[0]`**:若库里第一个角色恰好是「系统管理员」,新用户就继承成了 admin,
+	// `user.update` 的 admin 守卫会误伤。这条用例只关心"角色分配能落库",
+	// 不在意角色名 —— 取第一个**非 admin** 的即可。
+	const role = (await caller.role.list()).find((r) => r.name !== "系统管理员");
+	assert.ok(role, "前置条件:库里至少要有一个非管理员角色");
 	const updated = await caller.user.update({
 		id: created.id,
 		name: "改名后",
@@ -128,8 +163,6 @@ test("user.update:改姓名与邮箱,库里真的变了", async () => {
 	assert.equal(afterUpdate.emailVerified, true, "email_verified 应该已更新");
 
 	// 角色分配真的落库了(而且 `list` 能读回来)
-	// 策略表已启用 ⇒ 引擎失败关闭:合成的 test-admin 身份必须先补一条无限制策略,否则列表是空的
-	await ensureTestAdminPolicy();
 	const listed = (await caller.user.list()).find((row) => row.id === created.id);
 	assert.deepEqual(listed?.roleIds, [role.id], "角色分配应该被保存");
 	assert.deepEqual(listed?.roleNames, [role.name], "角色名也应该带出来");
@@ -171,8 +204,9 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	// 不 push 到 createdIds —— 这条用例自己要把它删干净
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}删除测试部门_${SUFFIX}` });
 	tempDeptIds.push(dept.id);
-	const role = (await caller.role.list())[0];
-	assert.ok(role, "前置条件:库里至少要有一个角色");
+	// 取第一个**非 admin** 的角色 —— 见上文 user.update 用例的同样解释
+	const role = (await caller.role.list()).find((r) => r.name !== "系统管理员");
+	assert.ok(role, "前置条件:库里至少要有一个非管理员角色");
 	await caller.department.addMember({ departmentId: dept.id, userId: created.id });
 	await caller.user.update({
 		id: created.id,
@@ -201,8 +235,8 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	assert.equal(
 		(await db
 			.select()
-			.from(casbinRule)
-			.where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${created.id}`)))).length,
+			.from(sysCasbinRule)
+			.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${created.id}`)))).length,
 		0,
 		"角色分配行(策略表的 `g` 行)也应该被清掉",
 	);
@@ -234,8 +268,6 @@ test("user.update:部门是覆盖式 —— 加一个 / 去掉一个,传进去�
 		emailVerified: false,
 		roleIds: [] as string[],
 	};
-	// 同上:先补无限制策略,`list` 才读得到(合成身份在库里不存在)
-	await ensureTestAdminPolicy();
 	const readDeptIds = async () => {
 		const row = (await caller.user.list()).find((item) => item.id === created.id);
 		return [...(row?.departmentIds ?? [])].sort();
@@ -276,4 +308,151 @@ test("user.update:部门 id 不存在时显式报错(不静默丢弃)", async ()
 			}),
 		"这些部门不存在",
 	);
+});
+
+// ── admin 守卫 ───────────────────────────────────────────────────────
+/**
+ * 直插一个不进 BA 的测试用户 —— 不需要密码哈希、不需要会话,
+ * 只为了「给他挂一个角色 → 把他放进 caller ctx」这条路。
+ *
+ * 走 `caller.user.create` 反而会触发 `auth.api.signUpEmail` 的副作用:
+ *  - 写 `sys_account` 一行
+ *  - 顺手建一个会话(本 procedure 之后会删掉,但顺序不稳)
+ *  - **挂上 caller 的角色继承图**(BA 内部逻辑)
+ *
+ * 这里要的是「一个干净用户 + 一个明确角色」,直插最干净。
+ */
+async function createPlainUser(label: string): Promise<{ id: string; name: string }> {
+	const id = newId();
+	const name = `${TEST_PREFIX}${label}_${SUFFIX}`;
+	await db.insert(sysUser).values({ id, name, email: `${id}@example.com`, emailVerified: false });
+	createdIds.push(id);
+	return { id, name };
+}
+
+/**
+ * 在 admin 守卫测试里,**操作员不能走 isSuper 短路**(那会让 permMiddleware 直接放行,
+ * admin 守卫形同虚设)。但 permMiddleware 又要求 `user.update` 必须配 `sys:user:edit`
+ * 权限码 —— 这条权限码来自菜单 `修改用户`(perm='sys:user:edit')与 `/settings/users`
+ * 页面的合成码 `page:settings_users:view`。所以非 admin 操作员必须**真正拥有
+ * 这两条菜单授权**。
+ *
+ * 本函数建一个**仅用于 admin 守卫测试**的非 admin 角色,把它授权到「修改用户」与
+ * 「用户管理」两个菜单,然后挂在 nonAdmin 用户头上 —— 这样 permMiddleware 走真实
+ * casbin 校验放行,admin 守卫又因为操作员**没有「系统管理员」角色**而生效。
+ */
+async function buildNonAdminEditorRole(): Promise<{ roleId: string }> {
+	const id = newId();
+	// `sys_role.name` 是 `varchar(32)` —— 取一个短名:`__test__adm-ed_<8 字符 fresh nonce>`
+	// (per-call nonce 而非模块级 `SUFFIX`,4 条用例各调一次不会撞;跨次跑即使崩了
+	// 也不会撞,因为 fresh nonce 全局唯一)
+	await db.insert(sysRole).values({
+		id,
+		name: `${TEST_PREFIX}adm-ed_${randomBytes(4).toString("hex")}`,
+		sort: 999,
+		status: 1,
+		remark: "",
+	});
+	createdRoleIds.push(id);
+	// 找出菜单 id(用名字筛,稳定可读)
+	const menus = await db.select({ id: sysMenu.id, name: sysMenu.name, perm: sysMenu.perm }).from(sysMenu);
+	const editUser = menus.find((m) => m.perm === "sys:user:edit");
+	const removeUser = menus.find((m) => m.perm === "sys:user:remove");
+	const userPage = menus.find((m) => m.name === "用户管理");
+	assert.ok(editUser, "前置条件:库里有 perm='sys:user:edit' 的「修改用户」菜单");
+	assert.ok(removeUser, "前置条件:库里有 perm='sys:user:remove' 的「删除用户」菜单");
+	assert.ok(userPage, "前置条件:库里有 name='用户管理' 的菜单");
+	// 三个都挂上:user.update 用 edit,user.remove 用 remove,userPage 是「用户管理」页面的可见性
+	await setRoleMenus(id, [editUser.id, removeUser.id, userPage.id]);
+	return { roleId: id };
+}
+
+test("user.update:被改的人是 admin 时,非 admin 操作员被 FORBIDDEN 拦下", async () => {
+	const target = await createPlainUser("admin-target");
+	const nonAdmin = await createPlainUser("non-admin-operator");
+
+	// target 持「系统管理员」
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	assert.ok(adminRoleRow, "前置条件:库里要有「系统管理员」角色(由 seed-rbac 建)");
+	await addUserRole(target.id, adminRoleRow.id);
+
+	// 操作员持「admin-guard-editor」(非 admin,且有 sys:user:edit 授权)
+	const editor = await buildNonAdminEditorRole();
+	await addUserRole(nonAdmin.id, editor.roleId);
+	const nonAdminCaller = callerAs({ id: nonAdmin.id, name: nonAdmin.name, isSuper: false });
+
+	await assertRejects(
+		() =>
+			nonAdminCaller.user.update({
+				id: target.id,
+				name: target.name,
+				email: `${target.id}@example.com`,
+				image: "",
+				emailVerified: false,
+				roleIds: [adminRoleRow.id],
+				departmentIds: [],
+			}),
+		"只有系统管理员才能修改管理员账号",
+	);
+
+	// 库里的角色分配没动(被拒后就该不动)
+	const after1 = await caller.user.roles({ userId: target.id });
+	assert.deepEqual(after1.map((r) => r.roleId).sort(), [adminRoleRow.id].sort(), "被拒后不该改动角色分配");
+});
+
+test("user.update:被改的人是 admin 时,admin 操作员放行", async () => {
+	const target = await createPlainUser("admin-target-2");
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	assert.ok(adminRoleRow);
+	await addUserRole(target.id, adminRoleRow.id);
+
+	// caller 是 TEST_USER(isSuper=true),他能改 admin
+	const updated = await caller.user.update({
+		id: target.id,
+		name: `${target.name}_改`,
+		email: `${target.id}@example.com`,
+		image: "",
+		emailVerified: false,
+		roleIds: [adminRoleRow.id],
+		departmentIds: [],
+	});
+	assert.equal(updated.name, `${target.name}_改`, "admin 改 admin 应该放行");
+});
+
+test("user.update:被改的人是普通用户时,非 admin 操作员也能改(守卫不误伤)", async () => {
+	const target = await createPlainUser("plain-target");
+	const nonAdmin = await createPlainUser("non-admin-operator-2");
+	const editor = await buildNonAdminEditorRole();
+	await addUserRole(target.id, editor.roleId);
+	await addUserRole(nonAdmin.id, editor.roleId);
+	const nonAdminCaller = callerAs({ id: nonAdmin.id, name: nonAdmin.name, isSuper: false });
+
+	const updated = await nonAdminCaller.user.update({
+		id: target.id,
+		name: `${target.name}_非admin改`,
+		email: `${target.id}@example.com`,
+		image: "",
+		emailVerified: false,
+		roleIds: [editor.roleId],
+		departmentIds: [],
+	});
+	assert.equal(updated.name, `${target.name}_非admin改`, "非 admin 改普通用户应该放行");
+});
+
+test("user.remove:被删的人是 admin 时拒", async () => {
+	const target = await createPlainUser("admin-remove-target");
+	const nonAdmin = await createPlainUser("non-admin-remover");
+	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find((r) => r.name === "系统管理员");
+	assert.ok(adminRoleRow);
+	await addUserRole(target.id, adminRoleRow.id);
+
+	const editor = await buildNonAdminEditorRole();
+	await addUserRole(nonAdmin.id, editor.roleId);
+	const nonAdminCaller = callerAs({ id: nonAdmin.id, name: nonAdmin.name, isSuper: false });
+
+	await assertRejects(() => nonAdminCaller.user.remove({ id: target.id }), "不能删除管理员账号");
+
+	// 库里的用户还在(被拒后不该删)
+	const [row] = await db.select().from(sysUser).where(eq(sysUser.id, target.id));
+	assert.ok(row, "被拒后用户应该还在库");
 });

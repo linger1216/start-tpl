@@ -1,8 +1,8 @@
 # start-tpl —— TanStack Start 后台模板
 
-一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、41 个 UI 原语、14 个跨域展示件、台账页面骨架,以及 tRPC + Drizzle + Better Auth + RBAC(页面级拦截 + 行级数据权限)的完整接线。
+一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、41 个 UI 原语、14 个跨域展示件、台账页面骨架,以及 tRPC + Drizzle + Better Auth + RBAC(页面级拦截 + 菜单/按钮授权)的完整接线。
 
-模板里**只保留一个真实业务模块**(系统设置,十个页面),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
+模板里**只保留一个真实业务模块**(系统设置,九个页面),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
 
 技术栈:React 19 · TanStack Start / Router / Query / Form / Table **v9** · tRPC **v11** · Drizzle ORM + MySQL / 达梦 · Better Auth · Tailwind CSS **v4** · Biome · Vite 8 · TypeScript 6
 
@@ -70,15 +70,14 @@ src/
 │   ├── table.ts                  # TanStack Table v9 的 app hook(useAppTable + useRowSelection)
 │   ├── excel.ts                  # Excel 列类型 + 唯一写盘点 writeSheet / cellText
 │   ├── rbac.ts                   # 权限码判定 + PERM_BY_PATH(接口 → 权限点的唯一字典)
-│   ├── data-policy-spec.ts       # 行级数据权限的纯逻辑(客户端可 import)
-│   ├── data-policy.ts            # casbin enforcer + 把规则编译成 SQL(仅服务端)
+│   ├── casbin.ts                 # casbin enforcer + 策略装载(仅服务端)
 │   ├── auth.ts / auth-client.ts / auth-debug.ts / current-user.ts
 │   ├── sys-para.ts / para-spec.ts / menu-spec.ts / notice.ts / sidebar-mode.ts
 │   ├── audit.ts / logger.ts / ids.ts / time.ts / format.ts / multi-value.ts / tree.ts / constants.ts
 │   ├── storage.ts / storage-minio.ts / menu-detail-path.ts / mock-table.ts / demo-store.ts / utils.ts
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 19 张系统表(18 张 sys_* + demo_grid:设置 / 认证 / 权限 / 日志…)
+│   ├── data-base-schema.ts       # 17 张系统表(16 张 sys_* + demo_grid:设置 / 认证 / 权限 / 日志…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
@@ -214,7 +213,6 @@ src/
 | `pnpm db:seed:dicts` / `db:seed:paras` | 字典种子 / `PARA_DEFAULTS` → `sys_para` |
 | `pnpm db:seed:tags` | 标签种子(`scripts/tag-seed-data.ts`:17 维度 / 120 标签) |
 | `pnpm db:seed:rbac` | 角色 / 菜单权限点 / 按钮级权限点 |
-| `pnpm db:seed:policies` | 行级数据权限的**基线策略**(88 行:队长按组织、队员按行) |
 | `pnpm db:minio:init` | 建 MinIO 桶 |
 | `pnpm db:seed:demo` | 演示数据:26 个演示账号(13 街镇 × 队长/队员)、71 条网格 |
 
@@ -262,7 +260,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **19 张系统表**(18 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 部门 / 角色 / 用户-部门 / 用户-角色 / 角色-菜单 / 数据权限 / 通知 / 日志 / 演示网格 / 文件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **17 张系统表**(16 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -412,8 +410,8 @@ function UsersPage() {
 
 | 页面 | 路由 | 数据来源 | 演示的骨架 |
 | --- | --- | --- | --- |
-| 用户管理 | `/settings/users` | `sys_user` + `sys_user_dept` + `casbin_rule`(`g` 行) | 台账 CRUD + 角色 / 部门分配 |
-| 角色管理 | `/settings/roles` | `sys_role` + `casbin_rule`(`p` / `g` 行) | 台账 CRUD + 权限树勾选(`PermissionTree`) |
+| 用户管理 | `/settings/users` | `sys_user` + `sys_user_dept` + `sys_casbin_rule`(`g` 行) | 台账 CRUD + 角色 / 部门分配 |
+| 角色管理 | `/settings/roles` | `sys_role` + `sys_casbin_rule`(`p` / `g` 行) | 台账 CRUD + 权限树勾选(`PermissionTree`) |
 | 部门管理 | `/settings/departments` | `sys_dept` + `sys_user_dept` | 可拖拽树 + 成员管理 |
 | 菜单管理 | `/settings/menus` | `sys_menu` | 可排序树 + 右侧编辑表单(改完即时生效) |
 | 字典管理 | `/settings/dictionary` | `sys_dict` | 字典 CRUD + 条目编辑 |
@@ -421,9 +419,8 @@ function UsersPage() {
 | 标签管理 | `/settings/tags` | `sys_tag` + `sys_tag_relation` | 主表 + 子表条目弹窗 + 拖拽树 |
 | 审计日志 | `/settings/logs` | `sys_log` | 只读台账 + 详情(带筛选与导出) |
 | 文件管理 | `/settings/files` | `sys_file` + MinIO | 上传 / 重命名 / 删除 / 预览(预签名地址) |
-| 数据权限 | `/settings/data-policy` | `sys_data_policy` | casbin 规则 CRUD + 「这条规则对某人算出什么」命中解释 |
 
-权限点目录(角色授权要勾的那棵树)来自 `sys_menu` 的真实数据(`menu.list` 回 `{ rows, perms }`),**不再由前端 `NAV_NODES` 派生**;菜单表为空时权限体系整体不启用(与「没配行级数据权限就不过滤」同一口径)。页面级权限(哪些 URL 可见)与接口级权限(哪些 procedure 可调)是两层,见 `doc/rbac-权限模型.md`。
+权限点目录(角色授权要勾的那棵树)来自 `sys_menu` 的真实数据(`menu.list` 回 `{ rows, perms }`),**不再由前端 `NAV_NODES` 派生**;菜单表为空时权限体系整体不启用(空表 = 这项能力没开)。页面级权限(哪些 URL 可见)与接口级权限(哪些 procedure 可调)是两层,见 `doc/rbac-权限模型.md`。
 
 ---
 
@@ -547,10 +544,8 @@ pnpm check
 | 改了什么 | 说明 |
 | --- | --- |
 | **重复实现审计 + 收敛重构** | 删掉通用 CRUD 套件(`lib/crud/*`)、查询参数 store、`lib/validators/common.ts` 等"配置式"封装 —— 字段一多,配置对象开始打架,读代码还得两处跳。UI 组件**一件没删**(有调用方或在工作台有实例),Excel 那一组刻意留着 |
-| **行级数据权限(ABAC)** | 权限从 `sys_role.data_scope` 一列搬进 `sys_data_policy`(`ptype/v0/v1/v2/v3/status`),主体 `*/user:/role:/dept:` × 资源 `*/type/type@org:/type@rowId` × 动作 `read/write/*` × 效果 `allow/deny`;未命中即 `1 = 0`(失败关闭),表空则不过滤。引擎分两半:`lib/data-policy-spec.ts`(纯逻辑,客户端可 import)+ `lib/data-policy.ts`(casbin + 编译成 SQL) |
 | **权限拦两层** | ① 页面级:`(main)/route.tsx` 的 `beforeLoad` 服务端读会话 + 判页面权限,**没权限返回 404 不是 403**(详情见 `doc/已知陷阱.md`);② 接口级:每个写接口进 `lib/rbac.ts` 的 `PERM_BY_PATH`,读接口三选一登记,`write` 才放行 |
 | **日志 100% 覆盖** | 每个 procedure 一条 `trpc.start` / `trpc.ok` / `trpc.err`,失败在 `trpc.err` 带错误码;附 28 条事件的**日志字典**(`doc/审计日志.md` §七),30 分钟清理测试残留 |
-| **数据权限管理页** | `/settings/data-policy`:规则 CRUD + 「这条规则对某人算出什么」的命中解释(直接跑一遍真实查询数出可见行数) |
 | **两份化石文档重写** | `README.md`(本文)与 `doc/后端接口约定.md`:前者还写着 47 个原语 / 7 个占位页 / 未接认证,后者整篇是已删业务(`lib/fusion-lane.ts` / `entity.*` / `source.*`)与不存在的脚本 |
 
 清空业务后的基线:`pnpm typecheck` 0 · `pnpm check` 0 error / 4 warning / 1 info · `pnpm build` 通过 · `pnpm test` **158 / 158**(15 个测试文件)。
@@ -573,7 +568,7 @@ pnpm check
 
 体量:92 files, **+677 / −2644**,加 3 个新件(+278 行)⇒ **净减约 1689 行**,删除 9 个文件。
 
-基线:`pnpm typecheck` 0 · `pnpm check` Checked 215 files / **0 error / 4 warning / 1 info**(与上一轮一字不差)· `pnpm build` 通过 · `pnpm test` **158 / 158**。行为验收用生产服 + 带 cookie 的 SSR 请求:12 个页面全 200 且匹配数与改前逐条一致(参数 17 / 用户 38 / 角色 12 / 文件 7 / 字典 3 / 日志 200 / 数据权限 89),权限四态不变(队长 `/settings/data-policy` = 404「没有权限」、队员 `/settings/users` = 200、未登录 = 307 带 `redirect`、未知路径 = 404「页面不存在」)。
+基线:`pnpm typecheck` 0 · `pnpm check` Checked 215 files / **0 error / 4 warning / 1 info**(与上一轮一字不差)· `pnpm build` 通过 · `pnpm test` **158 / 158**。行为验收用生产服 + 带 cookie 的 SSR 请求:11 个页面全 200 且匹配数与改前逐条一致(参数 17 / 用户 38 / 角色 12 / 文件 7 / 字典 3 / 日志 200),权限三态不变(队员 `/settings/users` = 200、未登录 = 307 带 `redirect`、未知路径 = 404「页面不存在」)。
 
 ---
 
@@ -584,7 +579,7 @@ pnpm check
 - `doc/后端代码导读.md` —— **后端代码怎么读**:目录结构 → 设计理念 → 公共路由与对外入口 → tRPC 中间件链 → 数据层 → lib 模块地图 + 三条阅读路线(要通读后端就从这份开始)
 - `doc/界面约定.md` —— **版式骨架 + 目录与文件角色约定、公共复用件与封装边界(必读)**
 - `doc/后端接口约定.md` —— 接口口径:一件只允许一个实现、批与单、列表四种形状、权限与审计、自检清单
-- `doc/rbac-权限模型.md` —— 菜单可见 → 页面级拦截 → 行级数据权限(casbin 规则)三层,含直白授权口径与排查 SQL
+- `doc/rbac-权限模型.md` —— 菜单可见 → 页面级拦截 → 接口级权限码两层,含 casbin 策略表口径与排查 SQL
 - `doc/数据库与认证.md` —— 系统表 / 迁移口径 / Better Auth 接线
 - `doc/达梦支持.md` —— 达梦与 MySQL 的差异、坑与验证命令
 - `doc/审计日志.md` —— 日志覆盖率、事件字典、30 分钟清理

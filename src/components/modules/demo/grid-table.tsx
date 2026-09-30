@@ -9,7 +9,7 @@ export type GridRow = {
 	name: string;
 	townName: string | null;
 	townId: string | null;
-	/** 归属的「管理单元」节点(行级数据范围按它算) */
+	/** 归属的「管理单元」节点(只用于展示与筛选) */
 	groupId: string | null;
 	ownerName: string | null;
 	ownerId: string | null;
@@ -26,8 +26,8 @@ const columnHelper = createAppColumnHelper<GridRow>();
  *
  * 两列关于"人"的字段别混:
  *  · **网格长**(`owner_name`)—— Excel 里那一列的原样文本(真实姓名);
- *  · **负责人**(`owner_id`)—— **指派给哪个系统账号** —— **行级数据权限就是按它算的**
- *    (队员的 `self` 档 = `owner_id = 我`)。没指派时显示「未指派」。
+ *  · **负责人**(`owner_id`)—— **指派给哪个系统账号** —— 只表达"这条归谁办"。
+ *    没指派时显示「未指派」。
  */
 export function gridColumns({
 	selected,

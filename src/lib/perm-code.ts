@@ -35,7 +35,7 @@ export function permMatches(pattern: string, code: string): boolean {
 }
 
 /**
- * **菜单路径 → 合成权限码**:`/settings/data-policy` → `page:settings_data_policy:view`。
+ * **菜单路径 → 合成权限码**:`/settings/logs` → `page:settings_logs:view`。
  *
  * 为什么用合成码而不是给每个页面再建一个按钮权限点:页面可见性**就是菜单授权**——
  * "勾了这个菜单" = "能进这个页面 + 能调它用的读接口"。合成码让读接口能复用同一份判据,

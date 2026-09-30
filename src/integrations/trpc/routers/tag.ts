@@ -35,7 +35,7 @@ import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
-function toTagRow(row: typeof sysTag.$inferSelect) {
+function toTag(row: typeof sysTag.$inferSelect) {
 	return {
 		id: row.id,
 		parentId: row.parent_id ?? null,
@@ -72,7 +72,7 @@ async function collectSubtreeIds(rootId: string): Promise<string[]> {
 export const tagRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));
-		return rows.map(toTagRow);
+		return rows.map(toTag);
 	}),
 
 	create: protectedProcedure
@@ -117,7 +117,7 @@ export const tagRouter = createTRPCRouter({
 				desc: input.desc?.trim() || null,
 				sort,
 			});
-			return toTagRow(await getTagRow(id));
+			return toTag(await getTagRow(id));
 		}),
 
 	update: protectedProcedure
@@ -140,7 +140,7 @@ export const tagRouter = createTRPCRouter({
 					update_time: new Date(),
 				})
 				.where(eq(sysTag.id, input.id));
-			return toTagRow(await getTagRow(input.id));
+			return toTag(await getTagRow(input.id));
 		}),
 
 	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
@@ -195,7 +195,7 @@ export const tagRouter = createTRPCRouter({
 				}
 			});
 			const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));
-			return { updated: input.orderedSiblingIds.length, rows: rows.map(toTagRow) };
+			return { updated: input.orderedSiblingIds.length, rows: rows.map(toTag) };
 		}),
 
 	// ── 标签 ↔ 业务对象(多态多对多,表 = `sys_tag_relation`)────────────────

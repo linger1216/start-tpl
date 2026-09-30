@@ -1,11 +1,10 @@
 /**
- * **系统表**的 drizzle 定义 —— 十八张:
+ * **系统表**的 drizzle 定义 —— 十七张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
- *  - 权限五张:`sys_dept` / `sys_role` / `sys_user_dept` /
- *    **`casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`)/
- *    **`sys_data_policy`**(行级数据权限规则,语义见 `doc/rbac-权限模型.md`);
+ *  - 权限四张:`sys_dept` / `sys_role` / `sys_user_dept` /
+ *    **`sys_casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`);
  *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
@@ -358,20 +357,16 @@ export const sysVerification = mysqlTable(
 //   sys_dept(树)                                    上海公司 / 武汉公司(可嵌套)
 //   sys_role(全局定义)                                     管理员 / 员工 / 开发 …  ← 不随部门数增长
 //   sys_user_dept(user_id, department_id)            张三:上海、武汉(角色不在这里)
-//   casbin_rule:g(user, role)                        张三 → 管理员(**权限 = 这些角色的并集**)
-//   casbin_rule:p(role, menu)                        角色能看见哪些菜单 / 能用哪些按钮
+//   sys_casbin_rule:g(user, role)                        张三 → 管理员(**权限 = 这些角色的并集**)
+//   sys_casbin_rule:p(role, menu)                        角色能看见哪些菜单 / 能用哪些按钮
 //
 // 为什么角色是**全局定义**而不是"每个部门各建一套":后者会让角色行数 = 部门数 × 角色种类
 // (上海管理员 / 武汉管理员 / …)。全局定义 + 分配时带部门,4 种角色在 100 个部门里也只有 4 行。
 //
-// **行级数据权限由下面那张 `sys_data_policy`(Casbin 的直白授权规则)承载** —— 角色只管功能权限,
-// 不再携带数据范围。规则长这样:「主体 `dept:<组织 id>` / `role:<角色 code>` / `user:<用户 id>`
-// 能访问资源 `*` / `<资源类型>` / `<资源类型>@org:<组织 id>` / `<资源类型>@<行 id>`(read / write)」。
-//   张三(挂「七宝镇网格组」)→ `user:张三 → demo_grid@org:七宝镇网格组` ⇒ 看到本网格组的全部网格
 // 下面这张 `sys_user_dept` 承载"我属于哪些组织"(真实项目里由区里**每天推送覆盖**);
 // **借调** = 给这个人再加一条指向对方的规则(不动编制,推送也冲不掉)—— 见 `doc/rbac-权限模型.md`。
 
-/** 部门树(数据权限的边界;形状对齐 `sys_menu` / `sys_tag`) */
+/** 部门树(组织架构;形状对齐 `sys_menu` / `sys_tag`) */
 export const sysDept = mysqlTable(
 	"sys_dept",
 	{
@@ -392,12 +387,14 @@ export const sysDept = mysqlTable(
  *
  * ⚠️ **同级/同部门重名不靠唯一索引**:`unique(parent_id, name)` 这类约束在 MySQL 上
  * 对 `parent_id is null`(顶级)不生效,是半吊子约束 —— 一律在 procedure 里查重。
+ *
+ * 角色**没有 `code` 列**:程序内部用 `id`(`varchar(32)` nanoid)引用即可,无须再保留一层
+ * `sys_casbin_rule.v0/v1` 里直接 `role:<id>` 即可 —— 没有 `code` 列。
  */
 export const sysRole = mysqlTable(
 	"sys_role",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
-		code: varchar("code", { length: 64 }).notNull(),
 		name: varchar("name", { length: 32 }).notNull(),
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
@@ -405,14 +402,14 @@ export const sysRole = mysqlTable(
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
-	(table) => [uniqueIndex("uk_sys_role_code").on(table.code)],
+	(table) => [uniqueIndex("uk_sys_role_name").on(table.name)],
 );
 
 /**
  * 部门成员 —— "谁在哪个部门"。**只管组织架构,不携带角色**。
  *
  * 角色是**全局定义**的,和人属于哪个部门无关 —— 所以这里没有 `role_id`,
- * 用户与角色的关系在 `casbin_rule` 的 `g` 行(`user:<id>` → `role:<code>`)。
+ * 用户与角色的关系在 `sys_casbin_rule` 的 `g` 行(`user:<id>` → `role:<id>`)。
  * `uk_sys_dm_unique(department_id, user_id)`:一个人不能重复加入同一个部门
  * (两个列都 not null,所以这个唯一键是真实生效的)。
  */
@@ -444,8 +441,8 @@ export const sysUserDept = mysqlTable(
  *
  * | 列 | `p`(角色 → 权限) | `g`(用户 → 角色 / 角色 → 角色) |
  * | --- | --- | --- |
- * | `v0` sub | `role:<角色 code>` | `user:<用户 id>` 或 `role:<角色 code>` |
- * | `v1` obj | `menu:<菜单/按钮 id>` | `role:<角色 code>` |
+ * | `v0` sub | `role:<角色 id>` | `user:<用户 id>` 或 `role:<角色 id>` |
+ * | `v1` obj | `menu:<菜单/按钮 id>` | `role:<角色 id>` |
  * | `v2` act | `access` | 空串 |
  *
  * ⚠️ **为什么 `v1` 存的是 `menu:<id>` 而不是权限码**:`sys_menu` 里目录 / 菜单 / 按钮
@@ -460,8 +457,8 @@ export const sysUserDept = mysqlTable(
  * ⚠️ 删菜单时**没有外键兜底**(Casbin 的行不是关系行,MySQL 也不会替我们级联)——
  * `routers/menu.ts` 的 `delete` 必须显式调 `removeMenuPolicies(id)`。
  */
-export const casbinRule = mysqlTable(
-	"casbin_rule",
+export const sysCasbinRule = mysqlTable(
+	"sys_casbin_rule",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		/** 规则类型:`p`(策略行)/ `g`(角色成员与继承) */
@@ -473,56 +470,9 @@ export const casbinRule = mysqlTable(
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		uniqueIndex("uk_casbin_rule").on(table.ptype, table.v0, table.v1, table.v2),
-		index("idx_casbin_rule_v0").on(table.ptype, table.v0),
-		index("idx_casbin_rule_v1").on(table.ptype, table.v1),
-	],
-);
-
-/**
- * **数据权限(Casbin 的策略表)** —— 一行就是一条「谁 能访问 哪个资源」的直白规则。
- *
- * 角色**只管功能权限**(菜单 / 按钮 / 接口),数据范围不再挂在 `sys_role` 上:谁能看哪些行,
- * 完全由这张表说了算。列名用 Casbin 的通用形状 `v0..v3`(规则行 = `ptype` + 一串值),
- * 而不是 `sub/obj/act/eft`,因为灌进模型的是 `addPolicy(sec, ptype, rule)`:
- *
- * | 列 | 含义 |
- * | --- | --- |
- * | `v0` sub | 主体:`*` / `user:<用户 id>` / `role:<角色 code>` / `dept:<部门 id>` |
- * | `v1` obj | 资源:`*` / `<资源类型>`(该类型全部)/ `<资源类型>@org:<部门 id>`(该组织及其子树)/ `<资源类型>@<行 id>`(单条) |
- * | `v2` act | 动作:`read` / `write` / `*` |
- * | `v3` eft | 效果:`allow` / `deny`(`deny` 一票否决) |
- *
- * ⚠️ 这里**刻意没有业务语义**(没有"本部门以下""仅本人"这种档位词):组织范围一律用**具体的组织节点**
- * 表达 —— 各街镇层级深浅不一,数层数必然出错。也不留 `v4/v5` 空列、不写 `casbin_rule` 的 `g` 行
- * (角色成员只在 `casbin_rule`,两处维护必漂移)。
- *
- * ⚠️ 表是「谁被授权看哪些资源」的唯一真源,**没有任何界面**;写入口只有三个:迁移脚本、
- * 维护脚本、`demoGrid.assign`(指派负责人时同步那条按行的授权)。解析 / 编译见 `lib/data-policy{,-spec}.ts`。
- */
-export const sysDataPolicy = mysqlTable(
-	"sys_data_policy",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		/** Casbin 的规则类型:目前只有 `p`(策略行) */
-		ptype: varchar("ptype", { length: 16 }).notNull().default("p"),
-		/** 主体:`*` / `user:<用户 id>` / `role:<角色 code>` / `dept:<部门 id>` */
-		v0: varchar("v0", { length: 80 }).notNull(),
-		/** 资源:`*` / `<资源类型>` / `<资源类型>@org:<部门 id>` / `<资源类型>@<行 id>` */
-		v1: varchar("v1", { length: 128 }).notNull(),
-		/** 动作:`read` / `write` / `*` */
-		v2: varchar("v2", { length: 16 }).notNull(),
-		/** 效果:`allow` / `deny` */
-		v3: varchar("v3", { length: 16 }).notNull().default("allow"),
-		/** 0 = 停用(适配器只装 `status = 1` 的行) */
-		status: tinyint("status").notNull().default(1),
-		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_sys_data_policy_sub_obj_act").on(table.v0, table.v1, table.v2),
-		index("idx_sys_data_policy_sub").on(table.v0, table.status),
+		uniqueIndex("uk_sys_casbin_rule").on(table.ptype, table.v0, table.v1, table.v2),
+		index("idx_sys_casbin_rule_v0").on(table.ptype, table.v0),
+		index("idx_sys_casbin_rule_v1").on(table.ptype, table.v1),
 	],
 );
 
@@ -610,12 +560,11 @@ export const sysLog = mysqlTable(
 );
 
 /**
- * Demo:综合网格履职(**行级数据权限的第二个真实落点**)。
+ * Demo:综合网格履职。
  *
  * 字段只保留方案里说的那几个 —— Excel 后面 17 列月度统计**不建**。
- * 两个"指向"是行级权限的关键:`group_id`(「管理单元」,规则 `demo_grid@org:<它>` 按它展开子树)、
- * `owner_id`(负责人,规则 `demo_grid@<行 id>` 由「指派」同步维护 —— 也就是"队员只能看自己管辖的网格")。
- * `town_id` 只用于展示 / 筛选 / 统计,**不参与行级过滤**(见 `doc/rbac-权限模型.md`)。
+ * `group_id`(「管理单元」)/ `town_id`(街镇)/ `owner_id`(负责人)现在都只参与展示 / 筛选 / 统计,
+ * **不参与任何过滤** —— 行级数据权限那套机制已整体删除(见 `doc/已知陷阱.md`)。
  */
 export const sysDemoGrid = mysqlTable(
 	"demo_grid",
@@ -626,19 +575,13 @@ export const sysDemoGrid = mysqlTable(
 		name: varchar("name", { length: 64 }).notNull(),
 		/** 所属街镇(Excel 原样文本,便于列表直接展示) */
 		town_name: varchar("town_name", { length: 32 }),
-		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计,**不参与行级过滤**) */
+		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计) */
 		town_id: varchar("town_id", { length: 32 }),
-		/**
-		 * 「管理单元」→ `sys_dept.id`。规则 `demo_grid@org:<这个节点>` 按它展开**节点及其子树**,
-		 * 「走个人授权」的规则则直接按行 id 授权(`demo_grid@<行 id>`)。
-		 *
-		 * ⚠️ 授权时优先指向**人也会被挂上去的那类节点**(这里是「××网格组」,`sys_user_dept` 挂的就是它),
-		 * 不要指向统计口径的节点(街镇 / 区)。理由见 `doc/rbac-权限模型.md`。
-		 */
+		/** 「管理单元」→ `sys_dept.id`(只用于展示 / 筛选 / 统计) */
 		group_id: varchar("group_id", { length: 32 }),
 		/** 网格长姓名(Excel 原样;92 位真实姓名里没几个能对上账号,所以另存 owner_id) */
 		owner_name: varchar("owner_name", { length: 32 }),
-		/** 负责人 → `sys_user.id`;**队员的 `self` 档就是 `owner_id = 我`** */
+		/** 负责人 → `sys_user.id`(只用于展示 / 筛选 / 统计) */
 		owner_id: varchar("owner_id", { length: 32 }),
 		/** 工作职务(Excel 原样) */
 		duty: varchar("duty", { length: 64 }),

@@ -112,7 +112,6 @@ const STATEMENTS: string[] = [
 
 	`create table if not exists ${S}."sys_role" (
 		"id" varchar(32) not null,
-		"code" varchar(64) not null,
 		"name" varchar(32) not null,
 		"sort" int default 0 not null,
 		"status" tinyint default 1 not null,
@@ -120,7 +119,7 @@ const STATEMENTS: string[] = [
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
-		constraint "uk_sys_role_code" unique ("code")
+		unique ("name")
 	)`,
 
 	`create table if not exists ${S}."sys_user_dept" (
@@ -136,8 +135,8 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_dm_user" on ${S}."sys_user_dept" ("user_id")`,
 
-	// ── casbin_rule(功能权限策略:Casbin 判定 + 存储;见 src/lib/casbin.ts)────────
-	`create table if not exists ${S}."casbin_rule" (
+	// ── sys_casbin_rule(功能权限策略:Casbin 判定 + 存储;见 src/lib/casbin.ts)────────
+	`create table if not exists ${S}."sys_casbin_rule" (
 		"id" varchar(32) not null,
 		"ptype" varchar(8) not null,
 		"v0" varchar(80) not null,
@@ -146,27 +145,10 @@ const STATEMENTS: string[] = [
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
 		primary key ("id"),
-		constraint "uk_casbin_rule" unique ("ptype", "v0", "v1", "v2")
+		constraint "uk_sys_casbin_rule" unique ("ptype", "v0", "v1", "v2")
 	)`,
-	`create index if not exists "idx_casbin_rule_v0" on ${S}."casbin_rule" ("ptype", "v0")`,
-	`create index if not exists "idx_casbin_rule_v1" on ${S}."casbin_rule" ("ptype", "v1")`,
-
-	// ── sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)────────────────
-	`create table if not exists ${S}."sys_data_policy" (
-		"id" varchar(32) not null,
-		"ptype" varchar(16) default 'p' not null,
-		"v0" varchar(80) not null,
-		"v1" varchar(128) not null,
-		"v2" varchar(16) not null,
-		"v3" varchar(16) default 'allow' not null,
-		"status" tinyint default 1 not null,
-		"remark" varchar(255),
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
-		primary key ("id"),
-		constraint "uk_sys_data_policy_sub_obj_act" unique ("v0", "v1", "v2")
-	)`,
-	`create index if not exists "idx_sys_data_policy_sub" on ${S}."sys_data_policy" ("v0", "status")`,
+	`create index if not exists "idx_sys_casbin_rule_v0" on ${S}."sys_casbin_rule" ("ptype", "v0")`,
+	`create index if not exists "idx_sys_casbin_rule_v1" on ${S}."sys_casbin_rule" ("ptype", "v1")`,
 
 	// ── sys_file(文件元数据;字节存 MinIO,见 doc/文件管理.md)─────────────────
 	`create table if not exists ${S}."sys_file" (
@@ -221,7 +203,7 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
     `create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
-    // ── demo_grid(Demo:综合网格履职;行级数据权限落点)──────────────────
+    // ── demo_grid(Demo:综合网格履职)──────────────────
     `create table if not exists ${S}."demo_grid" (
       "id" varchar(32) not null,
       "name" varchar(64) not null,
@@ -268,29 +250,15 @@ async function main() {
 			conn.execute(sql, [], { outFormat: 4002 }, (e, r) =>
 				e ? rej(e as Error) : res((r as { rows: Array<Record<string, unknown>> }).rows ?? [])));
 
-	const before = new Set(
-		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) => String(r.TABLE_NAME)),
-	);
-
+	// ── 老库改表名必须在**建表之前**跑 ──
+	// 否则 `create table if not exists` 会先把**新名字**那张空表建出来,改名随即看到「新旧同时存在」
+	// 而不敢合并:数据留在旧表、新表空着,而且**每次执行都重复这一幕**(MySQL 线已按同样顺序修正)。
 	let failed = 0;
-	for (const sql of STATEMENTS) {
-		const isCreateTable = /create table/i.test(sql);
-		const tableName = isCreateTable ? sql.match(/"([a-z_]+)"\s*\(/)?.[1] : undefined;
-		const existed = tableName ? before.has(tableName) : undefined;
-		try {
-			await run(sql);
-			const action = isCreateTable ? (existed ? "· 已存在" : "✓ 新建") : "· 索引/约束";
-			console.log(`${action} ${sql.replace(/\s+/g, " ").slice(0, 78)}`);
-		} catch (e) {
-			failed += 1;
-			console.log(`✗ 失败:${sql.replace(/\s+/g, " ").slice(0, 60)}\n    ${(e as Error).message?.slice(0, 120).replace(/\n/g, " ")}`);
-		}
-	}
-
-	// ── 老库改表名:表改名后老库里还叫旧名,`create table if not exists` 只会当"没这张表"重开一张 ──
 	const tableRenames: Array<{ from: string; to: string }> = [
 		{ from: "sys_department", to: "sys_dept" },
 		{ from: "sys_department_member", to: "sys_user_dept" },
+		// 功能权限策略表补 `sys_` 前缀,与 MySQL 线同步。
+		{ from: "casbin_rule", to: "sys_casbin_rule" },
 	];
 	let renamed = 0;
 	const existingTables = new Set(
@@ -322,6 +290,25 @@ async function main() {
 			console.log("✓ 已清达梦计划缓存(表名变了,旧计划不能再用了)");
 		} catch (e) {
 			console.log(`· 计划缓存未清(不影响建表):${(e as Error).message?.slice(0, 70).replace(/\n/g, " ")}`);
+		}
+	}
+
+	// 快照取在改名**之后** —— 否则刚搬过去的表会被报成「✓ 新建」(它此前的名字不在这份名单里)。
+	const before = new Set(
+		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) => String(r.TABLE_NAME)),
+	);
+
+	for (const sql of STATEMENTS) {
+		const isCreateTable = /create table/i.test(sql);
+		const tableName = isCreateTable ? sql.match(/"([a-z_]+)"\s*\(/)?.[1] : undefined;
+		const existed = tableName ? before.has(tableName) : undefined;
+		try {
+			await run(sql);
+			const action = isCreateTable ? (existed ? "· 已存在" : "✓ 新建") : "· 索引/约束";
+			console.log(`${action} ${sql.replace(/\s+/g, " ").slice(0, 78)}`);
+		} catch (e) {
+			failed += 1;
+			console.log(`✗ 失败:${sql.replace(/\s+/g, " ").slice(0, 60)}\n    ${(e as Error).message?.slice(0, 120).replace(/\n/g, " ")}`);
 		}
 	}
 

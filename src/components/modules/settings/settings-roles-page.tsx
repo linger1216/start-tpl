@@ -78,7 +78,10 @@ export function SettingsRolesPage() {
 	});
 	const permTree = useMemo(() => buildPermTree(menusQuery.data ?? []), [menusQuery.data]);
 
-	const filtered = useMemo(() => roles.filter((row) => matchKeyword([row.name, row.code], keyword)), [roles, keyword]);
+	const filtered = useMemo(
+		() => roles.filter((row) => matchKeyword([row.name, row.remark], keyword)),
+		[roles, keyword],
+	);
 
 	const columns = useMemo(
 		() =>
@@ -236,7 +239,7 @@ export function SettingsRolesPage() {
 					setKeyword(value);
 					table.setPageIndex(0);
 				}}
-				searchPlaceholder="搜索角色名 / 标识…"
+				searchPlaceholder="搜索角色名 / 备注…"
 				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
 			/>
 

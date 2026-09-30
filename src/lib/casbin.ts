@@ -1,5 +1,5 @@
 /**
- * 功能权限的**引擎** —— Casbin 判决策 + 策略表 `casbin_rule` 的唯一读写入口。只在服务端跑。
+ * 功能权限的**引擎** —— Casbin 判决策 + 策略表 `sys_casbin_rule` 的唯一读写入口。只在服务端跑。
  *
  * 分工:
  *  - `lib/perm-code.ts` 管权限码的**形状与比较**(纯逻辑);
@@ -8,22 +8,23 @@
  *
  * 四条纪律(改这里之前先读):
  * 1. **判决策只有 Casbin**:`enforce()` 说不放行就是不放行,不许在旁边另写一套 `if`;
- * 2. **表里只存一种写法**:策略行永远是 `p, role:<角色 code>, menu:<菜单 id>, access` 与
- *    `g, user:<用户 id>, role:<角色 code>` / `g, role:<A>, role:<B>`。
+ * 2. **表里只存一种写法**:策略行永远是 `p, role:<角色 id>, menu:<菜单 id>, access` 与
+ *    `g, user:<用户 id>, role:<角色 id>` / `g, role:<A>, role:<B>`。
  *    权限码与页面码是**装载时展开**出来的(见 `loadPolicy`),不落库 ——
  *    于是改菜单的 `perm` 不用回刷任何策略行;
+ *    (角色在策略表里**只用 `id`** —— `sys_role` 没有 `code` 列,程序内部一律以 id 引用。)
  * 3. **写路径不经过 enforcer**:`enableAutoSave` 要求"内存里的规则形状 == 库里的形状",
  *    而本项目故意让装载**展开**、存储**不展开**(规矩 2),两者不是一种形状 ——
  *    用 enforcer 的 `addPolicy` / `removeFilteredPolicy` 会写进展开后的形状、删也删不掉。
- *    所以:写一律**直写库 + 清缓存**,enforcer 只负责判定(与 `lib/data-policy.ts` 的只读适配器同一手法);
+ *    所以:写一律**直写库 + 清缓存**,enforcer 只负责判定;
  * 4. **失败关闭**:认不出人就什么都不给;唯一的例外是策略表**一条 `p` 行都没有** ——
- *    那时整套功能权限视为**未启用**,一律放行(与数据权限的「空表 = 没开」同一口径)。
+ *    那时整套功能权限视为**未启用**,一律放行。
  */
 import { type Adapter, Enforcer, type Model, newModelFromString } from "casbin";
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 
 import { db } from "#/db";
-import { casbinRule, sysMenu, sysRole } from "#/db/data-base-schema";
+import { sysCasbinRule, sysMenu, sysRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { logger } from "#/lib/logger";
 import { isPermPattern, pagePermOf, permMatches } from "#/lib/perm-code";
@@ -60,13 +61,19 @@ m = (r.sub == p.sub || g(r.sub, p.sub) || p.sub == "*") && codeMatch(p.obj, r.ob
 /** matcher 里那个自定义函数的注册名 */
 const CODE_MATCH_FN = "codeMatch";
 
-/** `casbin_rule` 的两种行 */
+/** `sys_casbin_rule` 的两种行 */
 const POLICY_TYPE = "p";
 const GROUP_TYPE = "g";
-/** 主体 / 客体串的前缀 —— 与 `sys_data_policy.v0` 的既有语法一致(`rbac.ts` 靠 `MENU_PREFIX` 拆客体) */
+/** 主体 / 客体串的前缀:主体 `user:` / `role:`,客体 `menu:`(`rbac.ts` 靠 `MENU_PREFIX` 拆客体) */
 export const USER_PREFIX = "user:";
 export const ROLE_PREFIX = "role:";
 export const MENU_PREFIX = "menu:";
+
+/**
+ * 「系统管理员」角色名 —— 唯一能跨 admin 改 admin / 删除 admin 的角色。
+ * **与 `scripts/seed-rbac.ts` 的 `ADMIN_ROLE_NAME` 同步**:改名要改两处。
+ */
+export const ADMIN_ROLE_NAME = "系统管理员";
 
 /**
  * 客体(obj)怎么比 —— matcher 调的就是它。**纯函数,不查库**。
@@ -83,7 +90,7 @@ function codeMatch(pattern: string, code: string): boolean {
 }
 
 /**
- * **只读适配器**:`loadPolicy` 读 `casbin_rule` 并按纪律 2 展开,四个写方法一律抛错。
+ * **只读适配器**:`loadPolicy` 读 `sys_casbin_rule` 并按纪律 2 展开,四个写方法一律抛错。
  *
  * 写方法为什么抛错而不是空实现:Casbin 自己从不调它们(纪律 3,我们不接自动持久化),
  * 但哪天有人调了,抛错立刻炸出来;空实现只会让"以为写进去了"的改动静默失效。
@@ -96,26 +103,26 @@ class CasbinRuleAdapter implements Adapter {
 		const [rules, menus, roles] = await Promise.all([
 			db
 				.select({
-					ptype: casbinRule.ptype,
-					v0: casbinRule.v0,
-					v1: casbinRule.v1,
-					v2: casbinRule.v2,
+					ptype: sysCasbinRule.ptype,
+					v0: sysCasbinRule.v0,
+					v1: sysCasbinRule.v1,
+					v2: sysCasbinRule.v2,
 				})
-				.from(casbinRule),
+				.from(sysCasbinRule),
 			db.select({ id: sysMenu.id, parentId: sysMenu.parent_id, perm: sysMenu.perm, path: sysMenu.path }).from(sysMenu),
-			db.select({ code: sysRole.code, status: sysRole.status }).from(sysRole),
+			db.select({ id: sysRole.id, status: sysRole.status }).from(sysRole),
 		]);
 		const menuById = new Map(menus.map((row) => [row.id, row]));
 
 		/**
-		 * **停用的角色一律不算**:凡是把 `role:<code>` 当主体 / 客体的 `g` 行与 `p` 行,只有 `sys_role.status = 1` 时才装载。
+		 * **停用的角色一律不算**:凡是把 `role:<id>` 当主体 / 客体的 `g` 行与 `p` 行,只有 `sys_role.status = 1` 时才装载。
 		 *
 		 * 为什么必须在装载时挡:策略表是一张纯字符串图,它不知道 `sys_role` 有 `status` 这一列 ——
 		 * 不在这里过一道,一个**停用**的角色照样把权限发给它的成员(旧实现里这层过滤长在 SQL 的 join 上,
-		 * 见 `tests/role.test.ts` 的「停用的角色不贡献权限」)。顺带把"`sys_role` 里已经没有这个 code"的
+		 * 见 `tests/role.test.ts` 的「停用的角色不贡献权限」)。顺带把"`sys_role` 里已经没有这个 id"的
 		 * 悬挂行也挡掉 —— 等价于旧方案里外键 cascade 的效果。
 		 */
-		const liveRoles = new Set(roles.filter((row) => row.status === 1).map((row) => row.code));
+		const liveRoles = new Set(roles.filter((row) => row.status === 1).map((row) => row.id));
 		const roleDisabled = (subject: string): boolean =>
 			subject.startsWith(ROLE_PREFIX) && !liveRoles.has(subject.slice(ROLE_PREFIX.length));
 
@@ -213,9 +220,10 @@ class CasbinRuleAdapter implements Adapter {
 	}
 }
 
-const READONLY_ERROR = "casbin_rule 只能通过 lib/casbin.ts 的领域函数写:装载是展开的、存储是不展开的,两者不是一种形状";
+const READONLY_ERROR =
+	"sys_casbin_rule 只能通过 lib/casbin.ts 的领域函数写:装载是展开的、存储是不展开的,两者不是一种形状";
 
-/** 策略很少动,缓存 30 秒(与 `lib/data-policy.ts`、`lib/sys-para.ts` 同一手法) */
+/** 策略很少动,缓存 30 秒(与 `lib/sys-para.ts` 同一手法) */
 const CACHE_TTL_MS = 30_000;
 let cache: { at: number; enforcer: Enforcer } | null = null;
 
@@ -233,7 +241,7 @@ async function engineOf(force = false): Promise<Enforcer> {
  * 策略写完立刻生效,不必干等 30 秒 —— **每个写函数末尾都会调它**,不用调用方记。
  *
  * ⚠️ **菜单增 / 删 / 改 / 排序后也必须调**(`routers/menu.ts` 的每个写接口):
- * 展开结果跟着 `sys_menu` 变,而 `casbin_rule` 一行没动,不刷缓存就会拿旧快照判定。
+ * 展开结果跟着 `sys_menu` 变,而 `sys_casbin_rule` 一行没动,不刷缓存就会拿旧快照判定。
  */
 export function clearCasbinCache(): void {
 	cache = null;
@@ -286,42 +294,69 @@ export async function implicitObjsOf(userId: string): Promise<string[]> {
  * 为什么直接查库、不吃 enforcer 的缓存:这是"库里到底有没有配过"的事实,不该跟着 30 秒 TTL 漂。
  */
 export async function isPermissionConfigured(): Promise<boolean> {
-	const [row] = await db.select({ n: sql<number>`count(*)` }).from(casbinRule).where(eq(casbinRule.ptype, POLICY_TYPE));
+	const [row] = await db
+		.select({ n: sql<number>`count(*)` })
+		.from(sysCasbinRule)
+		.where(eq(sysCasbinRule.ptype, POLICY_TYPE));
 	return Number(row?.n ?? 0) > 0;
 }
 
 // ── 读:角色的勾选、用户与角色的对应关系 ────────────────────────────
 
 /** 这个角色勾了哪些菜单 / 按钮(裸 id,已去掉 `menu:` 前缀) */
-export async function grantedMenuIdsOf(roleCode: string): Promise<string[]> {
+export async function grantedMenuIdsOf(roleId: string): Promise<string[]> {
 	const rows = await db
-		.select({ v1: casbinRule.v1 })
-		.from(casbinRule)
-		.where(and(eq(casbinRule.ptype, POLICY_TYPE), eq(casbinRule.v0, `${ROLE_PREFIX}${roleCode}`)));
+		.select({ v1: sysCasbinRule.v1 })
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, `${ROLE_PREFIX}${roleId}`)));
 	return rows
 		.map((row) => row.v1)
 		.filter((v1) => v1.startsWith(MENU_PREFIX))
 		.map((v1) => v1.slice(MENU_PREFIX.length));
 }
 
-/** 这个人直接挂着哪些角色(裸 code)。**不含**角色继承 —— 继承由 Casbin 判定时算 */
-export async function roleCodesOf(userId: string): Promise<string[]> {
+/** 这个人直接挂着哪些角色(裸 id)。**不含**角色继承 —— 继承由 Casbin 判定时算 */
+export async function roleIdsOf(userId: string): Promise<string[]> {
 	const rows = await db
-		.select({ v1: casbinRule.v1 })
-		.from(casbinRule)
-		.where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v0, `${USER_PREFIX}${userId}`)));
+		.select({ v1: sysCasbinRule.v1 })
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, `${USER_PREFIX}${userId}`)));
 	return rows
 		.map((row) => row.v1)
 		.filter((v1) => v1.startsWith(ROLE_PREFIX))
 		.map((v1) => v1.slice(ROLE_PREFIX.length));
 }
 
+/**
+ * 用户是否持有「系统管理员」角色。**只查直接挂的角色**,不展开继承(继承是 Casbin 的事,
+ * 这里只问「他本人是不是 admin」)。一次查 g 行 + sys_role.name join,不 N+1。
+ *
+ * 业务用途:`user.update` / `user.remove` 的「admin 守卫」—— 改 admin / 删 admin
+ * 都要 admin 自己来。
+ *
+ * **第二个参数 `isSuper` 是 ctx 旁路**:服务端拿到的「当前用户」是 BA 给出的对象,
+ * 上面有 `isSuper: boolean` —— 生产里它跟「持系统管理员角色」是同一件事(种子脚本
+ * 把 isSuper=true 的用户也挂上 admin),但**测试里** `TEST_USER = { id: "test-admin",
+ * isSuper: true }` 是凭空捏造的(库没有它的 g 行)。让 `isSuper=true` 也算 admin,
+ * 让 admin 守卫能在 caller-level 测试里稳定跑通,又不破坏生产语义。
+ */
+export async function isAdminUser(userId: string, isSuper = false): Promise<boolean> {
+	if (isSuper) return true;
+	const ids = await roleIdsOf(userId);
+	if (ids.length === 0) return false;
+	const [row] = await db
+		.select({ n: sql<number>`count(*)` })
+		.from(sysRole)
+		.where(and(inArray(sysRole.id, ids), eq(sysRole.name, ADMIN_ROLE_NAME)));
+	return Number(row?.n ?? 0) > 0;
+}
+
 /** 这个角色底下有哪些人(裸 user id) */
-export async function userIdsOfRole(roleCode: string): Promise<string[]> {
+export async function userIdsOfRole(roleId: string): Promise<string[]> {
 	const rows = await db
-		.select({ v0: casbinRule.v0 })
-		.from(casbinRule)
-		.where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v1, `${ROLE_PREFIX}${roleCode}`)));
+		.select({ v0: sysCasbinRule.v0 })
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v1, `${ROLE_PREFIX}${roleId}`)));
 	return rows
 		.map((row) => row.v0)
 		.filter((v0) => v0.startsWith(USER_PREFIX))
@@ -329,21 +364,21 @@ export async function userIdsOfRole(roleCode: string): Promise<string[]> {
 }
 
 /**
- * **全部**「人 → 角色 code」的直接成员关系(**不含**角色继承)。
+ * **全部**「人 → 角色 id」的直接成员关系(**不含**角色继承)。
  *
  * 用户台账要一次显示所有人的角色 —— 有了这个就不必按人逐个查(那是 N+1)。
- * 返回值刻意是**裸 code** 而不是角色 id:调用方自己去 `sys_role` 换名字,本文件不替它做 join。
+ * 返回值刻意是**裸 id** 而不是角色名:调用方自己去 `sys_role` 换名字,本文件不替它做 join。
  */
-export async function allUserRoles(): Promise<Array<{ userId: string; roleCode: string }>> {
+export async function allUserRoles(): Promise<Array<{ userId: string; roleId: string }>> {
 	const rows = await db
-		.select({ v0: casbinRule.v0, v1: casbinRule.v1 })
-		.from(casbinRule)
-		.where(and(eq(casbinRule.ptype, GROUP_TYPE), like(casbinRule.v0, `${USER_PREFIX}%`)));
+		.select({ v0: sysCasbinRule.v0, v1: sysCasbinRule.v1 })
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), like(sysCasbinRule.v0, `${USER_PREFIX}%`)));
 	return rows
 		.filter((row) => row.v1.startsWith(ROLE_PREFIX))
 		.map((row) => ({
 			userId: row.v0.slice(USER_PREFIX.length),
-			roleCode: row.v1.slice(ROLE_PREFIX.length),
+			roleId: row.v1.slice(ROLE_PREFIX.length),
 		}));
 }
 
@@ -351,13 +386,14 @@ export async function allUserRoles(): Promise<Array<{ userId: string; roleCode: 
  * 所有角色的成员数 —— **一次 groupBy 拿全**(禁止按角色逐个 count,那是 N+1)。
  *
  * 只数 `user:` 开头的行:同一张表里还有 `role:` 开头的(角色继承),那不是"成员"。
+ * 返回的 `Map`:键是 `sys_role.id`(策略表里 `role:<id>` 的那个 id),值是成员行数。
  */
-export async function memberCountsByRole(): Promise<Map<string, number>> {
+export async function memberCountsOfRole(): Promise<Map<string, number>> {
 	const rows = await db
-		.select({ v1: casbinRule.v1, n: sql<number>`count(*)` })
-		.from(casbinRule)
-		.where(and(eq(casbinRule.ptype, GROUP_TYPE), like(casbinRule.v0, `${USER_PREFIX}%`)))
-		.groupBy(casbinRule.v1);
+		.select({ v1: sysCasbinRule.v1, n: sql<number>`count(*)` })
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), like(sysCasbinRule.v0, `${USER_PREFIX}%`)))
+		.groupBy(sysCasbinRule.v1);
 	const out = new Map<string, number>();
 	for (const row of rows) {
 		if (!row.v1.startsWith(ROLE_PREFIX)) continue;
@@ -371,19 +407,19 @@ export async function memberCountsByRole(): Promise<Map<string, number>> {
 /** 幂等插入一行 —— 不用 `on duplicate key update`(达梦不认),与 `routers/role.ts` 的既有做法同口径 */
 async function insertIfAbsent(row: { ptype: string; v0: string; v1: string; v2?: string }): Promise<boolean> {
 	const [existing] = await db
-		.select({ id: casbinRule.id })
-		.from(casbinRule)
+		.select({ id: sysCasbinRule.id })
+		.from(sysCasbinRule)
 		.where(
 			and(
-				eq(casbinRule.ptype, row.ptype),
-				eq(casbinRule.v0, row.v0),
-				eq(casbinRule.v1, row.v1),
-				eq(casbinRule.v2, row.v2 ?? ""),
+				eq(sysCasbinRule.ptype, row.ptype),
+				eq(sysCasbinRule.v0, row.v0),
+				eq(sysCasbinRule.v1, row.v1),
+				eq(sysCasbinRule.v2, row.v2 ?? ""),
 			),
 		);
 	if (existing) return false;
 	const now = new Date();
-	await db.insert(casbinRule).values({
+	await db.insert(sysCasbinRule).values({
 		id: newId(),
 		ptype: row.ptype,
 		v0: row.v0,
@@ -396,14 +432,14 @@ async function insertIfAbsent(row: { ptype: string; v0: string; v1: string; v2?:
 }
 
 /** 重设一个角色的菜单勾选(**全量替换**)。`menuIds` 应由调用方先过 `withAncestorIds` 补全祖先 */
-export async function setRoleMenus(roleCode: string, menuIds: readonly string[]): Promise<void> {
-	const sub = `${ROLE_PREFIX}${roleCode}`;
+export async function setRoleMenus(roleId: string, menuIds: readonly string[]): Promise<void> {
+	const sub = `${ROLE_PREFIX}${roleId}`;
 	const ids = [...new Set(menuIds)];
 	await db.transaction(async (tx) => {
-		await tx.delete(casbinRule).where(and(eq(casbinRule.ptype, POLICY_TYPE), eq(casbinRule.v0, sub)));
+		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
 		if (ids.length === 0) return;
 		const now = new Date();
-		await tx.insert(casbinRule).values(
+		await tx.insert(sysCasbinRule).values(
 			ids.map((menuId) => ({
 				id: newId(),
 				ptype: POLICY_TYPE,
@@ -419,8 +455,8 @@ export async function setRoleMenus(roleCode: string, menuIds: readonly string[])
 }
 
 /** 给一个角色**补**几条菜单授权(已存在的行不动)—— 与 `setRoleMenus` 的全量替换相对,迁移 / 批量补用 */
-export async function addRoleMenus(roleCode: string, menuIds: readonly string[]): Promise<number> {
-	const sub = `${ROLE_PREFIX}${roleCode}`;
+export async function addRoleMenus(roleId: string, menuIds: readonly string[]): Promise<number> {
+	const sub = `${ROLE_PREFIX}${roleId}`;
 	let added = 0;
 	for (const menuId of [...new Set(menuIds)]) {
 		if (await insertIfAbsent({ ptype: POLICY_TYPE, v0: sub, v1: `${MENU_PREFIX}${menuId}`, v2: "access" })) added += 1;
@@ -430,21 +466,21 @@ export async function addRoleMenus(roleCode: string, menuIds: readonly string[])
 }
 
 /** 给一个人加一个角色(已存在则什么都不做) */
-export async function addUserRole(userId: string, roleCode: string): Promise<void> {
-	if (await insertIfAbsent({ ptype: GROUP_TYPE, v0: `${USER_PREFIX}${userId}`, v1: `${ROLE_PREFIX}${roleCode}` })) {
+export async function addUserRole(userId: string, roleId: string): Promise<void> {
+	if (await insertIfAbsent({ ptype: GROUP_TYPE, v0: `${USER_PREFIX}${userId}`, v1: `${ROLE_PREFIX}${roleId}` })) {
 		clearCasbinCache();
 	}
 }
 
 /** 摘掉一个人的某个角色 */
-export async function removeUserRole(userId: string, roleCode: string): Promise<void> {
+export async function removeUserRole(userId: string, roleId: string): Promise<void> {
 	await db
-		.delete(casbinRule)
+		.delete(sysCasbinRule)
 		.where(
 			and(
-				eq(casbinRule.ptype, GROUP_TYPE),
-				eq(casbinRule.v0, `${USER_PREFIX}${userId}`),
-				eq(casbinRule.v1, `${ROLE_PREFIX}${roleCode}`),
+				eq(sysCasbinRule.ptype, GROUP_TYPE),
+				eq(sysCasbinRule.v0, `${USER_PREFIX}${userId}`),
+				eq(sysCasbinRule.v1, `${ROLE_PREFIX}${roleId}`),
 			),
 		);
 	clearCasbinCache();
@@ -459,14 +495,14 @@ export async function removeUserRole(userId: string, roleCode: string): Promise<
 type Writer = Pick<typeof db, "delete" | "insert" | "select" | "update">;
 
 /** 重设一个人的全部角色(**全量替换**)—— 「保存角色」那条路径用它 */
-export async function setUserRoles(userId: string, roleCodes: readonly string[], tx?: Writer): Promise<void> {
+export async function setUserRoles(userId: string, roleIds: readonly string[], tx?: Writer): Promise<void> {
 	const sub = `${USER_PREFIX}${userId}`;
-	const targets = [...new Set(roleCodes)].map((code) => `${ROLE_PREFIX}${code}`);
+	const targets = [...new Set(roleIds)].map((roleId) => `${ROLE_PREFIX}${roleId}`);
 	const run = async (exec: Writer) => {
-		await exec.delete(casbinRule).where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v0, sub)));
+		await exec.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, sub)));
 		if (targets.length === 0) return;
 		const now = new Date();
-		await exec.insert(casbinRule).values(
+		await exec.insert(sysCasbinRule).values(
 			targets.map((v1) => ({
 				id: newId(),
 				ptype: GROUP_TYPE,
@@ -489,8 +525,8 @@ export async function setUserRoles(userId: string, roleCodes: readonly string[],
 /** 清掉一个人的全部角色(删用户时用) */
 export async function removeAllRolesOfUser(userId: string): Promise<void> {
 	await db
-		.delete(casbinRule)
-		.where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v0, `${USER_PREFIX}${userId}`)));
+		.delete(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, `${USER_PREFIX}${userId}`)));
 	clearCasbinCache();
 }
 
@@ -498,51 +534,24 @@ export async function removeAllRolesOfUser(userId: string): Promise<void> {
  * 角色被删时**把它的痕迹清干净**:自己的 `p` 行、以它为成员的人的 `g` 行、以及以它为父角色的继承行。
  *
  * ⚠️ 这件事本来靠外键 cascade;Casbin 的行不是关系行,没有外键可依 —— 必须显式清。
+ *
+ * user role
+ * role menu
  */
-export async function removeRoleEverywhere(roleCode: string): Promise<void> {
-	const code = `${ROLE_PREFIX}${roleCode}`;
+export async function removeRoleEverywhere(roleId: string): Promise<void> {
+	const sub = `${ROLE_PREFIX}${roleId}`;
 	await db.transaction(async (tx) => {
-		await tx.delete(casbinRule).where(and(eq(casbinRule.ptype, POLICY_TYPE), eq(casbinRule.v0, code)));
-		await tx.delete(casbinRule).where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v0, code)));
-		await tx.delete(casbinRule).where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v1, code)));
+		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
+		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, sub)));
+		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v1, sub)));
 	});
 	clearCasbinCache();
 }
 
 /**
- * 角色的 `code` 改名时,**把策略表里认它的行一起搬过去**(可并进调用方的事务)。
- *
- * 为什么必须搬:旧方案的两张老表引用的是角色 **id**,改 code 天然没事;Casbin 的主体串里嵌的是 **code**,
- * 不搬就会变成"授权还在、但挂在了一个不存在的角色上" —— 装载时被当悬挂行丢掉,界面上看起来就是"权限丢了"。
- *
- * 要搬三类行(与 `removeRoleEverywhere` 清的三类一一对应):
- * ① `p, role:旧, menu:X` —— 角色的菜单授权(主体侧 `v0`);
- * ② `g, role:旧, role:P` —— 它继承了谁(主体侧 `v0`);
- * ③ `g, user:U, role:旧` —— 谁是它的成员(客体侧 `v1`)。
- *
- * 名字撞车不会发生:`role.update` 先过 `assertCodeFree`,新 code 一定是没人用的。
+ * `sys_role` 没有 `code` 列、改名不影响 id,故无策略行需要搬 —— 旧 `renameRolePolicies` 已删除。
+ * 这条占位注释保留给查 git blame 的同事:历史上角色有 `code` 时确实需要这个函数。
  */
-export async function renameRolePolicies(oldCode: string, newCode: string, tx?: Writer): Promise<void> {
-	const from = `${ROLE_PREFIX}${oldCode}`;
-	const to = `${ROLE_PREFIX}${newCode}`;
-	if (from === to) return;
-	const now = new Date();
-	const run = async (exec: Writer) => {
-		// 主体侧:p 行(授权)与 g 行(继承)的 v0 都是角色
-		await exec.update(casbinRule).set({ v0: to, update_time: now }).where(eq(casbinRule.v0, from));
-		// 客体侧:只有 g 行(谁是成员)
-		await exec
-			.update(casbinRule)
-			.set({ v1: to, update_time: now })
-			.where(and(eq(casbinRule.ptype, GROUP_TYPE), eq(casbinRule.v1, from)));
-	};
-	if (tx) {
-		await run(tx);
-	} else {
-		await db.transaction(run);
-	}
-	clearCasbinCache();
-}
 
 /**
  * 菜单被删时清掉指向它的策略行。
@@ -552,7 +561,7 @@ export async function renameRolePolicies(oldCode: string, newCode: string, tx?: 
  */
 export async function removeMenuPolicies(menuId: string): Promise<void> {
 	await db
-		.delete(casbinRule)
-		.where(and(eq(casbinRule.ptype, POLICY_TYPE), eq(casbinRule.v1, `${MENU_PREFIX}${menuId}`)));
+		.delete(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v1, `${MENU_PREFIX}${menuId}`)));
 	clearCasbinCache();
 }

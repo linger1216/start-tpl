@@ -137,7 +137,7 @@ export const NAV_NODES: NavNode[] = [
 	{
 		name: "Demo",
 		icon: "grid-3x3",
-		description: "演示性业务页(可随 demo 一起删):目前是「网格履职」—— 行级数据权限的落地示例。",
+		description: "演示性业务页(可随 demo 一起删):目前是「网格履职」。",
 		children: [{ name: "网格履职", path: "/demo/grid", icon: "grid-3x3" }],
 	},
 	{
@@ -146,7 +146,7 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"十个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件、审计日志、数据权限(行级授权规则)—— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
+			"九个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件、审计日志 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
 			{ name: "部门管理", path: "/settings/departments", icon: "contact" },
@@ -157,7 +157,6 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
 			{ name: "文件管理", path: "/settings/files", icon: "files" },
 			{ name: "审计日志", path: "/settings/logs", icon: "scroll-text" },
-			{ name: "数据权限", path: "/settings/data-policy", icon: "shield-alert" },
 		],
 	},
 ];

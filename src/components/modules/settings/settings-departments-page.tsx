@@ -25,7 +25,7 @@ import { buildTree, bySortThenName } from "#/lib/tree";
 /**
  * 系统设置 ▸ 部门管理 —— **左侧部门树 + 右侧详情(含成员)**。
  *
- * 部门是**数据权限的边界**,但"数据权限"本身是下一轮的事;这一页只负责把
+ * 这一页只负责把
  * 「有哪些部门 / 谁在哪个部门 / 是什么角色」维护清楚。
  *
  * 张三是「上海=管理员、武汉=员工」时,这两条是**两条**成员记录(一人可跨部门),
@@ -139,7 +139,7 @@ export function SettingsDepartmentsPage() {
 		<PageFrame>
 			<PageHeader
 				title="部门管理"
-				description="部门是数据权限的边界:一个人可以同时属于多个部门,在每个部门里有一个角色 —— 权限取并集,不需要切换。"
+				description="一个人可以同时属于多个部门,在每个部门里有一个角色 —— 权限取并集,不需要切换。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
 						<RefreshButton busy={treeQuery.isFetching} onClick={() => void treeQuery.refetch()} />

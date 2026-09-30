@@ -23,7 +23,7 @@ const paraTypeSchema = z
 	.transform((value) => value as ParaType);
 
 /** 库行 → 接口出参(**只回表里真有的列** + 代码默认值的兜底) */
-function toParaRow(key: string, row: typeof sysPara.$inferSelect | undefined) {
+function toPara(key: string, row: typeof sysPara.$inferSelect | undefined) {
 	const fallback = PARA_DEFAULTS[key];
 	return {
 		// 与 sys_para 的十列一一对应(界面要能看全字段);`id` 是库里的无意义短串,
@@ -48,7 +48,7 @@ export const paraRouter = createTRPCRouter({
 		const stored = new Map(rows.map((row) => [row.para_key, row]));
 		const keys = [...new Set([...Object.keys(PARA_DEFAULTS), ...rows.map((row) => row.para_key)])];
 		return keys
-			.map((key) => toParaRow(key, stored.get(key)))
+			.map((key) => toPara(key, stored.get(key)))
 			.sort((a, b) => (a.group === b.group ? a.key.localeCompare(b.key) : a.group.localeCompare(b.group)));
 	}),
 

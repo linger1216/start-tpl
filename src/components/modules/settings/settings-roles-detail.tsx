@@ -30,7 +30,7 @@ export function SettingsRolesDetail({
 			meta={{ createdAt: row?.createTime ?? null, updatedAt: row?.updateTime ?? null }}
 			onOpenChange={onOpenChange}
 			title={`角色详情 · ${row?.name ?? ""}`}
-			description={<span className="font-mono">{row?.code ?? ""}</span>}
+			description={row?.remark || "全局定义的角色 —— 谁有它记在「用户 → 角色」上"}
 			badge={
 				row ? (
 					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
@@ -53,9 +53,6 @@ export function SettingsRolesDetail({
 					</DetailRow>
 					<DetailRow label="角色名">
 						<span className="text-sm font-medium">{row.name}</span>
-					</DetailRow>
-					<DetailRow label="标识">
-						<span className="font-mono text-xs">{row.code}</span>
 					</DetailRow>
 					<DetailRow label="排序">
 						<span className="tabular-nums">{row.sort}</span>

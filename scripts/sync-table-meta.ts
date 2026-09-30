@@ -39,16 +39,15 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_file: "文件元数据(字节存 MinIO;见 doc/文件管理.md)",
 	sys_log: "审计日志(只增不改;见 doc/审计日志.md)",
 	sys_notice: "站内通知(一条一个收件人;见 doc/通知中心.md)",
-	demo_grid: "Demo:综合网格履职(行级数据权限落点)",
+	demo_grid: "Demo:综合网格履职",
 	sys_user: "用户(Better Auth 内核四表之一;auth 是系统内部服务,故吃 sys_ 前缀)",
 	sys_session: "登录会话(每个设备 / 浏览器一行;user_id 级联删除)",
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
 	sys_verification: "验证码 / 一次性令牌(邮箱验证、改密、二次验证都用它)",
 	sys_dept: "部门树(组织架构;谁是成员见 sys_user_dept)",
-	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 casbin_rule 的 g 行)",
+	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
-	casbin_rule: "功能权限策略(p = 角色 → 权限码;g = 用户 → 角色 / 角色 → 角色继承;见 doc/rbac-权限模型.md)",
-	sys_data_policy: "行级数据权限(直白授权规则:谁 · 哪个资源 · 什么动作 · 允许 / 拒绝)",
+	sys_casbin_rule: "功能权限策略(p = 角色 → 权限码;g = 用户 → 角色 / 角色 → 角色继承;见 doc/rbac-权限模型.md)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 };
 
@@ -156,7 +155,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dept", column: "update_time", comment: "更新时间" },
 	// sys_role
 	{ table: "sys_role", column: "id", comment: "主键(nanoid,由代码生成)" },
-	{ table: "sys_role", column: "code", comment: "角色标识(业务键),如 sys_admin —— 程序里认它" },
 	{ table: "sys_role", column: "name", comment: "角色名(中文)" },
 	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
 	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
@@ -170,37 +168,22 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_user_dept", column: "create_time", comment: "创建时间" },
 	{ table: "sys_user_dept", column: "update_time", comment: "更新时间" },
 
-	// casbin_rule(功能权限策略;见 src/lib/casbin.ts)
-	{ table: "casbin_rule", column: "id", comment: "主键(nanoid,由代码生成)" },
+	// sys_casbin_rule(功能权限策略;见 src/lib/casbin.ts)
+	{ table: "sys_casbin_rule", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{
-		table: "casbin_rule",
+		table: "sys_casbin_rule",
 		column: "ptype",
 		comment: "规则类型:p(角色 → 权限)/ g(用户 → 角色、角色 → 角色)",
 	},
 	{
-		table: "casbin_rule",
+		table: "sys_casbin_rule",
 		column: "v0",
-		comment: "p:role:<角色 code>;g:user:<用户 id> 或 role:<角色 code>",
+		comment: "p:role:<角色 id>;g:user:<用户 id> 或 role:<角色 id>",
 	},
-	{ table: "casbin_rule", column: "v1", comment: "p:menu:<菜单/按钮 id>;g:role:<角色 code>" },
-	{ table: "casbin_rule", column: "v2", comment: "p:access;g:空串" },
-	{ table: "casbin_rule", column: "create_time", comment: "创建时间" },
-	{ table: "casbin_rule", column: "update_time", comment: "更新时间" },
-	// sys_data_policy(行级数据权限;见 doc/rbac-权限模型.md)
-	{ table: "sys_data_policy", column: "id", comment: "主键(nanoid,由代码生成)" },
-	{ table: "sys_data_policy", column: "ptype", comment: "规则类型(Casbin 口径;目前只有 p = 策略行)" },
-	{ table: "sys_data_policy", column: "v0", comment: "主体:* / user:<用户 id> / role:<角色 code> / dept:<部门 id>" },
-	{
-		table: "sys_data_policy",
-		column: "v1",
-		comment: "资源:* / <类型> / <类型>@org:<部门 id>(该组织及以下) / <类型>@<行 id>",
-	},
-	{ table: "sys_data_policy", column: "v2", comment: "动作:read / write / *(读写都算)" },
-	{ table: "sys_data_policy", column: "v3", comment: "效果:allow / deny(deny 一票否决)" },
-	{ table: "sys_data_policy", column: "status", comment: "0 停用 / 1 启用(只有启用的行会被装载)" },
-	{ table: "sys_data_policy", column: "remark", comment: "备注" },
-	{ table: "sys_data_policy", column: "create_time", comment: "创建时间" },
-	{ table: "sys_data_policy", column: "update_time", comment: "更新时间" },
+	{ table: "sys_casbin_rule", column: "v1", comment: "p:menu:<菜单/按钮 id>;g:role:<角色 id>" },
+	{ table: "sys_casbin_rule", column: "v2", comment: "p:access;g:空串" },
+	{ table: "sys_casbin_rule", column: "create_time", comment: "创建时间" },
+	{ table: "sys_casbin_rule", column: "update_time", comment: "更新时间" },
 	// todos(示例表)
 	{ table: "todos", column: "id", comment: "主键(自增;示例表)" },
 	{ table: "todos", column: "title", comment: "待办标题" },
@@ -258,6 +241,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
  */
 const INDEX_RENAMES: Array<{ table: string; from: string; to: string }> = [
 	{ table: "sys_para", from: "idx_cfg_group", to: "idx_para_group" },
+	// 表名补 `sys_` 前缀时(`create-system-tables.ts` 的 `TABLE_RENAMES`),索引名不会跟着走 ——
+	// `rename table` 只动表名,得在这里补一笔。
+	{ table: "sys_casbin_rule", from: "uk_casbin_rule", to: "uk_sys_casbin_rule" },
+	{ table: "sys_casbin_rule", from: "idx_casbin_rule_v0", to: "idx_sys_casbin_rule_v0" },
+	{ table: "sys_casbin_rule", from: "idx_casbin_rule_v1", to: "idx_sys_casbin_rule_v1" },
 ];
 
 /**

@@ -21,7 +21,6 @@ import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
 import { Route as mainDemoTableRouteImport } from './routes/(main)/demo/table'
 import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/tanstack-query'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
-import { Route as mainSettingsDataPolicyRouteImport } from './routes/(main)/settings/data-policy'
 import { Route as mainSettingsDepartmentsRouteImport } from './routes/(main)/settings/departments'
 import { Route as mainSettingsDictionaryRouteImport } from './routes/(main)/settings/dictionary'
 import { Route as mainSettingsFilesRouteImport } from './routes/(main)/settings/files'
@@ -92,11 +91,6 @@ const mainDemoTanstackQueryRoute = mainDemoTanstackQueryRouteImport.update({
 const mainSettingsIndexRoute = mainSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainSettingsDataPolicyRoute = mainSettingsDataPolicyRouteImport.update({
-  id: '/settings/data-policy',
-  path: '/settings/data-policy',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainSettingsDepartmentsRoute = mainSettingsDepartmentsRouteImport.update({
@@ -171,7 +165,6 @@ export interface FileRoutesByFullPath {
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
-  '/settings/data-policy': typeof mainSettingsDataPolicyRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/settings/files': typeof mainSettingsFilesRoute
@@ -197,7 +190,6 @@ export interface FileRoutesByTo {
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
-  '/settings/data-policy': typeof mainSettingsDataPolicyRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/settings/files': typeof mainSettingsFilesRoute
@@ -225,7 +217,6 @@ export interface FileRoutesById {
   '/(main)/demo/store': typeof mainDemoStoreRoute
   '/(main)/demo/table': typeof mainDemoTableRoute
   '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
-  '/(main)/settings/data-policy': typeof mainSettingsDataPolicyRoute
   '/(main)/settings/departments': typeof mainSettingsDepartmentsRoute
   '/(main)/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/(main)/settings/files': typeof mainSettingsFilesRoute
@@ -253,7 +244,6 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
-    | '/settings/data-policy'
     | '/settings/departments'
     | '/settings/dictionary'
     | '/settings/files'
@@ -279,7 +269,6 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
-    | '/settings/data-policy'
     | '/settings/departments'
     | '/settings/dictionary'
     | '/settings/files'
@@ -306,7 +295,6 @@ export interface FileRouteTypes {
     | '/(main)/demo/store'
     | '/(main)/demo/table'
     | '/(main)/demo/tanstack-query'
-    | '/(main)/settings/data-policy'
     | '/(main)/settings/departments'
     | '/(main)/settings/dictionary'
     | '/(main)/settings/files'
@@ -415,13 +403,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsIndexRouteImport
       parentRoute: typeof mainRouteRoute
     }
-    '/(main)/settings/data-policy': {
-      id: '/(main)/settings/data-policy'
-      path: '/settings/data-policy'
-      fullPath: '/settings/data-policy'
-      preLoaderRoute: typeof mainSettingsDataPolicyRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
     '/(main)/settings/departments': {
       id: '/(main)/settings/departments'
       path: '/settings/departments'
@@ -519,7 +500,6 @@ interface mainRouteRouteChildren {
   mainDemoStoreRoute: typeof mainDemoStoreRoute
   mainDemoTableRoute: typeof mainDemoTableRoute
   mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
-  mainSettingsDataPolicyRoute: typeof mainSettingsDataPolicyRoute
   mainSettingsDepartmentsRoute: typeof mainSettingsDepartmentsRoute
   mainSettingsDictionaryRoute: typeof mainSettingsDictionaryRoute
   mainSettingsFilesRoute: typeof mainSettingsFilesRoute
@@ -543,7 +523,6 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainDemoStoreRoute: mainDemoStoreRoute,
   mainDemoTableRoute: mainDemoTableRoute,
   mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,
-  mainSettingsDataPolicyRoute: mainSettingsDataPolicyRoute,
   mainSettingsDepartmentsRoute: mainSettingsDepartmentsRoute,
   mainSettingsDictionaryRoute: mainSettingsDictionaryRoute,
   mainSettingsFilesRoute: mainSettingsFilesRoute,

@@ -24,7 +24,6 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 
 export type RoleFormPayload = {
-	code: string;
 	name: string;
 	/** 留空 = 自动排到最后(只有编辑时才是必填的数值) */
 	sort?: number;
@@ -96,7 +95,6 @@ export function SettingsRolesForm({
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [name, setName] = useState("");
-	const [code, setCode] = useState("");
 	const [remark, setRemark] = useState("");
 	const [sort, setSort] = useState("0");
 	const [status, setStatus] = useState(true);
@@ -125,7 +123,6 @@ export function SettingsRolesForm({
 	useEffect(() => {
 		if (!open) return;
 		setName(role?.name ?? "");
-		setCode(role?.code ?? "");
 		setRemark(role?.remark ?? "");
 		setStatus(role ? role.status !== 0 : true);
 		setSort(role ? String(role.sort ?? 0) : "");
@@ -133,7 +130,7 @@ export function SettingsRolesForm({
 		setDraft(null);
 	}, [open, role, initialTab]);
 
-	const invalid = name.trim().length === 0 || code.trim().length === 0;
+	const invalid = name.trim().length === 0;
 	// 新增时还没有角色 id,谈不上"谁有这个角色" / "授了哪些菜单" —— 后两个 tab 只在编辑时出现
 	const editing = Boolean(role) && !creating;
 
@@ -191,15 +188,6 @@ export function SettingsRolesForm({
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
-							<DetailRow label="标识" htmlFor="role-code">
-								<Input
-									id="role-code"
-									value={code}
-									placeholder="如:dept_manager"
-									className="h-8 font-mono text-xs"
-									onChange={(event) => setCode(event.target.value)}
-								/>
-							</DetailRow>
 							<DetailRow label="说明" htmlFor="role-remark">
 								<Textarea
 									id="role-remark"
@@ -230,7 +218,6 @@ export function SettingsRolesForm({
 								onClick={() =>
 									onSubmit({
 										name: name.trim(),
-										code: code.trim(),
 										sort: sort.trim() === "" ? undefined : Number(sort),
 										status,
 										remark: remark.trim() || null,

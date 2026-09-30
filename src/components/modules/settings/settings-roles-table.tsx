@@ -6,7 +6,6 @@ import { formatLocalMinute } from "#/lib/time";
 /** 角色表的一行(tRPC `role.list` 出参)—— **与 `sys_role` 的列一一对应** + 一个派生计数 */
 export type RoleRow = {
 	id: string;
-	code: string;
 	name: string;
 	sort: number;
 	status: number;
@@ -43,12 +42,6 @@ export function roleColumns({
 			sortFn: "text",
 			size: 160,
 			cell: (ctx) => <span className="text-sm">{ctx.getValue()}</span>,
-		}),
-		columnHelper.accessor("code", {
-			header: "标识",
-			sortFn: "text",
-			size: 150,
-			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue()}</span>,
 		}),
 		columnHelper.accessor("memberCount", {
 			header: "成员",

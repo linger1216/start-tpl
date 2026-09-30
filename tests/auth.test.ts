@@ -75,14 +75,13 @@ describe("服务端鉴权", () => {
 		// 不带 `isSuper` 的注入用户:库里没有任何角色授权 ⇒ 权限集是空集
 		const nobody = createCallerFactory(trpcRouter)({ user: { id: "test-nobody", name: "无权用户" } });
 		await assertRejects(() => nobody.log.list(), "没有权限");
-		await assertRejects(() => nobody.role.create({ name: "不该建成", code: "NOPE", remark: "" }), "没有权限");
+		await assertRejects(() => nobody.role.create({ name: "不该建成", remark: "" }), "没有权限");
 		await assertRejects(() => nobody.file.remove({ ids: ["whatever"] }), "没有权限");
 		await assertRejects(() => nobody.notice.create({ userIds: ["x"], title: "不该发出" }), "没有权限");
 		// 页面数据类读接口也必须硬拦(前端藏菜单只是表象 —— 记住 url 直接调接口才是真口子)
 		await assertRejects(() => nobody.role.list(), "没有权限");
 		await assertRejects(() => nobody.para.list(), "没有权限");
 		await assertRejects(() => nobody.department.tree(), "没有权限");
-		await assertRejects(() => nobody.policy.list(), "没有权限");
 		// 外壳级读接口不受影响:顶栏铃铛、侧栏与每页的偏好参数 —— 拦它们会让整站打不开
 		await nobody.notice.list({ limit: 1 });
 		await nobody.para.byKey({ key: "page.size" });
@@ -158,10 +157,10 @@ describe("审计日志", () => {
 		assert.equal((await db.select().from(sysLog).where(eq(sysLog.path, "role.list"))).length, 0, "查询不该写审计");
 		assert.equal((await db.select().from(sysLog).where(eq(sysLog.path, "file.list"))).length, 0, "查询不该写审计");
 
-		const code = `${TEST_PREFIX}audit${SUFFIX}`.toUpperCase().slice(0, 32);
-		const created = await caller.role.create({ name: `${TEST_PREFIX}审计角色${SUFFIX}`, code, remark: "" });
+		const createdName = `${TEST_PREFIX}审计角色${SUFFIX}`;
+		const created = await caller.role.create({ name: createdName, remark: "" });
 		try {
-			const row = await waitForOwnLog("role.create", code);
+			const row = await waitForOwnLog("role.create", createdName);
 			assert.ok(row, "写调用要留下审计行");
 			const entry = row as typeof sysLog.$inferSelect;
 			assert.equal(entry.status, 1);
@@ -171,7 +170,7 @@ describe("审计日志", () => {
 			assert.equal(entry.operator_name, TEST_USER.name, "姓名要落快照(账号被删后日志仍读得懂)");
 			assert.ok(entry.trace_id, "要带上 traceId,才能和 stdout 日志对上");
 			// ⚠️ `role.create` 的入参里**没有 id**(它是服务端生成的)⇒ 目标描述只能挑到入参里真实存在的字段
-			assert.ok((entry.target ?? "").includes(code), "目标描述要带上入参里能认出的字段(code)");
+			assert.ok((entry.target ?? "").includes(createdName), "目标描述要带上入参里能认出的字段(角色名)");
 			assert.equal(entry.input?.includes(created.id), false, "入参快照就是入参,不该出现服务端生成的东西");
 			assert.ok(entry.duration_ms !== null);
 		} finally {
@@ -207,15 +206,16 @@ describe("审计日志", () => {
 	});
 
 	it("失败的写调用记 status=0(含错误码),且原来的报错照旧抛出", async () => {
-		const code = `${TEST_PREFIX}fail${SUFFIX}`.toUpperCase().slice(0, 32);
-		const first = await caller.role.create({ name: `${TEST_PREFIX}审计失败${SUFFIX}`, code, remark: "" });
+		// 角色名现在是唯一可挑的入参关键字(已没有 code 字段)⇒ 用同一个 name 撞两次,第二次会被 CONFLICT 拒
+		const failingName = `${TEST_PREFIX}审计失败_${SUFFIX}`;
+		const first = await caller.role.create({ name: failingName, remark: "" });
 		try {
-			await assertRejects(() => caller.role.create({ name: "重名", code, remark: "" }), "");
-			// 失败的这一次也会写一行:同 code 下应该出现 status=0 的那条
+			await assertRejects(() => caller.role.create({ name: failingName, remark: "" }), "");
+			// 失败的这一次也会写一行:同 name 下应该出现 status=0 的那条
 			let failedRow: typeof sysLog.$inferSelect | null = null;
 			for (let i = 0; i < 40 && !failedRow; i += 1) {
 				const rows = await db.select().from(sysLog).where(eq(sysLog.path, "role.create"));
-				failedRow = rows.find((row) => (row.target ?? "").includes(code) && row.status === 0) ?? null;
+				failedRow = rows.find((row) => (row.target ?? "").includes(failingName) && row.status === 0) ?? null;
 				if (failedRow) createdLogIds.push(failedRow.id);
 				else await new Promise((resolve) => setTimeout(resolve, 50));
 			}

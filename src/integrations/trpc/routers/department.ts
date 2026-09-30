@@ -12,8 +12,7 @@
  * | `setMemberRole` | mutation | 加人 / 改这个人在这个部门的角色(靠 `uk_sys_dm_unique` 唯一) |
  * | `removeMember` | mutation | 把某人移出这个部门 |
  *
- * 注意:**部门是数据权限的边界,但"数据权限"本身是下一轮** —— 这里只落"谁在哪个部门、是什么角色",
- * 不在这里做任何行级过滤。
+ * 注意:这里只落"谁在哪个部门、是什么角色",不做任何行级过滤。
  */
 
 import { TRPCError } from "@trpc/server";
@@ -27,7 +26,7 @@ import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参 */
-function toDepartmentRow(row: typeof sysDept.$inferSelect) {
+function toDepartment(row: typeof sysDept.$inferSelect) {
 	return {
 		id: row.id,
 		parentId: row.parent_id ?? null,
@@ -52,12 +51,12 @@ async function getDepartmentRow(id: string) {
  * 为什么:顶级部门的 `parent_id` 是 `NULL`,而 MySQL 的唯一索引**不把两个 NULL 当重复** ——
  * `unique(parent_id, name)` 对顶级节点形同虚设(半吊子约束比没有更糟,它会让人以为已经防住了)。
  */
-async function assertNameFree(parentId: string | null, name: string, selfId?: string) {
+async function assertDeptNameUnique(parentId: string | null, name: string, excludeDeptId?: string) {
 	const siblings = await db
 		.select({ id: sysDept.id, name: sysDept.name })
 		.from(sysDept)
 		.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
-	const clash = siblings.find((row) => row.name === name && row.id !== selfId);
+	const clash = siblings.find((row) => row.name === name && row.id !== excludeDeptId);
 	if (clash) throw new TRPCError({ code: "CONFLICT", message: `同一级下已经有叫「${name}」的部门了` });
 }
 
@@ -88,7 +87,7 @@ async function nextSort(parentId: string | null) {
 export const departmentRouter = createTRPCRouter({
 	tree: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysDept).orderBy(asc(sysDept.sort), asc(sysDept.name));
-		return rows.map(toDepartmentRow);
+		return rows.map(toDepartment);
 	}),
 
 	create: protectedProcedure
@@ -103,7 +102,7 @@ export const departmentRouter = createTRPCRouter({
 			const parentId = input.parentId ?? null;
 			if (parentId) await getDepartmentRow(parentId);
 			const name = input.name.trim();
-			await assertNameFree(parentId, name);
+			await assertDeptNameUnique(parentId, name);
 			const id = newId();
 			await db.insert(sysDept).values({
 				id,
@@ -115,7 +114,7 @@ export const departmentRouter = createTRPCRouter({
 				create_time: new Date(),
 				update_time: new Date(),
 			});
-			return toDepartmentRow(await getDepartmentRow(id));
+			return toDepartment(await getDepartmentRow(id));
 		}),
 
 	update: protectedProcedure
@@ -136,7 +135,7 @@ export const departmentRouter = createTRPCRouter({
 				await assertNotDescendant(input.id, parentId);
 			}
 			const name = input.name.trim();
-			await assertNameFree(parentId, name, input.id);
+			await assertDeptNameUnique(parentId, name, input.id);
 			await db
 				.update(sysDept)
 				.set({
@@ -148,7 +147,7 @@ export const departmentRouter = createTRPCRouter({
 					update_time: new Date(),
 				})
 				.where(eq(sysDept.id, input.id));
-			return toDepartmentRow(await getDepartmentRow(input.id));
+			return toDepartment(await getDepartmentRow(input.id));
 		}),
 
 	/**
@@ -220,16 +219,16 @@ export const departmentRouter = createTRPCRouter({
 			.orderBy(asc(sysUser.name));
 
 		const userIds = rows.map((row) => row.userId);
-		// 角色成员关系在策略表的 `g` 行里(存的是**角色 code**)—— 一次拉全再按本部门的人筛,不 N+1
+		// 角色成员关系在策略表的 `g` 行里(存的就是**角色 id**)—— 一次拉全再按本部门的人筛,不 N+1
 		const wanted = new Set(userIds);
 		const memberRows = (await allUserRoles()).filter((row) => wanted.has(row.userId));
-		// 认不出的 code(角色刚被删、`g` 行还没清)跳过,与装载时「跳过孤儿菜单」同一口径
+		// 认不出的 id(角色刚被删、`g` 行还没清)跳过,与装载时「跳过孤儿菜单」同一口径
 		const roleNames = new Map(
-			(await db.select({ code: sysRole.code, name: sysRole.name }).from(sysRole)).map((row) => [row.code, row.name]),
+			(await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).map((row) => [row.id, row.name]),
 		);
 		const rolesOf = new Map<string, string[]>();
 		for (const row of memberRows) {
-			const name = roleNames.get(row.roleCode);
+			const name = roleNames.get(row.roleId);
 			if (!name) continue;
 			const list = rolesOf.get(row.userId) ?? [];
 			list.push(name);

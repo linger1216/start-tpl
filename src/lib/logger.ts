@@ -1,43 +1,43 @@
 /**
- * **后端结构化日志**(唯一出口)。
+ * **后端结构化日志**(唯一出口)。底层 pino 10,外面一层薄包装 —— 所有调用点
+ * 仍然 `import { logger } from "#/lib/logger"`,形态与之前一致。
  *
- * 为什么要一个统一出口,而不是到处 `console.log`:
- *  1. **可查询**:每行是一条 JSON(`ts` / `level` / `event` / 业务字段),`grep '"event":"sync.finish"'`
- *     或 `jq 'select(.sourceId=="SRC-260920-153045")'` 就能把一次同步的前因后果串起来;
- *  2. **有 trace**:tRPC 中间件给每次请求发一个 `traceId` 放进 ctx,内部日志都带上它 ——
- *     一次调用里的所有日志(入口 / 同步 / 规则 / 落库)能按 traceId 串成一条时间线;
- *  3. **不泄密**:落盘前统一脱敏(`token`/`secret`/`password`/`authorization`/`cookie` 一律 `***`,
- *     长字符串截断)—— 凭据只以变量名出现在库里,日志里也不该出现真实值;
- *  4. **可静音 / 可注入**:`LOG_LEVEL` 调级别、`LOG_SILENT=1` 全关、测试用 `setLogSink()` 收流,
- *     所以"日志覆盖率"这件事本身能被用例断言。
+ * 为什么用 pino 而不是手写 JSON:
+ *  - 标准化的 JSON 行 + 性能高(异步 write、零分配路径);
+ *  - 内置 `level` / `redact` / `timestamp` 三大常用件,不用自己维护;
+ *  - `destination` 可注入(测试 `setLogSink` / `collectLogs` 直接复用 pino 的写法)。
  *
- * 约定:`event` 用 `域.动作` 命名(`trpc.ok` / `sync.finish` / `rule.batch` / `entity.import` …),
- * 告警与错误用 `warn` / `error`,`debug` 用来记"高频但排查时要看"的入口(如 list/detail)。
+ * 约定:`event` 用 `域.动作` 命名(`trpc.ok` / `sync.finish` / `rule.batch` …),
+ * 告警与错误用 `warn` / `error`,`debug` 用来记"高频但排查时要看"的入口。
  */
-type LogLevel = "debug" | "info" | "warn" | "error";
+import pino, { type Logger as PinoLogger } from "pino";
 
+type LogLevel = "debug" | "info" | "warn" | "error";
 type LogFields = Record<string, unknown>;
 
 export type LogLine = { ts: string; level: LogLevel; event: string } & LogFields;
 
-const LEVEL_WEIGHT: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-
-/** 需要脱敏的字段名(大小写不敏感,子串匹配) */
+/** 需要脱敏的字段名(子串匹配,大小写不敏感);同时给 pino redact 用 */
 const SECRET_KEY_PATTERN = /(token|secret|password|passwd|authorization|cookie|apikey|api_key|credential)/i;
+const REDACT_PATHS = [
+	"*.token",
+	"*.secret",
+	"*.password",
+	"*.passwd",
+	"*.authorization",
+	"*.cookie",
+	"*.apikey",
+	"*.api_key",
+	"*.credential",
+];
 /** 单条字符串/对象的最大长度(日志是拿来查问题的,不是拿来存数据的) */
 const MAX_STRING = 300;
 const MAX_FIELDS_DEPTH = 4;
 
-function currentLevel(): LogLevel {
-	const raw = (process.env.LOG_LEVEL ?? "info").toLowerCase();
-	return (["debug", "info", "warn", "error"] as const).includes(raw as LogLevel) ? (raw as LogLevel) : "info";
-}
-
-function silent(): boolean {
-	return process.env.LOG_SILENT === "1" || process.env.NODE_ENV === "test";
-}
-
-/** 递归脱敏 + 截断;Date 转本地串,函数/undefined 丢掉 */
+/**
+ * 递归脱敏 + 截断;Date 转本地串,函数/undefined 丢掉 —— **保留对外导出**:
+ * `tests/logging.test.ts` 直接 import 它做断言,改了它就改测试,所以保持形状。
+ */
 export function sanitize(value: unknown, depth = 0): unknown {
 	if (value === null || value === undefined) return value;
 	if (typeof value === "string")
@@ -61,41 +61,88 @@ export function sanitize(value: unknown, depth = 0): unknown {
 	return String(value);
 }
 
-/** 日志出口(可替换:测试里收流断言"每次调用都留下了日志") */
-type Sink = (line: LogLine) => void;
-const defaultSink: Sink = (line) => {
-	const text = `${JSON.stringify(line)}\n`;
-	// 服务端写 stdout;浏览器环境(tRPC 理论上不会在浏览器跑,但 SSR/水合期可能 import 到)退回落 console
-	if (typeof process !== "undefined" && process.stdout?.write) process.stdout.write(text);
-	else console.log(text.trim());
-};
-let sink: Sink = defaultSink;
+function envLevel(): LogLevel {
+	const raw = (process.env.LOG_LEVEL ?? "info").toLowerCase();
+	return (["debug", "info", "warn", "error"] as const).includes(raw as LogLevel) ? (raw as LogLevel) : "info";
+}
+function envSilent(): boolean {
+	return process.env.LOG_SILENT === "1" || process.env.NODE_ENV === "test";
+}
 
-/** 换出口(测试用);不传参数 = 恢复默认(stdout) */
-function setLogSink(next?: Sink): void {
-	sink = next ?? defaultSink;
+/**
+ * 日志出口(可替换):pino 接受任何 `{ write(str) }` 当 sink。
+ * 默认 = stdout;测试 = `setLogSink` / `collectLogs` 注入内存数组。
+ */
+type Sink = { write: (line: string) => void };
+
+function stdoutSink(): Sink {
+	return {
+		write(line: string) {
+			if (typeof process !== "undefined" && process.stdout?.write) process.stdout.write(line);
+			else console.log(line.trim());
+		},
+	};
+}
+
+/** 构造一个 pino 实例:封掉 base 噪音、把 `msg` 字段名改成 `event`、加 redact */
+function buildPino(destination: Sink): PinoLogger {
+	return pino(
+		{
+			base: null,
+			level: envSilent() ? "silent" : envLevel(),
+			timestamp: () => `,"ts":"${new Date().toISOString()}"`,
+			formatters: {
+				level: (label: string) => ({ level: label.toLowerCase() }),
+			},
+			messageKey: "event",
+			redact: { paths: REDACT_PATHS, censor: "***" },
+		},
+		{ write: (chunk: string) => destination.write(`${chunk}\n`) } as unknown as pino.DestinationStream,
+	);
+}
+
+/** 顶层活动实例;`setLogSink` 重建它(测试换出口用) */
+let active: PinoLogger = buildPino(stdoutSink());
+
+/** 换出口(测试用);不传 = 恢复 stdout */
+function setLogSink(next?: { write: (line: string) => void }): void {
+	active = buildPino(next ? { write: next.write } : stdoutSink());
 }
 
 /** 收集到的日志行(测试断言用) */
 export function collectLogs(): { lines: LogLine[]; restore: () => void } {
 	const lines: LogLine[] = [];
-	setLogSink((line) => lines.push(line));
+	setLogSink({
+		write(line: string) {
+			try {
+				lines.push(JSON.parse(line.trim()) as LogLine);
+			} catch {
+				/* 非 JSON 行忽略 */
+			}
+		},
+	});
 	return { lines, restore: () => setLogSink() };
 }
 
+/**
+ * 统一打日志入口。**保留名最后盖**:调用方在 `fields` 里塞了 `ts/level/event` 时,
+ * 我们先把它们剥掉再交给 pino,防止覆盖 pino / base 写进去的标准字段(实测踩过:
+ * 认证端点想记 `auth.ok`,入参里的 `event: "auth.sign_in"` 把日志自己的事件名顶掉了)。
+ */
 export function log(level: LogLevel, event: string, fields: LogFields = {}): void {
-	if (silent()) return;
-	if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[currentLevel()]) return;
-	const line = {
-		// 字段先铺,`ts` / `level` / `event` 三个**保留名最后盖** ——
-		// 否则调用方传一个叫 `event` 的字段就能把日志自己的事件名顶掉(实测踩过:
-		// 认证端点想记 `auth.ok`,入参里的 `event: "auth.sign_in"` 把它覆盖了,ok / failed 两个分支看起来一模一样)
-		...((sanitize(fields) ?? {}) as LogFields),
-		ts: new Date().toISOString(),
-		level,
-		event,
-	} as LogLine;
-	sink(line);
+	if (envSilent()) return;
+	const {
+		ts: _t,
+		level: _l,
+		event: _e,
+		...rest
+	} = fields as LogFields & {
+		ts?: unknown;
+		level?: unknown;
+		event?: unknown;
+	};
+	// pino 第二参 = msg;messageKey 把它写到 `event` 字段
+	active[level](rest, event);
 }
 
 export const logger = {

@@ -1,5 +1,4 @@
 import { createTRPCRouter } from "./init";
-import { dataPolicyRouter } from "./routers/data-policy";
 import { demoGridRouter } from "./routers/demo-grid";
 import { departmentRouter } from "./routers/department";
 import { dictRouter } from "./routers/dict";
@@ -17,7 +16,7 @@ export const trpcRouter = createTRPCRouter({
 	log: logRouter,
 	/** 站内通知(只碰自己的,见 doc/通知中心.md) */
 	notice: noticeRouter,
-	/** Demo:综合网格履职(行级数据权限落点,见 doc/测试数据/README.md) */
+	/** Demo:综合网格履职(见 doc/测试数据/README.md) */
 	demoGrid: demoGridRouter,
 	/** 系统设置 ▸ 菜单管理 —— 读写 `sys_menu` */
 	menu: menuRouter,
@@ -29,13 +28,11 @@ export const trpcRouter = createTRPCRouter({
 	tag: tagRouter,
 	/** 系统设置 ▸ 部门管理 —— 读写 `sys_dept`(自关联树)+ 成员/角色分配 */
 	department: departmentRouter,
-	/** 系统设置 ▸ 角色管理 —— 读写 `sys_role` + `casbin_rule`(`p` 行 = 菜单/按钮授权,`g` 行 = 成员) */
+	/** 系统设置 ▸ 角色管理 —— 读写 `sys_role` + `sys_casbin_rule`(`p` 行 = 菜单/按钮授权,`g` 行 = 成员) */
 	role: roleRouter,
 	/** 系统设置 ▸ 用户管理 —— 只读 `sys_user` + 读写部门/角色分配 */
 	user: userRouter,
 	/** 系统设置 ▸ 文件管理 —— 读写 `sys_file`(字节存 MinIO,见 doc/文件管理.md) */
 	file: fileRouter,
-	/** 系统设置 ▸ 数据权限 —— 读写 `sys_data_policy`(直白授权规则,见 doc/rbac-权限模型.md) */
-	policy: dataPolicyRouter,
 });
 export type TRPCRouter = typeof trpcRouter;

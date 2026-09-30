@@ -172,12 +172,15 @@ const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 });
 
 /**
- * 在 `protectedProcedure` 的 resolver 里取当前用户。
+ * 在 `protectedProcedure` 的 resolver 里取当前用户(从 **ctx** 拿)。
  *
  * 中间件已经保证了"有用户",所以这里只是把类型收紧 —— 业务代码不用每处都写一遍
  * `(ctx as { user: ... }).user` 的转换。
+ *
+ * ⚠️ 与 `#/lib/current-user` 的 `getCurrentUser()` **不是一回事**:那个从**请求上下文**异步取
+ * (直调 caller 里恒为 null),这个从 **`ctx`** 同步取、取不到直接抛 401。所以叫 `require*`。
  */
-export function currentUserOf(ctx: unknown): { id: string; name: string } {
+export function requireCurrentUser(ctx: unknown): { id: string; name: string } {
 	const user = (ctx as { user?: InjectedUser | null }).user;
 	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
 	return { id: user.id, name: user.name };

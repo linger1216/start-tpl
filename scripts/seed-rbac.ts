@@ -16,6 +16,10 @@
  *   要演示数据请另写脚本,不要混进初始化流程,否则「重跑一次」就变成了「改数据」。
  *
  * 用法:pnpm db:seed:rbac(可重复跑)
+ *
+ * 角色怎么按业务键定位:`sys_role` 没有 `code` 列 —— 整个程序内部一律以 `id` 引用,
+ * 策略表里也是 `role:<id>`。这里按**名字**查重,「系统管理员」是脚本唯一的种子角色,
+ * 名字稳定、可作为种子键。
  */
 import "dotenv/config";
 
@@ -23,7 +27,7 @@ import { asc, eq } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
-import { addUserRole, grantedMenuIdsOf, roleCodesOf, setRoleMenus } from "../src/lib/casbin.ts";
+import { addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
@@ -39,17 +43,17 @@ import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
 /** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
 const ADMIN_EMAIL = "admin@example.com";
 
-/** 系统管理员角色码 —— 策略表(`casbin_rule`)里存的是**角色 code**,不是角色 id */
-const ADMIN_ROLE_CODE = "sys_admin";
+/** 系统管理员 —— 整个仓库唯一的种子角色,名字稳定作为种子键 */
+const ADMIN_ROLE_NAME = "系统管理员";
 
 const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
 
 // ── 角色 ──────────────────────────────────────────────────────────
-async function upsertRole(code: string, name: string, sort: number, remark: string): Promise<string> {
-	const [existing] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.code, code)).limit(1);
+async function upsertRoleByName(name: string, sort: number, remark: string): Promise<string> {
+	const [existing] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.name, name)).limit(1);
 	if (existing) return existing.id;
 	const id = newId();
-	await db.insert(sysRole).values({ id, code, name, sort, status: 1, remark, create_time: new Date(), update_time: new Date() });
+	await db.insert(sysRole).values({ id, name, sort, status: 1, remark, create_time: new Date(), update_time: new Date() });
 	created.role += 1;
 	return id;
 }
@@ -98,31 +102,31 @@ async function upsertHiddenGroup(name: string, path: string, sort: number): Prom
 	return id;
 }
 
-async function grantIfEmpty(roleCode: string, menuIds: readonly string[]): Promise<void> {
+async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise<void> {
 	// 判据是**这个角色在策略表里还一条授权都没有**(不是"这次要加的这几条在不在")
-	const existing = await grantedMenuIdsOf(roleCode);
+	const existing = await grantedMenuIdsOf(roleId);
 	if (existing.length > 0) return;
 	const ids = await withAncestorIds(menuIds);
 	if (ids.length === 0) return;
-	await setRoleMenus(roleCode, ids);
+	await setRoleMenus(roleId, ids);
 	created.grant += ids.length;
 }
 
-/** 分配**全局角色**(userId × 角色 code)—— 已存在就不动 */
-async function assignRoleIfAbsent(userId: string, roleCode: string, label: string): Promise<void> {
-	const codes = await roleCodesOf(userId);
-	if (codes.includes(roleCode)) {
+/** 分配**全局角色**(userId × 角色 id)—— 已存在就不动 */
+async function assignRoleIfAbsent(userId: string, roleId: string, label: string): Promise<void> {
+	const ids = await roleIdsOf(userId);
+	if (ids.includes(roleId)) {
 		console.log(`  · ${label} 已有这个角色,不动`);
 		return;
 	}
-	await addUserRole(userId, roleCode);
+	await addUserRole(userId, roleId);
 	created.assign += 1;
 	console.log(`  + ${label}(角色)`);
 }
 
 async function main() {
 
-	await upsertRole(ADMIN_ROLE_CODE, "系统管理员", 1, "示例:能看见全部菜单与按钮");
+	const adminRoleId = await upsertRoleByName(ADMIN_ROLE_NAME, 1, "示例:能看见全部菜单与按钮");
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
 	// 否则下面"给系统管理员全部授权"的那份清单会漏掉刚建的两个按钮(实测踩过)。
@@ -194,13 +198,6 @@ async function main() {
 	if (日志MenuId) {
 		await upsertButton(日志MenuId, "查看审计日志", "sys:log:list", 90);
 	}
-	const 数据权限MenuId = byPath.get("/settings/data-policy")?.id;
-	if (数据权限MenuId) {
-		await upsertButton(数据权限MenuId, "查看数据权限", "sys:policy:list", 90);
-		await upsertButton(数据权限MenuId, "新增规则", "sys:policy:add", 91);
-		await upsertButton(数据权限MenuId, "修改规则", "sys:policy:edit", 92);
-		await upsertButton(数据权限MenuId, "删除规则", "sys:policy:remove", 93);
-	}
 	const 通知MenuId = byPath.get("/notices")?.id;
 	if (通知MenuId) {
 		await upsertButton(通知MenuId, "手动发通知", "sys:notice:add", 90);
@@ -231,7 +228,7 @@ async function main() {
 	console.log("── 授权(只在角色还没有任何授权时写入)→ 权限体系从此启用 ──");
 	// 系统管理员:**一条 `*:*:*` 就够** —— 通配模式在**装载时**展开(见 lib/casbin.ts),
 	// 所以"全部菜单 + 全部按钮 + **以后新增的**"都自动在内,不用每加一个菜单就回来补勾。
-	await grantIfEmpty(ADMIN_ROLE_CODE, [superPermId]);
+	await grantIfEmpty(adminRoleId, [superPermId]);
 
 	// 部门主管:**只给菜单、不给按钮** —— 这样切到演示账号能直接看到
 	// 「页面进得去,但页里的新增 / 删除按钮不可见」(按钮级可见性)
@@ -241,7 +238,7 @@ async function main() {
 	console.log("── 部门成员 + 全局角色 ──");
 	const [admin] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, ADMIN_EMAIL)).limit(1);
 	if (admin) {
-		await assignRoleIfAbsent(admin.id, ADMIN_ROLE_CODE, `${ADMIN_EMAIL} → 系统管理员`);
+		await assignRoleIfAbsent(admin.id, adminRoleId, `${ADMIN_EMAIL} → ${ADMIN_ROLE_NAME}`);
 	}
 
 
@@ -264,7 +261,7 @@ async function main() {
 	);
 	if (created.grant > 0) {
 		console.log(
-			"⚠️ 权限体系现在**已启用**(`casbin_rule` 里已经有授权行了):没有被分配部门与角色的账号将看不到任何菜单。",
+			"⚠️ 权限体系现在**已启用**(`sys_casbin_rule` 里已经有授权行了):没有被分配部门与角色的账号将看不到任何菜单。",
 		);
 	}
 	process.exit(0);

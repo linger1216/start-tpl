@@ -1,6 +1,6 @@
 /**
- * **系统表的建表脚本**(设置五张 + 认证四张 + 权限五张 + `sys_file` / `sys_log` / `sys_notice` +
- * `demo_grid` = 18 张)—— 幂等,可重复执行。
+ * **系统表的建表脚本**(设置五张 + 认证四张 + 权限四张 + `sys_file` / `sys_log` / `sys_notice` +
+ * `demo_grid` = 17 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -195,16 +195,15 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		name: "sys_role",
 		ddl: `create table if not exists \`sys_role\` (
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`code\` varchar(64) collate utf8mb4_unicode_ci not null comment '角色标识(业务键),如 sys_admin',
-			\`name\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色名(中文)',
+			\`name\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色名(中文,唯一)',
 			\`sort\` int not null default 0 comment '排序,越小越靠前',
 			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '说明',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
-			unique key \`uk_sys_role_code\` (\`code\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 casbin_rule 的 g 行)'`,
+			unique key \`uk_sys_role_name\` (\`name\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 sys_casbin_rule 的 g 行)'`,
 	},
 	{
 		name: "sys_user_dept",
@@ -219,41 +218,23 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_dm_user\` (\`user_id\`),
 			constraint \`fk_sys_dm_department\` foreign key (\`department_id\`) references \`sys_dept\` (\`id\`) on delete cascade,
 			constraint \`fk_sys_dm_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(谁在哪个部门;角色是全局的,见 casbin_rule 的 g 行)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门成员(谁在哪个部门;角色是全局的,见 sys_casbin_rule 的 g 行)'`,
 	},
 	{
-		name: "casbin_rule",
-		ddl: `create table if not exists \`casbin_rule\` (
+		name: "sys_casbin_rule",
+		ddl: `create table if not exists \`sys_casbin_rule\` (
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
 			\`ptype\` varchar(8) collate utf8mb4_unicode_ci not null comment '规则类型:p(角色 → 权限)/ g(用户 → 角色、角色 → 角色)',
-			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment 'p:role:<角色 code>;g:user:<用户 id> 或 role:<角色 code>',
-			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment 'p:menu:<菜单/按钮 id>;g:role:<角色 code>',
+			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment 'p:role:<角色 id>;g:user:<用户 id> 或 role:<角色 id>',
+			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment 'p:menu:<菜单/按钮 id>;g:role:<角色 id>',
 			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null default '' comment 'p:access;g:空串',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
-			unique key \`uk_casbin_rule\` (\`ptype\`, \`v0\`, \`v1\`, \`v2\`),
-			key \`idx_casbin_rule_v0\` (\`ptype\`, \`v0\`),
-			key \`idx_casbin_rule_v1\` (\`ptype\`, \`v1\`)
+			unique key \`uk_sys_casbin_rule\` (\`ptype\`, \`v0\`, \`v1\`, \`v2\`),
+			key \`idx_sys_casbin_rule_v0\` (\`ptype\`, \`v0\`),
+			key \`idx_sys_casbin_rule_v1\` (\`ptype\`, \`v1\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '功能权限策略(Casbin;判定与存储同一处,见 src/lib/casbin.ts)'`,
-	},
-	{
-		name: "sys_data_policy",
-		ddl: `create table if not exists \`sys_data_policy\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`ptype\` varchar(16) collate utf8mb4_unicode_ci not null default 'p' comment '规则类型(Casbin 口径;目前只有 p)',
-			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment '主体:* / user:<用户 id> / role:<角色 code> / dept:<部门 id>',
-			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment '资源:* / <类型> / <类型>@org:<部门 id> / <类型>@<行 id>',
-			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null comment '动作:read / write / *(读写都算)',
-			\`v3\` varchar(16) collate utf8mb4_unicode_ci not null default 'allow' comment '效果:allow / deny(deny 一票否决)',
-			\`status\` tinyint not null default 1 comment '0 停用 / 1 启用(只有启用的行会被装载)',
-			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '备注',
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
-			primary key (\`id\`),
-			unique key \`uk_sys_data_policy_sub_obj_act\` (\`v0\`, \`v1\`, \`v2\`),
-			key \`idx_sys_data_policy_sub\` (\`v0\`, \`status\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '行级数据权限(直白授权规则:谁 · 哪个资源 · 什么动作 · 允许 / 拒绝)'`,
 	},
 /** 文件元数据(字节存 MinIO;见 doc/文件管理.md) */
   {
@@ -317,7 +298,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`create_time\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '站内通知(一条一个收件人,见 doc/通知中心.md)'`,
 },
-/** Demo:综合网格履职(行级数据权限落点;见 doc/测试数据/README.md) */
+/** Demo:综合网格履职(见 doc/测试数据/README.md) */
 {
 	name: "demo_grid",
 	ddl: `create table if not exists \`demo_grid\` (
@@ -325,7 +306,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '网格名称(片区名)',
     \`town_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇(文本)',
     \`town_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇 → sys_dept.id(展示/统计用)',
-    \`group_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(行级范围按它过滤)',
+    \`group_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(展示/统计用)',
     \`owner_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '网格长姓名',
     \`owner_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '负责人 → sys_user.id(self 档用)',
     \`duty\` varchar(64) collate utf8mb4_unicode_ci default null comment '工作职务',
@@ -336,30 +317,26 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_demo_grid_town\` (\`town_id\`),
     key \`idx_demo_grid_group\` (\`group_id\`),
     key \`idx_demo_grid_owner\` (\`owner_id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = 'Demo:综合网格履职(行级数据权限落点)'`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = 'Demo:综合网格履职'`,
 },
 ];;
 
-const before = new Set(
-	((await db.execute(sql`show tables`))[0] as unknown as Array<Record<string, unknown>>).map((row) =>
-		String(Object.values(row)[0]),
-	),
-);
-
-for (const table of TABLES) {
-	await db.execute(sql.raw(table.ddl));
-	const created = !before.has(table.name);
-	console.log(`${created ? "✓ 新建" : "· 已存在"} ${table.name}`);
-}
-
 /**
- * **老库改表名** —— `create table if not exists` 只认新名字,**老库里还叫旧名的表它管不着**:
- * 结果就是老库"没这张表"被当成新库重新建一份,新表空着、旧表的数据没人读。
- * 表改名时在这里登记一条,幂等(新名已存在就跳过)。
+ * **老库改表名** —— 必须跑在**建表之前**,否则必然失效:
+ * `create table if not exists` 会先把**新名字**那张空表建出来,接着改名就会看到「新旧两张表同时存在」
+ * 而不敢合并 —— 数据留在旧表里、新表空着,而且**每次执行都重复这一幕**。
+ * 先改名再建表:老库把旧表搬成新名(`rename table`,数据原样保留),随后建表只是"已存在"。
+ *
+ * `create table if not exists` 只认新名字,**老库里还叫旧名的表它管不着**,所以才需要这张登记表。
+ * 幂等(旧名不在 → 跳过;新旧同时存在 → 跳过并要求人工确认,不自动合并)。
  */
 const TABLE_RENAMES: Array<{ from: string; to: string }> = [
 	{ from: "sys_department", to: "sys_dept" },
 	{ from: "sys_department_member", to: "sys_user_dept" },
+	// 功能权限策略表改名:补上 `sys_` 前缀 —— 这个前缀在本仓库就是「系统表、不进 drizzle 迁移」的标记,
+	// 它是唯一一张漏了的。Casbin 官方 SQL adapter 习惯叫 `casbin_rule`,但我们用的是自写 adapter
+	// (见 `lib/casbin.ts`),那条惯例换不来任何东西。
+	{ from: "casbin_rule", to: "sys_casbin_rule" },
 ];
 
 for (const rename of TABLE_RENAMES) {
@@ -381,6 +358,19 @@ for (const rename of TABLE_RENAMES) {
 	console.log(`✓ 表改名 ${rename.from} → ${rename.to}`);
 }
 
+// 快照取在改名**之后** —— 否则刚搬过去的表会被报成「✓ 新建」(它此前的名字不在这份名单里)。
+const before = new Set(
+	((await db.execute(sql`show tables`))[0] as unknown as Array<Record<string, unknown>>).map((row) =>
+		String(Object.values(row)[0]),
+	),
+);
+
+for (const table of TABLES) {
+	await db.execute(sql.raw(table.ddl));
+	const created = !before.has(table.name);
+	console.log(`${created ? "✓ 新建" : "· 已存在"} ${table.name}`);
+}
+
 /**
  * **老库补列** —— `create table if not exists` **不会**给已存在的表加列。
  * 往 `data-base-schema.ts` 加列之后,必须在这里登记一条,老库(以及已经有了 sys_session 的环境)才能跟上。
@@ -400,7 +390,7 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{
 		table: "demo_grid",
 		column: "group_id",
-		ddl: "varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(行级范围按它过滤)'",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(展示/统计用)'",
 	},
 ];
 

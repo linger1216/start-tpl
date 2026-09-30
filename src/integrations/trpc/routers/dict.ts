@@ -38,7 +38,7 @@ const dictItems = z
 	});
 
 /** 库行 → 接口出参(nanoid 主键也回,前端列表拿它当稳定 key) */
-function toDictRow(row: typeof sysDict.$inferSelect) {
+function toDict(row: typeof sysDict.$inferSelect) {
 	return {
 		id: row.id,
 		code: row.code,
@@ -61,13 +61,13 @@ export const dictRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
 		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 消费侧(useDict)自己只看启用的那些
 		const rows = await db.select().from(sysDict).orderBy(asc(sysDict.code));
-		return rows.map(toDictRow);
+		return rows.map(toDict);
 	}),
 
 	/** 按**字典编码**读一个(不是按主键 —— 业务侧只认识编码) */
 	byCode: protectedProcedure.input(z.object({ code: dictCode })).query(async ({ input }) => {
 		const row = await getByCode(input.code);
-		return row ? toDictRow(row) : null;
+		return row ? toDict(row) : null;
 	}),
 
 	create: protectedProcedure

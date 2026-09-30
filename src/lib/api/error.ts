@@ -17,6 +17,11 @@ class ApiError extends Error {
 	}
 }
 
+/**
+ * 网络 / 解析 / 无法识别错误的**兜底码**。
+ *
+ * 故意与 tRPC 的错码表错开(`UNAUTHORIZED=16` / `FORBIDDEN=3` …),前端**不要**把 5000 当成 HTTP 500。
+ */
 const FALLBACK_CODE = 5000;
 const FALLBACK_MSG = "未知错误";
 

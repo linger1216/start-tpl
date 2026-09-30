@@ -16,7 +16,7 @@ import { createTRPCRouter, protectedProcedure } from "#/integrations/trpc/init";
  *    要看得更久就用筛选条件收窄(时间 / 动作 / 操作人);
  *  · 权限点 `sys:log:list` 由 `lib/rbac.ts` 的 `PERM_BY_PATH` 强制(读接口也在那张表里)。
  */
-const logOut = (row: typeof sysLog.$inferSelect) => ({
+const toLog = (row: typeof sysLog.$inferSelect) => ({
 	id: row.id,
 	traceId: row.trace_id,
 	path: row.path,
@@ -87,6 +87,6 @@ export const logRouter = createTRPCRouter({
 				.where(conditions.length > 0 ? and(...conditions) : undefined)
 				.orderBy(desc(sysLog.create_time))
 				.limit(input?.limit ?? 200);
-			return rows.map(logOut);
+			return rows.map(toLog);
 		}),
 });

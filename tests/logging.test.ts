@@ -21,7 +21,7 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
  * tRPC v11 的 `.use()` 存的是 standalone 包装函数,**不是**原函数(实测 `===` 恒 false),
  * 所以改成**行为断言** —— 每个 path 真调一次,它的两行必须出现在日志流里。
  */
-const EXPECTED_PROCEDURES = 71;
+const EXPECTED_PROCEDURES = 65;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

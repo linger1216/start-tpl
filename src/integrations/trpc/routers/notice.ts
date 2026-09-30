@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysNotice } from "#/db/data-base-schema";
-import { createTRPCRouter, currentUserOf, protectedProcedure } from "#/integrations/trpc/init";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "#/integrations/trpc/init";
 import { notifyMany } from "#/lib/notice";
 
 /**
@@ -35,7 +35,7 @@ export const noticeRouter = createTRPCRouter({
 	list: protectedProcedure
 		.input(z.object({ limit: z.number().int().min(1).max(500).default(10) }).optional())
 		.query(async ({ ctx, input }) => {
-			const me = currentUserOf(ctx);
+			const me = requireCurrentUser(ctx);
 			const items = await db
 				.select()
 				.from(sysNotice)
@@ -51,7 +51,7 @@ export const noticeRouter = createTRPCRouter({
 
 	/** 标记一条已读(只有我的那条会变) */
 	read: protectedProcedure.input(z.object({ id: z.string().max(32) })).mutation(async ({ ctx, input }) => {
-		const me = currentUserOf(ctx);
+		const me = requireCurrentUser(ctx);
 		await db
 			.update(sysNotice)
 			.set({ read_at: new Date() })
@@ -87,7 +87,7 @@ export const noticeRouter = createTRPCRouter({
 
 	/** 全部已读 */
 	readAll: protectedProcedure.mutation(async ({ ctx }) => {
-		const me = currentUserOf(ctx);
+		const me = requireCurrentUser(ctx);
 		const rows = await db
 			.select({ id: sysNotice.id })
 			.from(sysNotice)

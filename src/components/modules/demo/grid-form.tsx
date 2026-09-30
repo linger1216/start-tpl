@@ -30,7 +30,7 @@ export type Option = { value: string; label: string };
  * 网格的新建 / 编辑。
  *
  * 字段就这几个(方案里定的"不用建那么多"):**所属街镇** + **网格名称(=片区)** 是主字段,
- * 另加**负责人**(行级权限的关键 —— 队员的 `self` 档按它算)、Excel 里的**网格长姓名**、职务、备注。
+ * 另加**负责人**(指派给哪个系统账号)、Excel 里的**网格长姓名**、职务、备注。
  */
 export function GridForm({
 	open,
@@ -57,7 +57,7 @@ export function GridForm({
 		remark: string | null;
 	} | null;
 	townOptions: Option[];
-	/** 某个街镇下的「归属组织」候选(演示数据里就是「××网格组」)—— 行级数据范围按它算 */
+	/** 某个街镇下的「归属组织」候选(演示数据里就是「××网格组」)—— 只用于展示与筛选 */
 	groupOptionsOf: (townId: string) => Option[];
 	userOptions: Option[];
 	onSubmit: (payload: GridFormPayload) => void;

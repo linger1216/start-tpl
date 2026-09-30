@@ -17,7 +17,7 @@ import { after, test } from "node:test";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
-import { casbinRule, sysAccount, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { sysCasbinRule, sysAccount, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { auth } from "../src/lib/auth.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
@@ -28,8 +28,6 @@ const SUFFIX = `${Date.now().toString(36)}`;
 const PASSWORD = "Passw0rd!123";
 const createdUserIds: string[] = [];
 const createdRoleIds: string[] = [];
-/** 策略表的 `p` / `g` 行认的是角色 **code**(不是 id)⇒ 清理时得有它 */
-const createdRoleCodes: string[] = [];
 const createdMenuIds: string[] = [];
 
 /** 从 set-cookie 里抠出 `name=value` 那一截 */
@@ -96,29 +94,27 @@ async function impersonateMenuId(): Promise<string> {
 async function grantImpersonate(userId: string): Promise<void> {
 	const roleId = newId();
 	createdRoleIds.push(roleId);
-	// code 必须唯一(`uk_sys_role_code`),而这个夹具会被多次调用 → 带上 userId 的尾巴
-	const roleCode = `${TEST_PREFIX}imp_${SUFFIX}_${userId.slice(-6)}`;
-	createdRoleCodes.push(roleCode);
+	// 角色按名字去重(`sys_role` 没有 code 列,这里用「imp + 测试后缀 + userId 后缀」当唯一名字)
+	const roleName = `${TEST_PREFIX}imp_${SUFFIX}_${userId.slice(-6)}`;
 	await db.insert(sysRole).values({
 		id: roleId,
-		code: roleCode,
-		name: `${TEST_PREFIX}切换用户`,
+		name: roleName,
 		sort: 0,
 		status: 1,
 	});
 	// 授权与成员关系现在都是策略表的行:授权 = `p` 行(客体是菜单),成员 = `g` 行(主体是人)
-	await db.insert(casbinRule).values({
+	await db.insert(sysCasbinRule).values({
 		id: newId(),
 		ptype: "p",
-		v0: `role:${roleCode}`,
+		v0: `role:${roleId}`,
 		v1: `menu:${await impersonateMenuId()}`,
 		v2: "access",
 	});
-	await db.insert(casbinRule).values({
+	await db.insert(sysCasbinRule).values({
 		id: newId(),
 		ptype: "g",
 		v0: `user:${userId}`,
-		v1: `role:${roleCode}`,
+		v1: `role:${roleId}`,
 		v2: "",
 	});
 	// 直接写表、绕过了 `lib/casbin.ts` 的领域函数 ⇒ 手动刷缓存,否则判定还停在旧策略上
@@ -128,8 +124,8 @@ async function grantImpersonate(userId: string): Promise<void> {
 /** 把某人的「切换用户」授权撤掉(删掉那条用户-角色关联)—— 验证例外不会变成永久通行证 */
 async function revokeImpersonate(userId: string): Promise<void> {
 	await db
-		.delete(casbinRule)
-		.where(and(eq(casbinRule.ptype, "g"), eq(casbinRule.v0, `user:${userId}`)));
+		.delete(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${userId}`)));
 	clearCasbinCache();
 }
 
@@ -156,22 +152,20 @@ after(async () => {
 		await cleanupStep("删除 account", () => db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds)));
 		await cleanupStep("删除 user_role", () =>
 			db
-				.delete(casbinRule)
+				.delete(sysCasbinRule)
 				.where(
-					and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, createdUserIds.map((userId) => `user:${userId}`))),
+					and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, createdUserIds.map((userId) => `user:${userId}`))),
 				),
 		);
 	}
-	if (createdRoleCodes.length > 0) {
-		const subjects = createdRoleCodes.map((code) => `role:${code}`);
+	if (createdRoleIds.length > 0) {
+		const subjects = createdRoleIds.map((roleId) => `role:${roleId}`);
 		await cleanupStep("删除 role_menu", () =>
-			db.delete(casbinRule).where(and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v0, subjects))),
+			db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v0, subjects))),
 		);
 		await cleanupStep("删除角色继承", () =>
-			db.delete(casbinRule).where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v1, subjects))),
+			db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v1, subjects))),
 		);
-	}
-	if (createdRoleIds.length > 0) {
 		await cleanupStep("删除 role", () => db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds)));
 	}
 	if (createdUserIds.length > 0)

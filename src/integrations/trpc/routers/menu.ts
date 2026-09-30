@@ -12,7 +12,7 @@
  * | `delete` | mutation | 删除(**连带清掉这个菜单上的角色授权**);**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
  *
  * 写接口末尾为什么要 `clearCasbinCache()`:判定用的策略是 `lib/casbin.ts` 装载时**展开**出来的,
- * 菜单的 `perm` / `path` / 父子关系一变,展开结果就变 —— 哪怕 `casbin_rule` 一行都没动。
+ * 菜单的 `perm` / `path` / 父子关系一变,展开结果就变 —— 哪怕 `sys_casbin_rule` 一行都没动。
  * (`reorder` 只改 `sort`,`sort` 不参与展开,所以那里不用刷。)
  *
  * 树为什么不在这里拼:渲染层要的是 `NavNode[](带图标组件映射)`,而图标映射属于前端资产;
@@ -34,7 +34,7 @@ import { effectiveMenusFor, PERM_FORMAT } from "#/lib/rbac";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
-function toMenuRow(row: typeof sysMenu.$inferSelect) {
+function toMenu(row: typeof sysMenu.$inferSelect) {
 	return {
 		id: row.id,
 		parentId: row.parent_id ?? null,
@@ -93,7 +93,7 @@ const permField = z
 export const menuRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
 		const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
-		return rows.map(toMenuRow);
+		return rows.map(toMenu);
 	}),
 
 	/**
@@ -104,7 +104,7 @@ export const menuRouter = createTRPCRouter({
 	 */
 	mine: protectedProcedure.query(async () => {
 		const { rows, perms } = await effectiveMenusFor(await getCurrentUserId());
-		return { rows: rows === null ? null : rows.map(toMenuRow), perms };
+		return { rows: rows === null ? null : rows.map(toMenu), perms };
 	}),
 
 	update: protectedProcedure
@@ -142,7 +142,7 @@ export const menuRouter = createTRPCRouter({
 				.where(eq(sysMenu.id, input.id));
 			// `perm` / `path` 变了,装载时的展开结果就变 —— 哪怕策略表一行没动
 			clearCasbinCache();
-			return toMenuRow(await getMenuRow(input.id));
+			return toMenu(await getMenuRow(input.id));
 		}),
 
 	/**
@@ -178,7 +178,7 @@ export const menuRouter = createTRPCRouter({
 				}
 			});
 			const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
-			return { updated: input.orderedIds.length, rows: rows.map(toMenuRow) };
+			return { updated: input.orderedIds.length, rows: rows.map(toMenu) };
 		}),
 
 	create: protectedProcedure
@@ -223,7 +223,7 @@ export const menuRouter = createTRPCRouter({
 			});
 			// 新菜单可能落进某个 `*:*:*` 的覆盖范围 —— 立刻重装
 			clearCasbinCache();
-			return toMenuRow(await getMenuRow(id));
+			return toMenu(await getMenuRow(id));
 		}),
 
 	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
@@ -236,7 +236,7 @@ export const menuRouter = createTRPCRouter({
 			});
 		}
 		// 这个菜单上的角色授权要显式清掉 —— `sys_role_menu` 连同它的 cascade 外键一起没了,
-		// 现在授权是 `casbin_rule` 的行(没有外键可依),必须自己按 `menu:<id>` 清
+		// 现在授权是 `sys_casbin_rule` 的行(没有外键可依),必须自己按 `menu:<id>` 清
 		await removeMenuPolicies(input.id);
 		await db.delete(sysMenu).where(eq(sysMenu.id, input.id));
 		clearCasbinCache();

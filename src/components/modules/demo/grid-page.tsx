@@ -33,7 +33,7 @@ import { toApiError } from "#/lib/api/error";
 import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
- * Demo:综合网格履职 —— 行级数据权限的**演示页**。
+ * Demo:综合网格履职 —— 一张普通业务表的列表 / 表单 / 批量指派负责人页。
  *
  * 三种身份看到的东西不一样(这就是这一页存在的意义):
  *  · **队员**(`self`) 只看得到 `owner_id = 自己` 的网格;
@@ -138,8 +138,8 @@ export function GridPage() {
 	/**
 	 * 「归属组织」候选 = 所选街镇的**直接子部门里,真有人挂着的那些**(演示数据里就是「××网格组」)。
 	 *
-	 * 这一列是**行级数据范围真正认的那个字段**,所以候选不能把整个街镇的科室都倒出来 ——
-	 * 挑一个没人挂的组织,数据就等于谁都看不见(见 `doc/rbac-权限模型.md` 的「归属组织对齐」)。
+	 * 这一列只用于**展示与筛选**,与可见性无关;候选仍只取「有人挂着的子部门」,
+	 * 是为了让演示数据里「街镇 → 网格组 → 人 → 角色」这条链对得上 ——
 	 * 一个都没人挂时(新库 / 还没挂人)退回全部子部门,否则第一条网格没得选。
 	 */
 	const groupOptionsOf = useCallback(
@@ -230,7 +230,7 @@ export function GridPage() {
 		<PageFrame>
 			<PageHeader
 				title="网格履职"
-				description="Demo ▸ 网格履职:数据来自《闵行区片区综合网格网格长履职情况汇总表》。这一页是**行级数据权限**的演示 —— 队员只看自己负责的、队长看整个街镇、区看全部;右上角「切换用户」可以立刻换身份看差别。"
+				description="Demo ▸ 网格履职:数据来自《闵行区片区综合网格网格长履职情况汇总表》。演示一张普通业务表的列表 / 新建 / 编辑 / 批量指派负责人;右上角「切换用户」可以换身份,看菜单与按钮权限的差别。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
 						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />

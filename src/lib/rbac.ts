@@ -1,9 +1,9 @@
 /**
  * **权限并集的计算** —— 角色 → 菜单/按钮。
  *
- * 模型(策略表见 `db/data-base-schema.ts` 的 `casbin_rule`,引擎见 `lib/casbin.ts`):
+ * 模型(策略表见 `db/data-base-schema.ts` 的 `sys_casbin_rule`,引擎见 `lib/casbin.ts`):
  *
- *   用户 --(casbin_rule 的 `g` 行,一人多角色)--> 角色 --(casbin_rule 的 `p` 行)--> 菜单 / 按钮
+ *   用户 --(sys_casbin_rule 的 `g` 行,一人多角色)--> 角色 --(sys_casbin_rule 的 `p` 行)--> 菜单 / 按钮
  *
  * 所以「这个用户能看到什么」= **他所有角色的授权取并集** —— 角色与部门无关(部门只是组织架构),
  * 没有"当前部门"这个概念,也不需要切换。
@@ -17,11 +17,11 @@
  *
  * 判决策本身在 `lib/casbin.ts`(`enforce`):本文件只负责把 Casbin 的结论**翻译成菜单树 + 权限码集合**。
  */
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 
 import { db } from "#/db";
-import { sysMenu, sysRole } from "#/db/data-base-schema";
-import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX, roleCodesOf } from "#/lib/casbin";
+import { sysMenu } from "#/db/data-base-schema";
+import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbin";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
 
@@ -95,27 +95,6 @@ export async function withAncestorIds(ids: readonly string[]): Promise<string[]>
 		}
 	}
 	return [...out];
-}
-
-/**
- * 该用户**启用的角色**(角色是全局的,与部门无关 —— 成员关系在 `casbin_rule` 的 `g` 行)。
- *
- * 单独抽出来是因为**功能权限**与**数据权限**都要用它:菜单侧只要 `id`,
- * 数据权限侧还要 `code`(`sys_data_policy` 里的主体写成 `role:<code>`)。全站原本只有一处这个 join,
- * 再抄一遍必然漂。
- *
- * ⚠️ `sys_role.status = 1` 的过滤留在这一层(`g` 行照旧存着):角色停用后权限立即消失,
- * 但成员关系不丢 —— 重新启用时不用再配一遍。判决策本身在 `lib/casbin.ts`。
- */
-export async function enabledRolesOf(userId: string): Promise<{ id: string; code: string }[]> {
-	const codes = await roleCodesOf(userId);
-	if (codes.length === 0) return [];
-	const rows = await db
-		.select({ id: sysRole.id, code: sysRole.code })
-		.from(sysRole)
-		.where(and(inArray(sysRole.code, codes), eq(sysRole.status, 1)));
-	// 去重:同一个角色只会有一条 g 行,但脏数据下也别让下游算两遍
-	return [...new Map(rows.map((row) => [row.id, row])).values()];
 }
 
 /** 该用户的可见菜单 + 权限标识(并集) */
@@ -203,11 +182,10 @@ async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 /**
  * **tRPC 路径 → 权限码**的映射(服务端强制的唯一真源)。
  *
- * 设计取舍:与其在 71 个 procedure 上各写一次 `permProcedure("…")`(漏写一个就**静默放开**),
+ * 设计取舍:与其在 65 个 procedure 上各写一次 `permProcedure("…")`(漏写一个就**静默放开**),
  * 不如把映射收在这一张表里、由中间件按 `path` **结构性**查 —— 与"日志天然全覆盖"同一个思路。
  *
- * **值可以是数组**(命中任一即放行):读接口常被多个页面共用(如 `role.list` 在角色/用户/部门/
- * 数据权限四个页面都用),写死一个码会把别的页面打死。数组里放的是 `pagePermOf(页面路径)` 合成的
+ * **值可以是数组**(命中任一即放行):读接口常被多个页面共用(如 `role.list` 在角色/用户/部门
  * 页面码 —— 复用菜单授权,不新增"没人能被授予"的假权限点。
  *
  * ⚠️ **登记在这里的 `sys:*` 码,必须先在 `sys_menu` 里有对应按钮**(`scripts/seed-rbac.ts` 建):
@@ -266,22 +244,12 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	 * 数组 = 这些页面里**任意一个**可见就放行(读接口被多页共用;写死一个会把别的页面打死)。
 	 * 只拦"页面数据",不拦跨页面的外壳读接口(见 `UNMAPPED_QUERIES` 的理由)。
 	 */
-	// 角色(角色页 / 用户的角色指派 / 部门的人员角色 / 数据权限的按角色授权)
-	"role.list": [
-		pagePermOf("/settings/roles"),
-		pagePermOf("/settings/users"),
-		pagePermOf("/settings/departments"),
-		pagePermOf("/settings/data-policy"),
-	],
+	// 角色(角色页 / 用户的角色指派 / 部门的人员角色)
+	"role.list": [pagePermOf("/settings/roles"), pagePermOf("/settings/users"), pagePermOf("/settings/departments")],
 	"role.users": pagePermOf("/settings/roles"),
 	"role.menuIds": pagePermOf("/settings/roles"),
-	// 部门(部门页 / 用户页的部门树 / 数据权限的组织范围 / 网格履职的组织筛选)
-	"department.tree": [
-		pagePermOf("/settings/departments"),
-		pagePermOf("/settings/users"),
-		pagePermOf("/settings/data-policy"),
-		pagePermOf("/demo/grid"),
-	],
+	// 部门(部门页 / 用户页的部门树 / 网格履职的组织筛选)
+	"department.tree": [pagePermOf("/settings/departments"), pagePermOf("/settings/users"), pagePermOf("/demo/grid")],
 	"department.members": pagePermOf("/settings/departments"),
 	// 字典(字典页;`dict.byCode` 是跨页面的取值器,见 UNMAPPED_QUERIES)
 	"dict.list": pagePermOf("/settings/dictionary"),
@@ -294,18 +262,10 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"file.url": pagePermOf("/settings/files"),
 	// 审计日志(读接口也走这张表)
 	"log.list": "sys:log:list",
-	// 数据权限(读接口也走这张表:看得到规则 = 看得到全站谁能看什么)
-	"policy.list": "sys:policy:list",
-	"policy.explain": "sys:policy:list",
-	"policy.create": "sys:policy:add",
-	"policy.update": "sys:policy:edit",
-	// 批量改标量(动作 / 效果 / 启用)与改一行是同一件事的两种粒度,共用 `sys:policy:edit`
-	"policy.updateMany": "sys:policy:edit",
-	"policy.remove": "sys:policy:remove",
 	// 站内通知(读自己的不需要权限点;替别人发才需要)
 	"notice.create": "sys:notice:add",
-	// Demo 网格履职(行级数据权限的演示表;数据权限页的"具体数据行"也要读它)
-	"demoGrid.list": [pagePermOf("/demo/grid"), pagePermOf("/settings/data-policy")],
+	// Demo 网格履职
+	"demoGrid.list": pagePermOf("/demo/grid"),
 	"demoGrid.create": "sys:grid:add",
 	"demoGrid.update": "sys:grid:edit",
 	"demoGrid.remove": "sys:grid:remove",
@@ -342,7 +302,7 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
  * 登记进 `PERM_BY_PATH` 的读接口 = **页面数据**(谁看不见这个页面,就取不到它的数据)。
  */
 export const UNMAPPED_QUERIES: readonly string[] = [
-	// 类别 1:外壳级 —— 顶栏账号切换器 + 工作台 + 通知选人(且 SQL 已被数据权限按 `sys_user` 过滤)
+	// 类别 1:外壳级 —— 顶栏账号切换器 + 工作台 + 通知选人
 	"user.list",
 	// 类别 1:外壳级 —— 侧边栏与 `useHasPerm` 的数据源(它自己就是权限结果,"要权限才能读权限"是死锁)
 	"menu.mine",

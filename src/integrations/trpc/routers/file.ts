@@ -59,7 +59,7 @@ const THUMB_TTL_SECONDS = 900;
  * 而不是让前端每行各发一次 tRPC(那才是 N+1)。
  * ⚠️ 公开桶用直链、私有桶用短时效预签名 —— 私有桶**不能**给直链。
  */
-const rowOut = async (row: typeof sysFile.$inferSelect) => {
+const toFile = async (row: typeof sysFile.$inferSelect) => {
 	const isImage = (row.content_type ?? "").startsWith("image/");
 	const ready = Number(row.status ?? 0) === 1;
 	const thumbUrl =
@@ -107,7 +107,7 @@ export const fileRouter = createTRPCRouter({
 				.from(sysFile)
 				.where(where.length > 0 ? (where.length === 1 ? where[0] : or(...where)) : undefined)
 				.orderBy(desc(sysFile.create_time));
-			return await Promise.all(rows.map((row) => rowOut(row)));
+			return await Promise.all(rows.map((row) => toFile(row)));
 		}),
 
 	/** ① 签 PUT URL + 落一行 status=0。校验白名单与大小上限(**服务端登录校验见文件头的「已知缺口」**) */
@@ -164,7 +164,7 @@ export const fileRouter = createTRPCRouter({
 						objectKey: hit.object_key,
 						uploadUrl: null,
 						expiresIn: 0,
-						file: await rowOut(hit),
+						file: await toFile(hit),
 					};
 				}
 			}
@@ -236,7 +236,7 @@ export const fileRouter = createTRPCRouter({
 
 			// 回读再返回:以前是拿"更新前的行"拼的,于是 `hash` 明明写进库了、接口却回 null(测试抓到的)
 			const [fresh] = await db.select().from(sysFile).where(eq(sysFile.id, row.id)).limit(1);
-			return await rowOut(fresh ?? row);
+			return await toFile(fresh ?? row);
 		}),
 
 	/** 访问地址:公开桶直链 / 私有桶预签名(私有桶**永远**不要返回直链) */
@@ -269,7 +269,7 @@ export const fileRouter = createTRPCRouter({
 			if (!row || Number(row.status) === 2) throw new TRPCError({ code: "NOT_FOUND", message: "文件不存在或已删除" });
 			await db.update(sysFile).set({ origin_name: input.name, update_time: new Date() }).where(eq(sysFile.id, row.id));
 			const [fresh] = await db.select().from(sysFile).where(eq(sysFile.id, row.id)).limit(1);
-			return await rowOut(fresh ?? row);
+			return await toFile(fresh ?? row);
 		}),
 
 	/** 批量删除:先删对象再置 status=2(行保留,便于审计与排查) */

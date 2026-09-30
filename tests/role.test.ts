@@ -1,16 +1,16 @@
 /**
- * 角色 API(`sys_role` + `casbin_rule` 的 `p` / `g` 行)与**权限并集的计算** —— 集成测试。
+ * 角色 API(`sys_role` + `sys_casbin_rule` 的 `p` / `g` 行)与**权限并集的计算** —— 集成测试。
  *
  * 覆盖:
- *  1. 角色台账:`code` 唯一 / `list` 带成员数 / 被部门成员引用时不让删;
+ *  1. 角色台账:`list` 带成员数 / 被部门成员引用时不让删;
  *  2. 授权:`setMenus` **自动补全祖先链**(只勾子节点也能看见)、`menuIds` 往返;
  *  3. **并集语义**(部门 → 角色 → 授权):张三在上海是 A、在武汉是 B,可见菜单与权限都是两者的并集;
- *  4. 两种兜底:未启用(`casbin_rule` 一条 `p` 行都没有)→ `perms = null` 一律放行,不把管理员锁在门外;
+ *  4. 两种兜底:未启用(`sys_casbin_rule` 一条 `p` 行都没有)→ `perms = null` 一律放行,不把管理员锁在门外;
  *     已启用但没有角色的人 → 失败关闭(`rows = null` + `perms = []`);
  *  5. 按钮(`type = 3`):**不进可见菜单**,但它的 `perm` 进权限集合。
  *
  * ⚠️ 会读写真实库;数据用 `__test__` 前缀,`after` 清干净。
- * ⚠️ 第 4 条断言**按库的当前状态分支**,不假设授权表是空的:授权是 `casbin_rule` 的 `p` 行,
+ * ⚠️ 第 4 条断言**按库的当前状态分支**,不假设授权表是空的:授权是 `sys_casbin_rule` 的 `p` 行,
  * 跑过演示种子之后它就不空了,而 `node --test` 按文件并行跑 —— 分支比"跳过"更稳。
  */
 import assert from "node:assert/strict";
@@ -20,7 +20,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 import {
-	casbinRule,
+	sysCasbinRule,
 	sysDept,
 	sysUserDept,
 	sysMenu,
@@ -31,7 +31,7 @@ import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
-import { assertRejects, caller, closeDb, ensureTestAdminPolicy, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const deptIds: string[] = [];
@@ -73,13 +73,13 @@ after(async () => {
 	// 直接删表绕过了 `lib/casbin.ts` 的领域函数,所以末尾要手动刷判定缓存。
 	if (menuIds.length > 0) {
 		await db
-			.delete(casbinRule)
-			.where(and(eq(casbinRule.ptype, "p"), inArray(casbinRule.v1, menuIds.map((id) => `menu:${id}`))));
+			.delete(sysCasbinRule)
+			.where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v1, menuIds.map((id) => `menu:${id}`))));
 	}
 	if (userIds.length > 0) {
 		await db
-			.delete(casbinRule)
-			.where(and(eq(casbinRule.ptype, "g"), inArray(casbinRule.v0, userIds.map((id) => `user:${id}`))));
+			.delete(sysCasbinRule)
+			.where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v0, userIds.map((id) => `user:${id}`))));
 	}
 	clearCasbinCache();
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
@@ -94,9 +94,9 @@ test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角�
 	// 空库(或没跑过 `pnpm db:seed:rbac`)验"未启用不过滤";跑过演示种子之后则验"没有角色的人看不到任何菜单"。
 	// 两种状态都是真实存在且必须成立的,所以分支比"跳过"更有价值。
 	const grants = await db
-		.select({ id: casbinRule.id })
-		.from(casbinRule)
-		.where(eq(casbinRule.ptype, "p"))
+		.select({ id: sysCasbinRule.id })
+		.from(sysCasbinRule)
+		.where(eq(sysCasbinRule.ptype, "p"))
 		.limit(1);
 	const someone = await makeUser("nobody");
 
@@ -119,11 +119,9 @@ test("权限体系的两种兜底:未启用 → 全放行;已启用但没有角�
 
 /**
  * 把角色分配给某个用户 —— 走真实的 `user.update`(角色是全局的,与部门无关)。
- * 用 API 而不是直接往 `casbin_rule` 插 `g` 行,这样测试同时覆盖了"保存角色"这条路径。
+ * 用 API 而不是直接往 `sys_casbin_rule` 插 `g` 行,这样测试同时覆盖了"保存角色"这条路径。
  */
 async function assignRoles(userId: string, roleIdList: string[]): Promise<void> {
-	// 策略表已启用 ⇒ 引擎失败关闭:合成的 test-admin 身份必须先补一条无限制策略,才读得到用户列表
-	await ensureTestAdminPolicy();
 	const row = (await caller.user.list()).find((item) => item.id === userId);
 	assert.ok(row, "用户应该存在");
 	// 角色与部门都是**覆盖式**:只想改角色,就得把当前部门原样传回去(不传会清掉)
@@ -138,11 +136,9 @@ async function assignRoles(userId: string, roleIdList: string[]): Promise<void> 
 	});
 }
 
-test("角色:code 唯一,list 带成员数", async () => {
-	const code = `${TEST_PREFIX}role_${SUFFIX}`;
-	const role = await caller.role.create({ code, name: `${TEST_PREFIX}管理员` });
+test("角色:list 带成员数", async () => {
+	const role = await caller.role.create({ name: `${TEST_PREFIX}管理员_${SUFFIX}` });
 	roleIds.push(role.id);
-	await assertRejects(() => caller.role.create({ code, name: "重复" }), "已被角色");
 
 	const user = await makeUser("rolelist");
 	await assignRoles(user, [role.id]);
@@ -152,7 +148,7 @@ test("角色:code 唯一,list 带成员数", async () => {
 });
 
 test("角色:被用户引用时不让删", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}used_${SUFFIX}`, name: `${TEST_PREFIX}在用` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}在用_${SUFFIX}` });
 	roleIds.push(role.id);
 	const user = await makeUser("usedrole");
 	await assignRoles(user, [role.id]);
@@ -165,7 +161,7 @@ test("角色:被用户引用时不让删", async () => {
 });
 
 test("角色授权:只勾子节点 → 自动补全祖先(否则侧边栏那一枝无处安放)", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}grant_${SUFFIX}`, name: `${TEST_PREFIX}授权` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}授权_${SUFFIX}` });
 	roleIds.push(role.id);
 	const parent = await makeMenu("父菜单", null, MENU_TYPE.DIR, null);
 	const child = await makeMenu("子菜单", parent, MENU_TYPE.MENU, null);
@@ -182,8 +178,8 @@ test("角色授权:只勾子节点 → 自动补全祖先(否则侧边栏那一�
 });
 
 test("权限并集:一个人有多个角色 → 菜单与权限都取并集", async () => {
-	const roleA = await caller.role.create({ code: `${TEST_PREFIX}unionA_${SUFFIX}`, name: `${TEST_PREFIX}上海管理员` });
-	const roleB = await caller.role.create({ code: `${TEST_PREFIX}unionB_${SUFFIX}`, name: `${TEST_PREFIX}武汉员工` });
+	const roleA = await caller.role.create({ name: `${TEST_PREFIX}上海管理员_${SUFFIX}` });
+	const roleB = await caller.role.create({ name: `${TEST_PREFIX}武汉员工_${SUFFIX}` });
 	roleIds.push(roleA.id, roleB.id);
 
 	const menuA = await makeMenu("上海专用", null, MENU_TYPE.MENU, "test:shanghai");
@@ -203,7 +199,7 @@ test("权限并集:一个人有多个角色 → 菜单与权限都取并集", as
 });
 
 test("停用的角色不贡献权限", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}off_${SUFFIX}`, name: `${TEST_PREFIX}停用角色` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}停用角色_${SUFFIX}` });
 	roleIds.push(role.id);
 	const menu = await makeMenu("停用测试菜单", null, MENU_TYPE.MENU, "test:off");
 	await caller.role.setMenus({ roleId: role.id, menuIds: [menu] });
@@ -212,18 +208,18 @@ test("停用的角色不贡献权限", async () => {
 	await assignRoles(user, [role.id]);
 
 	// 角色停用 → 权限跟着没了(注意:部门停用已经不影响权限了 —— 角色是全局的)
-	await caller.role.update({ id: role.id, code: role.code, name: role.name, status: false, remark: null });
+	await caller.role.update({ id: role.id, name: role.name, status: false, remark: null });
 	const afterRoleOff = await effectiveMenusFor(user);
 	assert.equal(afterRoleOff.rows, null, "角色停用 → 这个人没有可见菜单");
 
 	// 角色恢复 → 权限回来
-	await caller.role.update({ id: role.id, code: role.code, name: role.name, status: true, remark: null });
+	await caller.role.update({ id: role.id, name: role.name, status: true, remark: null });
 	const backOn = await effectiveMenusFor(user);
 	assert.ok(backOn.rows?.some((row) => row.id === menu), "角色恢复 → 菜单跟着回来");
 });
 
 test("按钮(type = 3):不进可见菜单,但它的 perm 进权限集合", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}btn_${SUFFIX}`, name: `${TEST_PREFIX}按钮角色` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}按钮角色_${SUFFIX}` });
 	roleIds.push(role.id);
 	const menu = await makeMenu("带按钮的页", null, MENU_TYPE.MENU, null);
 	const button = await makeMenu("删除按钮", menu, MENU_TYPE.BUTTON, "test:page:delete");
@@ -283,7 +279,7 @@ test("权限标识的形状在接口层被挡住(两段 / 大写 / 半截通配�
 });
 
 test("通配授权:一条 `test:thing:*` = 该资源下全部权限,而且**以后新增的自动包含**", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}wild_${SUFFIX}`, name: `${TEST_PREFIX}通配角色` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}通配角色_${SUFFIX}` });
 	roleIds.push(role.id);
 
 	const read = await makeMenu("通配读", null, MENU_TYPE.BUTTON, "test:thing:read");
@@ -310,7 +306,7 @@ test("通配授权:一条 `test:thing:*` = 该资源下全部权限,而且**以�
 });
 
 test("角色的用户:加人幂等 / 列表带出部门 / 能移出", async () => {
-	const role = await caller.role.create({ code: `${TEST_PREFIX}ru_${SUFFIX}`, name: `${TEST_PREFIX}角色用户` });
+	const role = await caller.role.create({ name: `${TEST_PREFIX}角色用户_${SUFFIX}` });
 	roleIds.push(role.id);
 	const user = await makeUser("roleuser");
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}角色用户部门_${SUFFIX}` });
