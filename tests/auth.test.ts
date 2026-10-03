@@ -14,7 +14,16 @@ import {
 	UNMAPPED_QUERIES,
 	UNSCOPED_QUERIES,
 } from "../src/lib/rbac.ts";
-import { anonymousCaller, assertRejects, caller, closeDb, TEST_PREFIX, TEST_USER, uniqueSuffix } from "./helpers.ts";
+import {
+	anonymousCaller,
+	assertRejects,
+	caller,
+	callerAs,
+	closeDb,
+	TEST_PREFIX,
+	TEST_USER,
+	uniqueSuffix,
+} from "./helpers.ts";
 
 /**
  * 服务端鉴权 + 审计。
@@ -64,6 +73,9 @@ describe("服务端鉴权", () => {
 		await assertRejects(() => anonymousCaller.role.list(), "请先登录");
 		await assertRejects(() => anonymousCaller.file.list(), "请先登录");
 		await assertRejects(() => anonymousCaller.role.remove({ id: "whatever" }), "请先登录");
+		// 个人资料页的读接口:它**不挂菜单授权**(没勾设置菜单的人也要能看自己),
+		// 但"要登录"这条不能少 —— 否则任何人都能靠它探到别人的资料(它的 SQL 只认 ctx.user.id)
+		await assertRejects(() => anonymousCaller.user.profile(), "请先登录");
 	});
 
 	it("未登录:会话路径上的写接口同样被拦(不只是读)", async () => {
@@ -89,6 +101,25 @@ describe("服务端鉴权", () => {
 		// 外壳级读接口不受影响:顶栏铃铛、侧栏与每页的偏好参数 —— 拦它们会让整站打不开
 		await nobody.notice.list({ limit: 1 });
 		await nobody.para.byKey({ key: "page.size" });
+	});
+
+	it("个人资料:只读自己那一行,roles / depts 永远给数组(个人资料页的数据源)", async () => {
+		// 注入的 `test-admin` **不是库里的账号**(见 helpers.ts),而 `user.profile` 读的是 `sys_user` 真实行,
+		// 所以这里先造一个真账号(邮箱带 `__test__` 前缀,收尾的清扫会连会话/account 一起删掉)。
+		const created = await caller.user.create({
+			name: `${TEST_PREFIX}资料页`,
+			email: `${TEST_PREFIX}profile-${SUFFIX}@example.com`,
+			password: "Passw0rd123",
+		});
+		const asSelf = callerAs({ id: created.id, name: created.name });
+		const me = await asSelf.user.profile();
+		assert.equal(me.id, created.id);
+		assert.equal(me.email, created.email);
+		assert.equal(me.emailVerified, false, "刚建出来的账号还没验证邮箱");
+		assert.deepEqual(me.roles, [], "没有角色 ⇒ 空数组(不是 null)");
+		assert.deepEqual(me.depts, [], "没有部门 ⇒ 空数组(不是 null)");
+		// 身份取的是会话(注入的 ctx.user),不接受入参 —— 所以"换成别人"在接口层就不可能
+		assert.equal(me.name, created.name);
 	});
 
 	it("分类守卫:每个写接口必须显式分类(配了权限点 / 或在未配清单里)", () => {

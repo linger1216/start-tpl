@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 
 import {
 	sysAccount,
@@ -358,13 +358,62 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		removed += staleLockoutEmails.length;
 	}
 
-	// ── 限流计数:BA 测试可能写入 `rate-limit:<key>`,按 key 前缀(`__test__*`)清。
-	const staleRateLimitKeys = (await db.select({ key: sysRateLimit.key }).from(sysRateLimit))
+	// ── 限流计数:BA 测试可能写入 `rate-limit:<key>`,按 key 前缀(`__test__*`)清 —— 但**只清已经过期的**。
+	//
+	// 为什么不能无差别按前缀删:`node --test` 按文件并行,别的文件同一时刻可能正拿着自己那个
+	// `__test__rate_limit_*` 键做 `increment` 计数(见 tests/rate-limit-storage.test.ts),
+	// 删掉它会让计数从 1 重来(踩过:`increment 单调递增` 偶发 `1 !== 3`)。
+	// 过期行(或 `set(key,value)` 没给 ttl 的孤儿行)才是真残留 —— 删它们对并发用例无害。
+	const staleRateLimitKeys = (
+		await db
+			.select({ key: sysRateLimit.key })
+			.from(sysRateLimit)
+			.where(or(lt(sysRateLimit.expiresAt, new Date()), isNull(sysRateLimit.expiresAt)))
+	)
 		.map((row) => row.key)
 		.filter((k): k is string => startsWithPrefix(k));
 	if (staleRateLimitKeys.length > 0) {
 		await db.delete(sysRateLimit).where(inArray(sysRateLimit.key, staleRateLimitKeys));
 		removed += staleRateLimitKeys.length;
+	}
+
+	// ── 会话缓存:BA 把 session 缓存在同一张表的 `value` 列,key 是**随机会话 token**,
+	// 所以按 key 前缀认不出来。两种都算残留:
+	//  a) 缓存内容里带着 `__test__` 账号(email / id)⇒ 一定是测试造的;
+	//  b) 缓存里那个 session token **在 `sys_session` 里已经不存在了** ⇒ 缓存是孤儿
+	//     (测试收尾删了会话行,缓存却留着 —— 实测每跑一轮留几百行、7 天后才过期的就是这类)。
+	const cachedRows = (
+		await db
+			.select({ key: sysRateLimit.key, value: sysRateLimit.value })
+			.from(sysRateLimit)
+			.where(isNotNull(sysRateLimit.value))
+	).filter((row) => (row.value ?? "").includes("{")); // 会话缓存是 JSON;限流计数行没有 value
+
+	const cachedTestSessionKeys: string[] = [];
+	const orphanTokenKeys: string[] = [];
+	for (const row of cachedRows) {
+		const raw = row.value ?? "";
+		if (raw.includes(TEST_PREFIX)) {
+			cachedTestSessionKeys.push(row.key);
+			continue;
+		}
+		try {
+			const parsed = JSON.parse(raw) as { session?: { token?: unknown } };
+			const token = parsed?.session?.token;
+			if (typeof token === "string" && token.length > 0) orphanTokenKeys.push(row.key);
+		} catch {
+			// 不是 JSON 就别猜 —— 留给它自己过期(粗心删错表里的东西比留几行更糟)
+		}
+	}
+	if (orphanTokenKeys.length > 0) {
+		const liveTokens = new Set(
+			(await db.select({ token: sysSession.token }).from(sysSession)).map((r) => r.token).filter(Boolean),
+		);
+		for (const key of orphanTokenKeys) if (!liveTokens.has(key)) cachedTestSessionKeys.push(key);
+	}
+	if (cachedTestSessionKeys.length > 0) {
+		await db.delete(sysRateLimit).where(inArray(sysRateLimit.key, cachedTestSessionKeys));
+		removed += cachedTestSessionKeys.length;
 	}
 
 	// 上面删的都是**裸 SQL 或直接删表**,绕过了 `lib/casbin.ts` 的领域函数 ⇒ 判定缓存可能还留着旧策略

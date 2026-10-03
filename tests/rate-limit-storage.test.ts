@@ -7,7 +7,8 @@
  *  3. `set/get` 互通:set("foo","bar", 60) → get("foo") === "bar",过期后 get → null;
  *  4. `getAndDelete` 原子:返回值 + 行真的没了;
  *  5. `delete` + `list`(按 LIKE 前缀):删 A 不影响 B;
- *  6. `increment` 失败关闭:catch 走通(模拟异常路径 —— 用一个超长 key 让 MySQL 拒绝)。
+ *  6. `increment` 失败关闭:catch 走通(模拟异常路径 —— 用一个超长 key 让 MySQL 拒绝);
+ *  7. `purgeExpiredRateLimitsThrottled` 会节流(认证请求心跳版,见 `auth.ts` 的 `hooks.after`)。
  *
  * 走真实 DB(`sys_rate_limit` 表);每个 case 用唯一前缀避免互相干扰。
  */
@@ -17,7 +18,11 @@ import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { sysRateLimit } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { purgeExpiredRateLimits, rateLimitStorage } from "../src/lib/rate-limit-storage.ts";
+import {
+	purgeExpiredRateLimits,
+	purgeExpiredRateLimitsThrottled,
+	rateLimitStorage,
+} from "../src/lib/rate-limit-storage.ts";
 import { closeDb, TEST_PREFIX } from "./helpers.ts";
 
 /** 给测试用的唯一 key —— 用随机后缀避免 suite 之间互相踩。 */
@@ -133,6 +138,14 @@ test("purgeExpiredRateLimits 清掉过期行", async () => {
 	const liveRow = await db.select({ key: sysRateLimit.key }).from(sysRateLimit).where(eq(sysRateLimit.key, live));
 	assert.equal(liveRow.length, 1, "live 行应保留");
 	await rateLimitStorage.delete(live);
+});
+
+test("purgeExpiredRateLimitsThrottled 节流:紧接着的第二次不再真跑(返回 0)", async () => {
+	// `intervalMs = 0` ⇒ 一定真跑(顺便把模块里的"上次跑过"打上);随后用默认一小时去问,应被节流挡住。
+	const first = await purgeExpiredRateLimitsThrottled(0);
+	assert.ok(first >= 0, "第一次应真跑(删 0 行也是合法结果)");
+	const second = await purgeExpiredRateLimitsThrottled(60 * 60 * 1000);
+	assert.equal(second, 0, "节流期内返回 0 = 没跑,而不是删了 0 行");
 });
 
 test.after(async () => {

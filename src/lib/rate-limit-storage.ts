@@ -133,9 +133,11 @@ export const rateLimitStorage = {
 };
 
 /**
- * 定期清理 expired 行 —— 防止 `sys_rate_limit` 越长越大。
- * 由 `src/lib/cleanup.ts` 的周期任务调用,不在这里 setInterval(避免重复定时器)。
- * MySQL 的 delete() 不支持 `.returning()`,改用 select + delete 两步。
+ * 清理 expired 行 —— 防止 `sys_rate_limit` 越长越大。
+ *
+ * **不在这里 setInterval**:模块级的定时器会在 dev 热重载 / 多副本下重复起。
+ * 想按自己的节奏清就直接调它(或者用下面那个节流版)。
+ * MySQL 的 `delete()` 不支持 `.returning()`,所以是 select + delete 两步。
  */
 export async function purgeExpiredRateLimits(now: Date = new Date()): Promise<number> {
 	const rows = await db
@@ -150,4 +152,24 @@ export async function purgeExpiredRateLimits(now: Date = new Date()): Promise<nu
 		),
 	);
 	return rows.length;
+}
+
+/** 上次真跑清理的时间(模块级 —— 每个进程各自节流,足够用) */
+let lastPurgeAt = 0;
+
+/**
+ * 节流版清理:**模板里没有调度器**,所以借认证请求当心跳(`auth.ts` 的 `hooks.after`)——
+ * 默认一小时最多真跑一次,认证请求本来就稀疏,代价可以忽略,而表也不会无限长下去。
+ *
+ * 节流期内返回 `0`(意思是"这次没跑",不是"跑了但没删到");清理失败只记日志,绝不影响登录。
+ */
+export async function purgeExpiredRateLimitsThrottled(intervalMs = 60 * 60 * 1000): Promise<number> {
+	if (Date.now() - lastPurgeAt < intervalMs) return 0;
+	lastPurgeAt = Date.now();
+	try {
+		return await purgeExpiredRateLimits();
+	} catch (error) {
+		logger.warn("rate_limit.purge_failed", { message: error instanceof Error ? error.message : String(error) });
+		return 0;
+	}
 }

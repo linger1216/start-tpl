@@ -47,7 +47,8 @@ type SysMenuRow = typeof sysMenu.$inferSelect;
  * - `/notices` 通知中心 = 刻意不发菜单授权(`scripts/seed-demo.ts` 的演示账号没有它),
  *   但顶栏铃铛在每个页面都指过来 —— 拦它等于把铃铛点坏了。
  *
- * 除此之外**不在**菜单表里的路径(如 `/blank`)也一律放行:菜单表管的是菜单驱动的页面。
+ * 除此之外,**不在**菜单表里的路径也一律放行:菜单表管的是菜单驱动的页面 ——
+ * 派生项目里新加的页面在灌进 `sys_menu` 之前,不会因为"查不到菜单"而被拦掉。
  */
 const ALWAYS_VIEWABLE_PATHS: readonly string[] = ["/", "/notices"];
 
@@ -125,7 +126,7 @@ export async function canViewPath(
 	// 权限体系未启用(菜单表空)⇒ 一律放行,与中间件、`useHasPerm` 同口径
 	if (perms === null) return { allowed: true, pageName };
 	if (ALWAYS_VIEWABLE_PATHS.includes(pathname)) return { allowed: true, pageName };
-	// 不在菜单表里的页面:菜单驱动不到它(如 `/blank`),只要求登录
+	// 不在菜单表里的页面:菜单驱动不到它,只要求登录
 	if (!pages.has(pathname)) return { allowed: true, pageName };
 	return { allowed: perms.includes(pagePermOf(pathname)), pageName };
 }
@@ -371,6 +372,7 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"role.users",
 	"role.menuIds",
 	"user.roles",
+	"user.profile",
 	"file.url",
 	"tag.objectIdsOfTag",
 	"tag.tagIdsOfObject",
@@ -430,4 +432,8 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"tag.tagsOfObject",
 	// 类别 3:目前没有调用方(留给"用户详情里的角色指派"),等有了调用方再按页面登记
 	"user.roles",
+	// 类别 2:天生自限范围 —— 个人资料页(`/settings/profile`)。SQL 只按 `ctx.user.id` 读自己那一行;
+	// 页面本身刻意**不挂菜单授权**(不然"没勾设置菜单的人连自己资料都看不到"),
+	// 入口在顶栏用户菜单里,与 `/blank` 那类"不在菜单表里的页面"同一个口径(见 `canViewPath`)。
+	"user.profile",
 ];

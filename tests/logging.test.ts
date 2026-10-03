@@ -22,7 +22,8 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
  * 所以改成**行为断言** —— 每个 path 真调一次,它的两行必须出现在日志流里。
  */
 // 65 → 77:新增数据权限两个 router(dataScope 7 个 + dataPlugin 5 个),全部走 protectedProcedure
-const EXPECTED_PROCEDURES = 77;
+// 77 → 78:新增 `user.profile`(个人资料页,protectedProcedure)
+const EXPECTED_PROCEDURES = 78;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

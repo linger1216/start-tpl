@@ -29,6 +29,7 @@ import { Route as mainSettingsFilesRouteImport } from './routes/(main)/settings/
 import { Route as mainSettingsLogsRouteImport } from './routes/(main)/settings/logs'
 import { Route as mainSettingsMenusRouteImport } from './routes/(main)/settings/menus'
 import { Route as mainSettingsParametersRouteImport } from './routes/(main)/settings/parameters'
+import { Route as mainSettingsProfileRouteImport } from './routes/(main)/settings/profile'
 import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/roles'
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
@@ -136,6 +137,11 @@ const mainSettingsParametersRoute = mainSettingsParametersRouteImport.update({
   path: '/settings/parameters',
   getParentRoute: () => mainRouteRoute,
 } as any)
+const mainSettingsProfileRoute = mainSettingsProfileRouteImport.update({
+  id: '/settings/profile',
+  path: '/settings/profile',
+  getParentRoute: () => mainRouteRoute,
+} as any)
 const mainSettingsRolesRoute = mainSettingsRolesRouteImport.update({
   id: '/settings/roles',
   path: '/settings/roles',
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/settings/logs': typeof mainSettingsLogsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
+  '/settings/profile': typeof mainSettingsProfileRoute
   '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/settings/logs': typeof mainSettingsLogsRoute
   '/settings/menus': typeof mainSettingsMenusRoute
   '/settings/parameters': typeof mainSettingsParametersRoute
+  '/settings/profile': typeof mainSettingsProfileRoute
   '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/(main)/settings/logs': typeof mainSettingsLogsRoute
   '/(main)/settings/menus': typeof mainSettingsMenusRoute
   '/(main)/settings/parameters': typeof mainSettingsParametersRoute
+  '/(main)/settings/profile': typeof mainSettingsProfileRoute
   '/(main)/settings/roles': typeof mainSettingsRolesRoute
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
@@ -279,6 +288,7 @@ export interface FileRouteTypes {
     | '/settings/logs'
     | '/settings/menus'
     | '/settings/parameters'
+    | '/settings/profile'
     | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/settings/logs'
     | '/settings/menus'
     | '/settings/parameters'
+    | '/settings/profile'
     | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/(main)/settings/logs'
     | '/(main)/settings/menus'
     | '/(main)/settings/parameters'
+    | '/(main)/settings/profile'
     | '/(main)/settings/roles'
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
@@ -496,6 +508,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsParametersRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/settings/profile': {
+      id: '/(main)/settings/profile'
+      path: '/settings/profile'
+      fullPath: '/settings/profile'
+      preLoaderRoute: typeof mainSettingsProfileRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/(main)/settings/roles': {
       id: '/(main)/settings/roles'
       path: '/settings/roles'
@@ -566,6 +585,7 @@ interface mainRouteRouteChildren {
   mainSettingsLogsRoute: typeof mainSettingsLogsRoute
   mainSettingsMenusRoute: typeof mainSettingsMenusRoute
   mainSettingsParametersRoute: typeof mainSettingsParametersRoute
+  mainSettingsProfileRoute: typeof mainSettingsProfileRoute
   mainSettingsRolesRoute: typeof mainSettingsRolesRoute
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
@@ -591,6 +611,7 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainSettingsLogsRoute: mainSettingsLogsRoute,
   mainSettingsMenusRoute: mainSettingsMenusRoute,
   mainSettingsParametersRoute: mainSettingsParametersRoute,
+  mainSettingsProfileRoute: mainSettingsProfileRoute,
   mainSettingsRolesRoute: mainSettingsRolesRoute,
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,

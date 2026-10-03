@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
+import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
@@ -198,6 +198,11 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 							<div className="truncate text-xs text-muted-foreground">{user.email}</div>
 						</DropdownMenuLabel>
 						<DropdownMenuSeparator />
+						{/* 个人资料 —— 入口放在这里,而不是侧边栏:改自己的密码不该要求"系统设置"菜单授权 */}
+						<DropdownMenuItem className="gap-2 text-sm" render={<Link to="/settings/profile" />}>
+							<UserRound className="size-3.5" />
+							个人资料
+						</DropdownMenuItem>
 						<DropdownMenuItem onClick={() => void handleSignOut()} className="gap-2 text-sm">
 							<LogOut className="size-3.5" />
 							退出登录

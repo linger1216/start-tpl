@@ -7,13 +7,15 @@
  * | `create` | mutation | **建账号** —— 转调 Better Auth 的 `signUpEmail`(密码哈希由它做) |
  * | `update` | mutation | 改姓名 / 邮箱(账号本身仍是 BA 的表,这里只动这两列) |
  * | `remove` | mutation | 删账号:先清会话 / account / 部门成员,再删 `sys_user`(拒绝删自己) |
- * | `assignments` | query | 这个人在哪些部门、各是什么角色 |
- *  *
+ * | `roles` | query | 这个人的全局角色(用户详情里的角色指派) |
+ * | `profile` | query | **当前登录者**自己的资料(个人资料页:姓名 / 邮箱 / 验证状态 / 角色 / 部门) |
+ *
  * 建账号为什么绕到 BA:**密码哈希(scrypt)、account 记录、邮箱唯一性都是它的职责**,
  * 我们自己 insert `sys_user` 只会得到一个登不进去的账号。所以这里只做三件它不管的事:
  * ① 先查重给出中文提示(BA 的报错是英文的);② 建完**立刻删掉它顺手建的那个会话**
  * (否则等于把当前登录的管理员顶掉);③ 返回我们能直接用的那几列。
- * 改 / 删用户仍然不在这里 —— 那会牵动会话与第三方登录绑定,不在这个页面的职责里。
+ * 改姓名 / 邮箱走 `update`;改**自己的**密码与邮箱验证走 BA 的客户端接口(见 `lib/auth.ts`),
+ * 不在这里 —— 那两条流程带着"邮件往返"和"校验旧密码",不是普通台账写入。
  */
 
 import { TRPCError } from "@trpc/server";
@@ -26,7 +28,7 @@ import { auth } from "#/lib/auth";
 import { allUserRoles, isAdminUser, removeAllRolesOfUser, roleIdsOf, setUserRoles } from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
 import { newId } from "#/lib/ids";
-import { createTRPCRouter, protectedProcedure } from "../init";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 export const userRouter = createTRPCRouter({
 	/**
@@ -353,5 +355,57 @@ export const userRouter = createTRPCRouter({
 			.from(sysRole)
 			.where(inArray(sysRole.id, ids))
 			.orderBy(asc(sysRole.sort), asc(sysRole.name));
+	}),
+
+	/**
+	 * **当前登录者自己的资料** —— `/settings/profile` 页的全部数据。
+	 *
+	 * `id` 一律取 `ctx.user.id`(中间件注入),不接受前端传参 ⇒ "看别人的资料"在 SQL 层不可能。
+	 * 邮箱验证状态取自 `sys_user.email_verified`(BA 的表,我们只读)—— 个人资料页据此显示
+	 * 「已验证 / 未验证」与「重发验证邮件」按钮。
+	 *
+	 * ⚠️ 取舍:姓名 / 邮箱的**改动**不走这个路由 —— 它们是 BA 的表,改邮箱还要邮件往返,
+	 * 所以页面直接调 BA 客户端接口(`authClient.updateUser` / `changeEmail` / `changePassword`)。
+	 */
+	profile: protectedProcedure.query(async ({ ctx }) => {
+		const me = requireCurrentUser(ctx);
+		const [row] = await db
+			.select({
+				id: sysUser.id,
+				name: sysUser.name,
+				email: sysUser.email,
+				emailVerified: sysUser.emailVerified,
+				createTime: sysUser.createdAt,
+			})
+			.from(sysUser)
+			.where(eq(sysUser.id, me.id))
+			.limit(1);
+		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "账号不存在(可能已被删除)" });
+
+		const roleIds = await roleIdsOf(me.id);
+		const roles =
+			roleIds.length === 0
+				? []
+				: await db
+						.select({ id: sysRole.id, name: sysRole.name })
+						.from(sysRole)
+						.where(inArray(sysRole.id, roleIds))
+						.orderBy(asc(sysRole.sort), asc(sysRole.name));
+		const depts = await db
+			.select({ id: sysDept.id, name: sysDept.name })
+			.from(sysUserDept)
+			.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id))
+			.where(eq(sysUserDept.user_id, me.id))
+			.orderBy(asc(sysDept.name));
+
+		return {
+			id: row.id,
+			name: row.name,
+			email: row.email,
+			emailVerified: Boolean(row.emailVerified),
+			createTime: row.createTime ? row.createTime.toISOString() : null,
+			roles,
+			depts,
+		};
 	}),
 });

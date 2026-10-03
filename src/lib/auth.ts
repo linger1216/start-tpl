@@ -8,7 +8,8 @@ import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base
 import { userSwitchPlugin } from "#/lib/auth-debug";
 import { clearSignInFailures, isAccountLocked, recordSignInFailure } from "#/lib/auth-lockout";
 import { logger } from "#/lib/logger";
-import { rateLimitStorage } from "#/lib/rate-limit-storage";
+import { sendMail } from "#/lib/mailer";
+import { purgeExpiredRateLimitsThrottled, rateLimitStorage } from "#/lib/rate-limit-storage";
 
 /**
  * Better Auth 的 origin 校验白名单。
@@ -70,15 +71,18 @@ function loadTrustedOrigins(): string[] {
  *  - 登录页 `/login`(`routes/login.tsx`,在后台外壳之外):邮箱 + 密码,成功后回 `?redirect=` 的原地址;
  *  - **整个后台都要登录**:`routes/(main)/route.tsx` 的 `beforeLoad` 在**服务端**读会话
  *    (`auth.api.getSession` + `getRequestHeaders()`),没有就 307 到登录页并带上原地址;
- *  - 顶栏用户菜单(显示姓名 / 邮箱 / 退出登录),退出后 by 守卫自动回登录页;
+ *  - 顶栏用户菜单(个人资料 / 显示姓名 / 邮箱 / 退出登录),退出后 by 守卫自动回登录页;
+ *  - **个人资料页** `/settings/profile`:改姓名(`updateUser`)、改密码(`changePassword`)、
+ *    邮箱验证状态 + 重发验证信、改邮箱(`changeEmail`,走邮件确认);
  *  - 回归测试:`tests/better-auth.test.ts`(注册 / 登录 / 取会话 / 错密码 / 登出)。
  *
  * 未接的部分(**不开放自注册**,账号需要先在库里建 —— 见 AGENTS.md「认证」):
  *  - 业务字段(账号 / 手机号 / 所属部门 / 状态)与 RBAC 的绑定:TBD —— 走 better-auth 的
  *    `user.additionalFields` 或独立的用户资料表,**本轮未加**,见 doc/表结构设计.md §11.4;
- *  - 注册页 / 忘记密码 / 改密:未做(要发邮件的那类流程还没接);
- *  - 权限点下发给前端:`session` 里目前不带权限,需要一个服务端 procedure 读
- *    `user_role → role_permission` 后返回权限码数组(接口未实现,前端已留好挂载点,见 §11.3);
+ *  - 注册页 / 忘记密码:未做(不开放自注册,所以"注册"是管理员在用户台账里建账号;
+ *    忘记密码同理走管理员重置 —— `user.ts` 的 `update` 能改邮箱,密码走 BA 的 `setPassword`);
+ *  - 权限点下发给前端:已由 `menu.mine`(`lib/rbac.ts` 的 `effectiveMenusFor`)提供,
+ *    前端挂载点见 `hooks/use-perms.ts`;
  *  - 第三方登录(微信 / 统一身份认证等):TBD,加 `socialProviders` 即可,表结构无需改动。
  */
 export const auth = betterAuth({
@@ -90,6 +94,46 @@ export const auth = betterAuth({
 	}),
 	emailAndPassword: {
 		enabled: true,
+		// 刻意**不开** requireEmailVerification:模板不发邮件(见下),开了等于谁都登不进来。
+		// 真实项目接了邮件服务商以后,把这个开关打开就是"必须验证邮箱才能登录"。
+	},
+	/**
+	 * 邮箱验证 —— 只提供**发送**能力,是否强制验证由上面那个开关决定。
+	 *
+	 * `sendVerificationEmail` 是 BA 在 `/send-verification-email`(重新发验证信)与
+	 * 注册流程里回调我们的唯一出口;邮件本身走 `lib/mailer.ts`(开发态打到终端)。
+	 * `expiresIn` 取 1 小时(BA 默认值,写出来是为了让人看见有这么个可调项)。
+	 */
+	emailVerification: {
+		expiresIn: 60 * 60,
+		sendVerificationEmail: async ({ user, url }) => {
+			await sendMail({
+				to: user.email,
+				subject: "验证你的邮箱",
+				text: `你好 ${user.name || user.email}:点下面的链接完成邮箱验证(1 小时内有效)。\n${url}`,
+				link: url,
+			});
+		},
+	},
+	/**
+	 * 改邮箱 —— BA 默认**关闭**这个端点(`user.changeEmail.enabled`),所以要显式打开。
+	 *
+	 * 走的是"发确认信 → 点链接才改"的往返:`sendChangeEmailConfirmation` 是那封信的出口。
+	 * 关掉 `updateEmailWithoutVerification`(默认)是刻意的 —— 改邮箱是账号接管的第一手段,
+	 * "谁改了谁的邮箱"必须留下一封可点的确认信。个人资料页 `/settings/profile` 是它的入口。
+	 */
+	user: {
+		changeEmail: {
+			enabled: true,
+			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+				await sendMail({
+					to: newEmail,
+					subject: "确认更换邮箱",
+					text: `${user.name || user.email} 想把邮箱换成 ${newEmail}:点下面的链接确认。\n${url}`,
+					link: url,
+				});
+			},
+		},
 	},
 	trustedOrigins: loadTrustedOrigins(),
 	/**
@@ -155,6 +199,9 @@ export const auth = betterAuth({
 			}
 		}),
 		after: createAuthMiddleware(async (ctx) => {
+			// 顺手清一次 `sys_rate_limit` 的过期行(内部节流:一小时最多真跑一次)。
+			// 模板没有内置调度器,就拿认证请求当心跳 —— 失败只记日志,不影响登录。
+			void purgeExpiredRateLimitsThrottled();
 			if (ctx.path !== "/sign-in/email") return;
 			const email = String(ctx.body?.email ?? "")
 				.trim()
