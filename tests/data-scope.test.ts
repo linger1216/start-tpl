@@ -152,6 +152,11 @@ test("资源元数据:主键从 information_schema 读,列带中文名", async (
 	for (const column of ["town_id", "owner_id"]) {
 		assert.ok(columns.includes(column), `demo_grid.${column} 应该在列清单里`);
 	}
+	// m24215:下拉只展示业务表 —— sys_* 系统表不应出现在资源清单里
+	assert.ok(
+		list.every((item) => !item.table.startsWith("sys_")),
+		"sys_* 表不应进入下拉,但引擎按 tag 路径解析历史规则时仍然能拿到它们",
+	);
 });
 
 test("插件清单:内置排在前面、界面上是只读的,兜底插件不出现", async () => {

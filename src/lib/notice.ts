@@ -3,6 +3,7 @@ import { sysNotice } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { logger } from "#/lib/logger";
 import type { NoticeLevel } from "#/lib/notice-levels";
+import { publish } from "./sse-bus";
 
 /**
  * 站内通知的**发送侧**(服务端专用)。
@@ -46,9 +47,11 @@ function normalizePath(path: string | null | undefined): string | null {
 
 /** 给一个人发一条。**绝不抛** */
 export async function notify(userId: string, payload: NoticePayload): Promise<void> {
+	let id: string | null = null;
 	try {
+		id = newId();
 		await db.insert(sysNotice).values({
-			id: newId(),
+			id,
 			user_id: userId,
 			title: payload.title.slice(0, 128),
 			body: payload.body ? payload.body.slice(0, 255) : null,
@@ -57,6 +60,9 @@ export async function notify(userId: string, payload: NoticePayload): Promise<vo
 			read_at: null,
 			create_time: new Date(),
 		});
+		// 写库成功 ⇒ 推一条 SSE,前端铃铛 / 列表无需等下一次轮询就能立刻刷新。
+		// 接收人就是写入对象,精确到 user_id。
+		publish({ channel: `notice:${userId}`, name: "notice.new", data: { id, userId } });
 	} catch (error) {
 		logger.warn("notice.write_failed", { userId, message: (error as Error).message });
 	}

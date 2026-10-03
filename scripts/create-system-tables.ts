@@ -180,6 +180,20 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_verification_identifier\` (\`identifier\`)
 		)`,
 	},
+	// ── 登录风控(失败计数 + 锁定;m23422 风格的连续失败 → 锁定表)────────────
+	// 见 src/lib/auth-lockout.ts 的阈值(默认 5 次失败锁 15 分钟)。
+	{
+		name: "sys_account_lockout",
+		ddl: `create table if not exists \`sys_account_lockout\` (
+			\`email\` varchar(255) not null,
+			\`failed_attempts\` int not null default 0,
+			\`locked_until\` timestamp null,
+			\`last_failed_at\` timestamp null,
+			\`last_failed_ip\` varchar(64) null,
+			primary key (\`email\`),
+			key \`idx_sys_account_lockout_until\` (\`locked_until\`)
+		)`,
+	},
 	// ── 权限四表(部门 / 角色;形状与理由见 src/db/data-base-schema.ts)──────────
 	{
 		name: "sys_dept",

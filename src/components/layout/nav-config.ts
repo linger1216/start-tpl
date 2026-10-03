@@ -40,6 +40,7 @@ import {
 	FileText,
 	Gauge,
 	KeyRound,
+	LayoutDashboard,
 	LayoutGrid,
 	LayoutPanelTop,
 	Library,
@@ -77,6 +78,7 @@ export const NAV_ICON_MAP = {
 	boxes: Boxes,
 	// 组件展示
 	"bar-chart-3": BarChart3,
+	"layout-dashboard": LayoutDashboard,
 	"clipboard-list": ClipboardList,
 	table: TableIcon,
 	"grid-3x3": LayoutGrid,
@@ -145,6 +147,7 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "数据库", path: "/demo/drizzle", icon: "database" },
 			{ name: "登录认证", path: "/demo/better-auth", icon: "key-round" },
 			{ name: "全局状态", path: "/demo/store", icon: "boxes" },
+			{ name: "业务首页", path: "/demo/business-home", icon: "layout-dashboard" },
 		],
 	},
 

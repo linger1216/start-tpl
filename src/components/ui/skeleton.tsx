@@ -8,7 +8,13 @@ import { cn } from "#/lib/utils";
  * 两个文件、两个 import 路径,调用方还得记住"哪个在哪"。合并后一个路径拿全。
  */
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
-	return <div data-slot="skeleton" className={cn("skeleton-shimmer rounded-md", className)} {...props} />;
+	return (
+		<div
+			data-slot="skeleton"
+			className={cn("skeleton-shimmer rounded-md bg-muted text-foreground", className)}
+			{...props}
+		/>
+	);
 }
 
 /** 统计卡加载骨架（数量由调用方控制） */

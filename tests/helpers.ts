@@ -17,6 +17,7 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 
 import {
 	sysAccount,
+	sysAccountLockout,
 	sysCasbinRule,
 	sysDataPlugin,
 	sysDataPolicy,
@@ -344,6 +345,16 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	if (stalePlugins.length > 0) {
 		await db.delete(sysDataPlugin).where(inArray(sysDataPlugin.plugin_key, stalePlugins));
 		removed += stalePlugins.length;
+	}
+
+	// ── 登录风控:行没有 created_at,按邮箱前缀(`__test__lockout_*` / `__test__ba_*`)清;
+	//   该表是 sole-owner of its email,直接删即可,无外键。
+	const staleLockoutEmails = (await db.select({ email: sysAccountLockout.email }).from(sysAccountLockout))
+		.map((row) => row.email)
+		.filter((email): email is string => startsWithPrefix(email));
+	if (staleLockoutEmails.length > 0) {
+		await db.delete(sysAccountLockout).where(inArray(sysAccountLockout.email, staleLockoutEmails));
+		removed += staleLockoutEmails.length;
 	}
 
 	// 上面删的都是**裸 SQL 或直接删表**,绕过了 `lib/casbin.ts` 的领域函数 ⇒ 判定缓存可能还留着旧策略

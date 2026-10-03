@@ -16,6 +16,7 @@ import {
 import { useTRPC } from "#/integrations/trpc/react";
 import { noticeLevelStyle } from "#/lib/notice-levels";
 import { formatLocalMinute } from "#/lib/time";
+import { useNoticeSse } from "#/lib/use-notice-sse";
 
 /**
  * 顶栏通知铃铛 —— 未读数 + 点开看最近 10 条 + **点一条就标记已读并跳到它指的页面**。
@@ -37,6 +38,9 @@ export function NotificationBell() {
 
 	// 60 秒轮询就够:这是站内通知,不是聊天(真需要实时再上 SSE)
 	const listQuery = useQuery({ ...trpc.notice.list.queryOptions(), refetchInterval: 60_000 });
+
+	// 订阅 SSE:有新通知就直接 invalidate 缓存,轮询周期里也能秒级收到。
+	useNoticeSse();
 
 	const readMutation = useMutation(
 		trpc.notice.read.mutationOptions({

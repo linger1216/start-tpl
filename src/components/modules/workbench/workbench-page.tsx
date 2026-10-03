@@ -1,30 +1,19 @@
 /**
  * 模板工作台 —— `/`。
  *
- * 设计意图:不再展示业务 KPI(那是新项目该有自己的事),页面内容固定为四块 ——
- * UI 组件示例(主体)、新项目上手的速查清单、系统设置模块导览(含各页数据源),
- * 以及一个明显的「派生时删什么」的提示。
+ * 设计意图:不再展示业务 KPI(那是新项目该有自己的事),页面内容固定为五块 ——
+ * UI 组件示例(主体)、新项目上手的速查清单、模板的两条主线、一级菜单索引
+ * (派生自 NAV_NODES),以及一个明显的「派生时删什么」的提示。
  *
- * 只有「一级菜单索引」那张卡由 NAV_NODES 派生(见 `navigableTopLevel`);
- * 其余入口卡是手写的策展导语,别在散文里声称它们跟着 nav-config 变。
+ * 入口索引由 NAV_NODES 派生(见 `navigableTopLevel`);其余卡是手写的策展导语,
+ * 别在散文里声称它们跟着 nav-config 变。
  */
 import { Link } from "@tanstack/react-router";
-import {
-	ArrowRight,
-	Code2,
-	Database,
-	FolderTree,
-	Layers,
-	Rocket,
-	Settings,
-	Tag as TagIcon,
-	Workflow,
-} from "lucide-react";
+import { ArrowRight, Code2, FolderTree, Layers, Rocket, Settings, Workflow } from "lucide-react";
 
 import { NAV_ICON_MAP, type NavNode } from "#/components/layout/nav-config";
 import { useNavNodes } from "#/components/layout/nav-data";
 import { PageHeader } from "#/components/layout/page-header";
-import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { cn } from "#/lib/utils";
 import { UiGallery } from "./ui-gallery";
@@ -58,52 +47,7 @@ const CHECKS = [
 	},
 ];
 
-/** 系统设置模块里各自有独立数据表的几页 —— 吃哪张表写清楚,免得后来人以为它们都是 mock */
-const SETTINGS_PAGES = [
-	{
-		name: "标签管理",
-		path: "/settings/tags",
-		source: "sys_tag",
-		desc: "维度 → 标签 两级树;可拖拽调序、跨父迁移。搭配 sys_tag_relation 给业务对象打标签",
-	},
-	{
-		name: "菜单管理",
-		path: "/settings/menus",
-		source: "sys_menu",
-		desc: "侧边栏 / 面包屑 / 工作台的运行时来源;改完即时生效(表为空则退回代码里的 NAV_NODES)",
-	},
-	{
-		name: "字典管理",
-		path: "/settings/dictionary",
-		source: "sys_dict",
-		desc: "全系统共用的固定取值表,业务按 code 引用(useDict 读它)",
-	},
-	{
-		name: "参数管理",
-		path: "/settings/parameters",
-		source: "sys_para",
-		desc: "运维口径 + 界面偏好(如侧边栏收起形态);按类型码校验,支持详情 / 编辑 / 删除",
-	},
-	{
-		name: "用户管理",
-		path: "/settings/users",
-		source: "sys_user",
-		desc: "账号台账读 Better Auth 的 sys_user(只读);这一页管的是授权 —— 谁在哪些部门、每个部门是什么角色",
-	},
-	{
-		name: "部门管理",
-		path: "/settings/departments",
-		source: "sys_dept",
-		desc: "部门树 —— 组织架构;成员与角色记在 sys_user_dept 上(一人可跨多个部门)",
-	},
-	{
-		name: "角色管理",
-		path: "/settings/roles",
-		source: "sys_role",
-		desc: "角色**全局定义**(不随部门复制)+ 权限点勾选;sys_casbin_rule 的 p 行同时决定菜单可见与按钮可用",
-	},
-];
-
+/** 模板的两条主线 —— 手写的策展导语;真正的入口索引是下面那张派生的「一级菜单索引」 */
 const STRUCTURE = [
 	{
 		icon: Workflow,
@@ -127,7 +71,7 @@ export function WorkbenchPage() {
 		<div className="page-enter space-y-6">
 			<PageHeader
 				title="工作台"
-				description="模板自带的入口页 —— 真实业务上手后会替换它。当前内容:UI 组件示例、新项目上手清单、系统设置模块导览,以及「派生时删什么」。"
+				description="模板自带的入口页 —— 真实业务上手后会替换它。当前内容:UI 组件示例、新项目上手清单、模板的两条主线,以及「派生时删什么」。"
 				descriptionInline
 			/>
 
@@ -203,65 +147,6 @@ export function WorkbenchPage() {
 								</div>
 							</Link>
 						))}
-					</div>
-				</CardContent>
-			</Card>
-
-			{/* 系统设置模块导览 —— 上面那几页分别吃什么数据 */}
-			<Card tone="var(--hue-amber)">
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2 text-base">
-						<Database className="size-4 text-muted-foreground" />
-						系统设置模块(唯一保留的真实业务)
-					</CardTitle>
-					<CardDescription>
-						下面每页都标了它吃哪张表 —— 数据都在 MySQL 里,不是 mock(完整页面清单以侧边栏为准)。
-						建表与本机开发按下面的命令走。
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-3 pt-0">
-					<div className="stagger grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-						{SETTINGS_PAGES.map((page) => (
-							<Link
-								key={page.path}
-								to={page.path}
-								className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:border-border-strong hover:bg-secondary hover:shadow-raise-1"
-							>
-								<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-hue-blue-soft text-primary ring-1 ring-border ring-inset">
-									<FolderTree className="size-4" />
-								</span>
-								<div className="min-w-0 flex-1">
-									<div className="flex items-center justify-between gap-2">
-										<span className="truncate font-medium text-foreground">{page.name}</span>
-										<Badge variant="secondary" className="shrink-0 px-1.5 font-mono text-xs">
-											{page.source}
-										</Badge>
-									</div>
-									<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{page.desc}</p>
-								</div>
-							</Link>
-						))}
-					</div>
-
-					<div className="rounded-xl border border-dashed border-border p-3 text-xs leading-relaxed text-muted-foreground">
-						<div className="mb-1.5 flex items-center gap-1.5 font-medium text-foreground">
-							<TagIcon className="size-3.5 text-muted-foreground" />
-							建表与灌种子(全部幂等)
-						</div>
-						<p>
-							<code className="font-mono text-foreground">pnpm db:create</code> 建 19 张表(18 张 sys_* + demo_grid) ·{" "}
-							<code className="font-mono text-foreground">pnpm db:seed:menus</code> 把 NAV_NODES 写进 sys_menu ·{" "}
-							<code className="font-mono text-foreground">db:seed:dicts</code> /{" "}
-							<code className="font-mono text-foreground">db:seed:paras</code> /{" "}
-							<code className="font-mono text-foreground">db:seed:tags</code> 灌示例数据,{" "}
-							<code className="font-mono text-foreground">db:seed:rbac</code> 灌权限点 /{" "}
-							<code className="font-mono text-foreground">db:seed:demo</code> 灌网格演示数据。
-						</p>
-						<p className="mt-1">
-							老库升级跑 <code className="font-mono text-foreground">pnpm db:migrate:ids</code>(语义 id → nanoid)与{" "}
-							<code className="font-mono text-foreground">pnpm db:sync:meta</code>(对齐列注释 / 索引名);接口改动由{" "}
-							<code className="font-mono text-foreground">pnpm test</code> 覆盖(直调 tRPC procedure 的集成测试)。
-						</p>
 					</div>
 				</CardContent>
 			</Card>

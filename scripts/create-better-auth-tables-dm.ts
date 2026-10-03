@@ -96,6 +96,18 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_verification_identifier" on ${S}."sys_verification" ("identifier")`,
 
+	// ── 登录风控(失败计数 + 锁定;m23422 风格的连续失败 → 锁定表)────────────
+	// 见 src/lib/auth-lockout.ts 的阈值(默认 5 次失败锁 15 分钟)。
+	`create table if not exists ${S}."sys_account_lockout" (
+		"email" varchar(255) not null,
+		"failed_attempts" int default 0 not null,
+		"locked_until" datetime,
+		"last_failed_at" datetime,
+		"last_failed_ip" varchar(64),
+		primary key ("email")
+	)`,
+	`create index if not exists "idx_sys_account_lockout_until" on ${S}."sys_account_lockout" ("locked_until")`,
+
 	// ── 权限四表(部门 / 角色;形状见 src/db/data-base-schema.ts)──
 	`create table if not exists ${S}."sys_dept" (
 		"id" varchar(32) not null,

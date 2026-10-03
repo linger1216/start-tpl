@@ -1,14 +1,15 @@
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import type { QueryClient } from "@tanstack/react-query";
-import type { NotFoundRouteProps } from "@tanstack/react-router";
+import type { ErrorComponentProps, NotFoundRouteProps } from "@tanstack/react-router";
 import { createRootRouteWithContext, HeadContent, Link, Scripts } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
-import { Compass, ShieldAlert } from "lucide-react";
+import { AlertOctagon, Compass, ShieldAlert } from "lucide-react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { buttonVariants } from "#/components/ui/button";
 import { Toaster } from "#/components/ui/sonner";
 import type { TRPCRouter } from "#/integrations/trpc/router";
+import { toApiError } from "#/lib/api/error";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles.css?url";
@@ -54,6 +55,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 	}),
 	shellComponent: RootDocument,
 	notFoundComponent: NotFound,
+	errorComponent: RootError,
 });
 
 /**
@@ -107,6 +109,64 @@ function NotFound({ data }: NotFoundRouteProps) {
 					}
 				/>
 			)}
+		</div>
+	);
+}
+
+/**
+ * 全局 error 兜底 —— 任何路由 throw 都汇到这里,落到 EmptyState 而不是 TanStack 默认的裸 `<p>`。
+ *
+ * 设计取舍:
+ *  - **不暴露原始 error.message 给最终用户**:`info.componentStack` 是 React 调试栈、
+ *    `error.stack` 是 Node 调试栈,生产环境泄漏细节(库版本 / 文件路径 / 内部表名)是反向送情报。
+ *    给用户看的是 `toApiError()` 归一后的 message —— 业务抛的 `TRPCError` 是「请先登录」、
+ *    「没有权限」、「系统异常,请稍后再试」之类的**可操作**文案;真崩时给的就是一段中文兜底 + 「复制给开发者」。
+ *  - **开发环境**额外开一个折叠区,把 componentStack 露出来 —— dev 模式下能看到,prod 下没有。
+ *  - **不接 Sentry 在前端**:见 `instrument.server.mjs`,DSN 缺失时整段 Sentry 不启动;统一在 server side 上送。
+ *
+ * 为什么不用 `errorComponent` 区分 4xx / 5xx:TanStack 框架对**任何错误边界**都写死 `status: 500`
+ * (`applyFailure` 的 ERROR 终态),`error.status` / `setResponseStatus` 都不参与判定 —— 想给 4xx 走
+ * not-found 通道(`status: 404`),见上面的 `NotFound`。所以这里只关心**用户看到什么**,不关心 HTTP 头。
+ */
+function RootError({ error, info }: ErrorComponentProps) {
+	const apiErr = toApiError(error);
+	const stack = error instanceof Error ? error.stack : undefined;
+	const componentStack = info?.componentStack;
+	const isDev = import.meta.env.DEV;
+	return (
+		<div className="flex min-h-screen items-center justify-center p-6">
+			<EmptyState
+				title="出错了"
+				description={apiErr.message || "页面加载失败,请稍后再试。"}
+				icon={<AlertOctagon className="size-6 text-destructive" />}
+				actions={
+					<div className="flex flex-wrap items-center justify-center gap-2">
+						<button
+							type="button"
+							className={buttonVariants({ variant: "outline" })}
+							// 重新加载当前页 —— 大多数 throw 是「这一次倒霉」,重试就能恢复
+							onClick={() => window.location.reload()}
+						>
+							重试
+						</button>
+						<Link to="/" className={buttonVariants()}>
+							返回工作台
+						</Link>
+					</div>
+				}
+				className="w-full max-w-xl"
+			>
+				{/* dev 模式才漏栈;prod 严格不漏(避免暴露代码路径 / 库版本) */}
+				{isDev && (stack || componentStack) ? (
+					<details className="mt-4 max-h-48 w-full overflow-auto rounded-md border border-border bg-background p-2 text-left text-xs">
+						<summary className="cursor-pointer font-medium text-muted-foreground">调试栈(开发模式)</summary>
+						<pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground">
+							{componentStack ?? ""}
+							{stack ? `\n\n${stack}` : ""}
+						</pre>
+					</details>
+				) : null}
+			</EmptyState>
 		</div>
 	);
 }

@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { OfflineIndicator } from "./offline-indicator";
 import { PageTransition } from "./page-transition";
 import { RouteProgress } from "./route-progress";
 import { Sidebar } from "./sidebar";
@@ -22,6 +23,7 @@ export function SidebarProvider({ user, children }: { user: SessionUser; childre
 				<div aria-hidden className="ambient-veil pointer-events-none absolute inset-x-0 top-0 h-72 opacity-60" />
 				<RouteProgress />
 				<Topbar user={user} onToggle={() => setCollapsed((c) => !c)} />
+				<OfflineIndicator />
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pt-6 pb-10">
 					<PageTransition>{children}</PageTransition>
 				</main>

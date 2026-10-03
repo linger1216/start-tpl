@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { ChevronRight, LogOut, Menu, Moon, Sun } from "lucide-react";
+import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
@@ -15,6 +15,7 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
+import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
 import type { NavNode } from "./nav-config";
 import { useNavTrail } from "./nav-data";
 import { NotificationBell } from "./notification-bell";
@@ -84,6 +85,8 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 		window.localStorage.setItem(THEME_STORAGE_KEY, next);
 	};
 
+	const palette = useCommandPaletteShortcut();
+
 	const handleSignOut = async () => {
 		try {
 			// ⚠️ 这里必须 try/catch:authClient 返回 { error } 也会**抛**(网络/解析失败),
@@ -148,6 +151,21 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 
 			{/* ── 右:通知 + 主题 + 用户 ────────────────────────────────── */}
 			<div className="flex items-center gap-1.5">
+				{/* ⌘K / Ctrl+K 命令面板入口(也可鼠标点):扁平化 NAV_NODES,关键词模糊命中,Enter 跳转。 */}
+				<Button
+					variant="ghost"
+					size="sm"
+					aria-label="打开快捷键面板"
+					onClick={() => palette.setOpen(true)}
+					className="hidden md:inline-flex h-8 gap-2 rounded-md border border-border bg-muted/40 px-2.5 text-xs text-muted-foreground hover:bg-muted"
+				>
+					<Search className="size-3.5" />
+					<span>搜索</span>
+					<kbd className="ml-1 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 text-[10px] font-mono">
+						<Command className="size-2.5" />K
+					</kbd>
+				</Button>
+
 				{/* 通知:未读数 + 点开看最近 10 条 + 点一条跳到对应页面(见 doc/通知中心.md) */}
 				<NotificationBell />
 
@@ -187,6 +205,8 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</div>
+
+			<CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
 		</header>
 	);
 }

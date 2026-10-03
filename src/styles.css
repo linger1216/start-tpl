@@ -593,6 +593,31 @@ a {
   }
 }
 
+/* ── 骨架屏:在占位块上横扫一道亮色,表示「数据马上到」──────────────────── */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, currentColor 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1500ms var(--ease-brand) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::after { animation: none; }
+}
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
 /* ── 在线状态点:一圈向外扩散的脉冲(2.4s,极轻)──────────────────── */
 .pulse-dot::after {
   content: '';

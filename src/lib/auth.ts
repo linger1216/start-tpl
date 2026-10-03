@@ -1,10 +1,13 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 import { db } from "#/db";
 import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base-schema";
 import { userSwitchPlugin } from "#/lib/auth-debug";
+import { clearSignInFailures, isAccountLocked, recordSignInFailure } from "#/lib/auth-lockout";
+import { logger } from "#/lib/logger";
 
 /**
  * Better Auth 的 origin 校验白名单。
@@ -88,6 +91,87 @@ export const auth = betterAuth({
 		enabled: true,
 	},
 	trustedOrigins: loadTrustedOrigins(),
+	/**
+	 * 限流(in-memory,默认)—— 跨实例部署前**改成 `database` + 一张小表**(`sys_rate_limit`):
+	 *  - dev / 单实例:memory 够用(重启清零,刚好兜住「忘记改密码重试」这类用户);
+	 *  - 多实例 / 生产:必须 db 共享,否则每个进程的计数各算各的,等于没限。
+	 *
+	 * `customRules` 用 glob;`*` 通配单段 —— `/sign-in/*` 同时覆盖 email 与 token,
+	 * 实际生效时按精确路径优先(`api/rate-limiter/index.mjs` 的 `wildcardMatch` 排序)。
+	 */
+	rateLimit: {
+		enabled: true,
+		window: 10,
+		max: 100,
+		// 派生新项目加 `database` 时,新建一张 `sys_rate_limit(key varchar PK, count int, expires_at timestamp)`
+		// 然后 storage 改 `database` —— 模板故意没建表,是为了避免给一次性用户多增一张表的迁移成本。
+		storage: "memory",
+		customRules: {
+			"/sign-in/email": { window: 60, max: 5 },
+			"/sign-in/*": { window: 60, max: 10 },
+			"/sign-up/email": { window: 60, max: 3 },
+			"/forget-password/email": { window: 60, max: 3 },
+		},
+	},
+	/**
+	 * 登录失败锁定 —— `before` 拦账号级(`sys_account_lockout` 表),
+	 * `after` 在 sign-in 失败时 +1,成功时清零。
+	 *
+	 * 与 `rateLimit` 的区别:那一层按「IP + 端点」控速,这一层按「账号」累计失败。
+	 * 攻击者每轮换 IP 也会撞到这一层,5 次失败 15 分钟(阈值见 `auth-lockout.ts`)。
+	 */
+	hooks: {
+		before: createAuthMiddleware(async (ctx) => {
+			// 只拦 /sign-in/email —— 注册 / 找回密码的失败不计(被 rateLimit 兜着)。
+			if (ctx.path !== "/sign-in/email") return;
+			const email = String(ctx.body?.email ?? "")
+				.trim()
+				.toLowerCase();
+			if (!email) return;
+			const status = await isAccountLocked(email);
+			if (status.locked) {
+				const sec = Math.ceil(status.remainingMs / 1000);
+				logger.warn("auth.sign-in.locked", { email, remainingSec: sec });
+				throw new APIError("TOO_MANY_REQUESTS", {
+					message: `账号已被锁定,请 ${sec} 秒后再试`,
+				});
+			}
+		}),
+		after: createAuthMiddleware(async (ctx) => {
+			if (ctx.path !== "/sign-in/email") return;
+			const email = String(ctx.body?.email ?? "")
+				.trim()
+				.toLowerCase();
+			if (!email) return;
+			const ip = (() => {
+				try {
+					const h = ctx.request?.headers;
+					const forwarded = h?.get?.("x-forwarded-for");
+					const real = h?.get?.("x-real-ip");
+					const raw = forwarded ? String(forwarded).split(",")[0].trim() : real ? String(real) : null;
+					return raw || null;
+				} catch {
+					return null;
+				}
+			})();
+			// 成功判定:better-auth 在 sign-in 成功后会把 `{ user, token }` 写到 `ctx.context.returned`。
+			// 用 duck-typing 判(避免在 BA 版本演进时锁死具体返回结构),只看 returned 里有 user.id 就记成功。
+			const returned = (ctx as { context?: { returned?: unknown } }).context?.returned as
+				| { user?: { id?: string }; redirect?: boolean }
+				| null
+				| undefined;
+			if (returned?.user?.id) {
+				void clearSignInFailures(email);
+			} else {
+				void recordSignInFailure(email, ip).catch((err: unknown) => {
+					logger.warn("auth.sign-in.record_failed.error", {
+						email,
+						message: err instanceof Error ? err.message : String(err),
+					});
+				});
+			}
+		}),
+	},
 	// `userSwitchPlugin` = 运维用的「切换用户」端点(见 lib/auth-debug.ts 的注释:为什么必须是插件)
 	plugins: [tanstackStartCookies(), userSwitchPlugin()],
 });

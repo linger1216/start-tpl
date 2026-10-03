@@ -9,6 +9,7 @@ import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
 import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
+import { captureException } from "#/lib/sentry";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -17,6 +18,17 @@ const t = initTRPC.create({
 /** 超过这个毫秒数记一条 warn(慢调用要能在日志里一眼看到) */
 function slowMs(): number {
 	return Number(process.env.LOG_SLOW_MS ?? 1500);
+}
+
+/**
+ * `TRPCError` 是业务层的 4xx(权限、找不到、参数错) —— 预期内、不上送 Sentry。
+ * 用 duck-type 判,避免在文件顶层 import 整套 TRPCError 类型带来循环。
+ */
+function isTRPCError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const name = (error as { name?: string }).name;
+	const trpcCode = (error as { code?: string }).code;
+	return name === "TRPCError" || (typeof trpcCode === "string" && /^[A-Z_]+$/.test(trpcCode));
 }
 
 /**
@@ -59,6 +71,11 @@ export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawI
 			message: error instanceof Error ? error.message : String(error),
 		});
 		if (error instanceof Error) (error as Error & { traceId?: string }).traceId = traceId;
+		// 只有 5xx 才上送 Sentry —— `TRPCError` 是业务层的 4xx 信号(权限、找不到、参数错),
+		// 这些是预期内的错误,送过去只会刷屏(实测会把 Sentry 的 issue 数撑成「真崩」)。
+		if (!isTRPCError(error)) {
+			captureException(error, { traceId, path, type, ms });
+		}
 		throw error;
 	}
 });

@@ -351,6 +351,31 @@ export const sysVerification = mysqlTable(
 	(table) => [index("idx_sys_verification_identifier").on(table.identifier)],
 );
 
+/**
+ * 登录失败计数 + 锁定(`email` 唯一) —— 模板里硬写的防爆破风控。
+ *
+ * 语义(详见 `lib/auth-lockout.ts` 的注释):
+ *  - `failed_attempts` 累计连续失败次数(成功登录清零);
+ *  - `locked_until` 超过阈值(默认 5)时被置 15 分钟后的未来时刻;
+ *    期间内任何 /sign-in/email 走 `hooks.before` 拦截,直接抛 429(实测比 401 更准确);
+ *  - `last_failed_at` / `last_ip` 仅作审计,不上送 Sentry(告警阈值由业务另设)。
+ *
+ * 为什么放在 better-auth 模型之外:better-auth 没有 `failedAttempts` 这个内置字段,
+ * 自己加列会污染 `user` 模型(违反 §11.1「BA 写死四表」的原则),放一张独立表更轻。
+ * `email` 唯一 ⇒ 同一邮箱最多一行;第一次失败走 INSERT 或 ON DUPLICATE。
+ */
+export const sysAccountLockout = mysqlTable(
+	"sys_account_lockout",
+	{
+		email: varchar("email", { length: 255 }).primaryKey(),
+		failedAttempts: int("failed_attempts").notNull().default(0),
+		lockedUntil: timestamp("locked_until", { mode: "date" }),
+		lastFailedAt: timestamp("last_failed_at", { mode: "date" }),
+		lastFailedIp: varchar("last_failed_ip", { length: 64 }),
+	},
+	(table) => [index("idx_sys_account_lockout_until").on(table.lockedUntil)],
+);
+
 // ── 权限(部门 / 角色)────────────────────────────────────
 //
 // 模型(与 better-auth 的 organization **无关** —— 那套是"选中一个当前组织 + 租户隔离",

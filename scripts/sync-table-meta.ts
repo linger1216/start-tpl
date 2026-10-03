@@ -44,6 +44,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_session: "登录会话(每个设备 / 浏览器一行;user_id 级联删除)",
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
 	sys_verification: "验证码 / 一次性令牌(邮箱验证、改密、二次验证都用它)",
+	sys_account_lockout: "登录风控(累计失败次数 + 锁定到期时间;阈值见 src/lib/auth-lockout.ts)",
 	sys_dept: "部门树(组织架构;谁是成员见 sys_user_dept)",
 	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
@@ -155,6 +156,12 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_verification", column: "expires_at", comment: "过期时间" },
 	{ table: "sys_verification", column: "created_at", comment: "创建时间(better-auth 口径)" },
 	{ table: "sys_verification", column: "updated_at", comment: "更新时间(better-auth 口径)" },
+	// sys_account_lockout(风控)
+	{ table: "sys_account_lockout", column: "email", comment: "邮箱(主键;lower-case 规范化后写入)" },
+	{ table: "sys_account_lockout", column: "failed_attempts", comment: "5 分钟滑动窗口内的连续失败次数(超过阈值即锁)" },
+	{ table: "sys_account_lockout", column: "locked_until", comment: "锁定到期时间;null 或过去 = 当前未锁" },
+	{ table: "sys_account_lockout", column: "last_failed_at", comment: "最后一次失败时间(用于 5 分钟滑动窗口)" },
+	{ table: "sys_account_lockout", column: "last_failed_ip", comment: "最后一次失败的来源 IP(运维参考,不上送 Sentry)" },
 	// sys_dept
 	{ table: "sys_dept", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_dept", column: "parent_id", comment: "上级部门 id;null = 顶级" },

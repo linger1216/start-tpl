@@ -14,4 +14,12 @@ if (!sentryDsn) {
     },
     tracesSampleRate: 0.1,
   })
+  // 标记启用 —— `#/lib/sentry` 通过这个 flag 决定要不要真正上送。
+  // 单独走 `void Sentry.captureException` 在没启用的 SDK 上是 throw,所以引入这个开关。
+  try {
+    const mod = await import('./src/lib/sentry.ts')
+    mod.enableSentry()
+  } catch (err) {
+    console.warn('[sentry] enableSentry failed', err)
+  }
 }

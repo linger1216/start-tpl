@@ -10,12 +10,14 @@ export function EmptyState({
 	icon,
 	actions,
 	className,
+	children,
 }: {
 	title: string;
 	description: string;
 	icon?: React.ReactNode;
 	actions?: React.ReactNode;
 	className?: string;
+	children?: React.ReactNode;
 }) {
 	return (
 		<div
@@ -32,6 +34,7 @@ export function EmptyState({
 			<h3 className="text-base font-semibold text-foreground">{title}</h3>
 			<p className="mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">{description}</p>
 			{actions && <div className="mt-5 flex items-center gap-2">{actions}</div>}
+			{children}
 		</div>
 	);
 }

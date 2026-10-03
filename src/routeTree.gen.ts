@@ -15,6 +15,7 @@ import { Route as mainIndexRouteImport } from './routes/(main)/index'
 import { Route as mainBlankRouteImport } from './routes/(main)/blank'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
+import { Route as mainDemoBusinessHomeRouteImport } from './routes/(main)/demo/business-home'
 import { Route as mainDemoDrizzleRouteImport } from './routes/(main)/demo/drizzle'
 import { Route as mainDemoGridRouteImport } from './routes/(main)/demo/grid'
 import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
@@ -33,6 +34,7 @@ import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 import { Route as mainDemoFormSimpleRouteImport } from './routes/(main)/demo/form.simple'
 
@@ -63,6 +65,11 @@ const mainNoticesRoute = mainNoticesRouteImport.update({
 const mainDemoBetterAuthRoute = mainDemoBetterAuthRouteImport.update({
   id: '/demo/better-auth',
   path: '/demo/better-auth',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainDemoBusinessHomeRoute = mainDemoBusinessHomeRouteImport.update({
+  id: '/demo/business-home',
+  path: '/demo/business-home',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainDemoDrizzleRoute = mainDemoDrizzleRouteImport.update({
@@ -155,6 +162,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSseNoticeRoute = ApiSseNoticeRouteImport.update({
+  id: '/api/sse/notice',
+  path: '/api/sse/notice',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: '/api/trpc/$',
   path: '/api/trpc/$',
@@ -172,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
+  '/demo/business-home': typeof mainDemoBusinessHomeRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
   '/demo/grid': typeof mainDemoGridRoute
   '/demo/store': typeof mainDemoStoreRoute
@@ -189,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
@@ -199,6 +213,7 @@ export interface FileRoutesByTo {
   '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
+  '/demo/business-home': typeof mainDemoBusinessHomeRoute
   '/demo/drizzle': typeof mainDemoDrizzleRoute
   '/demo/grid': typeof mainDemoGridRoute
   '/demo/store': typeof mainDemoStoreRoute
@@ -216,6 +231,7 @@ export interface FileRoutesByTo {
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
@@ -228,6 +244,7 @@ export interface FileRoutesById {
   '/(main)/notices': typeof mainNoticesRoute
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
+  '/(main)/demo/business-home': typeof mainDemoBusinessHomeRoute
   '/(main)/demo/drizzle': typeof mainDemoDrizzleRoute
   '/(main)/demo/grid': typeof mainDemoGridRoute
   '/(main)/demo/store': typeof mainDemoStoreRoute
@@ -245,6 +262,7 @@ export interface FileRoutesById {
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
   '/(main)/demo/form/simple': typeof mainDemoFormSimpleRoute
@@ -257,6 +275,7 @@ export interface FileRouteTypes {
     | '/notices'
     | '/'
     | '/demo/better-auth'
+    | '/demo/business-home'
     | '/demo/drizzle'
     | '/demo/grid'
     | '/demo/store'
@@ -274,6 +293,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings/'
     | '/demo/form/simple'
@@ -284,6 +304,7 @@ export interface FileRouteTypes {
     | '/notices'
     | '/'
     | '/demo/better-auth'
+    | '/demo/business-home'
     | '/demo/drizzle'
     | '/demo/grid'
     | '/demo/store'
@@ -301,6 +322,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings'
     | '/demo/form/simple'
@@ -312,6 +334,7 @@ export interface FileRouteTypes {
     | '/(main)/notices'
     | '/(main)/'
     | '/(main)/demo/better-auth'
+    | '/(main)/demo/business-home'
     | '/(main)/demo/drizzle'
     | '/(main)/demo/grid'
     | '/(main)/demo/store'
@@ -329,6 +352,7 @@ export interface FileRouteTypes {
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
     | '/api/auth/$'
+    | '/api/sse/notice'
     | '/api/trpc/$'
     | '/(main)/settings/'
     | '/(main)/demo/form/simple'
@@ -338,6 +362,7 @@ export interface RootRouteChildren {
   mainRouteRoute: typeof mainRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiSseNoticeRoute: typeof ApiSseNoticeRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
@@ -383,6 +408,13 @@ declare module '@tanstack/react-router' {
       path: '/demo/better-auth'
       fullPath: '/demo/better-auth'
       preLoaderRoute: typeof mainDemoBetterAuthRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/demo/business-home': {
+      id: '/(main)/demo/business-home'
+      path: '/demo/business-home'
+      fullPath: '/demo/business-home'
+      preLoaderRoute: typeof mainDemoBusinessHomeRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/demo/drizzle': {
@@ -511,6 +543,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sse/notice': {
+      id: '/api/sse/notice'
+      path: '/api/sse/notice'
+      fullPath: '/api/sse/notice'
+      preLoaderRoute: typeof ApiSseNoticeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/trpc/$': {
       id: '/api/trpc/$'
       path: '/api/trpc/$'
@@ -533,6 +572,7 @@ interface mainRouteRouteChildren {
   mainNoticesRoute: typeof mainNoticesRoute
   mainIndexRoute: typeof mainIndexRoute
   mainDemoBetterAuthRoute: typeof mainDemoBetterAuthRoute
+  mainDemoBusinessHomeRoute: typeof mainDemoBusinessHomeRoute
   mainDemoDrizzleRoute: typeof mainDemoDrizzleRoute
   mainDemoGridRoute: typeof mainDemoGridRoute
   mainDemoStoreRoute: typeof mainDemoStoreRoute
@@ -558,6 +598,7 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainNoticesRoute: mainNoticesRoute,
   mainIndexRoute: mainIndexRoute,
   mainDemoBetterAuthRoute: mainDemoBetterAuthRoute,
+  mainDemoBusinessHomeRoute: mainDemoBusinessHomeRoute,
   mainDemoDrizzleRoute: mainDemoDrizzleRoute,
   mainDemoGridRoute: mainDemoGridRoute,
   mainDemoStoreRoute: mainDemoStoreRoute,
@@ -586,6 +627,7 @@ const rootRouteChildren: RootRouteChildren = {
   mainRouteRoute: mainRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiSseNoticeRoute: ApiSseNoticeRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport

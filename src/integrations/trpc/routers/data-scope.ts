@@ -53,12 +53,16 @@ export const dataScopeRouter = createTRPCRouter({
 	/**
 	 * 资源 + 字段下拉(**零登记表**)—— 直接读 `information_schema` 的表/列注释(`lib/data-scope-meta.ts`)。
 	 *
+	 * 只回**业务表**:`sys_` 开头的系统表不进下拉(m24215 后,数据范围只挂在普通业务表上;
+	 * `sys_*` 是规则表的「目标」却不是它的「展示物」—— 历史规则仍可按 tag 路径解析)。
+	 *
 	 * 读不到元数据(达梦 / 没权限)时回空数组,表单此时允许**手输**表名 / 列名,不报错 ——
 	 * 反正保存时还有 `select … limit 0` 的试跑兜底。
 	 */
 	resources: protectedProcedure.query(async () => {
 		const meta = await loadResourceMeta();
 		return [...meta.values()]
+			.filter((item) => !item.table.startsWith("sys_"))
 			.map((item) => ({
 				table: item.table,
 				label: item.label,
