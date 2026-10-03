@@ -19,6 +19,7 @@ import { Input } from "#/components/ui/input";
 import { NAV_NODES, type NavNode } from "./nav-config";
 
 type Item = { id: string; name: string; path: string; group: string; description?: string };
+type FlatRow = { item: Item; flatIndex: number }; // flatIndex = 在扁平列表里的序号(键盘跳第 N 条要用)
 
 /** 扁平化 `NAV_NODES` 为一条「可跳转」列表。父菜单(无 path 但有 children)只用作分组。 */
 function flattenNav(nodes: NavNode[]): Item[] {
@@ -63,17 +64,41 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 	const [query, setQuery] = useState("");
 	const [highlight, setHighlight] = useState(0);
 	const inputRef = useRef<HTMLInputElement | null>(null);
+	const listRef = useRef<HTMLUListElement | null>(null);
+	// 各行 DOM 引用表 —— 「跳到第 N 条」/「选中滚到可见」都用它。
+	const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
 
 	const items = useMemo(() => flattenNav(NAV_NODES), []);
 	const filtered = useMemo(() => {
 		const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-		const ranked = items
+		return items
 			.map((item) => ({ item, s: score(item, tokens) }))
 			.filter((x) => x.s >= 0)
 			.sort((a, b) => b.s - a.s)
-			.slice(0, 20);
-		return ranked.map((x) => x.item);
+			.slice(0, 20)
+			.map((x) => x.item);
 	}, [items, query]);
+
+	// 按 group 顺序聚合 ——
+	// 排序后第一个 group 不一定就是 NAV_NODES 里出现顺序的第一个 group,所以先按 group 名稳定排序再列。
+	const grouped = useMemo(() => {
+		const order: string[] = [];
+		const map = new Map<string, Item[]>();
+		for (const item of filtered) {
+			const list = map.get(item.group);
+			if (list) list.push(item);
+			else {
+				order.push(item.group);
+				map.set(item.group, [item]);
+			}
+		}
+		// 给扁平行表 + 头部标记 —— 后续键盘/滚动/highlight 都按 flatIndex 算。
+		const rows: FlatRow[] = [];
+		for (const g of order) {
+			for (const it of map.get(g) ?? []) rows.push({ item: it, flatIndex: rows.length });
+		}
+		return { order, map, rows };
+	}, [filtered]);
 
 	// 打开时聚焦输入框 + 重置选中项 + 清空查询
 	useEffect(() => {
@@ -87,14 +112,41 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
 	// 命中变化时回正 selected
 	useEffect(() => {
-		if (highlight >= filtered.length) setHighlight(0);
-	}, [filtered, highlight]);
+		if (highlight >= grouped.rows.length) setHighlight(0);
+	}, [grouped, highlight]);
+
+	// 选中项滚到可见 —— 用 block:nearest(就差一点点也只滚一点点),避免列表抖。
+	useEffect(() => {
+		const node = itemRefs.current[highlight];
+		node?.scrollIntoView({ block: "nearest" });
+	}, [highlight]);
 
 	const choose = (idx: number) => {
-		const target = filtered[idx];
+		const target = grouped.rows[idx]?.item;
 		if (!target) return;
 		onOpenChange(false);
 		void navigate({ to: target.path });
+	};
+
+	// 「跳到第 N 条」:Mac 模式 ⌘1-⌘9;Win/Linux 用 Ctrl+1-Ctrl+9。
+	// Nth = 当下查询结果里的第 N 行(flatIndex)。
+	const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "ArrowDown") {
+			e.preventDefault();
+			setHighlight((h) => (grouped.rows.length === 0 ? 0 : (h + 1) % grouped.rows.length));
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			setHighlight((h) => (grouped.rows.length === 0 ? 0 : (h - 1 + grouped.rows.length) % grouped.rows.length));
+		} else if (e.key === "Enter") {
+			e.preventDefault();
+			choose(highlight);
+		} else if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) {
+			const n = Number(e.key) - 1;
+			if (n < grouped.rows.length) {
+				e.preventDefault();
+				choose(n);
+			}
+		}
 	};
 
 	return (
@@ -110,57 +162,75 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 							setQuery(e.target.value);
 							setHighlight(0);
 						}}
-						onKeyDown={(e) => {
-							if (e.key === "ArrowDown") {
-								e.preventDefault();
-								setHighlight((h) => (filtered.length === 0 ? 0 : (h + 1) % filtered.length));
-							} else if (e.key === "ArrowUp") {
-								e.preventDefault();
-								setHighlight((h) => (filtered.length === 0 ? 0 : (h - 1 + filtered.length) % filtered.length));
-							} else if (e.key === "Enter") {
-								e.preventDefault();
-								choose(highlight);
-							}
-						}}
-						placeholder="搜页面或菜单(空格分多关键词)..."
+						onKeyDown={handleKey}
+						placeholder="搜页面或菜单(空格分多关键词;⌘1-9 跳第 N 条)..."
 						className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
 					/>
 					<kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 text-[10px] text-muted-foreground">
 						ESC
 					</kbd>
 				</div>
-				<ul className="max-h-80 overflow-auto" aria-label="可跳转菜单项">
-					{filtered.length === 0 ? (
+				<ul ref={listRef} className="max-h-80 overflow-auto" aria-label="可跳转菜单项">
+					{grouped.rows.length === 0 ? (
 						<li className="px-4 py-8 text-center text-sm text-muted-foreground">没搜到相关页面</li>
 					) : (
-						filtered.map((item, idx) => (
-							<li key={item.id}>
-								<Button
-									variant="ghost"
-									className={`w-full justify-start gap-3 rounded-none px-4 py-2 h-auto ${idx === highlight ? "bg-accent text-accent-foreground" : ""}`}
-									onClick={() => choose(idx)}
-									onMouseEnter={() => setHighlight(idx)}
-								>
-									<span className="text-xs text-muted-foreground shrink-0 w-16 truncate text-left">{item.group}</span>
-									<span className="flex-1 text-left">
-										<div className="font-medium">{item.name}</div>
-										<div className="text-xs text-muted-foreground font-mono">{item.path}</div>
-									</span>
-								</Button>
-							</li>
-						))
+						grouped.order.map((groupName) => {
+							const list = grouped.map.get(groupName) ?? [];
+							return (
+								<li key={groupName}>
+									<div className="sticky top-0 z-10 bg-popover px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+										{groupName}
+									</div>
+									<ul>
+										{list.map((item) => {
+											const flatIndex = grouped.rows.findIndex((r) => r.item.id === item.id);
+											const isHighlight = flatIndex === highlight;
+											return (
+												<li
+													key={item.id}
+													ref={(el) => {
+														itemRefs.current[flatIndex] = el;
+													}}
+												>
+													<Button
+														variant="ghost"
+														className={`w-full justify-start gap-3 rounded-none px-4 py-2 h-auto ${isHighlight ? "bg-accent text-accent-foreground" : ""}`}
+														onClick={() => choose(flatIndex)}
+														onMouseEnter={() => setHighlight(flatIndex)}
+													>
+														<span className="font-medium flex-1 text-left">{item.name}</span>
+														<span className="text-xs text-muted-foreground font-mono">{item.path}</span>
+														{flatIndex < 9 ? (
+															<kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-border px-1 text-[10px] text-muted-foreground">
+																⌘{flatIndex + 1}
+															</kbd>
+														) : null}
+													</Button>
+												</li>
+											);
+										})}
+									</ul>
+								</li>
+							);
+						})
 					)}
 				</ul>
 				<div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-					<span>
-						<kbd className="rounded border border-border px-1 mr-1">↑↓</kbd>
-						选择
+					<span className="flex gap-3">
+						<span>
+							<kbd className="rounded border border-border px-1 mr-1">↑↓</kbd>
+							选择
+						</span>
+						<span>
+							<kbd className="rounded border border-border px-1 mr-1">Enter</kbd>
+							跳转
+						</span>
+						<span>
+							<kbd className="rounded border border-border px-1 mr-1">⌘1-9</kbd>
+							跳第 N 条
+						</span>
 					</span>
-					<span>
-						<kbd className="rounded border border-border px-1 mr-1">Enter</kbd>
-						跳转
-					</span>
-					<span>{filtered.length} 条结果</span>
+					<span>{grouped.rows.length} 条结果</span>
 				</div>
 			</DialogContent>
 		</Dialog>
