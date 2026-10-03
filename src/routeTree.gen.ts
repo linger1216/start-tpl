@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as mainRouteRouteImport } from './routes/(main)/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
-import { Route as mainBlankRouteImport } from './routes/(main)/blank'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
 import { Route as mainDemoBusinessHomeRouteImport } from './routes/(main)/demo/business-home'
@@ -50,11 +49,6 @@ const LoginRoute = LoginRouteImport.update({
 const mainIndexRoute = mainIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainBlankRoute = mainBlankRouteImport.update({
-  id: '/blank',
-  path: '/blank',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainNoticesRoute = mainNoticesRouteImport.update({
@@ -180,7 +174,6 @@ const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
-  '/blank': typeof mainBlankRoute
   '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -209,7 +202,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/blank': typeof mainBlankRoute
   '/notices': typeof mainNoticesRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -240,7 +232,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(main)': typeof mainRouteRouteWithChildren
   '/login': typeof LoginRoute
-  '/(main)/blank': typeof mainBlankRoute
   '/(main)/notices': typeof mainNoticesRoute
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
@@ -271,7 +262,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/login'
-    | '/blank'
     | '/notices'
     | '/'
     | '/demo/better-auth'
@@ -300,7 +290,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
-    | '/blank'
     | '/notices'
     | '/'
     | '/demo/better-auth'
@@ -330,7 +319,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/(main)'
     | '/login'
-    | '/(main)/blank'
     | '/(main)/notices'
     | '/(main)/'
     | '/(main)/demo/better-auth'
@@ -387,13 +375,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof mainIndexRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/blank': {
-      id: '/(main)/blank'
-      path: '/blank'
-      fullPath: '/blank'
-      preLoaderRoute: typeof mainBlankRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/notices': {
@@ -568,7 +549,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface mainRouteRouteChildren {
-  mainBlankRoute: typeof mainBlankRoute
   mainNoticesRoute: typeof mainNoticesRoute
   mainIndexRoute: typeof mainIndexRoute
   mainDemoBetterAuthRoute: typeof mainDemoBetterAuthRoute
@@ -594,7 +574,6 @@ interface mainRouteRouteChildren {
 }
 
 const mainRouteRouteChildren: mainRouteRouteChildren = {
-  mainBlankRoute: mainBlankRoute,
   mainNoticesRoute: mainNoticesRoute,
   mainIndexRoute: mainIndexRoute,
   mainDemoBetterAuthRoute: mainDemoBetterAuthRoute,

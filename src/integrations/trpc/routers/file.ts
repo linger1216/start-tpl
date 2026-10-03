@@ -7,10 +7,10 @@
  * ⚠️ 别在别处"顺手"加一个 REST 上传路由:`presign`/`confirm` 都是 tRPC 小 JSON,
  * 只有**浏览器 ↔ MinIO** 那一段是外部服务(见 AGENTS「接口铁律」)。
  *
- * ⚠️ 这里**没有**服务端登录校验 —— 与另外 7 个路由同口径(界面靠 `(main)` 的守卫 + `useHasPerm`)。
- * 不是不知道风险:`getCurrentUserId()` 在**直调 caller**(测试 / 脚本)里恒为 null(没有请求上下文),
- * 加硬校验会让这一整条链路无法集成测试。真正的修法是给 `init.ts` 加 `protectedProcedure`,
- * 并让测试能注入会话 —— 记在 `doc/文件管理.md` 的「已知缺口」里,和审计日志那批一起做。
+ * ✅ 服务端登录校验:本路由的过程全是 `protectedProcedure`(=`init.ts` 的 `requireUser` 中间件),
+ * 无会话直发 tRPC ⇒ `UNAUTHORIZED「请先登录」`(与另外 11 个路由同口径,`tests/auth.test.ts`
+ * 用匿名 caller 断言过)。直调 caller 的测试自己注入 `ctx.user` —— `requireUser` 优先取注入值,
+ * 而 `getCurrentUserId()` 在没有请求上下文时恒为 null:别把校验写成"只认 `getCurrentUserId()`"。
  */
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, like, or } from "drizzle-orm";
