@@ -67,7 +67,7 @@ export function TableResizeHandle({
 			title="拖拽调整列宽;双击重置"
 			onPointerDown={handlePointerDown}
 			onDoubleClick={handleDoubleClick}
-			className="absolute top-0 right-0 z-10 h-full w-1 cursor-col-resize touch-none border-r border-primary/10 bg-transparent
+			className="absolute top-0 right-0 z-10 h-full w-1 cursor-col-resize touch-none bg-transparent
 			select-none appearance-none border-0 p-0 transition-[background-color,border-color] hover:border-primary hover:bg-primary/15 active:border-primary active:bg-primary/15"
 		/>
 	);

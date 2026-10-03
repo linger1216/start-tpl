@@ -138,7 +138,7 @@ export function SettingsUsersForm({
 	/** 每个 tab 底部都长这样:左「取消」、右该 tab 的动作(三个 tab 共用一个提交 —— 都是同一张表的字段) */
 	const actions = (
 		<div className="flex shrink-0 items-center justify-end gap-2 pt-3">
-			<Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+			<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 				取消
 			</Button>
 			<Button disabled={pending || invalid} onClick={submit}>

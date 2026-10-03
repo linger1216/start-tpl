@@ -10,7 +10,7 @@ import { SettingsFilesForm } from "#/components/modules/settings/settings-files-
 import { type FileRow, fileColumns } from "#/components/modules/settings/settings-files-table";
 import { SettingsFilesUpload } from "#/components/modules/settings/settings-files-upload";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
-import { LedgerCard } from "#/components/modules/shared/ledger-card";
+import { LedgerCard, SelectionBar } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { ActionButton } from "#/components/ui/action-button";
@@ -215,30 +215,15 @@ export function SettingsFilesPage() {
 				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
 			>
 				{/* 批量操作条:只在选中时出现,长在表格正上方(动作与选择对象挨着) */}
-				{selected.size > 0 ? (
-					<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-						<span className="text-xs text-foreground">
-							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 个
-							<span className="ml-2 text-muted-foreground">
-								(
-								{selectedRows
-									.map((row) => row.originName)
-									.slice(0, 3)
-									.join("、")}
-								{selected.size > 3 ? " …" : ""})
-							</span>
-						</span>
-						<div className="flex items-center gap-2">
-							<ActionButton onClick={clear}>清空选择</ActionButton>
-							<ActionButton
-								tone="danger"
-								onClick={() => (canRemove ? setPendingDelete(selectedRows) : toast.error("没有删除文件的权限"))}
-							>
-								批量删除
-							</ActionButton>
-						</div>
-					</div>
-				) : null}
+				<SelectionBar count={selected.size} unit="个" names={selectedRows.map((row) => row.originName)}>
+					<ActionButton onClick={clear}>清空选择</ActionButton>
+					<ActionButton
+						tone="danger"
+						onClick={() => (canRemove ? setPendingDelete(selectedRows) : toast.error("没有删除文件的权限"))}
+					>
+						批量删除
+					</ActionButton>
+				</SelectionBar>
 			</LedgerCard>
 
 			<SettingsFilesUpload open={uploading} onOpenChange={setUploading} onDone={() => setUploading(false)} />

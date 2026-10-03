@@ -17,7 +17,7 @@
  */
 
 import { Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
@@ -77,7 +77,6 @@ export function TagInput({
 	disabled?: boolean;
 }) {
 	const [draft, setDraft] = useState("");
-	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	// 父组件外部重置(例如 dialog 重新打开)时,清空草稿
 	useEffect(() => {
@@ -105,7 +104,6 @@ export function TagInput({
 		<div className="space-y-2">
 			<div className="flex items-center gap-2">
 				<Input
-					ref={inputRef}
 					value={draft}
 					onChange={(e) => setDraft(e.target.value)}
 					onKeyDown={(e) => {

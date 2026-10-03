@@ -41,7 +41,7 @@ async function main() {
 		const rows = await db
 			.select({ key: sysPara.para_key, value: sysPara.para_value })
 			.from(sysPara)
-			.where(eq(sysPara.para_key, "sync.enabled"))
+			.where(eq(sysPara.para_key, "log.enabled"))
 			.orderBy(sysPara.para_key);
 		return `rows=${rows.length}, ${JSON.stringify(rows[0])}`;
 	});
@@ -50,7 +50,7 @@ async function main() {
 		const rows = await db
 			.select({ key: sysPara.para_key })
 			.from(sysPara)
-			.where(inArray(sysPara.para_key, ["sync.enabled", "cleanup.enabled", "sync.overlap_seconds"]))
+			.where(inArray(sysPara.para_key, ["log.enabled", "page.size", "file.max_size_mb"]))
 			.orderBy(sysPara.para_key);
 		return `rows=${rows.length}, keys=${rows.map((r) => r.key).join(",")}`;
 	});

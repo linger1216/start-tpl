@@ -65,13 +65,13 @@ const CODE_MATCH_FN = "codeMatch";
 const POLICY_TYPE = "p";
 const GROUP_TYPE = "g";
 /** 主体 / 客体串的前缀:主体 `user:` / `role:`,客体 `menu:`(`rbac.ts` 靠 `MENU_PREFIX` 拆客体) */
-export const USER_PREFIX = "user:";
-export const ROLE_PREFIX = "role:";
+const USER_PREFIX = "user:";
+const ROLE_PREFIX = "role:";
 export const MENU_PREFIX = "menu:";
 
 /**
  * 「系统管理员」角色名 —— 唯一能跨 admin 改 admin / 删除 admin 的角色。
- * **与 `scripts/seed-rbac.ts` 的 `ADMIN_ROLE_NAME` 同步**:改名要改两处。
+ * `scripts/seed-rbac.ts` 也从这里导入同名常量。
  */
 export const ADMIN_ROLE_NAME = "系统管理员";
 

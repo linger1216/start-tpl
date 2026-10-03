@@ -15,21 +15,15 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { NOTICE_LEVELS, type NoticeLevel } from "#/lib/notice-levels";
 
-/** 级别选项 —— `items` 与 `<SelectItem>` **两边都要给**(Base UI 不从子元素收集 label,踩过) */
-const LEVEL_ITEMS = [
-	{ value: "info", label: "通知 —— 中性提示" },
-	{ value: "success", label: "成功 —— 完成了什么" },
-	{ value: "warn", label: "提醒 —— 需要留意" },
-	{ value: "danger", label: "告警 —— 出问题了" },
-];
-
+/** ⚠️ `items` 与 `<SelectItem>` **两边都要给**(Base UI 不从子元素收集 label,踩过) */
 export type NoticeFormPayload = {
 	userIds: string[];
 	title: string;
 	body?: string;
 	path?: string;
-	level: "info" | "success" | "warn" | "danger";
+	level: NoticeLevel;
 };
 
 /**
@@ -55,7 +49,7 @@ export function NoticeForm({
 	const [title, setTitle] = useState("");
 	const [body, setBody] = useState("");
 	const [path, setPath] = useState("");
-	const [level, setLevel] = useState<NoticeFormPayload["level"]>("info");
+	const [level, setLevel] = useState<NoticeLevel>("info");
 
 	function submit() {
 		if (userIds.length === 0) {
@@ -125,16 +119,12 @@ export function NoticeForm({
 						/>
 					</DetailRow>
 					<DetailRow label="类型">
-						<Select
-							items={LEVEL_ITEMS}
-							value={level}
-							onValueChange={(next) => setLevel(next as NoticeFormPayload["level"])}
-						>
+						<Select items={NOTICE_LEVELS} value={level} onValueChange={(next) => setLevel(next as NoticeLevel)}>
 							<SelectTrigger id="notice-level" size="sm" className="w-full">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{LEVEL_ITEMS.map((item) => (
+								{NOTICE_LEVELS.map((item) => (
 									<SelectItem key={item.value} value={item.value}>
 										{item.label}
 									</SelectItem>

@@ -187,7 +187,7 @@ export function SettingsTagsPage() {
 
 			<StatCards items={stats} />
 
-			<div className="grid min-h-[24rem] flex-1 gap-4 lg:grid-cols-[30rem_minmax(0,1fr)]">
+			<div className="grid min-h-96 flex-1 gap-4 lg:grid-cols-[30rem_minmax(0,1fr)]">
 				{/* 左:标签树 */}
 				<Card className="flex min-h-0 flex-col gap-3">
 					<CardHeader className="flex-row items-center justify-between gap-2">

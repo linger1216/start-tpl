@@ -21,6 +21,8 @@ import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
 import { Route as mainDemoTableRouteImport } from './routes/(main)/demo/table'
 import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/tanstack-query'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
+import { Route as mainSettingsDataPluginsRouteImport } from './routes/(main)/settings/data-plugins'
+import { Route as mainSettingsDataScopeRouteImport } from './routes/(main)/settings/data-scope'
 import { Route as mainSettingsDepartmentsRouteImport } from './routes/(main)/settings/departments'
 import { Route as mainSettingsDictionaryRouteImport } from './routes/(main)/settings/dictionary'
 import { Route as mainSettingsFilesRouteImport } from './routes/(main)/settings/files'
@@ -91,6 +93,16 @@ const mainDemoTanstackQueryRoute = mainDemoTanstackQueryRouteImport.update({
 const mainSettingsIndexRoute = mainSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainSettingsDataPluginsRoute = mainSettingsDataPluginsRouteImport.update({
+  id: '/settings/data-plugins',
+  path: '/settings/data-plugins',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainSettingsDataScopeRoute = mainSettingsDataScopeRouteImport.update({
+  id: '/settings/data-scope',
+  path: '/settings/data-scope',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainSettingsDepartmentsRoute = mainSettingsDepartmentsRouteImport.update({
@@ -165,6 +177,8 @@ export interface FileRoutesByFullPath {
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
+  '/settings/data-plugins': typeof mainSettingsDataPluginsRoute
+  '/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/settings/files': typeof mainSettingsFilesRoute
@@ -190,6 +204,8 @@ export interface FileRoutesByTo {
   '/demo/store': typeof mainDemoStoreRoute
   '/demo/table': typeof mainDemoTableRoute
   '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
+  '/settings/data-plugins': typeof mainSettingsDataPluginsRoute
+  '/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
   '/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/settings/files': typeof mainSettingsFilesRoute
@@ -217,6 +233,8 @@ export interface FileRoutesById {
   '/(main)/demo/store': typeof mainDemoStoreRoute
   '/(main)/demo/table': typeof mainDemoTableRoute
   '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
+  '/(main)/settings/data-plugins': typeof mainSettingsDataPluginsRoute
+  '/(main)/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/(main)/settings/departments': typeof mainSettingsDepartmentsRoute
   '/(main)/settings/dictionary': typeof mainSettingsDictionaryRoute
   '/(main)/settings/files': typeof mainSettingsFilesRoute
@@ -244,6 +262,8 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
+    | '/settings/data-plugins'
+    | '/settings/data-scope'
     | '/settings/departments'
     | '/settings/dictionary'
     | '/settings/files'
@@ -269,6 +289,8 @@ export interface FileRouteTypes {
     | '/demo/store'
     | '/demo/table'
     | '/demo/tanstack-query'
+    | '/settings/data-plugins'
+    | '/settings/data-scope'
     | '/settings/departments'
     | '/settings/dictionary'
     | '/settings/files'
@@ -295,6 +317,8 @@ export interface FileRouteTypes {
     | '/(main)/demo/store'
     | '/(main)/demo/table'
     | '/(main)/demo/tanstack-query'
+    | '/(main)/settings/data-plugins'
+    | '/(main)/settings/data-scope'
     | '/(main)/settings/departments'
     | '/(main)/settings/dictionary'
     | '/(main)/settings/files'
@@ -403,6 +427,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsIndexRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/settings/data-plugins': {
+      id: '/(main)/settings/data-plugins'
+      path: '/settings/data-plugins'
+      fullPath: '/settings/data-plugins'
+      preLoaderRoute: typeof mainSettingsDataPluginsRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/settings/data-scope': {
+      id: '/(main)/settings/data-scope'
+      path: '/settings/data-scope'
+      fullPath: '/settings/data-scope'
+      preLoaderRoute: typeof mainSettingsDataScopeRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/(main)/settings/departments': {
       id: '/(main)/settings/departments'
       path: '/settings/departments'
@@ -500,6 +538,8 @@ interface mainRouteRouteChildren {
   mainDemoStoreRoute: typeof mainDemoStoreRoute
   mainDemoTableRoute: typeof mainDemoTableRoute
   mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
+  mainSettingsDataPluginsRoute: typeof mainSettingsDataPluginsRoute
+  mainSettingsDataScopeRoute: typeof mainSettingsDataScopeRoute
   mainSettingsDepartmentsRoute: typeof mainSettingsDepartmentsRoute
   mainSettingsDictionaryRoute: typeof mainSettingsDictionaryRoute
   mainSettingsFilesRoute: typeof mainSettingsFilesRoute
@@ -523,6 +563,8 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainDemoStoreRoute: mainDemoStoreRoute,
   mainDemoTableRoute: mainDemoTableRoute,
   mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,
+  mainSettingsDataPluginsRoute: mainSettingsDataPluginsRoute,
+  mainSettingsDataScopeRoute: mainSettingsDataScopeRoute,
   mainSettingsDepartmentsRoute: mainSettingsDepartmentsRoute,
   mainSettingsDictionaryRoute: mainSettingsDictionaryRoute,
   mainSettingsFilesRoute: mainSettingsFilesRoute,

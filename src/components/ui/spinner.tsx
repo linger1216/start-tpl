@@ -18,11 +18,7 @@ export function Spinner({
 }) {
 	const px = size === "sm" ? "size-4" : size === "lg" ? "size-7" : "size-5";
 	return (
-		<div
-			role="status"
-			aria-label={label ?? "加载中"}
-			className={cn("flex items-center justify-center gap-2", className)}
-		>
+		<div role="status" className={cn("flex items-center justify-center gap-2", className)}>
 			<svg className={cn("animate-spin text-muted-foreground", px)} viewBox="0 0 24 24" fill="none" aria-hidden>
 				<circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2.5" />
 				<circle
@@ -36,7 +32,12 @@ export function Spinner({
 					strokeDashoffset="10.6"
 				/>
 			</svg>
-			{label && <span className="text-xs text-muted-foreground">{label}</span>}
+			{label ? (
+				<span className="text-xs text-muted-foreground">{label}</span>
+			) : (
+				/* 只转圈不带字时,给 `role="status"` 留一段可播报的文本(视觉不可见) */
+				<span className="sr-only">加载中</span>
+			)}
 		</div>
 	);
 }

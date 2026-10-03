@@ -23,12 +23,14 @@
  * (`components/modules/workbench/ui-gallery.tsx`),不需要时整块删掉。
  *
  * 图标约定:值来自 `NAV_ICON_MAP`,键名是「小写 kebab-case」。
- * `NavIcon` 是 `keyof NAV_ICON_MAP`,写错图标名会在 `pnpm typecheck` 阶段失败。
+ * `NavIcon` 是 `keyof NAV_ICON_MAP`,写错图标名会在 `pnpm typecheck` 阶段失败;
+ * `tests/icons.test.ts` 另有一条断言盯着「`NAV_NODES` 用到的图标必须都已登记」。
  * 菜单管理页(`/settings/menus`)的图标选择器能选全量 lucide 图标,但**只有登记在本表里的
  * 才会生效**(认不出来退回 `file-text`)—— 想让新图标可用,往 `NAV_ICON_MAP` 里加一行。
  */
 import {
 	BarChart3,
+	Bell,
 	Boxes,
 	Cable,
 	ClipboardList,
@@ -38,6 +40,7 @@ import {
 	FileText,
 	Gauge,
 	KeyRound,
+	LayoutGrid,
 	LayoutPanelTop,
 	Library,
 	ListChecks,
@@ -45,8 +48,10 @@ import {
 	MessageSquare,
 	Palette,
 	RefreshCw,
+	ScrollText,
 	Settings,
 	ShieldAlert,
+	ShieldCheck,
 	SlidersHorizontal,
 	Sparkles,
 	Table as TableIcon,
@@ -55,10 +60,16 @@ import {
 	Workflow,
 } from "lucide-react";
 
-/** 菜单可用图标表:键为「小写 kebab-case」,与存库图标名约定一致。 */
-export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
+/**
+ * 菜单可用图标表:键为「小写 kebab-case」,与存库图标名约定一致。
+ *
+ * **不要给这个常量加 `Record<string, …>` 标注** —— 加了之后 `keyof typeof NAV_ICON_MAP`
+ * 会退化成 `string`,`NavIcon` 就再也拦不住拼错的图标名(曾经真的漏过三个)。
+ */
+export const NAV_ICON_MAP = {
 	// 模块级
 	dashboard: Gauge,
+	bell: Bell,
 	library: Library,
 	sparkles: Sparkles,
 	workflow: Workflow,
@@ -68,6 +79,7 @@ export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	"bar-chart-3": BarChart3,
 	"clipboard-list": ClipboardList,
 	table: TableIcon,
+	"grid-3x3": LayoutGrid,
 	"layout-panel-top": LayoutPanelTop,
 	"message-square": MessageSquare,
 	"list-checks": ListChecks,
@@ -77,6 +89,7 @@ export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	database: Database,
 	"key-round": KeyRound,
 	"shield-alert": ShieldAlert,
+	"shield-check": ShieldCheck,
 	// 系统设置
 	users: Users,
 	contact: Contact,
@@ -84,6 +97,7 @@ export const NAV_ICON_MAP: Record<string, typeof Gauge> = {
 	menu: MenuIcon,
 	"sliders-horizontal": SlidersHorizontal,
 	palette: Palette,
+	"scroll-text": ScrollText,
 	// 兜底
 	"file-text": FileText,
 	files: Files,
@@ -146,7 +160,7 @@ export const NAV_NODES: NavNode[] = [
 		path: "/settings",
 		icon: "settings",
 		description:
-			"九个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件、审计日志 —— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
+			"十一个页面全部接真实数据:部门(树 + 成员/角色)、角色(权限点勾选)、用户(台账 + 授权)、标签(树)、菜单(树 + 驱动侧边栏)、字典、参数、文件、审计日志、数据权限(数据范围 + 值域插件)—— 演示「列表 + 表单 + 详情 + 树形排序」的骨架。",
 		children: [
 			{ name: "用户管理", path: "/settings/users", icon: "users" },
 			{ name: "部门管理", path: "/settings/departments", icon: "contact" },
@@ -157,6 +171,8 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
 			{ name: "文件管理", path: "/settings/files", icon: "files" },
 			{ name: "审计日志", path: "/settings/logs", icon: "scroll-text" },
+			{ name: "数据范围", path: "/settings/data-scope", icon: "shield-alert" },
+			{ name: "值域插件", path: "/settings/data-plugins", icon: "cable" },
 		],
 	},
 ];

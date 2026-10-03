@@ -128,7 +128,7 @@ export function TabsTrigger({
 				<Badge
 					variant="secondary"
 					className={cn(
-						"h-[1.125rem] min-w-[1.25rem] rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
+						"h-4.5 min-w-5 rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
 						COUNT_ACTIVE[variant],
 					)}
 				>
@@ -141,11 +141,11 @@ export function TabsTrigger({
 				<>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-border opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
+						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-border opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
 					/>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[2px] rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-[active]/tabs-trigger:bg-hue-blue group-data-[active]/tabs-trigger:opacity-100 group-data-[active]/tabs-trigger:shadow-[0_2px_6px_-1px_var(--af-blue-ring)]"
+						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-[active]/tabs-trigger:bg-hue-blue group-data-[active]/tabs-trigger:opacity-100 group-data-[active]/tabs-trigger:shadow-(--shadow-glow)"
 					/>
 				</>
 			) : null}

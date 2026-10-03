@@ -123,5 +123,3 @@ export async function getStorage(): Promise<Storage> {
 	});
 	return cached;
 }
-
-export { DEFAULT_EXPIRES_GET, DEFAULT_EXPIRES_PUT };

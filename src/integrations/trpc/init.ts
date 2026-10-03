@@ -3,10 +3,12 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
 import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
-import { enforceAny, isPermissionConfigured } from "#/lib/casbin";
+import { enforceAny, isAdminUser, isPermissionConfigured } from "#/lib/casbin";
 import { getCurrentUser } from "#/lib/current-user";
+import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
+import type { PolicyCtx } from "#/lib/data-scope-spec";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
-import { PERM_BY_PATH } from "#/lib/rbac";
+import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -172,6 +174,39 @@ const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 });
 
 /**
+ * ⑤ 数据权限(行级):把 `ctx.scope(resource?)` 挂到 ctx 上 —— resolver 用它拿"我该看到哪些行"的条件。
+ *
+ * 与 `permMiddleware` 是**两层**,不重叠:那一层管"能不能调这个接口"(菜单勾没勾),这一层管
+ * "同一个接口里我能看到哪些行"。一个接口两层都要,所以它排在后面、两层都过。
+ *
+ * 三个刻意的设计:
+ *  · **装配一次,整个请求共用** —— `buildPolicyCtx()`(查角色 + 查部门)懒执行且只执行一次,
+ *    一条 resolver 里连调几次 `scope()` 不会重复查库;
+ *  · **资源从 `DATA_SCOPE_BY_PATH` 按 path 查**,而不是让每个 resolver 手写表名:漏登记会在调
+ *    `ctx.scope()` 时**明确抛错**(而不是静默不筛),`tests/auth.test.ts` 的分类守卫再兜一层;
+ *  · **`publicProcedure` 不挂** —— 它没有 `requireUser`,拿不到人;本项目当前也没有公开接口。
+ *    将来真加了公开读接口,它要么自己不管行级,要么显式接一个用户来源。
+ */
+const dataScopeMiddleware = t.middleware(async ({ ctx, path, next }) => {
+	const mapped = DATA_SCOPE_BY_PATH[path];
+	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	let policyCtx: PolicyCtx | null = null;
+	const scope: DataScopeFn = async (resource) => {
+		const target = resource ?? mapped?.resource;
+		if (!target) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: `接口 ${path} 没有在 DATA_SCOPE_BY_PATH 里登记资源,不能调 ctx.scope()`,
+			});
+		}
+		if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
+		policyCtx ??= await buildPolicyCtx(user.id);
+		return scopeWhere(target, policyCtx);
+	};
+	return next({ ctx: { ...ctx, scope } });
+});
+
+/**
  * 在 `protectedProcedure` 的 resolver 里取当前用户(从 **ctx** 拿)。
  *
  * 中间件已经保证了"有用户",所以这里只是把类型收紧 —— 业务代码不用每处都写一遍
@@ -186,16 +221,37 @@ export function requireCurrentUser(ctx: unknown): { id: string; name: string } {
 	return { id: user.id, name: user.name };
 }
 
+/**
+ * **只有超管能用**的那几个接口的守卫(当前:值域插件 CRUD 与试跑)。
+ *
+ * 为什么插件要更严:自定义插件的 `code` 是**在服务端执行的任意 JS**(`new Function` 不是沙箱),
+ * 权限点能授给别人,但"能写服务端代码"这件事不该跟着权限点走。所以两条都要:权限点管"进得来",
+ * 这里管"这类操作只有超管做"。
+ *
+ * `isSuper` 是**直调 caller 注入**的标记(脚本 / 测试),与 `permMiddleware` 的判断同源 ——
+ * HTTP 路径注入不进来(见 `requireUser` 的注释),所以这里不会成为绕过口子。
+ */
+export async function requireAdminUser(ctx: unknown): Promise<string> {
+	const user = (ctx as { user?: InjectedUser | null }).user;
+	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
+	if (user.isSuper) return user.id;
+	if (!(await isAdminUser(user.id))) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "只有系统管理员能操作数据权限插件" });
+	}
+	return user.id;
+}
+
 export const createTRPCRouter = t.router;
 
 /** 只挂日志与审计:**任何人**都能调(本项目当前没有这种接口,留着表达"公开"的语义) */
 export const publicProcedure = t.procedure.use(loggingMiddleware).use(auditMiddleware);
-/** 基础写/读接口:**必须登录**(全站默认用这个) */
+/** 基础写/读接口:**必须登录**(全站默认用这个);第五层挂 `ctx.scope()` 供行级数据权限用 */
 export const protectedProcedure = t.procedure
 	.use(loggingMiddleware)
 	.use(requireUser)
 	.use(auditMiddleware)
-	.use(permMiddleware);
+	.use(permMiddleware)
+	.use(dataScopeMiddleware);
 /**
  * 服务端直调入口工厂(`createCallerFactory`)。
  *

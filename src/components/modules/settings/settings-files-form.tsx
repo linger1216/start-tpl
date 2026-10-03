@@ -69,7 +69,7 @@ export function SettingsFilesForm({
 				</div>
 
 				<DialogFooter>
-					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
 						取消
 					</Button>
 					<Button onClick={() => onSubmit(trimmed)} disabled={pending || !canSubmit}>

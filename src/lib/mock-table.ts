@@ -26,7 +26,7 @@ type MockTableState<T extends MockRow = MockRow> = {
 	remove: (ids: string[]) => void;
 };
 
-export type MockTableStore<T extends MockRow = MockRow> = UseBoundStore<StoreApi<MockTableState<T>>>;
+type MockTableStore<T extends MockRow = MockRow> = UseBoundStore<StoreApi<MockTableState<T>>>;
 
 /**
  * 建一张内存表。`idPrefix` 用于生成新行主键(如 ENT-0025),

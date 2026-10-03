@@ -41,6 +41,16 @@ export const PARA_TYPE_META: Record<ParaType, { label: string; hint: string }> =
  */
 export const PARA_VALUE_MAX = 4000;
 
+/**
+ * 上传策略两键的**兜底值** —— 库里读不到 / 没配过时用它。
+ *
+ * 三处共用这一份,以前是三处各写一遍字面量(后端 `routers/file.ts` 的 `readPolicy()`、
+ * 上传对话框 `settings-files-upload.tsx`、参数管理页的 `PARA_DEFAULTS`),改了名单忘了别处就会
+ * 出现"界面允许传、后端拒收"这种最难查的错。
+ */
+export const FILE_ALLOW_EXT_DEFAULT = "jpg,jpeg,png,gif,webp,pdf,xlsx,docx";
+export const FILE_MAX_SIZE_MB_DEFAULT = 20;
+
 export function isParaType(value: unknown): value is ParaType {
 	return typeof value === "number" && (PARA_TYPES as readonly number[]).includes(value);
 }

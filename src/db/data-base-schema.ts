@@ -1,10 +1,12 @@
 /**
- * **系统表**的 drizzle 定义 —— 十七张:
+ * **系统表**的 drizzle 定义 —— 十九张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
  *  - 权限四张:`sys_dept` / `sys_role` / `sys_user_dept` /
  *    **`sys_casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`);
+ *  - 数据权限两张:**`sys_data_policy`**(谁看到哪些行)/ **`sys_data_plugin`**(值域插件登记;
+ *    加 / 改插件不用重启,见 `lib/data-scope.ts` + `lib/data-scope-plugins.ts`);
  *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
@@ -163,7 +165,7 @@ export const sysPara = mysqlTable(
 	{
 		/** 普通列(非主键):无意义短串(nanoid);业务永远按 `para_key` 找参数 */
 		id: varchar("id", { length: 32 }).notNull(),
-		/** 参数名,如 `raw.retention.soft_days` —— **主键** */
+		/** 参数名,如 `log.enabled` —— **主键** */
 		para_key: varchar("para_key", { length: 64 }).primaryKey(),
 		/** 参数值(text,不限 4000) */
 		para_value: text("para_value").notNull(),
@@ -388,8 +390,9 @@ export const sysDept = mysqlTable(
  * ⚠️ **同级/同部门重名不靠唯一索引**:`unique(parent_id, name)` 这类约束在 MySQL 上
  * 对 `parent_id is null`(顶级)不生效,是半吊子约束 —— 一律在 procedure 里查重。
  *
- * 角色**没有 `code` 列**:程序内部用 `id`(`varchar(32)` nanoid)引用即可,无须再保留一层
- * `sys_casbin_rule.v0/v1` 里直接 `role:<id>` 即可 —— 没有 `code` 列。
+ * 角色**没有 `code` 列**:程序内部一律用 `id`(`varchar(32)` nanoid)引用 —— 策略表
+ * `sys_casbin_rule.v0/v1` 里直接写 `role:<id>`,不必再维护一层"角色编码 → id"的映射。
+ * 界面上按 `name` 展示,唯一性由 `uk_sys_role_name` 保证。
  */
 export const sysRole = mysqlTable(
 	"sys_role",
@@ -563,8 +566,10 @@ export const sysLog = mysqlTable(
  * Demo:综合网格履职。
  *
  * 字段只保留方案里说的那几个 —— Excel 后面 17 列月度统计**不建**。
- * `group_id`(「管理单元」)/ `town_id`(街镇)/ `owner_id`(负责人)现在都只参与展示 / 筛选 / 统计,
- * **不参与任何过滤** —— 行级数据权限那套机制已整体删除(见 `doc/已知陷阱.md`)。
+ * `town_id`(街镇)/ `owner_id`(负责人)本身只参与展示 / 筛选 / 统计,
+ * 是**数据权限**(`sys_data_policy` + `sys_data_plugin`)拿它们当判据列来筛行,才产生过滤效果 ——
+ * 也就是说:表结构里没有硬编码的过滤条件,过滤条件全在数据权限规则里(见 `doc/数据权限.md`)。
+ * 这张表的注释是 `scripts/sync-table-meta.ts` 里那三行,改了记得两边一起改。
  */
 export const sysDemoGrid = mysqlTable(
 	"demo_grid",
@@ -577,8 +582,6 @@ export const sysDemoGrid = mysqlTable(
 		town_name: varchar("town_name", { length: 32 }),
 		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计) */
 		town_id: varchar("town_id", { length: 32 }),
-		/** 「管理单元」→ `sys_dept.id`(只用于展示 / 筛选 / 统计) */
-		group_id: varchar("group_id", { length: 32 }),
 		/** 网格长姓名(Excel 原样;92 位真实姓名里没几个能对上账号,所以另存 owner_id) */
 		owner_name: varchar("owner_name", { length: 32 }),
 		/** 负责人 → `sys_user.id`(只用于展示 / 筛选 / 统计) */
@@ -589,11 +592,7 @@ export const sysDemoGrid = mysqlTable(
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
 	},
-	(table) => [
-		index("idx_demo_grid_town").on(table.town_id),
-		index("idx_demo_grid_group").on(table.group_id),
-		index("idx_demo_grid_owner").on(table.owner_id),
-	],
+	(table) => [index("idx_demo_grid_town").on(table.town_id), index("idx_demo_grid_owner").on(table.owner_id)],
 );
 
 export const sysFile = mysqlTable(
@@ -625,4 +624,101 @@ export const sysFile = mysqlTable(
 		index("idx_sys_file_status").on(table.status, table.create_time),
 		index("idx_sys_file_hash").on(table.hash),
 	],
+);
+
+// ── 数据权限 ─────────────────────────────────────────────
+//
+// 只解决一件事:**list 的可见性**(这一行看不看得见)。只读 / 可编辑是**功能权限**
+// (Casbin 在管),所以下面两张表里没有动作(action)概念 —— 别把它们和 RBAC 混起来。
+//
+// 与功能权限的第三层(读接口的 `PERM_BY_PATH`)是并行的两道闸:那个管"能不能调这个接口",
+// 这里管"调了能看到哪些行"。求值在 `lib/data-scope.ts`,值域在 `lib/data-scope-plugins.ts`。
+
+/**
+ * 数据权限**规则** —— 一行 = 主体 + 资源 + (列 | 整行) + 值域插件 + 插件参数。形状:
+ *
+ *   `<资源表>.<列> in 插件(我)`           -- 插件产出 `value`
+ *   `<资源表>.<主键> in 插件(我, 资源)`    -- 插件产出 `row`(逐行授权)
+ *   (不配插件)                             -- 整类可见
+ *
+ * 三条的唯一判据在 `lib/data-scope-spec.ts` 的 `validatePolicyCombo()`(`column` 可空是刻意的)。
+ *
+ * ⚠️ **只存角色的 id,不存角色里的人**:`subject = role:<id>`,请求时才展开成"我有哪些角色"
+ * ⇒ 角色加人减人不用回来改策略行。**这张表应该长期只有几十行**;涨到几千行,说明它被当成
+ * 人员名单用了 —— 那是 `sys_user_dept` / Casbin 的 `g` 行该干的事。
+ *
+ * ⚠️ `column` 是 **MySQL 保留字**:裸写 SQL 时必须加反引号(drizzle 生成的语句会自动加)。
+ */
+export const sysDataPolicy = mysqlTable(
+	"sys_data_policy",
+	{
+		/** 主键:nanoid */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 0 停用 / 1 启用 */
+		status: tinyint("status").notNull().default(1),
+		/** `*`(所有人)/ `user:<id>` / `role:<id>` / `dept:<id>` —— 见 `data-scope-spec.ts` 的 `parseSubject()` */
+		subject: varchar("subject", { length: 48 }).notNull(),
+		/** 资源 = 库里一张业务表的名字(如 `demo_grid`);界面上从 `information_schema` 里选 */
+		resource: varchar("resource", { length: 64 }).notNull(),
+		/** 拿资源的哪一列去比;插件产出 `row`(或整类可见)时留空 */
+		column: varchar("column", { length: 64 }),
+		/**
+		 * 从值域插件的输出行里**取哪个 key** 的值去比(m23422)。
+		 *
+		 * 插件每行形如 `{ key: value }`(内置的是 `id` / `name` / `value`,自建「清单」是自己填的
+		 * `town_id` / `risk_level` 之类),这一列说"这条规则认哪一类 key":
+		 * `<column> in 插件的行[key]`。留空 = 老规则(NULL),引擎按 `<column>` 当 key 推断、
+		 * 再兜 `value` —— 只为兼容旧行,表单保存时一定会写上一个具体 key。
+		 */
+		value_key: varchar("value_key", { length: 64 }),
+		/** 值域插件的 key(内置四个 + `sys_data_plugin` 里登记的);留空 = 整类可见 */
+		plugin_key: varchar("plugin_key", { length: 64 }),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [index("idx_sys_data_policy_resource").on(table.resource, table.status)],
+);
+
+/**
+ * 数据权限的**值域插件登记** —— 规则的右半边。
+ *
+ * **v2(m20034)起**:这张表登记**只能是「指定清单」(fixed)类**插件,
+ * 由用户在表单里**逐行手填** `[{key,value}]`(走 `data-scope-spec.ts` 的
+ * `parseItems` / `checkRuleItems` + `PLUGIN_ITEMS_MAX` / `PLUGIN_ITEM_*_MAX`)。
+ *
+ * 函数体(`new Function` 那套)**不再让用户编辑** —— 那是地基内置插件的事,
+ * 在 `lib/data-scope-plugins.ts` 的代码里:`self` / `my_departments` /
+ * `my_dept_ancestors` / `my_street` 四个。**规则下拉里**会同时显示这 4 个内置 +
+ * 这张表里的所有 fixed 插件。
+ *
+ * 引擎(`lib/data-scope.ts` 的 `compileRule`)读规则时,直接拿 `row.output_values`
+ * 拼 SQL,不再从规则行带任何「参数」过来 —— 「值」是**插件的属性**,不是规则的属性
+ * (user 在 m20034 明确「数据范围里不需要输出值, 所有的值都在值域插件里面」)。
+ */
+export const sysDataPlugin = mysqlTable(
+	"sys_data_plugin",
+	{
+		/** 主键:nanoid */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 小写字母 / 数字 / 下划线,全局唯一 —— 策略行的 `plugin_key` 指向它 */
+		plugin_key: varchar("plugin_key", { length: 64 }).notNull(),
+		/** 界面名(如「用户的街镇」) */
+		label: varchar("label", { length: 64 }).notNull(),
+		/**
+		 * 「指定清单」(`v2` 起新列):`[{key, value}]`,每行一个 `key/value`。
+		 * - `key` 是「这行属于哪一类」(如 `town_id` / `risk_level`,任意字符串,
+		 *   引擎不挑它去用它做 SQL 关键字 —— 引擎读规则行的 `column`);
+		 * - `value` 是「这条规则在那一类里允许的值」(如 `310112003`)。
+		 * 引擎按 `data-rule.value` 拼 SQL 的 `in (...)`,再丢到 `column` 列上去比。
+		 * 读回来可能是字符串,一律走 `parseItems()` 兜底。
+		 */
+		output_values: json("output_values"),
+		/** 0 停用 / 1 启用 */
+		status: tinyint("status").notNull().default(1),
+		remark: varchar("remark", { length: 255 }),
+		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [uniqueIndex("uk_sys_data_plugin_key").on(table.plugin_key)],
 );

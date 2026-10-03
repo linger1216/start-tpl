@@ -1,7 +1,7 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
+import { NOTICE_LEVEL_SHORT_LABEL } from "#/lib/notice-levels";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /** 与 `trpc.notice.list` 的出参一一对应 */
 export type NoticeRow = {
@@ -15,8 +15,6 @@ export type NoticeRow = {
 };
 
 const columnHelper = createAppColumnHelper<NoticeRow>();
-
-const LEVEL_LABEL: Record<string, string> = { info: "通知", success: "成功", warn: "提醒", danger: "告警" };
 
 /**
  * 「我的通知」的列定义 —— **只读台账**。
@@ -36,7 +34,7 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 		columnHelper.accessor("level", {
 			header: "类型",
 			size: 90,
-			cell: (ctx) => <Badge variant="outline">{LEVEL_LABEL[ctx.getValue()] ?? ctx.getValue()}</Badge>,
+			cell: (ctx) => <Badge variant="outline">{NOTICE_LEVEL_SHORT_LABEL[ctx.getValue()] ?? ctx.getValue()}</Badge>,
 		}),
 		columnHelper.accessor("title", {
 			header: "标题",
@@ -59,11 +57,7 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 			size: 180,
 			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
 		}),
-		columnHelper.accessor("createTime", {
-			header: "时间",
-			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
-		}),
+		timeColumn<NoticeRow>("createTime", { header: "时间" }),
 		actionsColumn<NoticeRow>({
 			size: 90,
 			onView: onOpen,

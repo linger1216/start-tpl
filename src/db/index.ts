@@ -12,7 +12,7 @@
  */
 import { drizzle as drizzleMysql } from "drizzle-orm/mysql2";
 
-import { log } from "#/lib/logger";
+import { logger } from "#/lib/logger";
 import { createDmDatabase } from "./dm/index.ts";
 import * as schema from "./schema.ts";
 
@@ -46,7 +46,7 @@ function describeConn(raw: string): string {
 		return "(连接串无法解析)";
 	}
 }
-log("info", "db.dialect", { dialect: isDm ? "dm(达梦)" : "mysql", target: describeConn(url) });
+logger.info("db.dialect", { dialect: isDm ? "dm(达梦)" : "mysql", target: describeConn(url) });
 
 function buildMysqlDb() {
 	return drizzleMysql(url, { schema, mode: "default" });

@@ -4,8 +4,7 @@
     "node_modules",
     "dist",
     ".output",
-    ".tanstack",
-    "scripts/__probe__*.ts"
+    ".tanstack"
   ],
   "compilerOptions": {
     "target": "ES2022",

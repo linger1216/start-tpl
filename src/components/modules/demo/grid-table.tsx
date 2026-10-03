@@ -1,7 +1,6 @@
-import { actionsColumn, selectColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /** 与 `trpc.demoGrid.list` 的出参一一对应(见 doc/测试数据/README.md 的字段对应) */
 export type GridRow = {
@@ -9,8 +8,6 @@ export type GridRow = {
 	name: string;
 	townName: string | null;
 	townId: string | null;
-	/** 归属的「管理单元」节点(只用于展示与筛选) */
-	groupId: string | null;
 	ownerName: string | null;
 	ownerId: string | null;
 	duty: string | null;
@@ -86,11 +83,7 @@ export function gridColumns({
 			size: 180,
 			cell: (ctx) => <TextCell value={ctx.getValue()} />,
 		}),
-		columnHelper.accessor("updateTime", {
-			header: "更新时间",
-			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
-		}),
+		timeColumn<GridRow>("updateTime", { header: "更新时间" }),
 		actionsColumn<GridRow>({ size: 160, onView, onEdit, onDelete }),
 	]);
 }

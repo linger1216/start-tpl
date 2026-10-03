@@ -48,7 +48,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 				// ⚠️ **项目改写**:表头 `sticky`(表格自己滚的时候列名不能跟着跑掉)。
 				// 背景必须**不透明**,否则行会从表头底下透出来(`bg-card` 与卡片底色一致)。
 				// 下边框放在 th 上而不是 `thead tr`:行会被滚走,边框得跟着表头一起粘住。
-				"sticky top-0 z-10 h-10 border-b border-border bg-card px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+				"sticky top-0 z-10 h-10 border-b border-border bg-card px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-0.5",
 				className,
 			)}
 			{...props}
@@ -61,7 +61,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
 		<td
 			data-slot="table-cell"
 			className={cn(
-				"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+				"p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-0.5",
 				className,
 			)}
 			{...props}

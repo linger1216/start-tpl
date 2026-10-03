@@ -39,7 +39,7 @@ export function Switch({
 					data-slot="switch-thumb"
 					className={cn(
 						"pointer-events-none inline-block size-3.5 rounded-full bg-white shadow-md transition-transform duration-150",
-						checked ? "translate-x-[18px]" : "translate-x-0.5",
+						checked ? "translate-x-4.5" : "translate-x-0.5",
 					)}
 				/>
 			</span>

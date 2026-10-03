@@ -1,6 +1,6 @@
 /**
- * **系统表的建表脚本**(设置五张 + 认证四张 + 权限四张 + `sys_file` / `sys_log` / `sys_notice` +
- * `demo_grid` = 17 张)—— 幂等,可重复执行。
+ * **系统表的建表脚本**(设置五张 + 认证四张 + 权限四张 + 数据权限两张 + `sys_file` / `sys_log` /
+ * `sys_notice` + `demo_grid` = 19 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -25,18 +25,23 @@ import { sql } from "drizzle-orm";
 import { db } from "../src/db/index.ts";
 import { syncTableMeta } from "./sync-table-meta.ts";
 
+/**
+ * 列注释**不写在这里**:唯一真源是 `scripts/sync-table-meta.ts` 的 `COLUMN_COMMENTS`。
+ * 建表末尾会调 `syncTableMeta()` 把库里的列注释对齐过去 —— 两边都写必然漂移、而且没人会发现。
+ * 下面这些 CREATE 以及后面的补列 / 改列型定义,都只写结构、不带列注释。
+ */
 const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_menu",
 		ddl: `create table if not exists \`sys_menu\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '父菜单 id(nanoid);null = 一级菜单',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
 			\`name\` varchar(32) collate utf8mb4_unicode_ci not null,
-			\`path\` varchar(128) collate utf8mb4_unicode_ci not null comment '业务键:页面路由(not null + 唯一)',
+			\`path\` varchar(128) collate utf8mb4_unicode_ci not null,
 			\`icon\` varchar(32) collate utf8mb4_unicode_ci default null,
 			\`sort\` int not null default 0,
 			\`visible\` tinyint(1) not null default 1,
-			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
+			\`status\` tinyint not null default 1,
 			\`create_time\` datetime(3) not null default current_timestamp(3),
 			\`update_time\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
 			primary key (\`id\`),
@@ -47,12 +52,12 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_dict",
 		ddl: `create table if not exists \`sys_dict\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`code\` varchar(64) collate utf8mb4_unicode_ci not null comment '字典编码(业务键),如 entity_category',
-			\`name\` varchar(32) collate utf8mb4_unicode_ci not null comment '字典名称(中文)',
-			\`items\` json default null comment '字典项:[{label,value}]',
-			\`remark\` varchar(255) character set utf8mb4 collate utf8mb4_unicode_ci default null comment '说明',
-			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`code\` varchar(64) collate utf8mb4_unicode_ci not null,
+			\`name\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`items\` json default null,
+			\`remark\` varchar(255) character set utf8mb4 collate utf8mb4_unicode_ci default null,
+			\`status\` tinyint not null default 1,
 			\`create_time\` datetime default current_timestamp,
 			\`update_time\` datetime default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -62,14 +67,14 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_para",
 		ddl: `create table if not exists \`sys_para\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`para_key\` varchar(64) collate utf8mb4_unicode_ci not null comment '参数名,如 raw.retention.soft_days',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`para_key\` varchar(64) collate utf8mb4_unicode_ci not null,
 			\`para_value\` text collate utf8mb4_unicode_ci not null,
-			\`para_type\` tinyint not null comment '1:int 2:bool 3:string 4:json',
-			\`para_group\` varchar(32) collate utf8mb4_unicode_ci default null comment '分组',
-			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
-			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '给人看的说明(界面直接展示)',
-			\`editable\` tinyint not null default 1 comment '0 = 代码内置不允许改',
+			\`para_type\` tinyint not null,
+			\`para_group\` varchar(32) collate utf8mb4_unicode_ci default null,
+			\`status\` tinyint not null default 1,
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
+			\`editable\` tinyint not null default 1,
 			\`create_time\` datetime default current_timestamp,
 			\`update_time\` datetime default current_timestamp on update current_timestamp,
 			primary key (\`para_key\`),
@@ -79,12 +84,12 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_tag",
 		ddl: `create table if not exists \`sys_tag\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '父节点 id(nanoid);null = 维度(一级节点)',
-			\`label\` varchar(32) collate utf8mb4_unicode_ci not null comment '展示名(维度名 / 标签名)',
-			\`value\` varchar(32) collate utf8mb4_unicode_ci default null comment '取值(可空)',
-			\`desc\` text collate utf8mb4_unicode_ci default null comment '含义说明',
-			\`sort\` int not null default 0 comment '同级排序,越小越靠前',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+			\`label\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`value\` varchar(32) collate utf8mb4_unicode_ci default null,
+			\`desc\` text collate utf8mb4_unicode_ci default null,
+			\`sort\` int not null default 0,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -94,10 +99,10 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_tag_relation",
 		ddl: `create table if not exists \`sys_tag_relation\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`tag_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '标签 id → sys_tag.id(叶子标签)',
-			\`obj_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '业务对象主键',
-			\`obj_type\` tinyint not null comment '业务对象类型(tinyint 码,各业务自己约定)',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`tag_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`obj_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`obj_type\` tinyint not null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -112,7 +117,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_user",
 		ddl: `create table if not exists \`sys_user\` (
-			\`id\` varchar(36) not null comment '主键(better-auth 生成)',
+			\`id\` varchar(36) not null,
 			\`name\` varchar(128) not null,
 			\`email\` varchar(255) not null,
 			\`email_verified\` tinyint(1) not null default 0,
@@ -179,12 +184,12 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_dept",
 		ddl: `create table if not exists \`sys_dept\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '上级部门 id;null = 顶级',
-			\`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '部门名',
-			\`sort\` int not null default 0 comment '同级排序,越小越靠前',
-			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
-			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '备注',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+			\`name\` varchar(64) collate utf8mb4_unicode_ci not null,
+			\`sort\` int not null default 0,
+			\`status\` tinyint not null default 1,
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -194,11 +199,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_role",
 		ddl: `create table if not exists \`sys_role\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`name\` varchar(32) collate utf8mb4_unicode_ci not null comment '角色名(中文,唯一)',
-			\`sort\` int not null default 0 comment '排序,越小越靠前',
-			\`status\` tinyint not null default 1 comment '1 启用 / 0 停用',
-			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '说明',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`name\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`sort\` int not null default 0,
+			\`status\` tinyint not null default 1,
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -208,9 +213,9 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_user_dept",
 		ddl: `create table if not exists \`sys_user_dept\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '部门 id → sys_dept.id(级联删除)',
-			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '用户 id → sys_user.id(级联删除)',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -223,11 +228,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_casbin_rule",
 		ddl: `create table if not exists \`sys_casbin_rule\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-			\`ptype\` varchar(8) collate utf8mb4_unicode_ci not null comment '规则类型:p(角色 → 权限)/ g(用户 → 角色、角色 → 角色)',
-			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null comment 'p:role:<角色 id>;g:user:<用户 id> 或 role:<角色 id>',
-			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null comment 'p:menu:<菜单/按钮 id>;g:role:<角色 id>',
-			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null default '' comment 'p:access;g:空串',
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`ptype\` varchar(8) collate utf8mb4_unicode_ci not null,
+			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null,
+			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null,
+			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null default '',
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
@@ -240,15 +245,15 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_file",
 		ddl: `create table if not exists \`sys_file\` (
-      \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-      \`bucket\` varchar(64) collate utf8mb4_unicode_ci not null comment '桶名(app-public 公开 / app-private 私有)',
-      \`object_key\` varchar(512) collate utf8mb4_unicode_ci not null comment '对象键:{yyyy}/{MM}/{nanoid}.{ext}',
-      \`origin_name\` varchar(255) collate utf8mb4_unicode_ci not null comment '原始文件名(下载时进 Content-Disposition)',
-      \`ext\` varchar(16) collate utf8mb4_unicode_ci default null comment '小写后缀(不带点)',
-      \`content_type\` varchar(128) collate utf8mb4_unicode_ci default null comment 'MIME 类型(以对象存储回的为准)',
-      \`size\` bigint not null default 0 comment '字节数(confirm 时校准)',
-      \`hash\` char(64) collate utf8mb4_unicode_ci default null comment '内容 sha256(仅元数据,不自动去重)',
-      \`status\` tinyint not null default 0 comment '0 待确认 / 1 正常 / 2 已删除',
+      \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+      \`bucket\` varchar(64) collate utf8mb4_unicode_ci not null,
+      \`object_key\` varchar(512) collate utf8mb4_unicode_ci not null,
+      \`origin_name\` varchar(255) collate utf8mb4_unicode_ci not null,
+      \`ext\` varchar(16) collate utf8mb4_unicode_ci default null,
+      \`content_type\` varchar(128) collate utf8mb4_unicode_ci default null,
+      \`size\` bigint not null default 0,
+      \`hash\` char(64) collate utf8mb4_unicode_ci default null,
+      \`status\` tinyint not null default 0,
       \`create_time\` datetime not null default current_timestamp,
       \`update_time\` datetime not null default current_timestamp on update current_timestamp,
       primary key (\`id\`),
@@ -261,20 +266,20 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_log",
 		ddl: `create table if not exists \`sys_log\` (
-    \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-    \`trace_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '与后端日志同值的追踪号',
-    \`path\` varchar(64) collate utf8mb4_unicode_ci not null comment 'tRPC 路径(如 role.create)',
-    \`label\` varchar(64) collate utf8mb4_unicode_ci default null comment '中文动作名',
-    \`type\` varchar(16) collate utf8mb4_unicode_ci default null comment 'query / mutation',
-    \`operator_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '操作人 id',
-    \`operator_name\` varchar(64) collate utf8mb4_unicode_ci default null comment '操作人姓名快照',
-    \`ip\` varchar(64) collate utf8mb4_unicode_ci default null comment '来源 IP',
-    \`target\` varchar(255) collate utf8mb4_unicode_ci default null comment '目标描述(尽力而为)',
-    \`status\` tinyint not null default 1 comment '1 成功 / 0 失败',
-    \`error_code\` varchar(48) collate utf8mb4_unicode_ci default null comment '错误码',
-    \`error_message\` varchar(255) collate utf8mb4_unicode_ci default null comment '错误消息(已脱敏截断)',
-    \`input\` text comment '入参快照(已脱敏、截断 2000 字符)',
-    \`duration_ms\` int default null comment '耗时(毫秒)',
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`trace_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`path\` varchar(64) collate utf8mb4_unicode_ci not null,
+    \`label\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`type\` varchar(16) collate utf8mb4_unicode_ci default null,
+    \`operator_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`operator_name\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`ip\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`target\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`status\` tinyint not null default 1,
+    \`error_code\` varchar(48) collate utf8mb4_unicode_ci default null,
+    \`error_message\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`input\` text,
+    \`duration_ms\` int default null,
     \`create_time\` datetime not null default current_timestamp,
     primary key (\`id\`),
     key \`idx_sys_log_time\` (\`create_time\`),
@@ -286,13 +291,13 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_notice",
 		ddl: `create table if not exists \`sys_notice\` (
-    \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-    \`user_id\` varchar(32) collate utf8mb4_unicode_ci not null comment '收件人 id',
-    \`title\` varchar(128) collate utf8mb4_unicode_ci not null comment '标题',
-    \`body\` varchar(255) collate utf8mb4_unicode_ci default null comment '可选正文',
-    \`path\` varchar(255) collate utf8mb4_unicode_ci default null comment '点击跳转的站内路径(必须 / 开头)',
-    \`level\` varchar(16) collate utf8mb4_unicode_ci not null default 'info' comment 'info / success / warn / danger',
-    \`read_at\` datetime default null comment '已读时间;null = 未读',
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`user_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`title\` varchar(128) collate utf8mb4_unicode_ci not null,
+    \`body\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`path\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`level\` varchar(16) collate utf8mb4_unicode_ci not null default 'info',
+    \`read_at\` datetime default null,
     \`create_time\` datetime not null default current_timestamp,
     primary key (\`id\`),
     key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`create_time\`)
@@ -302,22 +307,73 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "demo_grid",
 		ddl: `create table if not exists \`demo_grid\` (
-    \`id\` varchar(32) collate utf8mb4_unicode_ci not null comment '主键(nanoid,由代码生成)',
-    \`name\` varchar(64) collate utf8mb4_unicode_ci not null comment '网格名称(片区名)',
-    \`town_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇(文本)',
-    \`town_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '所属街镇 → sys_dept.id(展示/统计用)',
-    \`group_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(展示/统计用)',
-    \`owner_name\` varchar(32) collate utf8mb4_unicode_ci default null comment '网格长姓名',
-    \`owner_id\` varchar(32) collate utf8mb4_unicode_ci default null comment '负责人 → sys_user.id(self 档用)',
-    \`duty\` varchar(64) collate utf8mb4_unicode_ci default null comment '工作职务',
-    \`remark\` varchar(255) collate utf8mb4_unicode_ci default null comment '备注',
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`name\` varchar(64) collate utf8mb4_unicode_ci not null,
+    \`town_name\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`town_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`owner_name\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`owner_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`duty\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`create_time\` datetime not null default current_timestamp,
     \`update_time\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
     key \`idx_demo_grid_town\` (\`town_id\`),
-    key \`idx_demo_grid_group\` (\`group_id\`),
     key \`idx_demo_grid_owner\` (\`owner_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = 'Demo:综合网格履职'`,
+	},
+	/**
+	 * 数据权限:**规则**(谁看得到哪些行,见 `src/lib/data-scope.ts`)。
+	 *
+	 * 合法形状只有三种(`lib/data-scope-spec.ts` 的 `validatePolicyCombo()` 是唯一实现):
+	 *  - `column` / `plugin_key` 都不填 = 整类可见;
+	 *  - `column` + `plugin_key`(插件填了域 = 「给值」)= `<column> in 插件(我)`;
+	 *  - `plugin_key`(插件填了资源表 = 「给行」,不填 column)= `<主键> in 插件(我, 资源)`。
+	 *
+	 * m23422 起插件那句读作 `<column> in 插件(我).value_key` —— 规则多一列 `value_key`,
+	 * 说"从插件输出的每行里取哪个 key 的值";留空 = 老规则,按 `<column>` 推断。
+	 */
+	{
+		name: "sys_data_policy",
+		ddl: `create table if not exists \`sys_data_policy\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`status\` tinyint not null default 1,
+    \`subject\` varchar(48) collate utf8mb4_unicode_ci not null,
+    \`resource\` varchar(64) collate utf8mb4_unicode_ci not null,
+    \`column\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`value_key\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`plugin_key\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`create_time\` datetime not null default current_timestamp,
+    \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    key \`idx_sys_data_policy_resource\` (\`resource\`, \`status\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '数据权限规则(谁看得到哪些行,见 src/lib/data-scope.ts)'`,
+	},
+	/**
+	 * 数据权限:**值域插件登记**(见 `src/lib/data-scope-plugins.ts`)。
+	 *
+	 * **v2(m20034)起**:这张表登记的**只能是「指定清单」(fixed)类**插件。
+	 * 用户在表单里**逐行手填** `[{key, value}]`,存进 `output_values` json 列;
+	 * 函数体(`fn` / `code`)已删——那是地基内置插件的事,在 `lib/data-scope-plugins.ts` 的代码里:
+	 * `self` / `my_departments` / `my_dept_ancestors` / `my_street` 四个。
+	 * 引擎按 `output_values` 拼 SQL 的 `in (...)`,再丢到规则的 `column` 列上去比
+	 * —— 「值」是**插件的属性**,不是规则的属性。
+	 */
+	{
+		name: "sys_data_plugin",
+		ddl: `create table if not exists \`sys_data_plugin\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`plugin_key\` varchar(64) collate utf8mb4_unicode_ci not null,
+    \`label\` varchar(64) collate utf8mb4_unicode_ci not null,
+    \`output_values\` json default null,
+    \`status\` tinyint not null default 1,
+    \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
+    \`create_time\` datetime not null default current_timestamp,
+    \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_sys_data_plugin_key\` (\`plugin_key\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)'`,
 	},
 ];
 
@@ -378,17 +434,24 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{
 		table: "sys_menu",
 		column: "type",
-		ddl: "tinyint not null default 2 comment '1 目录 / 2 菜单 / 3 按钮(按钮只是权限点,不进侧边栏)'",
+		ddl: "tinyint not null default 2",
 	},
 	{
 		table: "sys_menu",
 		column: "perm",
-		ddl: "varchar(64) collate utf8mb4_unicode_ci default null comment '权限标识,如 sys:role:write;前端 useHasPerm() 认它'",
+		ddl: "varchar(64) collate utf8mb4_unicode_ci default null",
 	},
+	// 数据权限 v2 (m20034):「输出值」搬到 plugin.output_values(原 plugin.fn / rule.params 已删)
 	{
-		table: "demo_grid",
-		column: "group_id",
-		ddl: "varchar(32) collate utf8mb4_unicode_ci default null comment '管理单元 → sys_dept.id(展示/统计用)'",
+		table: "sys_data_plugin",
+		column: "output_values",
+		ddl: "json default null",
+	},
+	// 数据权限 m23422:规则多一列「从插件输出行里取哪个 key」
+	{
+		table: "sys_data_policy",
+		column: "value_key",
+		ddl: "varchar(64) collate utf8mb4_unicode_ci default null",
 	},
 ];
 
@@ -422,7 +485,7 @@ const COLUMN_TYPE_FIXES: Array<{ table: string; column: string; type: string; dd
 		table: "sys_dict",
 		column: "items",
 		type: "json",
-		ddl: "json default null comment '字典项:[{label,value}]'",
+		ddl: "json default null",
 	},
 ];
 
@@ -447,12 +510,74 @@ for (const fix of COLUMN_TYPE_FIXES) {
 }
 
 /**
+ * **老库改列名** —— 字段被重命名时在这里登记一条。
+ *
+ * `column_rename` 用的也是 `ALTER TABLE ... CHANGE` 语法,MySQL 上它既能改列名、也能
+ * 顺手改型 —— 数据原样保留(`new_type` 兼容时才安全,`TEXT` ↔ `TEXT` 没问题)。
+ *
+ * 幂等:`from` 列不在 + `to` 列已在 ⇒ 跳过(已经改过了)。
+ */
+const COLUMN_RENAMES: Array<{
+	table: string;
+	from: string;
+	to: string;
+	newType: string;
+}> = [
+	// 数据权限 v1.3 (m18228):`code` → `fn`(user:字段名是函数体,叫 fn 更贴切)
+	{
+		table: "sys_data_plugin",
+		from: "code",
+		to: "fn",
+		newType: "text",
+	},
+];
+
+for (const ren of COLUMN_RENAMES) {
+	const cols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns
+				where table_schema = database() and table_name = ${ren.table}`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	const names = new Set(cols.map((c) => c.name));
+	if (names.has(ren.to) && !names.has(ren.from)) {
+		console.log(`· ${ren.table}.${ren.from} → ${ren.to} 已改过,跳过`);
+		continue;
+	}
+	if (!names.has(ren.from)) {
+		console.log(`· ${ren.table}.${ren.from} 不存在(可能新表),跳过`);
+		continue;
+	}
+	if (names.has(ren.from) && names.has(ren.to)) {
+		console.log(`· ${ren.table} 同时存在 ${ren.from} 和 ${ren.to},人工处理`);
+		continue;
+	}
+	await db.execute(sql.raw(`alter table \`${ren.table}\` change column \`${ren.from}\` \`${ren.to}\` ${ren.newType}`));
+	console.log(`✓ ${ren.table}.${ren.from} → ${ren.to}`);
+}
+
+/**
  * **老库删列** —— 列被合并 / 废弃时要在这里登记一条。不登记的话老库里那列会一直留着:
  * 它多半是 `not null` 而新代码不再写它,**下一次插入就会违反非空约束**(静默失败最烦人)。
  * 幂等:列不存在就跳过。MySQL 上一列若还挂在某个外键下,必须先删外键再删列。
+ *
+ * `rename`(从 `code` → `fn`)不在这里 —— 字段重命名归「老库改列名」管,
+ * 见上面 `COLUMN_RENAMES` 那一段。`COLUMN_DROPS` 只管**真删**。
  */
 const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }> = [
 	{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
+	{ table: "sys_data_plugin", column: "produces" },
+	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃
+	{ table: "sys_data_plugin", column: "impl_kind" },
+	{ table: "sys_data_plugin", column: "decl" },
+	// 数据权限 v1.3 (m18228):user 明确「插件不需要域概念」 —— domain / resource 全砍;code → fn
+	{ table: "sys_data_plugin", column: "domain" },
+	{ table: "sys_data_plugin", column: "resource" },
+	// 数据权限 v2 (m20034):user 明确「新建插件只允许指定清单(fixed)类」 —— 函数体那段(fn)不进库;
+	// 「输出值」搬到 plugin.output_values,规则行的 params 删(规则不再带参数)。
+	{ table: "sys_data_plugin", column: "fn" },
+	{ table: "sys_data_policy", column: "params" },
 ];
 
 for (const drop of COLUMN_DROPS) {
@@ -479,6 +604,29 @@ for (const drop of COLUMN_DROPS) {
 	}
 	await db.execute(sql.raw(`alter table \`${drop.table}\` drop column \`${drop.column}\``));
 	console.log(`✓ ${drop.table} 删列 ${drop.column}`);
+}
+
+/**
+ * 真删索引 —— 和列一起在 demo_grid 上撤掉的 `idx_demo_grid_group`(m24215:不再限制 demo_grid)。
+ * 幂等:索引不存在就跳过。
+ */
+const INDEX_DROPS: Array<{ table: string; index: string }> = [
+	// demo_grid 去 group_id 时连带的(`sys_data_policy` 已经拿不到这列当判据)
+	{ table: "demo_grid", index: "idx_demo_grid_group" },
+];
+
+for (const drop of INDEX_DROPS) {
+	const idxs = (
+		await db.execute(
+			sql`select index_name as name from information_schema.statistics where table_schema = database() and table_name = ${drop.table}`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (!idxs.some((row) => row.name === drop.index)) {
+		console.log(`· ${drop.table}.${drop.index} 不存在,跳过`);
+		continue;
+	}
+	await db.execute(sql.raw(`alter table \`${drop.table}\` drop index \`${drop.index}\``));
+	console.log(`✓ ${drop.table} 删索引 ${drop.index}`);
 }
 
 // 建完表再对齐一次列注释 / 索引名:老库通常是在更早的 DDL 下建的,注释里会留着旧列名

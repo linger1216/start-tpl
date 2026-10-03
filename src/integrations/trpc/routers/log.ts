@@ -11,7 +11,7 @@ import { createTRPCRouter, protectedProcedure } from "#/integrations/trpc/init";
  *
  * 三条刻意的设计:
  *  · **只增不改的表现在没有写接口**:写入由 `init.ts` 的 `auditMiddleware` 结构性完成,
- *    这里只读 —— 页面上也**没有删除 / 编辑入口**(清理按 `log.retention_days` 交给定时任务);
+ *    这里只读 —— 页面上也**没有删除 / 编辑入口**(审计表只增不改,清理策略由使用方自行决定);
  *  · **默认只取最近 200 条**(上限 500):审计增长很快,全量返回只是把压力换个地方,
  *    要看得更久就用筛选条件收窄(时间 / 动作 / 操作人);
  *  · 权限点 `sys:log:list` 由 `lib/rbac.ts` 的 `PERM_BY_PATH` 强制(读接口也在那张表里)。

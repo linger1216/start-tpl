@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -10,9 +10,10 @@ import { createTRPCRouter, protectedProcedure } from "../init";
 /**
  * Demo:综合网格履职 —— 一张普通业务表(列表 / 新建 / 编辑 / 删除 / 批量指派负责人)。
  *
- * 历史上这里是**行级数据权限**的演示落点:按人 / 按组织往 `sys_data_policy` 写直白授权,
- * 五处查询共用同一个范围条件。那套机制已整体删除(见 doc/已知陷阱.md),本文件回归普通 CRUD:
- * `group_id`(管理单元)/ `town_id`(街镇)现在只参与展示、筛选、统计,**不再参与任何过滤**。
+ * 这里是**行级数据权限(数据范围)的样板落点**:`list` 里一句 `ctx.scope()` 就把"我该看到哪些行"
+ * 交给了 `sys_data_policy`(资源 / 插件登记见 `lib/rbac.ts` 的 `DATA_SCOPE_BY_PATH` 与
+ * `lib/data-scope.ts`)。`town_id`(街镇)是**可以被规则引用的列** —— 规则没配时不筛,
+ * 配了才按它筛;`owner_id` 只表达"这条归谁办"。
  */
 
 const toGrid = (row: typeof sysDemoGrid.$inferSelect) => ({
@@ -20,7 +21,6 @@ const toGrid = (row: typeof sysDemoGrid.$inferSelect) => ({
 	name: row.name,
 	townName: row.town_name,
 	townId: row.town_id,
-	groupId: row.group_id,
 	ownerName: row.owner_name,
 	ownerId: row.owner_id,
 	duty: row.duty,
@@ -40,7 +40,6 @@ const writeInput = z.object({
 	name: z.string().min(1, "网格名称不能为空").max(64),
 	townName: z.string().max(32).nullable().default(null),
 	townId: z.string().max(32).nullable().default(null),
-	groupId: z.string().max(32).nullable().default(null),
 	ownerName: z.string().max(32).nullable().default(null),
 	ownerId: z.string().max(32).nullable().default(null),
 	duty: z.string().max(64).nullable().default(null),
@@ -48,9 +47,19 @@ const writeInput = z.object({
 });
 
 export const demoGridRouter = createTRPCRouter({
-	/** 列表 */
-	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysDemoGrid).orderBy(asc(sysDemoGrid.town_name), asc(sysDemoGrid.name));
+	/** 列表 —— 行级数据权限的第一个(也是当前唯一一个)落点:资源 / 插件登记见 `lib/rbac.ts` */
+	list: protectedProcedure.query(async ({ ctx }) => {
+		/**
+		 * `ctx.scope()` 的条件来自 `sys_data_policy`(按 `DATA_SCOPE_BY_PATH["demoGrid.list"]` 找到资源
+		 * `demo_grid`):没配规则时是 `undefined` —— `and()` 会把 `undefined` 参数丢掉,所以"没配 = 不筛",
+		 * 而不是"筛成空"。条件本身永远是参数化的 `in (…)`,不会拼字符串。
+		 */
+		const scope = await ctx.scope();
+		const rows = await db
+			.select()
+			.from(sysDemoGrid)
+			.where(and(scope))
+			.orderBy(asc(sysDemoGrid.town_name), asc(sysDemoGrid.name));
 		return rows.map(toGrid);
 	}),
 
@@ -62,7 +71,6 @@ export const demoGridRouter = createTRPCRouter({
 			name: input.name.trim(),
 			town_name: input.townName?.trim() || null,
 			town_id: input.townId || null,
-			group_id: input.groupId || null,
 			owner_name: input.ownerName?.trim() || null,
 			owner_id: input.ownerId || null,
 			duty: input.duty?.trim() || null,
@@ -82,7 +90,6 @@ export const demoGridRouter = createTRPCRouter({
 				name: input.name.trim(),
 				town_name: input.townName?.trim() || null,
 				town_id: input.townId || null,
-				group_id: input.groupId || null,
 				owner_name: input.ownerName?.trim() || null,
 				owner_id: input.ownerId || null,
 				duty: input.duty?.trim() || null,

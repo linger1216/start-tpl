@@ -14,13 +14,12 @@ import { userSwitchPlugin } from "#/lib/auth-debug";
  *   `https://xxx.localhost`、自定义域名、自定义端口等场景的报错来源)
  * - 在列表里 → 放行
  *
- * 默认列表:
+ * 默认列表(`DEFAULT_TRUSTED_ORIGINS`)就是下面这两条:
  * - `http://localhost:3000`:`pnpm dev` 默认端口(直连)
- * - `http://localhost:4811`:`pnpm dev` 在 3000 被占时 Vite 飘到的端口(常见;
- *   portless 自己也会挑端口)
+ * - `https://*.localhost`:portless 的 `https://xxx.localhost`(单段通配,见下)
  *
- * 端口形如 `http://localhost:4811` 已经够用,**不需要** `localhost:3000` 这种单值
- * 列举若干端口 —— 后续 `BETTER_AUTH_TRUSTED_ORIGINS` 才是扩展入口。
+ * 其它端口 / 域名(如 3000 被占时 Vite 飘到的 `http://localhost:4811`、自建域名 / 反向代理
+ * 入口)都不写死在代码里,靠 `BETTER_AUTH_TRUSTED_ORIGINS` 环境变量追加(逗号分隔)。
  *
  * better-auth 1.7.4 的 `matchesOriginPattern`:
  * - 形如 `https://*.localhost`(含 `://` 与 `*`)→ 通配单段主机名;`**` 才能跨段。

@@ -15,8 +15,8 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
-import { findNavTrailIn, type NavNode } from "./nav-config";
-import { useNavNodes } from "./nav-data";
+import type { NavNode } from "./nav-config";
+import { useNavTrail } from "./nav-data";
 import { NotificationBell } from "./notification-bell";
 import { UserSwitcher } from "./user-switcher";
 
@@ -35,9 +35,8 @@ function readTheme(): ThemeMode {
 	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
-	// 命中菜单的路径:面包屑完全由菜单树派生 —— 与侧边栏同一份来源,不会再漂移
-	const trail = findNavTrailIn(nodes, pathname);
+function buildCrumbs(trail: readonly NavNode[], pathname: string): Crumb[] {
+	// 命中菜单的路径:面包屑完全由菜单树派生 —— 与侧边栏同一份来源(useNavTrail),不会再漂移
 	if (trail.length > 0) {
 		if (trail.length === 1 && trail[0].path === "/") return [{ label: trail[0].name }];
 		return [
@@ -64,8 +63,8 @@ function buildCrumbs(nodes: readonly NavNode[], pathname: string): Crumb[] {
 
 export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => void }) {
 	const { pathname } = useLocation();
-	const nodes = useNavNodes();
-	const crumbs = useMemo(() => buildCrumbs(nodes, pathname), [nodes, pathname]);
+	const trail = useNavTrail(pathname);
+	const crumbs = useMemo(() => buildCrumbs(trail, pathname), [trail, pathname]);
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const [theme, setTheme] = useState<ThemeMode>("light");

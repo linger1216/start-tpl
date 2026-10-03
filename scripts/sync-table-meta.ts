@@ -29,7 +29,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 
-/** 表注释(10 张表全要有) */
+/** 表注释(19 张表全要有:与 `create-system-tables.ts` 的 `TABLES` 一一对应) */
 const TABLE_COMMENTS: Record<string, string> = {
 	sys_menu: "后台菜单(侧边栏 / 面包屑 / 模块概览的运行时来源;代码里的 NAV_NODES 只是兜底)",
 	sys_dict: "系统字典(全系统共用的枚举;读写走 hooks/use-dict)",
@@ -48,6 +48,9 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
 	sys_casbin_rule: "功能权限策略(p = 角色 → 权限码;g = 用户 → 角色 / 角色 → 角色继承;见 doc/rbac-权限模型.md)",
+	sys_data_policy: "数据权限规则(谁看得到哪些行,见 src/lib/data-scope.ts)",
+	sys_data_plugin:
+		"数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 };
 
@@ -81,7 +84,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dict", column: "update_time", comment: "更新时间" },
 	// sys_para
 	{ table: "sys_para", column: "id", comment: "主键(nanoid,由代码生成)" },
-	{ table: "sys_para", column: "para_key", comment: "参数名,如 raw.retention.soft_days(表的主键)" },
+	{ table: "sys_para", column: "para_key", comment: "参数名,如 log.enabled(表的主键)" },
 	{ table: "sys_para", column: "para_value", comment: "参数值(text,不受 4000 字符列宽限制)" },
 	{ table: "sys_para", column: "para_type", comment: "类型码:1:int 2:bool 3:string 4:json(见 lib/para-spec.ts)" },
 	{ table: "sys_para", column: "para_group", comment: "分组(参数管理页按它归堆)" },
@@ -233,14 +236,50 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "demo_grid", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "demo_grid", column: "name", comment: "网格名称(片区名)" },
 	{ table: "demo_grid", column: "town_name", comment: "所属街镇(文本)" },
-	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id(展示/统计用)" },
-	{ table: "demo_grid", column: "group_id", comment: "归属组织 → sys_dept.id(策略里的 @org: 规则按它筛)" },
+	{ table: "demo_grid", column: "town_id", comment: "所属街镇 → sys_dept.id(数据权限:「我的部门及以下」按它筛)" },
 	{ table: "demo_grid", column: "owner_name", comment: "网格长姓名" },
-	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(指派给他就自动写一条按行授权)" },
+	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(数据权限:「我本人」按它筛)" },
 	{ table: "demo_grid", column: "duty", comment: "工作职务" },
 	{ table: "demo_grid", column: "remark", comment: "备注" },
 	{ table: "demo_grid", column: "create_time", comment: "创建时间" },
 	{ table: "demo_grid", column: "update_time", comment: "更新时间" },
+
+	// sys_data_policy(数据权限:规则 —— 谁看得到哪些行,见 src/lib/data-scope.ts)
+	{ table: "sys_data_policy", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_data_policy", column: "status", comment: "0 停用 / 1 上线(引擎加载)/ 2 启用(还没上线,引擎不加载)" },
+	{ table: "sys_data_policy", column: "subject", comment: "主体:* = 所有人,或 user:<id> / role:<id> / dept:<id>" },
+	{ table: "sys_data_policy", column: "resource", comment: "资源表名(如 demo_grid)" },
+	{ table: "sys_data_policy", column: "column", comment: '配"值"插件时要比的资源列;整类可见 / "整行"插件留空' },
+	{
+		table: "sys_data_policy",
+		column: "value_key",
+		comment: "从插件输出行里取哪个 key 的值去比(id / name / 自建清单的 key);留空 = 老规则按 column 推断",
+	},
+	{
+		table: "sys_data_policy",
+		column: "plugin_key",
+		comment: "值域插件 → sys_data_plugin.plugin_key(内置的见 lib/data-scope-plugins.ts)",
+	},
+	{ table: "sys_data_policy", column: "remark", comment: "备注" },
+	{ table: "sys_data_policy", column: "create_time", comment: "创建时间" },
+	{ table: "sys_data_policy", column: "update_time", comment: "更新时间" },
+
+	// sys_data_plugin(数据权限:值域插件登记 —— v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置)
+	{ table: "sys_data_plugin", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_data_plugin", column: "plugin_key", comment: "插件标识(策略行按它引用;与内置同名时以内置为准)" },
+	{ table: "sys_data_plugin", column: "label", comment: "中文名(界面上显示)" },
+	// v2 (m20034):输出值搬到 plugin 上。引擎按 value 拼 SQL 的 in(...);key 是任意字符串分类标签,
+	// 不参与 SQL 拼接 —— 引擎读规则行的 column 决定列名。
+	{
+		table: "sys_data_plugin",
+		column: "output_values",
+		comment:
+			"v2 起:指定清单 = [{key, value}]。引擎按 value 拼 SQL 的 in(...);key 是任意字符串分类标签(如 town_id / risk_level),不参与 SQL 拼接",
+	},
+	{ table: "sys_data_plugin", column: "status", comment: '1 启用 / 0 停用(停用 = 规则按"插件不可用"处理)' },
+	{ table: "sys_data_plugin", column: "remark", comment: "备注" },
+	{ table: "sys_data_plugin", column: "create_time", comment: "创建时间" },
+	{ table: "sys_data_plugin", column: "update_time", comment: "更新时间" },
 ];
 
 /**

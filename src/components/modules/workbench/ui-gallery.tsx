@@ -21,7 +21,6 @@ import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
@@ -125,7 +124,6 @@ import { cn } from "#/lib/utils";
 const MISSING_TEXT: string | null = null;
 const EMPTY_TEXT: string | null = "";
 
-/** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
 /**
  * `StatCards` 示例数据 —— 三种口径 + 三种色相,顺带展示 `unit` / `description` 的落位。
  * `Icon` 必须是 lucide 图标(`StatItem.Icon` 的类型是 `LucideIcon`)。
@@ -159,6 +157,7 @@ const DEMO_STATS: StatItem[] = [
 	},
 ];
 
+/** 一格:标题 + 说明 + 渲染区。`wide` 让它在网格里跨满整行(内容宽的例子用) */
 function Cell({
 	name,
 	hint,
@@ -222,8 +221,11 @@ export function UiGallery() {
 				<CardHeader>
 					<CardTitle className="text-sm">台账表格(完整业务页骨架)</CardTitle>
 					<CardDescription>
-						指标卡 → 快速筛选 chip → 工具条 → 批量操作条 → 表格(多选 / 排序 / 徽章 / 标签 / 数值对齐 / 行操作)→
-						分页。列定义走 <code className="font-mono">lib/table.ts</code> 的 v9 app hook,多选列与 操作列用{" "}
+						指标卡 → 快速筛选 chip → 工具条(<code className="font-mono">shared/ledger-toolbar</code>)→ 批量操作条(
+						<code className="font-mono">shared/ledger-card</code> 的 <code className="font-mono">SelectionBar</code>)→
+						表格(多选 / 排序 / 徽章 / 标签 / 数值对齐 / 行操作)→ 卡内分页 + 「匹配 N 条」卡头(
+						<code className="font-mono">shared/ledger-card</code>
+						)。列定义走 <code className="font-mono">lib/table.ts</code> 的 v9 app hook,多选列与 操作列用{" "}
 						<code className="font-mono">shared/table-kit</code> 的 <code className="font-mono">selectColumn</code> /{" "}
 						<code className="font-mono">actionsColumn</code> —— 抄这一份就够搭一个台账页。
 					</CardDescription>
@@ -379,7 +381,7 @@ export function UiGallery() {
 						<ActionButton disabled>停用(已禁用)</ActionButton>
 					</div>
 					<p className="text-xs text-muted-foreground">
-						与上面 <code className="font-mono">Button</code> 的分工:这些位置**空间很窄**(一行要并排 3~5 个),
+						与 <code className="font-mono">Button</code> 的分工:这些位置**空间很窄**(一行要并排 3~5 个),
 						所以不要图标、悬停才出下划线。主操作与对话框动作(新增 / 保存 / 确定)仍用{" "}
 						<code className="font-mono">Button</code>。
 					</p>
@@ -691,7 +693,6 @@ function ModuleGallery() {
 	const [tree, setTree] = useState(DEMO_TREE);
 	const [treeSelected, setTreeSelected] = useState<string | null>("tag-a1");
 	const [permSelected, setPermSelected] = useState<string[]>(["sys:menu"]);
-	const [toolbarSearch, setToolbarSearch] = useState("");
 	const [multiValue, setMultiValue] = useState("紧急、待审;hot");
 	const [paraInput, setParaInput] = useState("0");
 	const [paraType, setParaType] = useState<ParaType>(PARA_TYPE.INT);
@@ -713,7 +714,7 @@ function ModuleGallery() {
 					open={detailDemo}
 					onOpenChange={setDetailDemo}
 					title="示例详情 · 参数管理"
-					description="raw.retention.soft_days"
+					description="file.max_size_mb"
 					badge={
 						<>
 							<Badge variant="secondary">整数</Badge>
@@ -729,12 +730,12 @@ function ModuleGallery() {
 						<DetailRow label="ID">
 							<span className="font-mono text-xs">V1StGXR8Z5jdHi6B</span>
 						</DetailRow>
-						<DetailRow label="分组">留存策略</DetailRow>
+						<DetailRow label="分组">文件管理</DetailRow>
 						<DetailRow label="当前值">
-							<span className="tabular-nums">365</span>
+							<span className="tabular-nums">20</span>
 						</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-sm">软删除数据保留多少天</span>
+							<span className="text-sm">单个文件大小上限(MB);presign 与 confirm 两头都按它校验</span>
 						</DetailRow>
 					</div>
 					{/* 多值字段(部门 / 角色那种)用徽章列表,别拼成一串顿号分隔的文本 */}
@@ -813,19 +814,6 @@ function ModuleGallery() {
 							}
 						/>
 					</div>
-				</Cell>
-
-				<Cell name="LedgerToolbar" hint="台账工具条:搜索 + 选中态 + 批量操作 + 右侧 actions">
-					<LedgerToolbar
-						search={toolbarSearch}
-						onSearchChange={setToolbarSearch}
-						searchPlaceholder="搜索编号 / 标题"
-						actions={
-							<Button size="sm" variant="outline" onClick={() => toast.info("新增")}>
-								新增
-							</Button>
-						}
-					/>
 				</Cell>
 
 				<Cell name="IconPicker / ExcelImportDialog" hint="这两件这里只给签名 —— 理由见下" wide>
@@ -1007,7 +995,7 @@ function ModuleGallery() {
 						</div>
 						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/sys-para.ts(服务端)</div>
-							<div>getParaMap() / getParaInt() / getParaBool() / clearParaCache()</div>
+							<div>getParaMap() / getParaBool() / clearParaCache()</div>
 							<div className="font-sans text-muted-foreground">
 								带 30 秒内存缓存,同样 import 了 <code className="font-mono">#/db</code>。客户端要类型码 / 校验时从{" "}
 								<code className="font-mono">lib/para-spec</code> 取(就是上面那张卡)。
@@ -1023,7 +1011,7 @@ function ModuleGallery() {
 							<div className="font-sans font-medium text-foreground">lib/excel.ts(重依赖)</div>
 							<div>readSheetTable(buf, opts) / writeSheet(columns, rows, fileName) / cellText(v)</div>
 							<div className="font-sans text-muted-foreground">
-								依赖 <code className="font-mono">xlsx</code>;实活用法在「参数管理 / 标签管理」页的导入导出。
+								依赖 <code className="font-mono">xlsx</code>;模板里目前**没有业务调用方**(见上面那张「签名 + 指路」卡)。
 							</div>
 						</div>
 					</div>
@@ -1064,9 +1052,10 @@ function ModuleGallery() {
 						</li>
 						<li>
 							<code className="font-mono text-foreground">shared/filter-chips</code> ·{" "}
-							<code className="font-mono">pagination-control</code> · <code className="font-mono">stat-cards</code> ·{" "}
-							<code className="font-mono">table-kit</code> · <code className="font-mono">badge-list</code> ——
-							这五个已经在上面那张「台账表格(完整业务页骨架)」里带着用了一遍,不重复放。
+							<code className="font-mono">table-kit</code> ——
+							这两件已经在上面那张「台账表格(完整业务页骨架)」里带着用了一遍,不重复放;
+							<code className="font-mono">stat-cards</code> 与 <code className="font-mono">badge-list</code>{" "}
+							各有独立格子(见上面)。
 						</li>
 					</ul>
 				</Cell>

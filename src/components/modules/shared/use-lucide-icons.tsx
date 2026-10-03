@@ -106,6 +106,7 @@ import {
 	Save,
 	Scale,
 	Scan,
+	ScrollText,
 	Search,
 	Send,
 	Server,
@@ -162,8 +163,9 @@ export {
 /**
  * LucideIcon 组件 —— **按名字渲染,而不是把整个图标库搬进客户端**。
  *
- * 这里逐个显式 import 的 139 个图标,就是本模板支持的图标全集
- * (清单在 `icons-list.ts` 的 `ICON_NAMES`)。要加图标:两边各加一行,然后 `pnpm typecheck` 会立刻
+ * 这里**逐个显式 import** 的图标就是本模板支持的图标全集(清单在 `icons-list.ts` 的 `ICON_NAMES`,
+ * 两张表一一对应、数量相同 —— 别在注释里写死数量,加了图标就过期)。
+ * 要加图标:两边各加一行,然后 `pnpm typecheck` 会立刻
  * 告诉你名字写错没有(拼错 = 找不到导出,编译期就报)。
  *
  * 为什么不能写 `import * as icons from "lucide-react"`:那等于把 **1500+ 个图标全打进客户端** ——
@@ -236,6 +238,7 @@ const ICON_MAP: Record<string, React.ComponentType<LucideProps>> = {
 	Calendar,
 	Clock,
 	History,
+	ScrollText,
 	Timer,
 	Folder,
 	FolderOpen,

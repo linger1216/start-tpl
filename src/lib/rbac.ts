@@ -32,8 +32,13 @@ import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
  */
 export { PERM_FORMAT, pagePermOf, permMatches };
 
-/** `sys_menu` 的一行 */
-type MenuRow = typeof sysMenu.$inferSelect;
+/**
+ * `sys_menu` 的一行(**整行**,服务端用)。
+ *
+ * 别与 `layout/nav-menu.ts` 导出的 `MenuRow` 混:那是喂给侧边栏的**投影**
+ * (`{id,name,path,icon,type,parentId}` 那一小把),不是整行。
+ */
+type SysMenuRow = typeof sysMenu.$inferSelect;
 
 /**
  * **只要求登录、不需要菜单授权**的页面路径。
@@ -55,7 +60,7 @@ type EffectiveMenus = {
 	 *  - `null`= **权限体系已启用,但这个人没有可见菜单**(或认不到人)→ 就是什么都不显示,不要回落静态菜单
 	 *            (回落等于把全部菜单漏给他)。
 	 */
-	rows: MenuRow[] | null;
+	rows: SysMenuRow[] | null;
 	/** 权限标识集合(`perm`);`null` = 权限体系未启用 → 一律放行 */
 	perms: string[] | null;
 };
@@ -128,7 +133,7 @@ export async function canViewPath(
 /** `effectiveMenusFor` / `canViewPath` 的共同实现(一次查询同时满足两种问法,别各查一遍) */
 async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 	const all = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
-	const navigable = (rows: readonly MenuRow[]) => rows.filter((row) => Number(row.type) !== MENU_TYPE.BUTTON);
+	const navigable = (rows: readonly SysMenuRow[]) => rows.filter((row) => Number(row.type) !== MENU_TYPE.BUTTON);
 	// 菜单驱动的页面:路径以 `/` 开头(分组节点是 `#group/…`、按钮是 `#perm/…`)。
 	// `sys_menu.path` 是 not null + unique,所以这里天然不重复。
 	const pages = new Map(
@@ -244,12 +249,22 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	 * 数组 = 这些页面里**任意一个**可见就放行(读接口被多页共用;写死一个会把别的页面打死)。
 	 * 只拦"页面数据",不拦跨页面的外壳读接口(见 `UNMAPPED_QUERIES` 的理由)。
 	 */
-	// 角色(角色页 / 用户的角色指派 / 部门的人员角色)
-	"role.list": [pagePermOf("/settings/roles"), pagePermOf("/settings/users"), pagePermOf("/settings/departments")],
+	// 角色(角色页 / 用户的角色指派 / 部门的人员角色 / 数据范围规则选主体)
+	"role.list": [
+		pagePermOf("/settings/roles"),
+		pagePermOf("/settings/users"),
+		pagePermOf("/settings/departments"),
+		pagePermOf("/settings/data-scope"),
+	],
 	"role.users": pagePermOf("/settings/roles"),
 	"role.menuIds": pagePermOf("/settings/roles"),
-	// 部门(部门页 / 用户页的部门树 / 网格履职的组织筛选)
-	"department.tree": [pagePermOf("/settings/departments"), pagePermOf("/settings/users"), pagePermOf("/demo/grid")],
+	// 部门(部门页 / 用户页的部门树 / 网格履职的组织筛选 / 数据范围规则选主体)
+	"department.tree": [
+		pagePermOf("/settings/departments"),
+		pagePermOf("/settings/users"),
+		pagePermOf("/demo/grid"),
+		pagePermOf("/settings/data-scope"),
+	],
 	"department.members": pagePermOf("/settings/departments"),
 	// 字典(字典页;`dict.byCode` 是跨页面的取值器,见 UNMAPPED_QUERIES)
 	"dict.list": pagePermOf("/settings/dictionary"),
@@ -270,7 +285,101 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"demoGrid.update": "sys:grid:edit",
 	"demoGrid.remove": "sys:grid:remove",
 	"demoGrid.assign": "sys:grid:assign",
+	// 数据权限 ▸ 数据范围(整个页面是"管权限的人"的活,所以按页面 + 三个写权限点)
+	"dataScope.list": pagePermOf("/settings/data-scope"),
+	"dataScope.resources": pagePermOf("/settings/data-scope"),
+	"dataScope.plugins": pagePermOf("/settings/data-scope"),
+	"dataScope.trial": pagePermOf("/settings/data-scope"),
+	"dataScope.create": "sys:scope:add",
+	"dataScope.update": "sys:scope:edit",
+	"dataScope.remove": "sys:scope:remove",
+	// 数据权限 ▸ 值域插件(`test` 是把插件真跑一遍,和写接口一样只该超管碰 —— 见 routers/data-plugin.ts)
+	"dataPlugin.list": pagePermOf("/settings/data-plugins"),
+	"dataPlugin.test": "sys:plugin:test",
+	"dataPlugin.create": "sys:plugin:add",
+	"dataPlugin.update": "sys:plugin:edit",
+	"dataPlugin.remove": "sys:plugin:remove",
 };
+
+/**
+ * **数据权限:哪个读接口对应哪张"资源表"**(行级可见性 —— 与 `PERM_BY_PATH` 同一个思路)。
+ *
+ * 分两层管,别混:
+ *  · `PERM_BY_PATH` 管**功能** —— 能不能调这个接口(菜单勾没勾);
+ *  · 这张表管**行** —— 同一个接口,不同的人看到不同的行。
+ *
+ * 中间件(`init.ts` 的 `dataScopeMiddleware`)按 `path` 查到资源,再给 resolver 挂
+ * `ctx.scope(resource?)`。resolver 只需把返回值塞进 `where`:
+ *
+ *     const scope = await ctx.scope();                    // 默认取本 path 登记的资源
+ *     const rows = await db.select().from(sysDemoGrid).where(and(eq(…), scope));
+ *
+ * `and()` 会丢掉 `undefined` 参数(实测 `drizzle-orm/sql/expressions/conditions.js` 的
+ * `and()` 第一件事就是 `filter((c) => c !== undefined)`)⇒ **"没有规则 = 不筛选"天然成立**,
+ * 不必写 `if (scope)` 那种一旦写反就静默放行的形状。
+ *
+ * ⚠️ **`ctx.scope()` 的返回值必须进 `where`** —— 它返回 `undefined` 的含义是"不筛选",不是"没数据";
+ * 忘了塞,这条接口就没有行级过滤。`tests/auth.test.ts` 的分类守卫只能保证"这条接口被显式分类过"
+ * (落在本表 = 要做行级过滤,落在 `UNSCOPED_QUERIES` = 明确声明不做),管不到 resolver 内部 ——
+ * 所以规矩是:**读了业务表就调一次 `ctx.scope()`,别绕过**。
+ */
+export const DATA_SCOPE_BY_PATH: Record<string, { resource: string }> = {
+	// Demo 网格履职 —— v1 的第一个(也是当前唯一一个)行级资源,拿来当样板
+	"demoGrid.list": { resource: "demo_grid" },
+};
+
+/**
+ * **不做行级过滤**的读接口 —— 与 `DATA_SCOPE_BY_PATH` 二选一,同样由 `tests/auth.test.ts` 的
+ * 分类守卫强制(每个 query 必须落在这两张表之一)。
+ *
+ * 为什么不跟 `UNMAPPED_QUERIES` 合成一张:那张表管的是**权限**(要不要权限点),这张管的是**行**
+ * (要不要按部门 / 本人筛)—— 两个维度会分岔:`role.list` 要权限点(在 `PERM_BY_PATH` 里)但不筛行;
+ * 反过来 `demoGrid.list` 两个都要。合成一张就表达不了"要权限、但不筛行"这一类。
+ *
+ * 加进来必须写清属于下面哪一类:
+ *
+ * 1. **外壳级** —— 每个页面都在用,筛它会让整站打不开;
+ * 2. **全局定义 / 配置类** —— 角色、菜单、字典、参数这种"全系统一份"的数据,没有"这一行归哪个部门"这一说;
+ * 3. **天生自限范围** —— SQL 只按入参读、或只读"自己那一份";
+ * 4. **v1 还没做** —— 这些**应该**有行级口径(按部门看人 / 看日志 / 看文件),但 v1 只落了 `demo_grid`
+ *    一个样板。它们是数据权限后续的落地清单,不是"永远不做"。
+ */
+export const UNSCOPED_QUERIES: readonly string[] = [
+	// 类别 1:外壳级
+	"user.list",
+	"menu.mine",
+	"department.tree",
+	"department.members",
+	"notice.list",
+	"tag.list",
+	// 类别 2:全局定义 / 配置类
+	"menu.list",
+	"role.list",
+	"dict.list",
+	"dict.byCode",
+	"para.list",
+	"para.byKey",
+	// 类别 2:数据权限自己的配置 —— 规则 / 插件 / 资源元数据是"全系统一份",不存在"这一行归谁看"
+	"dataScope.list",
+	"dataScope.resources",
+	"dataScope.plugins",
+	// 类别 2 —— 试用页的只读诊断:它算的就是"**指定的人**看得到哪些行",本身不该再被同一套规则筛一遍
+	"dataScope.trial",
+	"dataPlugin.list",
+	"dataPlugin.test",
+	// 类别 3:天生自限范围(按入参读 / 只读自己那一份)
+	"role.users",
+	"role.menuIds",
+	"user.roles",
+	"file.url",
+	"tag.objectIdsOfTag",
+	"tag.tagIdsOfObject",
+	"tag.objectsOfTag",
+	"tag.tagsOfObject",
+	// 类别 4:v1 还没做 —— 后续要按部门 / 本人筛
+	"file.list",
+	"log.list",
+];
 
 /**
  * **只要求登录、不需要权限点**的写接口。

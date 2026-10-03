@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Check, FileText, HardDrive, Plus, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -14,8 +13,9 @@ import {
 import { FileDropzone } from "#/components/ui/file-dropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useFileUpload } from "#/hooks/use-file-upload";
-import { useTRPC } from "#/integrations/trpc/react";
+import { useParaRaw } from "#/hooks/use-para-prefs";
 import { formatBytes } from "#/lib/format";
+import { FILE_ALLOW_EXT_DEFAULT, FILE_MAX_SIZE_MB_DEFAULT } from "#/lib/para-spec";
 
 /**
  * 上传文件(**支持一次多个 + 秒传**)—— 具体链路在 `hooks/use-file-upload` 里,这里只排队列与展示状态。
@@ -61,21 +61,21 @@ export function SettingsFilesUpload({
 	onOpenChange: (next: boolean) => void;
 	onDone: () => void;
 }) {
-	const trpc = useTRPC();
 	const { upload } = useFileUpload();
 	const [items, setItems] = useState<QueueItem[]>([]);
 	const [kind, setKind] = useState<"public" | "private">("private");
 	const [busy, setBusy] = useState(false);
 
-	// 策略来自参数管理(与后端读的是同一份默认值,不会两处漂移)
-	const allowExt = useQuery({ ...trpc.para.byKey.queryOptions({ key: "file.allow_ext" }) });
-	const maxSize = useQuery({ ...trpc.para.byKey.queryOptions({ key: "file.max_size_mb" }) });
-	const extList = (allowExt.data?.value ?? "jpg,jpeg,png,gif,webp,pdf,xlsx,docx")
+	// 策略来自参数管理。兜底值与后端 `readPolicy()`、参数管理页的 `PARA_DEFAULTS` 共用
+	// `lib/para-spec.ts` 里那两份常量 —— 三处各写一遍字面量的年代已经过去了。
+	const allowExt = useParaRaw("file.allow_ext");
+	const maxSize = useParaRaw("file.max_size_mb");
+	const extList = (allowExt || FILE_ALLOW_EXT_DEFAULT)
 		.split(",")
 		.map((v) => v.trim())
 		.filter(Boolean);
 	const accept = extList.map((ext) => `.${ext}`).join(",");
-	const maxSizeMb = Number(maxSize.data?.value ?? 20);
+	const maxSizeMb = Number(maxSize || FILE_MAX_SIZE_MB_DEFAULT);
 
 	const working = busy || items.some((item) => item.status === "doing");
 	const waiting = items.filter((item) => item.status === "wait" || item.status === "error");
@@ -262,7 +262,7 @@ export function SettingsFilesUpload({
 							清空已完成
 						</Button>
 					) : null}
-					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={working}>
+					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={working}>
 						取消
 					</Button>
 					<Button onClick={() => void handleUpload()} disabled={working || waiting.length === 0}>

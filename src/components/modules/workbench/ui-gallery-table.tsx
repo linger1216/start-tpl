@@ -1,17 +1,17 @@
-import { Download, Plus, Search } from "lucide-react";
+import { Download, ListChecks, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ActiveFilterPills, FilterChipBar } from "#/components/modules/shared/filter-chips";
-import { PaginationControl } from "#/components/modules/shared/pagination-control";
+import { LedgerCard, SelectionBar } from "#/components/modules/shared/ledger-card";
+import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { actionsColumn, DataTable, selectColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, selectColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { createAppColumnHelper, useAppTable, useRowSelection } from "#/lib/table";
 
@@ -23,6 +23,8 @@ import { createAppColumnHelper, useAppTable, useRowSelection } from "#/lib/table
  * 批量操作条(仅选中时出现)→ 表格(多选 / 排序 / 徽章 / 标签 / 数值右对齐 / 行操作)→ 分页行。
  *
  * 抄这一份就够了,里面没有"为了演示而演示"的写法:
+ *  - 工具条走 `shared/ledger-toolbar`、卡壳走 `shared/ledger-card`、批量条走同文件的 `SelectionBar`
+ *    (与 9 个真实台账页逐字同形):搜索 / 刷新 / 列 / 导出 / 新增 这一行、以及「卡内表格 + 分页」这一层都别手搓;
  *  - 列定义走 `createAppColumnHelper`(`lib/table.ts` 的 v9 app hook),`sortFn: "text"` 是
  *    在 `lib/table.ts` 里注册过的字符串名;
  *  - 多选列 / 操作列用 `table-kit` 的 `selectColumn` / `actionsColumn`,别手写;
@@ -171,9 +173,6 @@ export function UiGalleryTable() {
 		[],
 	);
 
-	const pageIndex = table.state.pagination.pageIndex;
-	const pageSize = table.state.pagination.pageSize;
-
 	return (
 		<div className="space-y-3">
 			<StatCards items={stats} />
@@ -214,69 +213,49 @@ export function UiGalleryTable() {
 				}}
 			/>
 
-			{/* 工具条:左搜索、右操作组 —— **在卡片外面**,搜索不该被卡片边框圈起来 */}
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<div className="relative">
-					<Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						value={keyword}
-						onChange={(event) => setKeyword(event.target.value)}
-						placeholder="搜索编号 / 名称 / 负责人 / 标签…"
-						className="h-8 w-72 pl-8"
-					/>
-				</div>
-				<div className="flex items-center gap-2">
-					<RefreshButton onClick={() => toast.success("已刷新", { description: "示例数据" })} />
-					<ColumnToggle table={table} />
-					<ActionButton onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}>导出</ActionButton>
-					<Button size="sm" onClick={() => toast.info("新增", { description: "示例:这里打开表单弹窗" })}>
-						<Plus className="size-3.5" />
-						新增
-					</Button>
-				</div>
-			</div>
+			{/* 工具条:左搜索、右操作组 —— **在卡片外面**,搜索不该被卡片边框圈起来。
+			    整行走 shared/ledger-toolbar(8 个台账页同款),别在这里手搓一份 */}
+			<LedgerToolbar
+				search={keyword}
+				onSearchChange={(value) => {
+					setKeyword(value);
+					// 搜索词变了就回第一页,否则容易停在一个空页上(共享件的约定)
+					table.setPageIndex(0);
+				}}
+				searchPlaceholder="搜索编号 / 名称 / 负责人 / 标签…"
+				actions={
+					<>
+						<RefreshButton onClick={() => toast.success("已刷新", { description: "示例数据" })} />
+						<ColumnToggle table={table} />
+						<ActionButton onClick={() => toast.info("导出", { description: "示例:接 ledger-excel" })}>
+							导出
+						</ActionButton>
+						<Button size="sm" onClick={() => toast.info("新增", { description: "示例:这里打开表单弹窗" })}>
+							<Plus className="size-3.5" />
+							新增
+						</Button>
+					</>
+				}
+			/>
 
-			<section className="rounded-xl border border-border bg-card shadow-raise-1">
-				{/* 批量操作条:只在选中时出现,并且长在表格正上方(动作与选择对象挨着) */}
-				{selected.size > 0 ? (
-					<div className="flex items-center justify-between gap-3 border-b border-border bg-brand-faint px-3.5 py-2">
-						<span className="text-xs text-foreground">
-							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
-							<span className="ml-2 text-muted-foreground">
-								(
-								{selectedRows
-									.map((row) => row.code)
-									.slice(0, 3)
-									.join("、")}
-								{selected.size > 3 ? " …" : ""})
-							</span>
-						</span>
-						<div className="flex items-center gap-2">
-							{/* 这里原来是个手写的原生按钮 —— 统一走 ActionButton(同一套文字按钮样式) */}
-							<ActionButton onClick={clear}>清空选择</ActionButton>
-							<ActionButton tone="danger" onClick={() => setPendingDelete(true)}>
-								批量删除
-							</ActionButton>
-						</div>
-					</div>
-				) : null}
-
-				<DataTable
-					table={table}
-					emptyText="这条筛选下没有台账"
-					rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
-				/>
-
-				<div className="border-t border-border px-3.5 py-1">
-					<PaginationControl
-						page={pageIndex + 1}
-						pageSize={pageSize}
-						total={table.getFilteredRowModel().rows.length}
-						onPageChange={(next) => table.setPageIndex(next - 1)}
-						onPageSizeChange={(next) => table.setPageSize(next)}
-					/>
-				</div>
-			</section>
+			{/* 卡内表格 + 分页:走 shared/ledger-card,与 9 个真实台账页同形(含卡头「匹配 N 条」) */}
+			<LedgerCard
+				title="台账清单"
+				Icon={ListChecks}
+				count={table.getFilteredRowModel().rows.length}
+				busy={false}
+				emptyText="这条筛选下没有台账"
+				table={table}
+				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
+			>
+				{/* 批量操作条:只在选中时出现,长在表格正上方(动作与选择对象挨着) */}
+				<SelectionBar count={selected.size} unit="条" names={selectedRows.map((row) => row.code)}>
+					<ActionButton onClick={clear}>清空选择</ActionButton>
+					<ActionButton tone="danger" onClick={() => setPendingDelete(true)}>
+						批量删除
+					</ActionButton>
+				</SelectionBar>
+			</LedgerCard>
 
 			<ConfirmDialog
 				open={pendingDelete}

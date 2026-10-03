@@ -14,9 +14,6 @@ import {
 import { toApiError } from "#/lib/api/error";
 import { type ImportField, type ImportResult, type ImportRow, writeTemplate } from "#/lib/excel";
 
-// 类型已归拢到 lib/excel;此处 re-export 保持既有 import 路径兼容
-export type { ImportField, ImportResult, ImportRow };
-
 type Parsed = {
 	rows: ImportRow[];
 	warnings: string[];

@@ -186,7 +186,7 @@ export function ActiveFilterPills({
 						type="button"
 						aria-label={`移除「${item.groupLabel}:${item.value}」`}
 						onClick={() => onRemove(item.key)}
-						className="cursor-pointer rounded-full p-0.5 transition-colors hover:bg-black/10"
+						className="cursor-pointer rounded-full p-0.5 transition-colors hover:bg-hover"
 					>
 						<X className="size-3" />
 					</button>

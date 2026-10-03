@@ -1,10 +1,9 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cog, Plus, SlidersHorizontal, Timer } from "lucide-react";
+import { Cog, Plus, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsParametersCleanup } from "#/components/modules/settings/settings-parameters-cleanup";
 import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
 import {
 	type ParameterFormPayload,
@@ -24,12 +23,10 @@ import { toApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
- * 系统设置 ▸ 参数管理 —— 运维口径不写死在代码里。
+ * 系统设置 ▸ 参数管理 —— 运维口径与界面偏好不写死在代码里。
  *
- * 现在这里管两类东西:
- * - **raw 保留**:已抽取的数据保留多久软删、软删后再多久物理删、每批清理多少行;
- * - **对接同步**:定时同步开关(默认关)、间隔、增量窗口重叠秒数。
- * 参数值改了**下一趟任务生效**,不需要重新发版。
+ * 页面**只展示数据库里的参数行**(`sys_para`)加代码内置默认值,不附带任何"后台任务"入口。
+ * 每条参数被谁读、读来干什么,看 `lib/sys-para.ts` 的 `PARA_DEFAULTS` 注释。
  *
  * 支持**完整 CRUD**:新增(指定类型 / 分组 / 说明)、修改(按类型校验)、删除(回到默认值或彻底消失)。
  * 类型含 string / int / bool / json / array / map,json 类用多行 JSON 文本录入。
@@ -53,7 +50,7 @@ export function SettingsParametersPage() {
 			onSuccess: async (outcome) => {
 				await queryClient.invalidateQueries(trpc.para.pathFilter());
 				setEditing(null);
-				toast.success(`已保存 ${outcome.key}`, { description: `新值:${outcome.value};下一趟任务生效。` });
+				toast.success(`已保存 ${outcome.key}`, { description: `新值:${outcome.value}` });
 			},
 			onError: (error) => toast.error(toApiError(error).message),
 		}),
@@ -64,7 +61,7 @@ export function SettingsParametersPage() {
 			onSuccess: async (outcome) => {
 				await queryClient.invalidateQueries(trpc.para.pathFilter());
 				setCreating(false);
-				toast.success(`已新增参数 ${outcome.key}`, { description: "下一趟任务生效。" });
+				toast.success(`已新增参数 ${outcome.key}`);
 			},
 			onError: (error) => toast.error(toApiError(error).message),
 		}),
@@ -152,14 +149,6 @@ export function SettingsParametersPage() {
 				tone: "bg-hue-amber-soft text-hue-amber-fg",
 				unit: "条",
 			},
-			{
-				key: "sync",
-				label: "定时同步",
-				value: rows.find((row) => row.key === "sync.enabled")?.value === "true" ? "已开启" : "已关闭",
-				description: "默认关闭:先手动跑通再打开",
-				Icon: Timer,
-				tone: "bg-hue-teal-soft text-hue-teal-fg",
-			},
 		],
 		[rows],
 	);
@@ -168,7 +157,7 @@ export function SettingsParametersPage() {
 		<PageFrame>
 			<PageHeader
 				title="参数管理"
-				description="系统设置 ▸ 参数管理:raw 保留策略(软删 / 物理删)与对接同步开关都在这儿调。支持字符串 / 整数 / 开关 / JSON / 数组 / 映射六种类型,参数改了下一趟任务生效,不需要发版。"
+				description="系统设置 ▸ 参数管理:这里只展示数据库里的参数行(库里没有的按代码内置默认值展示)。支持字符串 / 整数 / 开关 / JSON / 数组 / 映射六种类型,改动即时写库。"
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
 						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
@@ -187,8 +176,6 @@ export function SettingsParametersPage() {
 			/>
 
 			<StatCards items={stats} />
-
-			<SettingsParametersCleanup />
 
 			<LedgerToolbar
 				search={keyword}

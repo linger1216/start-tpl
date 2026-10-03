@@ -22,6 +22,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysDept, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { allUserRoles } from "#/lib/casbin";
+import { clearDeptCache } from "#/lib/data-scope-plugins";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -114,6 +115,8 @@ export const departmentRouter = createTRPCRouter({
 				create_time: new Date(),
 				update_time: new Date(),
 			});
+			// 部门树变了 ⇒ 数据权限的部门链缓存立刻作废(否则 30 秒内算出来的可见范围还是旧的)
+			clearDeptCache();
 			return toDepartment(await getDepartmentRow(id));
 		}),
 
@@ -147,6 +150,8 @@ export const departmentRouter = createTRPCRouter({
 					update_time: new Date(),
 				})
 				.where(eq(sysDept.id, input.id));
+			// 改名 / 换父级都会变数据权限的部门链 ⇒ 缓存作废
+			clearDeptCache();
 			return toDepartment(await getDepartmentRow(input.id));
 		}),
 
@@ -201,6 +206,8 @@ export const departmentRouter = createTRPCRouter({
 			});
 		}
 		await db.delete(sysDept).where(eq(sysDept.id, input.id));
+		// 部门没了 ⇒ 数据权限的部门链缓存作废
+		clearDeptCache();
 		return { success: true };
 	}),
 

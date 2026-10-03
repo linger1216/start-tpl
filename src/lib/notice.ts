@@ -2,6 +2,7 @@ import { db } from "#/db";
 import { sysNotice } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { logger } from "#/lib/logger";
+import type { NoticeLevel } from "#/lib/notice-levels";
 
 /**
  * 站内通知的**发送侧**(服务端专用)。
@@ -13,8 +14,12 @@ import { logger } from "#/lib/logger";
  * 与 `lib/audit.ts` 的 `writeAudit` 同一个立场:**绝不抛** —— 通知失败不能影响业务。
  */
 
-/** 级别决定图标与颜色(走 DESIGN 的语义色:`info` 中性 / `success` / `warn` / `danger`) */
-export type NoticeLevel = "info" | "success" | "warn" | "danger";
+/**
+ * 级别词表(`NOTICE_LEVELS` / 图标 / 长短标签)的**唯一真源**在 client-safe 的
+ * `#/lib/notice-levels` —— 这里只转发类型,保持 `#/lib/notice` 这个既有引用路径不变
+ * (本文件 import 了 `#/db`,客户端不能引它,要词表请直接引 `#/lib/notice-levels`)。
+ */
+export type { NoticeLevel };
 
 type NoticePayload = {
 	title: string;

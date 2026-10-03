@@ -24,7 +24,7 @@
  */
 import dmdb from "dmdb";
 
-import { log } from "#/lib/logger";
+import { logger } from "#/lib/logger";
 import { type DmPreparedQueryHKT, type DmQueryResultHKT, drizzleDm } from "./session";
 import { bindDmExec, type DmPool } from "./translate";
 
@@ -50,13 +50,13 @@ function withLoginEncryptDefault(url: string): string {
 	const explicit = url.match(/[?&]loginEncrypt=([^&]*)/i);
 	if (explicit) {
 		if (/^(true|1|yes)$/i.test(explicit[1] ?? "")) {
-			log("warn", "dm.login_encrypt_on", {
+			logger.warn("dm.login_encrypt_on", {
 				hint: "开着登录加密需要 NODE_OPTIONS=--openssl-legacy-provider(DES-CFB 属 legacy 算法);先跑 `pnpm check:legacy` 确认当前 Node 支不支持,否则连接会静默挂住",
 			});
 		}
 		return url;
 	}
-	log("info", "dm.login_encrypt_defaulted", {
+	logger.info("dm.login_encrypt_defaulted", {
 		hint: "URL 未指定 loginEncrypt,自动按 false 处理(避开 OpenSSL 3 的 DES 限制)",
 	});
 	return `${url}${url.includes("?") ? "&" : "?"}loginEncrypt=false`;
@@ -71,7 +71,7 @@ export function createDmDatabase<TFullSchema extends Record<string, unknown> = R
 	parseDmUrl(config.url); // 只做格式校验
 	if (!/[?&]schema=/i.test(config.url) && !warnedMissingSchema) {
 		warnedMissingSchema = true;
-		log("warn", "dm.no_schema_param", {
+		logger.warn("dm.no_schema_param", {
 			hint: "URL 没带 ?schema=<模式>;表不在登录用户的默认模式下时会报「无效的表或视图名」。表在 eg 模式就写 ?schema=eg",
 		});
 	}

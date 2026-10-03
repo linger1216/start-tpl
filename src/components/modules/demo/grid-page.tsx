@@ -9,7 +9,7 @@ import { GridForm, type GridFormPayload, type Option } from "#/components/module
 import { type GridRow, gridColumns } from "#/components/modules/demo/grid-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { LedgerCard } from "#/components/modules/shared/ledger-card";
+import { LedgerCard, SelectionBar } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { ActionButton } from "#/components/ui/action-button";
@@ -37,7 +37,7 @@ import { matchKeyword, useRowSelection } from "#/lib/table";
  *
  * 三种身份看到的东西不一样(这就是这一页存在的意义):
  *  · **队员**(`self`) 只看得到 `owner_id = 自己` 的网格;
- *  · **队长**(`dept_below`) 看得到**本网格组及以下**(`group_id IN (…)`,覆盖整个街镇);
+ *  · **队长**(`dept_below`) 看得到**整个街镇及以下**(`town_id IN (…)`);
  *  · **区**(`all`)    看得到全部。
  *
  * 右上角的「切换用户」可以直接换身份看效果(`sys:user:impersonate`)。
@@ -134,35 +134,6 @@ export function GridPage() {
 			}),
 		);
 	}, [deptsQuery.data]);
-
-	/**
-	 * 「归属组织」候选 = 所选街镇的**直接子部门里,真有人挂着的那些**(演示数据里就是「××网格组」)。
-	 *
-	 * 这一列只用于**展示与筛选**,与可见性无关;候选仍只取「有人挂着的子部门」,
-	 * 是为了让演示数据里「街镇 → 网格组 → 人 → 角色」这条链对得上 ——
-	 * 一个都没人挂时(新库 / 还没挂人)退回全部子部门,否则第一条网格没得选。
-	 */
-	const groupOptionsOf = useCallback(
-		(townId: string): Option[] => {
-			const children = (deptsQuery.data ?? []).filter(
-				(dept: { parentId: string | null }) => townId !== "" && dept.parentId === townId,
-			);
-			const staffed = new Set((usersQuery.data ?? []).flatMap((user) => user.departmentIds));
-			const units = children.filter((dept: { id: string }) => staffed.has(dept.id));
-			return (units.length > 0 ? units : children).map((dept: { id: string; name: string }) => ({
-				value: dept.id,
-				label: dept.name,
-			}));
-		},
-		[deptsQuery.data, usersQuery.data],
-	);
-
-	/** `group_id` → 名字(详情里显示"归属组织") */
-	const groupNameOf = useCallback(
-		(groupId: string | null) =>
-			groupId ? ((deptsQuery.data ?? []).find((dept: { id: string }) => dept.id === groupId)?.name ?? groupId) : null,
-		[deptsQuery.data],
-	);
 
 	const { selected, selectedRows, toggleOne, toggleMany, clear } = useRowSelection(filtered);
 
@@ -265,30 +236,15 @@ export function GridPage() {
 				table={table}
 				rowClassName={(row) => (selected.has(row.id) ? "bg-brand-faint" : undefined)}
 			>
-				{selected.size > 0 ? (
-					<div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-border bg-brand-faint px-3 py-2">
-						<span className="text-xs text-foreground">
-							已选 <span className="font-semibold tabular-nums">{selected.size}</span> 条
-							<span className="ml-2 text-muted-foreground">
-								(
-								{selectedRows
-									.map((row) => row.name)
-									.slice(0, 3)
-									.join("、")}
-								{selected.size > 3 ? " …" : ""})
-							</span>
-						</span>
-						<div className="flex items-center gap-2">
-							<ActionButton onClick={clear}>清空选择</ActionButton>
-							{canAssign ? <ActionButton onClick={() => setAssignOpen(true)}>批量指派负责人</ActionButton> : null}
-							{canRemove ? (
-								<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
-									批量删除
-								</ActionButton>
-							) : null}
-						</div>
-					</div>
-				) : null}
+				<SelectionBar count={selected.size} unit="条" names={selectedRows.map((row) => row.name)}>
+					<ActionButton onClick={clear}>清空选择</ActionButton>
+					{canAssign ? <ActionButton onClick={() => setAssignOpen(true)}>批量指派负责人</ActionButton> : null}
+					{canRemove ? (
+						<ActionButton tone="danger" onClick={() => setPendingDelete(selectedRows)}>
+							批量删除
+						</ActionButton>
+					) : null}
+				</SelectionBar>
 			</LedgerCard>
 
 			<GridForm
@@ -302,7 +258,6 @@ export function GridPage() {
 				pending={createMutation.isPending || updateMutation.isPending}
 				editing={editing}
 				townOptions={townOptions}
-				groupOptionsOf={groupOptionsOf}
 				userOptions={userOptions}
 				onSubmit={formPayload}
 			/>
@@ -375,7 +330,6 @@ export function GridPage() {
 				{viewing ? (
 					<>
 						<DetailRow label="所属街镇">{viewing.townName ?? "—"}</DetailRow>
-						<DetailRow label="归属组织">{groupNameOf(viewing.groupId) ?? "—"}</DetailRow>
 						<DetailRow label="网格名称(片区)">{viewing.name}</DetailRow>
 						<DetailRow label="网格长(Excel)">{viewing.ownerName ?? "—"}</DetailRow>
 						<DetailRow label="负责人(系统账号)">{ownerNameOf(viewing.ownerId) ?? "未指派"}</DetailRow>

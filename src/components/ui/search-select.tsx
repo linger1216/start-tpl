@@ -10,20 +10,17 @@ export type SearchSelectOption<T extends string = string> = {
 };
 
 /**
- * 过滤引擎(唯一实现):label 必搜,value 可选(matchValue)。
+ * 过滤引擎(唯一实现):label 与 value 都参与匹配。
  */
 function useOptionSearch<T extends string>(
 	options: readonly SearchSelectOption<T>[],
 	query: string,
-	matchValue: boolean,
 ): SearchSelectOption<T>[] {
 	return useMemo(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return options as SearchSelectOption<T>[];
-		return options.filter(
-			(o) => o.label.toLowerCase().includes(q) || (matchValue && o.value.toLowerCase().includes(q)),
-		);
-	}, [options, query, matchValue]);
+		return options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
+	}, [options, query]);
 }
 
 /**
@@ -41,11 +38,7 @@ export function SearchSelect<T extends string = string>({
 	options,
 	placeholder = "请选择",
 	emptyText = "无匹配选项",
-	triggerClassName,
-	inputClassName,
-	listClassName,
 	align = "start",
-	maxHeight = 288,
 	disabled = false,
 	loading = false,
 }: {
@@ -54,11 +47,7 @@ export function SearchSelect<T extends string = string>({
 	options: SearchSelectOption<T>[];
 	placeholder?: string;
 	emptyText?: string;
-	triggerClassName?: string;
-	inputClassName?: string;
-	listClassName?: string;
 	align?: "start" | "end";
-	maxHeight?: number;
 	disabled?: boolean;
 	loading?: boolean;
 }) {
@@ -66,7 +55,7 @@ export function SearchSelect<T extends string = string>({
 	const [query, setQuery] = useState("");
 	const [highlight, setHighlight] = useState(0);
 
-	const filtered = useOptionSearch(options, query, true);
+	const filtered = useOptionSearch(options, query);
 	const selected = options.find((o) => o.value === value);
 
 	function pick(v: T) {
@@ -108,8 +97,7 @@ export function SearchSelect<T extends string = string>({
 				aria-disabled={disabled}
 				className={cn(
 					"flex h-8 items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
-					disabled ? "cursor-not-allowed opacity-50" : "hover:border-foreground/50 hover:text-foreground",
-					triggerClassName,
+					disabled ? "cursor-not-allowed opacity-50" : "hover:border-ring/60 hover:text-foreground",
 				)}
 			>
 				<span className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.label ?? placeholder}</span>
@@ -127,8 +115,8 @@ export function SearchSelect<T extends string = string>({
 
 			<PopoverContent
 				align={align}
-				className={cn("flex w-(--anchor-width) flex-col overflow-hidden p-0", listClassName)}
-				style={{ maxHeight }}
+				className="flex w-(--anchor-width) flex-col overflow-hidden p-0"
+				style={{ maxHeight: 288 }}
 			>
 				<div className="relative shrink-0 border-b border-border p-1.5">
 					<Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -142,10 +130,7 @@ export function SearchSelect<T extends string = string>({
 						}}
 						onKeyDown={onInputKeyDown}
 						placeholder="搜索…"
-						className={cn(
-							"h-7 w-full rounded-lg border border-input bg-background pr-2 pl-7 text-sm outline-none",
-							inputClassName,
-						)}
+						className="h-7 w-full rounded-lg border border-input bg-background pr-2 pl-7 text-sm outline-none"
 					/>
 				</div>
 

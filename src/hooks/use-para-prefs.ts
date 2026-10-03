@@ -15,22 +15,20 @@ import type { MockRow, useAppTable } from "#/lib/table";
  */
 
 /** 参数管理里的键(值是一段 JSON,见下方的结构) */
-export const PAGE_COLUMNS_KEY = "page.columns";
+const PAGE_COLUMNS_KEY = "page.columns";
 /** 参数管理里的键(值是一段 JSON,形状见下) */
-export const PAGE_TREE_KEY = "page.tree";
+const PAGE_TREE_KEY = "page.tree";
 /** 参数管理里的键(值是每页条数,见 `lib/sys-para.ts` 的 `PARA_DEFAULTS`) */
 export const PAGE_SIZE_KEY = "page.size";
 /** 参数缺失 / 填坏时的落点 —— 与 `PARA_DEFAULTS` 里的默认值保持一致 */
-export const PAGE_SIZE_FALLBACK = 20;
+const PAGE_SIZE_FALLBACK = 20;
 
 /** 单个页面的列偏好:顺序 + 隐藏列 */
-export type PageColumnPrefs = { order: string[]; hidden: string[] };
+type PageColumnPrefs = { order: string[]; hidden: string[] };
 /** 整段 JSON 的形状:页面标识 → 该页的列偏好 */
-export type PageColumnsMap = Record<string, PageColumnPrefs>;
+type PageColumnsMap = Record<string, PageColumnPrefs>;
 /** 单个页面记下的"展开到哪" —— 已展开节点的 id */
-export type PageTreePrefs = { expanded: string[] };
-/** 整段 JSON 的形状:页面标识 → 该页的树展开态 */
-export type PageTreeMap = Record<string, PageTreePrefs>;
+type PageTreePrefs = { expanded: string[] };
 
 /**
  * 解析一段「页面标识 → 偏好」的 JSON 对象。
@@ -50,13 +48,8 @@ function parsePageRecord<T>(raw: string | null | undefined): Record<string, T> {
 }
 
 /** 解析 `page.columns` 的值。 */
-export function parsePageColumns(raw: string | null | undefined): PageColumnsMap {
+function parsePageColumns(raw: string | null | undefined): PageColumnsMap {
 	return parsePageRecord<PageColumnPrefs>(raw);
-}
-
-/** 解析 `page.tree` 的值。 */
-export function parsePageTree(raw: string | null | undefined): PageTreeMap {
-	return parsePageRecord<PageTreePrefs>(raw);
 }
 
 /**
@@ -70,8 +63,13 @@ export function parsePageSize(raw: string | null | undefined): number {
 	return (PAGE_SIZES as readonly number[]).includes(value) ? value : PAGE_SIZE_FALLBACK;
 }
 
-/** 读 `sys_para` 某个键的原始串;`undefined` = 还没读到 */
-function useParaRaw(key: string): string | undefined {
+/**
+ * 读 `sys_para` 某个键的原始串;`undefined` = 还没读到。
+ *
+ * 导出给「只读一个键、不需要写回」的调用方(如侧边栏的收起形态)——
+ * 别再手写一份 `useQuery(trpc.para.byKey...)`:那会多出第三条读路径。
+ */
+export function useParaRaw(key: string): string | undefined {
 	const trpc = useTRPC();
 	const query = useQuery(trpc.para.byKey.queryOptions({ key }));
 	return query.data?.value;

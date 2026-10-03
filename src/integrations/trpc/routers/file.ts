@@ -19,6 +19,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysFile } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
+import { FILE_ALLOW_EXT_DEFAULT, FILE_MAX_SIZE_MB_DEFAULT } from "#/lib/para-spec";
 import { bucketFor, buildObjectKey, getStorage, isPublicBucket, publicUrlOf } from "#/lib/storage";
 import { getParaMap } from "#/lib/sys-para";
 import { createTRPCRouter, protectedProcedure } from "../init";
@@ -35,17 +36,17 @@ function extOf(name: string): string {
 		.toLowerCase();
 }
 
-/** 读上传策略(参数化,界面改参数即生效;读不到就用兜底值) */
+/** 读上传策略(参数化,界面改参数即生效;读不到就用 `para-spec.ts` 里那份兜底值) */
 async function readPolicy() {
 	const map = await getParaMap();
-	const maxMb = Number(map.get("file.max_size_mb") ?? 20);
+	const maxMb = Number(map.get("file.max_size_mb") ?? FILE_MAX_SIZE_MB_DEFAULT);
 	const allowExt = (map.get("file.allow_ext") ?? "")
 		.split(",")
 		.map((item) => item.trim().toLowerCase())
 		.filter(Boolean);
 	return {
 		maxBytes: Math.max(1, maxMb) * 1024 * 1024,
-		allowExt: allowExt.length > 0 ? allowExt : ["jpg", "jpeg", "png", "gif", "webp", "pdf", "xlsx", "docx"],
+		allowExt: allowExt.length > 0 ? allowExt : FILE_ALLOW_EXT_DEFAULT.split(","),
 	};
 }
 

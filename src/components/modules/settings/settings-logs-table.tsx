@@ -1,7 +1,6 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /** 与 `trpc.log.list` 的出参一一对应(`sys_log` 的列,一个不少) */
 export type LogRow = {
@@ -27,16 +26,12 @@ const columnHelper = createAppColumnHelper<LogRow>();
 /**
  * 审计日志的列定义 —— **只读台账**。
  *
- * 行操作只有「详情」:审计表是**只增不改**的,没有编辑 / 删除入口(清理按 `log.retention_days`
- * 交给定时任务)。这与文件管理页"行内三四个动作"不同,是刻意的。
+ * 行操作只有「详情」:审计表是**只增不改**的,没有编辑 / 删除入口(清理策略由使用方自行决定)。
+ * 这与文件管理页"行内三四个动作"不同,是刻意的。
  */
 export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 	return columnHelper.columns([
-		columnHelper.accessor("createTime", {
-			header: "时间",
-			size: 150,
-			cell: (ctx) => <span className="tabular-nums text-xs">{formatLocalMinute(ctx.getValue())}</span>,
-		}),
+		timeColumn<LogRow>("createTime", { header: "时间" }),
 		columnHelper.accessor("label", {
 			header: "动作",
 			size: 130,

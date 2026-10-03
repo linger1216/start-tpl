@@ -125,11 +125,14 @@ export function collectLogs(): { lines: LogLine[]; restore: () => void } {
 }
 
 /**
- * 统一打日志入口。**保留名最后盖**:调用方在 `fields` 里塞了 `ts/level/event` 时,
+ * 统一打日志入口 —— **故意不导出**:对外只有下面 `logger.debug/info/warn/error` 一个面,
+ * 免得出现"两个都能打日志的 API、调用方各写一半"的分叉(历史上确实同时存在过)。
+ *
+ * **保留名最后盖**:调用方在 `fields` 里塞了 `ts/level/event` 时,
  * 我们先把它们剥掉再交给 pino,防止覆盖 pino / base 写进去的标准字段(实测踩过:
  * 认证端点想记 `auth.ok`,入参里的 `event: "auth.sign_in"` 把日志自己的事件名顶掉了)。
  */
-export function log(level: LogLevel, event: string, fields: LogFields = {}): void {
+function log(level: LogLevel, event: string, fields: LogFields = {}): void {
 	if (envSilent()) return;
 	const {
 		ts: _t,

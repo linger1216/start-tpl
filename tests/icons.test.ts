@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { NAV_ICON_MAP, NAV_NODES } from "../src/components/layout/nav-config.ts";
+import { NAV_ICON_MAP, NAV_NODES, type NavNode } from "../src/components/layout/nav-config.ts";
 import {
 	ICON_KEYS,
 	ICON_NAMES,
@@ -20,9 +20,26 @@ import {
 	toKebabCase,
 } from "../src/components/modules/shared/icons-list.ts";
 
+/** 把导航树摊平成所有节点(含子树)—— 只查顶层会漏掉整棵子树的图标。 */
+function flattenNav(nodes: readonly NavNode[]): NavNode[] {
+	return nodes.flatMap((node) => [node, ...flattenNav(node.children ?? [])]);
+}
+
 test("导航节点的每个 icon 都能解析到清单里", () => {
-	const missing = NAV_NODES.map((node) => node.icon as string).filter((name) => resolveLucideIconKey(name) === null);
+	const missing = flattenNav(NAV_NODES)
+		.map((node) => node.icon as string)
+		.filter((name) => resolveLucideIconKey(name) === null);
 	assert.deepEqual(missing, [], `这些导航图标不在 ICON_NAMES 里:${missing.join(", ")}`);
+});
+
+test("NAV_NODES 用到的图标必须都已登记在 NAV_ICON_MAP 里", () => {
+	// 这条是补的空子:`NavIcon` 本身说明不了问题 —— 一旦 `NAV_ICON_MAP` 被加上
+	// `Record<string, …>` 之类的宽标注,`keyof` 就退化成 `string`,
+	// 拼错的图标名既过得了 typecheck,也过得了上面那条 ICON_NAMES 断言
+	// (`bell` / `grid-3x3` / `scroll-text` 曾经就这么漏了三个,界面上静默退了兜底图标)。
+	const used = new Set(flattenNav(NAV_NODES).map((node) => node.icon as string));
+	const missing = [...used].filter((name) => !(name in NAV_ICON_MAP));
+	assert.deepEqual(missing, [], `这些导航图标没登记进 NAV_ICON_MAP,界面上会静默退回兜底图标:${missing.join(", ")}`);
 });
 
 test("NAV_ICON_MAP 的每个键都能解析到清单里", () => {

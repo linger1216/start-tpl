@@ -81,6 +81,7 @@ export const ICON_NAMES: readonly string[] = Object.freeze([
 	"calendar",
 	"clock",
 	"history",
+	"scroll-text",
 	"timer",
 	"folder",
 	"folder-open",

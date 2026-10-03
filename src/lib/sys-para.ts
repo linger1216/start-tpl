@@ -1,8 +1,8 @@
 /**
  * 系统参数(`sys_para`)—— 运维口径与界面偏好都不写死在代码里。
  *
- * 为什么单独一层:保留天数、同步开关、侧边栏收起形态这类东西**改一次不该发一次版**;
- * 而任务/执行器又要频繁读它 —— 所以这里带一个 30 秒内存缓存,避免每批执行都查库。
+ * 为什么单独一层:侧边栏收起形态、列表页每页条数这类东西**改一次不该发一次版**;
+ * 而页面与接口又要频繁读它 —— 所以这里带一个 30 秒内存缓存,避免每次请求都查库。
  *
  * 界面偏好为什么也在这里(而不是 localStorage):它是**系统设置级**偏好 ——
  * 换机器 / 换浏览器都该一致,而且要在「参数管理」页改得到。
@@ -14,59 +14,11 @@
  */
 import { db } from "#/db";
 import { sysPara } from "#/db/data-base-schema";
-import { PARA_TYPE, type ParaType } from "./para-spec";
+import { FILE_ALLOW_EXT_DEFAULT, FILE_MAX_SIZE_MB_DEFAULT, PARA_TYPE, type ParaType } from "./para-spec";
 import { SIDEBAR_COLLAPSE_MODE_DEFAULT, SIDEBAR_MODE_CONFIG_KEY } from "./sidebar-mode";
 
 /** 代码内置的默认参数(库里没有时用这些,并作为"参数管理"页的初始清单) */
 export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; group: string; remark: string }> = {
-	"raw.retention.soft_days": {
-		value: "90",
-		type: PARA_TYPE.INT,
-		group: "raw 保留",
-		remark: "已抽取的数据超过多少天先软删除(不在界面出现、不参与治理)",
-	},
-	"raw.retention.hard_days": {
-		value: "180",
-		type: PARA_TYPE.INT,
-		group: "raw 保留",
-		remark: "软删除之后再超过多少天物理删除",
-	},
-	"raw.retention.batch_size": {
-		value: "2000",
-		type: PARA_TYPE.INT,
-		group: "raw 保留",
-		remark: "清理任务每批处理多少行(分批,避免长事务锁表)",
-	},
-	"cleanup.enabled": {
-		value: "false",
-		type: PARA_TYPE.BOOL,
-		group: "raw 保留",
-		remark: "是否开启定时清理。默认关闭:自动删数据必须显式打开,也可随时点「立即清理」",
-	},
-	"cleanup.interval_hours": {
-		value: "24",
-		type: PARA_TYPE.INT,
-		group: "raw 保留",
-		remark: "定时清理的间隔(小时)",
-	},
-	"sync.enabled": {
-		value: "false",
-		type: PARA_TYPE.BOOL,
-		group: "对接同步",
-		remark: "是否开启定时同步。默认关闭:先把某个源手动跑通再打开",
-	},
-	"sync.interval_minutes": {
-		value: "30",
-		type: PARA_TYPE.INT,
-		group: "对接同步",
-		remark: "定时同步的间隔(分钟)",
-	},
-	"sync.overlap_seconds": {
-		value: "300",
-		type: PARA_TYPE.INT,
-		group: "对接同步",
-		remark: "增量窗口向前重叠多少秒 —— 防止边界上的数据被漏掉",
-	},
 	// ── 界面偏好 ──────────────────────────────────────────────
 	// 取值域 / 默认值 / 容错解析都在 lib/sidebar-mode.ts,这里只登记参数本身。
 	[SIDEBAR_MODE_CONFIG_KEY]: {
@@ -102,18 +54,12 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "界面偏好",
 		remark: "列表页默认每页多少条;只认 10 / 20 / 50 / 100,填别的按 20 处理;改完对之后打开的页面生效",
 	},
-	// 上传策略 —— 由 trpc/routers/file.ts 读取(改参数即时生效,不用改代码)
+	// 审计日志 —— 由 lib/audit.ts 读取(改参数即时生效,不用改代码)
 	"log.enabled": {
 		value: "true",
 		type: PARA_TYPE.BOOL,
 		group: "审计日志",
 		remark: "总开关;排查期可临时关掉(关掉后不再往 sys_log 写)",
-	},
-	"log.retention_days": {
-		value: "90",
-		type: PARA_TYPE.INT,
-		group: "审计日志",
-		remark: "保留天数;由定时任务清理(批 6)",
 	},
 	"log.skip_paths": {
 		value: "page.",
@@ -121,14 +67,15 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "审计日志",
 		remark: "不记的动作:这里填参数**键**前缀 —— 列顺序 / 树展开态属高频 UI 偏好,记进审计就是噪音",
 	},
+	// 上传策略 —— 由 trpc/routers/file.ts 读取(改参数即时生效,不用改代码)
 	"file.max_size_mb": {
-		value: "20",
+		value: String(FILE_MAX_SIZE_MB_DEFAULT),
 		type: PARA_TYPE.INT,
 		group: "文件管理",
 		remark: "单个文件大小上限(MB);presign 与 confirm 两头都按它校验",
 	},
 	"file.allow_ext": {
-		value: "jpg,jpeg,png,gif,webp,pdf,xlsx,docx",
+		value: FILE_ALLOW_EXT_DEFAULT,
 		type: PARA_TYPE.STRING,
 		group: "文件管理",
 		remark: "允许上传的后缀(逗号分隔,小写、不带点);不在名单里的一律拒绝",
@@ -152,11 +99,6 @@ export async function getParaMap(force = false): Promise<Map<string, string>> {
 /** 参数变更后清缓存(路由里改完调用) */
 export function clearParaCache() {
 	cache = null;
-}
-
-export async function getParaInt(key: string, fallback: number): Promise<number> {
-	const value = Number((await getParaMap()).get(key) ?? PARA_DEFAULTS[key]?.value);
-	return Number.isFinite(value) ? value : fallback;
 }
 
 export async function getParaBool(key: string, fallback: boolean): Promise<boolean> {

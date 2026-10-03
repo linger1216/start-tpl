@@ -18,6 +18,8 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import {
 	sysAccount,
 	sysCasbinRule,
+	sysDataPlugin,
+	sysDataPolicy,
 	sysDept,
 	sysDict,
 	sysLog,
@@ -163,6 +165,18 @@ function startsWithPrefix(value: unknown): boolean {
 }
 
 /**
+ * 审计日志里**测试身份**的 operator_id。
+ *
+ * 比 `__test__` 前缀宽:测试用 tRPC caller 直接构造身份,id 一律写成 `test-*`
+ * (`test-admin` / `test-nobody` / `test-other-<suffix>`)—— 它们不是库里的账号,
+ * 上面的用户清扫带不走它们,而审计表只增不改,漏掉就会一直堆。
+ */
+function isTestOperator(operatorId: unknown): boolean {
+	const id = String(operatorId ?? "");
+	return id.startsWith("test-") || startsWithPrefix(id);
+}
+
+/**
  * 兜底清扫:删掉**上一次跑残留**的 `__test__*` 数据。
  *
  * 为什么要有它:`after()` 只在用例正常跑完时执行 —— 文件**加载就失败**(import 报错、建表语句挂掉)
@@ -257,16 +271,14 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 		removed += list.length;
 	}
 
-	// ── 审计日志:两类都要清 —— ① `operator_id = "test-admin"`(内部 caller 的标记,没有 __test__ 前缀);
+	// ── 审计日志:两类都要清 —— ① operator 是**测试身份**(`test-*`,见 isTestOperator);
 	//     ② operator 是**测试自己建的账号**(`__test__u-…`)。
-	//     审计是只增不改的表,漏一类就会一直堆(实测每跑一轮漏 ~6 行)。
+	//     审计是只增不改的表,漏一类就会一直堆(实测 `test-nobody` / `test-other-*` 曾漏掉 863 行)。
 	const staleLogs = await db
 		.select({ id: sysLog.id, operatorId: sysLog.operator_id })
 		.from(sysLog)
 		.where(lt(sysLog.create_time, cutoff));
-	const logIds = staleLogs
-		.filter((row) => row.operatorId === TEST_USER.id || startsWithPrefix(row.operatorId))
-		.map((row) => row.id);
+	const logIds = staleLogs.filter((row) => isTestOperator(row.operatorId)).map((row) => row.id);
 	if (logIds.length > 0) {
 		await db.delete(sysLog).where(inArray(sysLog.id, logIds));
 		removed += logIds.length;
@@ -310,6 +322,28 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 			),
 		);
 		removed += staleTags.length;
+	}
+
+	// ── 数据权限的插件与规则(v2 之后输出值挂在插件上,残留几乎都在插件表)──
+	// `plugin_key` 是调用方手敲的,测试一律 `__test__` 打头;规则按它引用的插件判。
+	const stalePolicies = (
+		await db.select({ key: sysDataPolicy.plugin_key }).from(sysDataPolicy).where(lt(sysDataPolicy.create_time, cutoff))
+	)
+		.map((row) => row.key)
+		.filter((key): key is string => startsWithPrefix(key));
+	if (stalePolicies.length > 0) {
+		await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.plugin_key, stalePolicies));
+		removed += stalePolicies.length;
+	}
+
+	const stalePlugins = (
+		await db.select({ key: sysDataPlugin.plugin_key }).from(sysDataPlugin).where(lt(sysDataPlugin.create_time, cutoff))
+	)
+		.map((row) => row.key)
+		.filter((key): key is string => startsWithPrefix(key));
+	if (stalePlugins.length > 0) {
+		await db.delete(sysDataPlugin).where(inArray(sysDataPlugin.plugin_key, stalePlugins));
+		removed += stalePlugins.length;
 	}
 
 	// 上面删的都是**裸 SQL 或直接删表**,绕过了 `lib/casbin.ts` 的领域函数 ⇒ 判定缓存可能还留着旧策略

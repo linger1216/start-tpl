@@ -6,7 +6,14 @@ import { sysLog, sysMenu } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
-import { PERM_BY_PATH, pagePermOf, UNMAPPED_MUTATIONS, UNMAPPED_QUERIES } from "../src/lib/rbac.ts";
+import {
+	DATA_SCOPE_BY_PATH,
+	PERM_BY_PATH,
+	pagePermOf,
+	UNMAPPED_MUTATIONS,
+	UNMAPPED_QUERIES,
+	UNSCOPED_QUERIES,
+} from "../src/lib/rbac.ts";
 import { anonymousCaller, assertRejects, caller, closeDb, TEST_PREFIX, TEST_USER, uniqueSuffix } from "./helpers.ts";
 
 /**
@@ -106,6 +113,24 @@ describe("服务端鉴权", () => {
 			[],
 			`新增读接口必须显式分类:要么在 PERM_BY_PATH 里配页面码,要么加进 UNMAPPED_QUERIES 并写清原因。漏了这些:${unclassified.join(", ")}`,
 		);
+	});
+
+	/**
+	 * 数据范围(行级)与权限是**两层**:上面两条守卫管"能不能调",这条管"同一个接口里能看到哪些行"。
+	 * 它拦的是最容易出的错 —— 新加一个读接口,忘了想"这个接口要不要按部门 / 本人筛",于是默认就看全部。
+	 */
+	it("数据范围守卫:每个读接口必须显式分类(登记了资源 / 或在未做清单里)", () => {
+		const queries = PROCEDURES.filter((path) => typeOf(path) === "query");
+		const unclassified = queries.filter((path) => !DATA_SCOPE_BY_PATH[path] && !UNSCOPED_QUERIES.includes(path));
+		assert.deepEqual(
+			unclassified,
+			[],
+			`新增读接口必须显式归类:要么在 DATA_SCOPE_BY_PATH 里登记资源并在 resolver 里用 ctx.scope(),要么加进 UNSCOPED_QUERIES 并写清属于哪一类。漏了这些:${unclassified.join(", ")}`,
+		);
+		// 反向断言:表里不能留已经不存在的接口(改名 / 删接口后忘了清,守卫就形同虚设)
+		const known = new Set(queries);
+		const stale = [...Object.keys(DATA_SCOPE_BY_PATH), ...UNSCOPED_QUERIES].filter((path) => !known.has(path));
+		assert.deepEqual(stale, [], `这两张表里有已经不存在的读接口(改名 / 删除后没清):${stale.join(", ")}`);
 	});
 
 	it("权限映射里的码都必须真实存在(否则是「没人能被授予」的假权限)", async () => {

@@ -44,7 +44,7 @@ export const BADGE_THEMES = {
 	brand: [
 		"bg-primary/10 text-primary",
 		"bg-success-soft text-success-fg",
-		"bg-foreground/8 text-foreground",
+		"bg-foreground/10 text-foreground",
 		"bg-secondary text-secondary-foreground",
 	],
 	rainbow: [
@@ -90,7 +90,7 @@ export const BADGE_THEMES = {
 	stone: [
 		"bg-secondary text-secondary-foreground",
 		"bg-muted text-muted-foreground",
-		"bg-foreground/8 text-foreground",
+		"bg-foreground/10 text-foreground",
 		"bg-foreground/5 text-muted-foreground",
 	],
 } as const satisfies Record<string, readonly string[]>;

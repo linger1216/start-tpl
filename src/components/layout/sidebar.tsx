@@ -1,9 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronRight, Layers } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useTRPC } from "#/integrations/trpc/react";
+import { useParaRaw } from "#/hooks/use-para-prefs";
 import { parseSidebarCollapseMode, SIDEBAR_MODE_CONFIG_KEY, type SidebarCollapseMode } from "#/lib/sidebar-mode";
 import { cn } from "#/lib/utils";
 import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
@@ -126,13 +125,12 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
  * 收起后的样子 —— 读系统参数 `ui.sidebar.collapsed_mode`(取值域见 `lib/sidebar-mode.ts`)。
  *
  * 这里**没有**任何自定义 store / subscribe / getSnapshot:值的订阅与缓存是 React Query
- * 本来就在做的事(`config.byKey`)。首屏的值由 `(main)/route.tsx` 的 loader 预取,
+ * 本来就在做的事(`para.byKey`,读法统一走 `hooks/use-para-prefs.ts` 的 `useParaRaw`)。
+ * 首屏的值由 `(main)/route.tsx` 的 loader 预取,
  * 所以 SSR 直出的宽度就是最终宽度;读不到 / 值非法 → 回落默认值,不会崩。
  */
 function useSidebarCollapseMode(): SidebarCollapseMode {
-	const trpc = useTRPC();
-	const { data } = useQuery(trpc.para.byKey.queryOptions({ key: SIDEBAR_MODE_CONFIG_KEY }));
-	return parseSidebarCollapseMode(data?.value);
+	return parseSidebarCollapseMode(useParaRaw(SIDEBAR_MODE_CONFIG_KEY));
 }
 
 function NavItem({

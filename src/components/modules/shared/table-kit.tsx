@@ -4,9 +4,9 @@ import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
-import { splitMultiValue } from "#/lib/multi-value";
 import type { MockRow } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
+import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /**
@@ -15,8 +15,9 @@ import { cn } from "#/lib/utils";
  *   · `DataTable`          表壳:表头排序 + 空态(数据 / 列 / 状态全部由页面传入);
  *   · `selectColumn`       多选列(表头全选本页 + 行勾选),选中集合由编排壳持有;
  *   · `actionsColumn`      行操作列(详情 / 编辑 / 删除),回调由编排壳闭包注入;
- *   · `multiValueFilterFn` 多值(标签)列的取值筛选;
+ *   · `timeColumn`         时间列(表头 + 等宽时间单元格);
  *   · `TextCell`  单元格渲染口径(长文本传 `truncate`);
+ *   · `TimeCell`  时间单元格(统一 `formatLocalMinute` 口径 + 等宽数字);
  *   · `TableLoadingShell`  请求中的加载壳(不换内容、只叠指示器)。
  *
  * 为什么允许共用:这些件**不含字段声明、不订阅 store、不承载写操作** ——
@@ -106,7 +107,7 @@ export function DataTable<TRow extends MockRow>({
 }
 
 /** 表头排序图标(升 / 降 / 未排序三态) */
-export function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
+function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
 	if (dir === "asc") return <ArrowUp className="size-3.5" />;
 	if (dir === "desc") return <ArrowDown className="size-3.5" />;
 	return <ChevronsUpDown className="size-3.5 opacity-40" />;
@@ -206,22 +207,6 @@ export function actionsColumn<TRow extends MockRow>({
 	});
 }
 
-/**
- * 多值(标签)列的取值筛选。
- * `filterValue` 既可以是单个值,也可以是数组 —— 多个标签维度命中同一列时
- * (重点关注的三类对象共用「分类标签」列)会把各自选中的值聚合成数组,任一命中即保留该行。
- */
-export function multiValueFilterFn(
-	row: { getValue: (columnId: string) => unknown },
-	columnId: string,
-	filterValue: unknown,
-): boolean {
-	if (filterValue === undefined || filterValue === null || filterValue === "") return true;
-	const wanted = Array.isArray(filterValue) ? filterValue.map(String) : [String(filterValue)];
-	const cell = splitMultiValue(row.getValue(columnId));
-	return wanted.some((value) => cell.includes(value));
-}
-
 /** 单值文本单元格:空值统一显示 `—` */
 export function TextCell({ value, truncate = false }: { value: unknown; truncate?: boolean }) {
 	const text = value === undefined || value === null || value === "" ? "—" : String(value);
@@ -231,6 +216,35 @@ export function TextCell({ value, truncate = false }: { value: unknown; truncate
 			{text}
 		</span>
 	);
+}
+
+/** 时间单元格:统一 `formatLocalMinute` 口径 + 等宽数字 */
+export function TimeCell({ value }: { value: unknown }) {
+	return (
+		<span className="tabular-nums text-xs">
+			{formatLocalMinute(value as Date | string | number | null | undefined)}
+		</span>
+	);
+}
+
+/**
+ * 时间列工厂:表头 + 等宽时间单元格。
+ *
+ * **沿用调用方的 accessor 键**,不另造列 id —— 于是排序能力与 `page.columns` 里持久化的
+ * 列 id 都保持原样(换成 display 列会两者一起丢)。
+ * `header` 默认「创建时间」,更新时间等场景自己覆盖;`size` 默认 150(与现有时间列一致)。
+ */
+export function timeColumn<TRow extends MockRow>(
+	key: keyof TRow & string,
+	{ header = "创建时间", size = 150 }: { header?: string; size?: number } = {},
+) {
+	return createAppColumnHelper<TRow>().accessor((row: TRow) => row[key], {
+		// `id` 必须沿用调用方的 accessor 键:列偏好(`page.columns`)按 id 存,换 id 会把用户存下的顺序 / 隐藏态作废
+		id: key,
+		header,
+		size,
+		cell: (ctx) => <TimeCell value={ctx.getValue()} />,
+	});
 }
 
 export function TableLoadingShell({

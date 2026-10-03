@@ -26,7 +26,7 @@ import "dotenv/config";
 import { asc, eq } from "drizzle-orm";
 import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
+import { ADMIN_ROLE_NAME, addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
@@ -41,9 +41,6 @@ import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
 
 /** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
 const ADMIN_EMAIL = "admin@example.com";
-
-/** 系统管理员 —— 整个仓库唯一的种子角色,名字稳定作为种子键 */
-const ADMIN_ROLE_NAME = "系统管理员";
 
 const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
 
@@ -193,6 +190,20 @@ async function main() {
 		await upsertButton(角色管理MenuId, "修改角色", "sys:role:edit", 90);
 		await upsertButton(角色管理MenuId, "调整角色成员", "sys:role:user", 91);
 		await upsertButton(角色管理MenuId, "保存角色权限", "sys:role:perm", 92);
+	}
+	// 数据权限:规则页给"管权限的人";插件页的写接口服务端还额外要求**超管**(插件能写服务端代码)
+	const 数据范围MenuId = byPath.get("/settings/data-scope")?.id;
+	if (数据范围MenuId) {
+		await upsertButton(数据范围MenuId, "新增规则", "sys:scope:add", 90);
+		await upsertButton(数据范围MenuId, "修改规则", "sys:scope:edit", 91);
+		await upsertButton(数据范围MenuId, "删除规则", "sys:scope:remove", 92);
+	}
+	const 值域插件MenuId = byPath.get("/settings/data-plugins")?.id;
+	if (值域插件MenuId) {
+		await upsertButton(值域插件MenuId, "新增插件", "sys:plugin:add", 90);
+		await upsertButton(值域插件MenuId, "修改插件", "sys:plugin:edit", 91);
+		await upsertButton(值域插件MenuId, "删除插件", "sys:plugin:remove", 92);
+		await upsertButton(值域插件MenuId, "试跑插件", "sys:plugin:test", 93);
 	}
 	const 日志MenuId = byPath.get("/settings/logs")?.id;
 	if (日志MenuId) {

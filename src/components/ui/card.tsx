@@ -11,20 +11,17 @@ import { cn } from "#/lib/utils";
  * ⚠️ **调用点不要再传 `hover:border-border` / `hover:shadow-none`**:那样会把这里的悬浮态顶掉,
  * 症状是"页面上怎么悬浮都不变蓝"(7 个设置页踩过 —— 当年为了压住 3px 蓝环留的,现已删)。
  *
- * 另有两个可选口子:`interactive`(整卡可点)与 `tone`(顶部 2px 强调色线,走 `.tone-topline` +
+ * 另有一个可选口子:`tone`(顶部 2px 强调色线,走 `.tone-topline` +
  * `--tone-color`,如 `tone="var(--hue-violet)"`)—— 后者是"一级模块各认一色"的一环(工作台入口卡在用),
  * 别顺手删:删了这里,`styles.css` 的 `.tone-topline` 与 5 处调用会一起失效。
  */
 function Card({
 	className,
 	size = "default",
-	interactive = false,
 	tone,
 	...props
 }: React.ComponentProps<"div"> & {
 	size?: "default" | "sm";
-	/** 整卡可点击时传 true:给出手型光标 */
-	interactive?: boolean;
 	/** 顶部 2px 强调色线,传一个 CSS 颜色值(如 `"var(--hue-violet)"`) */
 	tone?: string;
 }) {
@@ -32,14 +29,12 @@ function Card({
 		<div
 			data-slot="card"
 			data-size={size}
-			data-interactive={interactive ? "" : undefined}
 			style={tone ? ({ "--tone-color": tone } as React.CSSProperties) : undefined}
 			className={cn(
 				"relative flex flex-col gap-5 overflow-hidden rounded-xl border border-border bg-card text-card-foreground",
 				"transition-[border-color,box-shadow] duration-200 ease-brand",
 				// 悬浮:1px 边框 → 亮蓝(`--primary` = 品牌蓝 #1b61c9,亮色主题下最深的一抹蓝,就是它)
 				"hover:border-primary",
-				interactive && "cursor-pointer",
 				tone && "tone-topline",
 				"data-[size=sm]:rounded-lg",
 				className,

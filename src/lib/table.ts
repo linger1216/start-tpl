@@ -40,7 +40,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *  2. 具名函数(`sortFn: "text"` / `filterFn: "includesString"`)要先用
  *     `sortFns` / `filterFns` 注册表登记,字符串名才可用。
  */
-export const { useAppTable, createAppColumnHelper, appFeatures } = createTableHook({
+export const { useAppTable, createAppColumnHelper } = createTableHook({
 	features: tableFeatures({
 		// ── 启用的特性 ────────────────────────────────────────────
 		cellSelectionFeature,

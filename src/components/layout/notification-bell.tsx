@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { Bell, CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { useTRPC } from "#/integrations/trpc/react";
+import { noticeLevelStyle } from "#/lib/notice-levels";
 import { formatLocalMinute } from "#/lib/time";
 
 /**
@@ -27,16 +28,6 @@ import { formatLocalMinute } from "#/lib/time";
  * 形态与右端的用户菜单**同一个组件、同一个 `align="end"`** —— 顶栏的两个下拉天然同形;
  * 触发器用 `render={<Button/>}` 复用标准按钮样式(`user-switcher` 同款写法)。
  */
-
-/** 级别 → 图标 / 颜色(颜色只走 theme 的语义色:success / warn / danger) */
-const LEVEL_STYLE = {
-	info: { Icon: Info, tone: "text-muted-foreground" },
-	success: { Icon: CircleCheck, tone: "text-success" },
-	warn: { Icon: TriangleAlert, tone: "text-warn" },
-	danger: { Icon: CircleX, tone: "text-danger" },
-} as const;
-
-type NoticeLevel = keyof typeof LEVEL_STYLE;
 
 export function NotificationBell() {
 	const trpc = useTRPC();
@@ -108,7 +99,7 @@ export function NotificationBell() {
 				) : (
 					<div className="max-h-[60vh] overflow-auto py-1">
 						{items.map((item) => {
-							const { Icon, tone } = LEVEL_STYLE[(item.level as NoticeLevel) ?? "info"] ?? LEVEL_STYLE.info;
+							const { Icon, tone } = noticeLevelStyle(item.level);
 							return (
 								<DropdownMenuItem
 									key={item.id}

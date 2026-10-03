@@ -37,11 +37,11 @@
 
 ## 种子数据清单(每个种子造什么、幂等键是什么)
 
-七个种子都可重复跑,**幂等「只补不覆盖」** —— 已存在的行一个字段都不动,你手工改过的东西不会被冲掉。
+六个种子都可重复跑,**幂等「只补不覆盖」** —— 已存在的行一个字段都不动,你手工改过的东西不会被冲掉。
 
 | 命令 | 造什么 | 幂等键 | 典型体量(本机) |
 | --- | --- | --- | --- |
-| `pnpm db:seed:menus` | 把静态 `NAV_NODES` 写进 `sys_menu`(含**纯分组的合成 path** `#group/…`) | 有 path 的按 path、分组按合成 path | 67 行 |
+| `pnpm db:seed:menus` | 把静态 `NAV_NODES` 写进 `sys_menu`(含**纯分组的合成 path** `#group/…`) | 有 path 的按 path、分组按合成 path | 66 行 |
 | `pnpm db:seed:dicts` | 演示字典 | 字典键 | 3 条 |
 | `pnpm db:seed:paras` | 系统参数默认值 | `para_key` | 17 条 |
 | `pnpm db:seed:tags` | 标签维度 + 标签 | 维度名 / 标签名 | 17 维 + 120 标签 |
@@ -60,8 +60,9 @@
 | 部门 | 13 个「<街镇>网格组」,挂在各自街镇节点下(队长与队员同属它) |
 | 账号 | 26 个:`<拼音>.leader@example.com` / `<拼音>.member@example.com`(拼音 = huacao / meilong / maqiao / jiangchuanlu / gumeilu / hongqiao / xinhong / xinzhuang / zhuanqiao / qibao / pujiang / wujing / pujin),密码与管理员相同 |
 | 授权 | 两个角色各授了菜单;队长另授 `sys:grid:{add,edit,remove,assign}`(队员只读) |
-| 网格归属 | 71 行里 **69 行**的 `group_id` 已回填到本街镇网格组(另 2 行没有街镇,见下),`town_id` 仍只作展示 / 筛选 |
+| 网格归属 | 71 行里 **69 行**的 `town_id` 已回填到街镇节点(另 2 行没有街镇,见下);`town_id` / `owner_id` 都是**数据权限的判据列**(见 `doc/数据权限.md`),列本身不做过滤 |
 | 网格指派 | 71 行中 **39 行**已指派负责人(每个街镇前一半给它自己的队员) |
 
 > ⚠️ `demo_grid` 里 **2 行没有街镇**(Excel 里是"申北(北部)片区 / 鑫都(南部)片区",部门树里没有对应节点)⇒
-> `group_id` 为空 —— 行级数据权限那套机制已整体删除,现在它只影响**展示与筛选**(按街镇 / 网格组筛时选不到它们),不再影响可见性。
+> `town_id` 为空 —— 一旦配了「按 `town_id` 筛」的数据权限规则(见 `doc/数据权限.md`),这 2 行对谁都不可见;
+> 没配规则时只影响**展示与筛选**(按街镇筛时选不到它们)。

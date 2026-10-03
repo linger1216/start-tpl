@@ -37,7 +37,7 @@ function FieldShell({
 			<Label className="text-xs">{label}</Label>
 			{children}
 			{hint && !error ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-			{error ? <p className="text-xs text-[color:var(--danger-fg)]">{error}</p> : null}
+			{error ? <p className="text-xs text-danger-fg">{error}</p> : null}
 		</div>
 	);
 }
@@ -60,7 +60,7 @@ function TextField({
 				onChange={(event: ChangeEvent<HTMLInputElement>) => field.handleChange(event.target.value)}
 				onBlur={field.handleBlur}
 				placeholder={placeholder}
-				className={cn(field.state.meta.errors.length > 0 && "border-[color:var(--danger)]")}
+				className={cn(field.state.meta.errors.length > 0 && "border-danger")}
 			/>
 		</FieldShell>
 	);
@@ -76,7 +76,7 @@ function TextArea({ label, placeholder }: { label: string; placeholder?: string 
 				onBlur={field.handleBlur}
 				placeholder={placeholder}
 				rows={4}
-				className={cn(field.state.meta.errors.length > 0 && "border-[color:var(--danger)]")}
+				className={cn(field.state.meta.errors.length > 0 && "border-danger")}
 			/>
 		</FieldShell>
 	);
