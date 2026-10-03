@@ -22,6 +22,7 @@ export function LedgerCard<TRow extends MockRow>({
 	Icon,
 	count,
 	busy,
+	showSkeleton,
 	emptyText,
 	table,
 	rowClassName,
@@ -35,6 +36,8 @@ export function LedgerCard<TRow extends MockRow>({
 	count: number;
 	/** 列表请求是否在途 —— 交给 `TableLoadingShell` 出占位 */
 	busy: boolean;
+	/** 首次加载显示骨架行(B1);已有数据时仍走 spinner 行为 */
+	showSkeleton?: boolean;
 	emptyText: string;
 	table: ReturnType<typeof useAppTable<TRow>>;
 	/** 逐行附加 class;目前**只有文件页**用(选中行加底色),别处不需要 */
@@ -57,7 +60,7 @@ export function LedgerCard<TRow extends MockRow>({
 			</CardHeader>
 			<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 				{children}
-				<TableLoadingShell fill busy={busy} minHeight={240}>
+				<TableLoadingShell fill busy={busy} showSkeleton={showSkeleton} minHeight={240}>
 					<DataTable table={table} emptyText={emptyText} rowClassName={rowClassName} />
 				</TableLoadingShell>
 				<div className="shrink-0 border-t border-border pt-1">

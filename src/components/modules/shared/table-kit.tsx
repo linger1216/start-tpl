@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
+import { Skeleton, TableSkeleton } from "#/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import type { MockRow } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
@@ -252,6 +253,7 @@ export function TableLoadingShell({
 	label = "读取中…",
 	minHeight = 220,
 	fill = false,
+	showSkeleton = false,
 	className,
 	children,
 }: {
@@ -266,6 +268,12 @@ export function TableLoadingShell({
 	 * 不传就是老行为:内容多高就多高,由整页滚动。
 	 */
 	fill?: boolean;
+	/**
+	 * `true` = 首次加载(没旧数据)时显示骨架行(B1 条)代替带 spinner 的占位;
+	 * 后续请求(已有数据 + `busy`)仍走老的 spinner 行为。
+	 * 调用方根据 listQuery.isPending 决定首次 / 后续。
+	 */
+	showSkeleton?: boolean;
 	className?: string;
 	children: ReactNode;
 }) {
@@ -277,7 +285,6 @@ export function TableLoadingShell({
 		>
 			<div
 				className={cn(
-					busy && "opacity-60",
 					/*
 					 * `fill` 下**纵向滚动交给表格自己的容器**(`ui/table.tsx` 的 `[data-slot=table-container]`)。
 					 * 不让这一层滚,是因为它一旦是滚动容器,表头的 `sticky` 会被**更近的**容器抢走 ——
@@ -285,11 +292,26 @@ export function TableLoadingShell({
 					 */
 					fill &&
 						"min-h-0 flex-1 overflow-hidden [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:overflow-y-auto",
+					/*
+					 * 首次加载(busy=true 且 showSkeleton=true)完全不渲染 children,改由下方的 `TableSkeleton` 接管;
+					 * 此时不再加 opacity-60(没有旧数据要模糊)。
+					 */
+					busy && !showSkeleton && "opacity-60",
 				)}
 			>
-				{children}
+				{busy && showSkeleton ? (
+					<div className="px-1 py-2">
+						<div className="mb-2 flex items-center justify-between">
+							<Skeleton className="h-3 w-24" />
+							<Skeleton className="h-7 w-32" />
+						</div>
+						<TableSkeleton />
+					</div>
+				) : (
+					children
+				)}
 			</div>
-			{busy ? (
+			{busy && !showSkeleton ? (
 				<div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
 					<Badge
 						variant="outline"

@@ -242,6 +242,7 @@ export function SettingsDataPluginsPage() {
 				Icon={Cable}
 				count={filtered.length}
 				busy={listQuery.isFetching}
+				showSkeleton={listQuery.isPending}
 				emptyText="没有符合条件的插件"
 				table={table}
 			/>
