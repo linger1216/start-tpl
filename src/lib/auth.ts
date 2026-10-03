@@ -8,6 +8,7 @@ import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base
 import { userSwitchPlugin } from "#/lib/auth-debug";
 import { clearSignInFailures, isAccountLocked, recordSignInFailure } from "#/lib/auth-lockout";
 import { logger } from "#/lib/logger";
+import { rateLimitStorage } from "#/lib/rate-limit-storage";
 
 /**
  * Better Auth 的 origin 校验白名单。
@@ -92,20 +93,36 @@ export const auth = betterAuth({
 	},
 	trustedOrigins: loadTrustedOrigins(),
 	/**
-	 * 限流(in-memory,默认)—— 跨实例部署前**改成 `database` + 一张小表**(`sys_rate_limit`):
-	 *  - dev / 单实例:memory 够用(重启清零,刚好兜住「忘记改密码重试」这类用户);
-	 *  - 多实例 / 生产:必须 db 共享,否则每个进程的计数各算各的,等于没限。
+	 * 限流 + session cache 落地表(`sys_rate_limit`,A1)。
 	 *
-	 * `customRules` 用 glob;`*` 通配单段 —— `/sign-in/*` 同时覆盖 email 与 token,
-	 * 实际生效时按精确路径优先(`api/rate-limiter/index.mjs` 的 `wildcardMatch` 排序)。
+	 * `secondaryStorage` 同时被两件事用:
+	 *  1. **限流计数**(BA 的 `rateLimit` 模块)—— 走 `count` 列。
+	 *  2. **session cache**(BA 的 `internalAdapter.createSession` 镜写二级缓存)——
+	 *     走 `value` 列(默认 BA **不再写 `sys_session` 表**;详见
+	 *     `@better-auth/core/dist/db/adapter/factory.mjs:818` + `get-tables.mjs:197`:
+	 *     「`secondaryStorage` + 不设 `storeSessionInDatabase` ⇒ `tables.session` 被删」)。
+	 *
+	 * 我们要保留 `sys_session` 表里的审计痕迹 —— 因为:
+	 *  - 「用户在哪个 IP 登录 / 浏览器 UA」对审计日志(`sys_log`)是补充信息;
+	 *  - 旧的 BA 测试断言「登录后 `sys_session` 多一行」,改测试成本远大于一行配置。
+	 *
+	 * 因此打开 `storeSessionInDatabase: true`,**两路都写** —— 读仍走 secondaryStorage
+	 * (因为那是最新的,没有 DB cache invalidation 问题)。
+	 *
+	 * `customRules` 用 glob;`*` 通配单段 —— `/sign-in/*` 同时覆盖 email 与 token。
 	 */
+	secondaryStorage: rateLimitStorage,
+	session: {
+		// 让 BA 同时把 session 写进 `sys_session` 表;读仍走 secondaryStorage。
+		storeSessionInDatabase: true,
+	},
 	rateLimit: {
 		enabled: true,
 		window: 10,
 		max: 100,
-		// 派生新项目加 `database` 时,新建一张 `sys_rate_limit(key varchar PK, count int, expires_at timestamp)`
-		// 然后 storage 改 `database` —— 模板故意没建表,是为了避免给一次性用户多增一张表的迁移成本。
-		storage: "memory",
+		// 注释保留:`storage` 默认随 `secondaryStorage` 自动切换 —— 见上。
+		// 想显式走内存:解开下面这一行注释,把 `secondaryStorage` 那行注释掉。
+		// storage: "memory",
 		customRules: {
 			"/sign-in/email": { window: 60, max: 5 },
 			"/sign-in/*": { window: 60, max: 10 },

@@ -45,6 +45,8 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_account: "登录账号(一个用户可绑多种登录方式;邮箱密码登录的 provider_id = 'credential')",
 	sys_verification: "验证码 / 一次性令牌(邮箱验证、改密、二次验证都用它)",
 	sys_account_lockout: "登录风控(累计失败次数 + 锁定到期时间;阈值见 src/lib/auth-lockout.ts)",
+	sys_rate_limit:
+		"限流计数(better-auth secondaryStorage 落地表;多副本 / 进程崩溃后仍生效,见 src/lib/rate-limit-storage.ts)",
 	sys_dept: "部门树(组织架构;谁是成员见 sys_user_dept)",
 	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
@@ -162,6 +164,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_account_lockout", column: "locked_until", comment: "锁定到期时间;null 或过去 = 当前未锁" },
 	{ table: "sys_account_lockout", column: "last_failed_at", comment: "最后一次失败时间(用于 5 分钟滑动窗口)" },
 	{ table: "sys_account_lockout", column: "last_failed_ip", comment: "最后一次失败的来源 IP(运维参考,不上送 Sentry)" },
+	// sys_rate_limit(better-auth secondaryStorage;A1)
+	{ table: "sys_rate_limit", column: "key", comment: "限流键(BA 给的格式;主键)" },
+	{ table: "sys_rate_limit", column: "count", comment: "当前窗口累计请求数(increment 走这列)" },
+	{ table: "sys_rate_limit", column: "value", comment: "通用 KV 值(BA session cache 等用;限流时为空)" },
+	{ table: "sys_rate_limit", column: "expires_at", comment: "过期时刻(创建行时设,后续 increment 不延长)" },
 	// sys_dept
 	{ table: "sys_dept", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_dept", column: "parent_id", comment: "上级部门 id;null = 顶级" },

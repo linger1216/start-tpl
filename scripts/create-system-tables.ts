@@ -194,6 +194,21 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			key \`idx_sys_account_lockout_until\` (\`locked_until\`)
 		)`,
 	},
+	// ── 限流计数(better-auth secondaryStorage 落地;A1)────────────────
+	// 配合 src/lib/rate-limit-storage.ts,实现跨进程 / 多副本的 IP 限流。
+	// 列:value 用来存 session cache 等 KV 数据(BA secondaryStorage 的另一种用途);
+	//      count 用来存限流计数;两套逻辑都靠 expires_at 控制生命周期。
+	{
+		name: "sys_rate_limit",
+		ddl: `create table if not exists \`sys_rate_limit\` (
+			\`key\` varchar(191) not null,
+			\`count\` int not null default 0,
+			\`value\` text null,
+			\`expires_at\` timestamp null,
+			primary key (\`key\`),
+			key \`idx_sys_rate_limit_expires\` (\`expires_at\`)
+		)`,
+	},
 	// ── 权限四表(部门 / 角色;形状与理由见 src/db/data-base-schema.ts)──────────
 	{
 		name: "sys_dept",

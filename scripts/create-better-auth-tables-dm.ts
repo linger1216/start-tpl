@@ -108,6 +108,18 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_account_lockout_until" on ${S}."sys_account_lockout" ("locked_until")`,
 
+	// ── 限流计数(better-auth secondaryStorage 落地;A1)────────────────
+	// 配合 src/lib/rate-limit-storage.ts,实现跨进程 / 多副本的 IP 限流。
+	// value 列存 session cache 的 JSON 字符串;count 列存限流计数。
+	`create table if not exists ${S}."sys_rate_limit" (
+		"key" varchar(191) not null,
+		"count" int default 0 not null,
+		"value" text,
+		"expires_at" datetime,
+		primary key ("key")
+	)`,
+	`create index if not exists "idx_sys_rate_limit_expires" on ${S}."sys_rate_limit" ("expires_at")`,
+
 	// ── 权限四表(部门 / 角色;形状见 src/db/data-base-schema.ts)──
 	`create table if not exists ${S}."sys_dept" (
 		"id" varchar(32) not null,

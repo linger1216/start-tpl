@@ -376,6 +376,26 @@ export const sysAccountLockout = mysqlTable(
 	(table) => [index("idx_sys_account_lockout_until").on(table.lockedUntil)],
 );
 
+/**
+ * 限流计数(better-auth 的 `secondaryStorage` 落地表 —— A1)
+ *
+ * - `key` 主键 + `count` 当前计数 + `expires_at` 过期时刻;
+ * - 派生原子写 `seconds * 1000` 时刻 TTL(BA 的 `increment(key, ttl)` 只在**首次创建**时生效,
+ *   后续增加不延长窗口);
+ * - `src/lib/rate-limit-storage.ts` 把这张表包成 BA 的 `SecondaryStorage` 接口;
+ * - 配合 `src/lib/auth.ts` 的 `rateLimit.customRules`,挂在 `/sign-in/*` 等端点上做
+ *   「IP + 端点」粒度的滑动窗口限流 —— 内存版重启就清零,db 版多副本 / 进程崩溃都共享计数。
+ *
+ * 为什么不复用 better-auth 内置 `rateLimitSchema`(`@better-auth/core` 里有但没暴露 drizzle adapter
+ * 生成脚本):模板期望「db:create 一条龙搞定」,靠内置 schema 反而要绕一圈;自己建表简单一行。
+ */
+export const sysRateLimit = mysqlTable("sys_rate_limit", {
+	key: varchar("key", { length: 191 }).primaryKey(),
+	count: int("count").notNull().default(0),
+	value: text("value"),
+	expiresAt: timestamp("expires_at", { mode: "date" }),
+});
+
 // ── 权限(部门 / 角色)────────────────────────────────────
 //
 // 模型(与 better-auth 的 organization **无关** —— 那套是"选中一个当前组织 + 租户隔离",

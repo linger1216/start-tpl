@@ -26,6 +26,7 @@ import {
 	sysLog,
 	sysMenu,
 	sysPara,
+	sysRateLimit,
 	sysRole,
 	sysSession,
 	sysTag,
@@ -355,6 +356,15 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	if (staleLockoutEmails.length > 0) {
 		await db.delete(sysAccountLockout).where(inArray(sysAccountLockout.email, staleLockoutEmails));
 		removed += staleLockoutEmails.length;
+	}
+
+	// ── 限流计数:BA 测试可能写入 `rate-limit:<key>`,按 key 前缀(`__test__*`)清。
+	const staleRateLimitKeys = (await db.select({ key: sysRateLimit.key }).from(sysRateLimit))
+		.map((row) => row.key)
+		.filter((k): k is string => startsWithPrefix(k));
+	if (staleRateLimitKeys.length > 0) {
+		await db.delete(sysRateLimit).where(inArray(sysRateLimit.key, staleRateLimitKeys));
+		removed += staleRateLimitKeys.length;
 	}
 
 	// 上面删的都是**裸 SQL 或直接删表**,绕过了 `lib/casbin.ts` 的领域函数 ⇒ 判定缓存可能还留着旧策略
