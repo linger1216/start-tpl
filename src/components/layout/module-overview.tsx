@@ -31,7 +31,7 @@ export function ModuleOverview({ path }: { path: string }) {
 					{subgroups.map((group) => (
 						<section key={group.name} className="space-y-3">
 							<header className="flex items-baseline justify-between gap-2 border-b border-border pb-2">
-								<h3 className="text-sm font-medium tracking-[-0.005em] text-foreground">{group.name}</h3>
+								<h3 className="text-sm font-medium text-foreground">{group.name}</h3>
 								<span className="text-xs tabular-nums text-muted-foreground">{group.children?.length ?? 0} 个页面</span>
 							</header>
 							<nav className="flex flex-col">
@@ -45,7 +45,7 @@ export function ModuleOverview({ path }: { path: string }) {
 					{directPages.length > 0 && (
 						<section className="space-y-3">
 							<header className="flex items-baseline justify-between gap-2 border-b border-border pb-2">
-								<h3 className="text-sm font-medium tracking-[-0.005em] text-foreground">直达</h3>
+								<h3 className="text-sm font-medium text-foreground">直达</h3>
 								<span className="text-xs tabular-nums text-muted-foreground">{directPages.length} 个页面</span>
 							</header>
 							<nav className="flex flex-col">

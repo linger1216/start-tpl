@@ -174,7 +174,7 @@ export function SettingsDataPluginsForm({
 					<DetailRow label="输出值" htmlFor="plugin-output-values">
 						<div className="flex flex-col gap-2">
 							<div className="flex flex-col gap-1.5 rounded-md border border-border/60">
-								<div className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-1.5 border-b border-border/60 bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+								<div className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-1.5 border-b border-border/60 bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
 									<span>key(类别)</span>
 									<span>value(真值)</span>
 									<span />

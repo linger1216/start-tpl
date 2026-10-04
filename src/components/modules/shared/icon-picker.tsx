@@ -105,7 +105,7 @@ export function IconPicker({
 				) : null}
 			</div>
 
-			<PopoverContent align="start" className="w-[22rem] p-0">
+			<PopoverContent align="start" className="w-80 p-0">
 				<div className="flex max-h-[26rem] flex-col overflow-hidden">
 					<div className="shrink-0 border-b border-border p-2">
 						<div className="relative">
@@ -153,7 +153,7 @@ function Section({
 }) {
 	return (
 		<div className="mb-3 last:mb-0">
-			<div className="mb-2 px-1 text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">{title}</div>
+			<div className="mb-2 px-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">{title}</div>
 			{icons.length === 0 && emptyText ? (
 				<div className="py-6 text-center text-xs text-muted-foreground">{emptyText}</div>
 			) : (

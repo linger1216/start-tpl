@@ -86,7 +86,7 @@ export function dataScopeColumns({
 				return (
 					<div className="flex min-w-0 flex-col gap-0.5 whitespace-normal break-words">
 						<span className="text-xs font-medium text-foreground">{ctx.getValue()}</span>
-						<Badge className={`w-fit text-[10px] ${SUBJECT_TONE[kind] ?? ""}`} translate="no">
+						<Badge className={`w-fit text-xs ${SUBJECT_TONE[kind] ?? ""}`} translate="no">
 							{ctx.row.original.subject}
 						</Badge>
 					</div>
@@ -100,7 +100,7 @@ export function dataScopeColumns({
 			cell: (ctx) => (
 				<div className="flex min-w-0 flex-col gap-0.5 whitespace-normal break-words">
 					<span className="text-xs font-medium text-foreground">{ctx.getValue()}</span>
-					<span translate="no" className="font-mono text-[10px] text-muted-foreground">
+					<span translate="no" className="font-mono text-xs text-muted-foreground">
 						{ctx.row.original.resource}
 					</span>
 				</div>
@@ -123,7 +123,7 @@ export function dataScopeColumns({
 				const row = ctx.row.original;
 				if (!row.pluginKey) {
 					return (
-						<Badge variant="outline" className="text-[10px]">
+						<Badge variant="outline" className="text-xs">
 							不用插件
 						</Badge>
 					);
@@ -131,7 +131,7 @@ export function dataScopeColumns({
 				return (
 					<div className="flex min-w-0 flex-col gap-0.5 whitespace-normal break-words">
 						<span className="text-xs">{row.pluginLabel}</span>
-						<span translate="no" className="font-mono text-[10px] text-muted-foreground">
+						<span translate="no" className="font-mono text-xs text-muted-foreground">
 							{row.pluginKey}
 						</span>
 					</div>
@@ -144,7 +144,7 @@ export function dataScopeColumns({
 			cell: (ctx) => {
 				const meta = policyStatusMeta(Number(ctx.getValue()));
 				return (
-					<Badge className={`text-[10px] ${meta.tone}`} title={meta.hint}>
+					<Badge className={`text-xs ${meta.tone}`} title={meta.hint}>
 						{meta.label}
 					</Badge>
 				);

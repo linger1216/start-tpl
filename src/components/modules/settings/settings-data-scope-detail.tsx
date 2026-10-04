@@ -55,7 +55,7 @@ export function SettingsDataScopeDetail({
 					<DetailRow label="主体">
 						<div className="flex flex-wrap items-center gap-1.5">
 							<span className="text-sm">{row.subjectLabel}</span>
-							<Badge translate="no" variant="outline" className="font-mono text-[10px]">
+							<Badge translate="no" variant="outline" className="font-mono text-xs">
 								{row.subject}
 							</Badge>
 						</div>
@@ -63,7 +63,7 @@ export function SettingsDataScopeDetail({
 					<DetailRow label="资源表">
 						<div className="flex flex-wrap items-center gap-1.5">
 							<span className="text-sm">{row.resourceLabel}</span>
-							<Badge translate="no" variant="outline" className="font-mono text-[10px]">
+							<Badge translate="no" variant="outline" className="font-mono text-xs">
 								{row.resource}
 							</Badge>
 						</div>
@@ -77,7 +77,7 @@ export function SettingsDataScopeDetail({
 						{row.column ? (
 							<div className="flex flex-wrap items-center gap-1.5">
 								<span className="text-sm">{row.columnLabel}</span>
-								<Badge translate="no" variant="outline" className="font-mono text-[10px]">
+								<Badge translate="no" variant="outline" className="font-mono text-xs">
 									{row.column}
 								</Badge>
 							</div>
@@ -91,7 +91,7 @@ export function SettingsDataScopeDetail({
 						{row.pluginKey ? (
 							<div className="flex flex-wrap items-center gap-1.5">
 								<span className="text-sm">{row.pluginLabel}</span>
-								<Badge translate="no" variant="outline" className="font-mono text-[10px]">
+								<Badge translate="no" variant="outline" className="font-mono text-xs">
 									{row.pluginKey}
 								</Badge>
 							</div>

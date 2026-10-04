@@ -69,16 +69,13 @@ export function PolicyContextBlock({
 				<span className="text-foreground">{userName || "—"}</span>
 			</Row>
 
-			<Row
-				icon={<Badge className="bg-hue-teal-soft text-hue-teal-fg text-[10px]">角色</Badge>}
-				label={`${roleCount} 个`}
-			>
+			<Row icon={<Badge className="bg-hue-teal-soft text-hue-teal-fg text-xs">角色</Badge>} label={`${roleCount} 个`}>
 				{roleCount === 0 ? (
 					<span className="text-muted-foreground">—</span>
 				) : (
 					<div className="flex flex-wrap gap-1.5">
 						{roles.map((name) => (
-							<Badge key={name} variant="secondary" className="text-[11px]">
+							<Badge key={name} variant="secondary" className="text-xs">
 								{name}
 							</Badge>
 						))}
@@ -95,9 +92,9 @@ export function PolicyContextBlock({
 							<span key={`anc-${dept.name}`} className="inline-flex items-center gap-1">
 								{index > 0 ? <ChevronRight className="size-3 text-muted-foreground/60" /> : null}
 								{dept.mine ? (
-									<Badge className="bg-hue-amber-soft text-hue-amber-fg border-hue-amber-border text-[11px] font-medium">
+									<Badge className="bg-hue-amber-soft text-hue-amber-fg border-hue-amber-border text-xs font-medium">
 										{dept.name}
-										<span className="ml-1 text-[10px] font-normal opacity-80">我所属</span>
+										<span className="ml-1 text-xs font-normal opacity-80">我所属</span>
 									</Badge>
 								) : (
 									<span className="text-foreground/80">{dept.name}</span>
@@ -117,14 +114,14 @@ export function PolicyContextBlock({
 							<Badge
 								key={`${dept.name}-${dept.mine ? "mine" : "sub"}`}
 								className={cn(
-									"text-[11px] font-medium",
+									"text-xs font-medium",
 									dept.mine
 										? "bg-hue-amber-soft text-hue-amber-fg border-hue-amber-border"
 										: "bg-hue-violet-soft text-hue-violet-fg border-hue-violet-border",
 								)}
 							>
 								{dept.name}
-								{dept.mine ? <span className="ml-1 text-[10px] font-normal opacity-80">我所属</span> : null}
+								{dept.mine ? <span className="ml-1 text-xs font-normal opacity-80">我所属</span> : null}
 							</Badge>
 						))}
 					</div>
@@ -137,7 +134,7 @@ export function PolicyContextBlock({
 function Row({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
 	return (
 		<div className="flex flex-col gap-1">
-			<div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+			<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 				<span className="inline-flex items-center justify-center">{icon}</span>
 				<span>{label}</span>
 			</div>

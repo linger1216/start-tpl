@@ -161,7 +161,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 				>
 					<Search className="size-3.5" />
 					<span>搜索</span>
-					<kbd className="ml-1 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 text-[10px] font-mono">
+					<kbd className="ml-1 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 text-xs font-mono">
 						<Command className="size-2.5" />K
 					</kbd>
 				</Button>

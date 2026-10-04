@@ -169,7 +169,7 @@ function RootError({ error, info }: ErrorComponentProps) {
 				{isDev && !isClientErr && (stack || componentStack) ? (
 					<details className="mt-4 max-h-48 w-full overflow-auto rounded-md border border-border bg-background p-2 text-left text-xs">
 						<summary className="cursor-pointer font-medium text-muted-foreground">调试栈(开发模式)</summary>
-						<pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[10px] text-muted-foreground">
+						<pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
 							{componentStack ?? ""}
 							{stack ? `\n\n${stack}` : ""}
 						</pre>

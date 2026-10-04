@@ -63,7 +63,7 @@ export function SettingsDataPluginsDetail({
 								<p className="text-xs text-muted-foreground">清单是空的 —— 用了它的规则会取到 0 行。</p>
 							) : (
 								<div className="overflow-hidden rounded-lg border border-border bg-muted">
-									<div className="grid grid-cols-[1fr_2fr] border-b border-border bg-muted/70 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+									<div className="grid grid-cols-[1fr_2fr] border-b border-border bg-muted/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
 										<span>key</span>
 										<span>value</span>
 									</div>

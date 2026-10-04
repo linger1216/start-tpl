@@ -241,12 +241,12 @@ export function SettingsDataScopePreviewDialog({
 								</span>
 								{mine && effect ? (
 									<div className="mt-1 flex flex-wrap items-center gap-2">
-										<Badge className={`text-[10px] ${effect.tone}`}>{effect.label}</Badge>
+										<Badge className={`text-xs ${effect.tone}`}>{effect.label}</Badge>
 										<span className="text-xs text-foreground">{mine.detail}</span>
 									</div>
 								) : null}
 								{mine?.values && mine.values.length > 0 ? (
-									<p translate="no" className="font-mono text-[11px] break-all text-muted-foreground">
+									<p translate="no" className="font-mono text-xs break-all text-muted-foreground">
 										值:{mine.values.slice(0, 6).join(", ")}
 										{mine.values.length > 6 ? ` …(共 ${mine.values.length} 个)` : ""}
 									</p>
@@ -258,11 +258,11 @@ export function SettingsDataScopePreviewDialog({
 									<>
 										<pre
 											translate="no"
-											className="max-h-32 overflow-auto rounded-lg border border-border bg-muted p-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap text-foreground"
+											className="max-h-32 overflow-auto rounded-lg border border-border bg-muted p-2 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-foreground"
 										>
 											{`-- 数出「能看到几行」\n${sql.count.text}\n-- 参数\n${sql.count.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)\n"}\n\n-- 贴出这些行\n${sql.rows.text}\n-- 参数\n${sql.rows.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)"}`}
 										</pre>
-										<span className="text-[11px] text-muted-foreground">
+										<span className="text-xs text-muted-foreground">
 											表名与列名拼在语句里(过 isIdent 白名单),值一律走 ? 参数。
 										</span>
 									</>
@@ -292,7 +292,7 @@ export function SettingsDataScopePreviewDialog({
 												{rowColumns.map((column) => (
 													<TableHead
 														key={column}
-														className="h-8 bg-muted/60 px-2 font-mono text-[11px] text-muted-foreground"
+														className="h-8 bg-muted/60 px-2 font-mono text-xs text-muted-foreground"
 													>
 														{column}
 													</TableHead>
@@ -330,7 +330,7 @@ export function SettingsDataScopePreviewDialog({
 											<li key={reason}>{reason}</li>
 										))}
 									</ul>
-									<span className="text-[11px] text-hue-amber-fg">
+									<span className="text-xs text-hue-amber-fg">
 										改完再点一次「预览」重算;数字对了,回台账点这一行的「上线」。
 									</span>
 								</div>

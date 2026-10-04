@@ -169,7 +169,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 						placeholder="搜页面或菜单(空格分多关键词;⌘1-9 跳第 N 条)..."
 						className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
 					/>
-					<kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 text-[10px] text-muted-foreground">
+					<kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 text-xs text-muted-foreground">
 						ESC
 					</kbd>
 				</div>
@@ -181,7 +181,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 							const list = grouped.map.get(groupName) ?? [];
 							return (
 								<li key={groupName}>
-									<div className="sticky top-0 z-10 bg-popover px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+									<div className="sticky top-0 z-10 bg-popover px-4 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
 										{groupName}
 									</div>
 									<ul>
@@ -204,7 +204,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 														<span className="font-medium flex-1 text-left">{item.name}</span>
 														<span className="text-xs text-muted-foreground font-mono">{item.path}</span>
 														{flatIndex < 9 ? (
-															<kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-border px-1 text-[10px] text-muted-foreground">
+															<kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-border px-1 text-xs text-muted-foreground">
 																⌘{flatIndex + 1}
 															</kbd>
 														) : null}
@@ -218,7 +218,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 						})
 					)}
 				</ul>
-				<div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+				<div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
 					<span className="flex gap-3">
 						<span>
 							<kbd className="rounded border border-border px-1 mr-1">↑↓</kbd>

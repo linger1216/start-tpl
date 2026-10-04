@@ -125,7 +125,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 				>
 					<UserCog className="size-4" />
 				</PopoverTrigger>
-				<PopoverContent align="end" className="w-[22rem] p-0">
+				<PopoverContent align="end" className="w-80 p-0">
 					<div className="space-y-2 p-2">
 						{canSwitch || from ? (
 							<Input

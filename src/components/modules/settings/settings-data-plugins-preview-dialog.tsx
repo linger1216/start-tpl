@@ -58,7 +58,7 @@ export function SettingsDataPluginsPreviewDialog({
 
 					{/* 当前上下文(谁) */}
 					<div className="flex flex-col gap-1.5">
-						<p className="text-[11px] text-muted-foreground">当前上下文</p>
+						<p className="text-xs text-muted-foreground">当前上下文</p>
 						{testQuery.data ? (
 							<PolicyContextBlock
 								userName={testQuery.data.userName}
@@ -77,7 +77,7 @@ export function SettingsDataPluginsPreviewDialog({
 
 					{/* 输出值(插件取到的) —— 一列:原始对象,是什么显示什么,不查名字(m18546);v1.4 m18655 起返对象数组,这里 JSON 化贴出 */}
 					<div className="flex flex-col gap-1.5">
-						<p className="text-[11px] text-muted-foreground">输出值(原始对象)</p>
+						<p className="text-xs text-muted-foreground">输出值(原始对象)</p>
 						<div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
 							{testQuery.isFetching ? (
 								<p className="text-muted-foreground">算着呢…</p>
@@ -92,7 +92,7 @@ export function SettingsDataPluginsPreviewDialog({
 										) : null}
 									</p>
 									{testQuery.data.rows.length > 0 ? (
-										<pre className="max-h-48 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground/90">
+										<pre className="max-h-48 overflow-auto rounded border border-border bg-background p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-foreground/90">
 											{testQuery.data.rows.map((item) => JSON.stringify(item)).join("\n")}
 										</pre>
 									) : null}

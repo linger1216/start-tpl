@@ -52,12 +52,12 @@ export function pluginColumns({
 					<div className="flex items-center gap-1.5">
 						<span className="truncate text-xs font-medium text-foreground">{ctx.getValue()}</span>
 						{ctx.row.original.kind === "builtin" ? (
-							<Badge variant="outline" className="text-[10px]">
+							<Badge variant="outline" className="text-xs">
 								内置
 							</Badge>
 						) : null}
 					</div>
-					<span translate="no" className="truncate font-mono text-[10px] text-muted-foreground">
+					<span translate="no" className="truncate font-mono text-xs text-muted-foreground">
 						{ctx.row.original.pluginKey}
 					</span>
 				</div>
