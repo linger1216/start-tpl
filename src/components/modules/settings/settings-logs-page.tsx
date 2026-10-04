@@ -4,8 +4,14 @@ import { useMemo, useState } from "react";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsLogsDetail } from "#/components/modules/settings/settings-logs-detail";
-import { type LogRow, logColumns } from "#/components/modules/settings/settings-logs-table";
+import {
+	LOG_EXCEL_COLUMNS,
+	type LogRow,
+	logColumns,
+	logExcelRows,
+} from "#/components/modules/settings/settings-logs-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ExcelExportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -22,6 +28,9 @@ import { matchKeyword } from "#/lib/table";
  *
  * 列表**默认只取最近 200 条**(接口上限 500):审计增长很快,全量返回只是把压力换个地方;
  * 搜索框一端连着后端的多字段模糊匹配(动作名 / 路径 / 目标 / 操作人),要看得更久就用它收窄。
+ *
+ * 工具条右端可以**导出当前筛选结果**(xlsx,列契约在 `settings-logs-table.tsx` 的 `LOG_EXCEL_COLUMNS`):
+ * 导出的是屏幕上这 N 条,不是"全部历史" —— 要更久的历史,先用搜索收窄再导。
  */
 export function SettingsLogsPage() {
 	const trpc = useTRPC();
@@ -37,6 +46,8 @@ export function SettingsLogsPage() {
 	);
 
 	const columns = useMemo(() => logColumns({ onView: setViewing }), []);
+	/** 导出的行(转好了状态与时间;xlsx 只在点导出时下载,这里便宜) */
+	const excelRows = useMemo(() => logExcelRows(filtered), [filtered]);
 
 	const { table, persistColumns } = useLedgerTable({
 		columns,
@@ -99,7 +110,13 @@ export function SettingsLogsPage() {
 					table.setPageIndex(0);
 				}}
 				searchPlaceholder="搜索动作 / 路径 / 目标 / 操作人 / 追踪号…"
-				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+				actions={
+					<>
+						<ColumnToggle table={table} onPersist={persistColumns} />
+						{/* 导出的是**当前筛选结果**(与卡头「匹配 N 条」同源),不是全部历史 —— 列表本来只加载最近 200 条 */}
+						<ExcelExportButton columns={LOG_EXCEL_COLUMNS} rows={excelRows} fileName="审计日志" />
+					</>
+				}
 			/>
 
 			<LedgerCard
