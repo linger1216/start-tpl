@@ -7,7 +7,7 @@
  * 注意不能把 `SettingsDictRow` 直接丢给 `writeSheet` —— 它的 `items` 是对象数组,
  * `cellText` 只会把对象变成 `[object Object]`(见 `lib/excel.ts`),必须先在这里摊平。
  */
-import type { SettingsDictRow } from "#/components/modules/settings/settings-dictionary-types";
+import type { SettingsDictRow } from "#/components/modules/settings/settings-dictionary-table";
 import type { ExcelColumn } from "#/lib/excel";
 
 type DictExcelKey = "code" | "name" | "label" | "value" | "remark";

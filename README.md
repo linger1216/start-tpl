@@ -740,6 +740,20 @@ pnpm check
 
 基线:`pnpm typecheck` 0 · `pnpm check` 284 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
 
+### 第十二轮:再扫一轮命名 / 文件角色 outlier(2026-10)
+
+第十一轮把「动词统一」扫完后,本轮只剩 3 个**个例级别**的命名 / 角色 outlier;它们没有破坏什么,但看一眼就能看出"为什么这里例外"—— 不是不可以,**但本模板要做的是给别人看的范本**,范本里最忌讳「我知道为啥例外」这种解释成本。
+
+| 类别 | outlier | 改法 |
+| --- | --- | --- |
+| 文件角色 | **用户管理**是 12 个列表页里**唯一**没有 `*-detail.tsx` 的(详情直接内联在 `settings-users-page.tsx` 的 60 行 `DetailDialog` 里) | 新件 `settings-users-detail.tsx`(71 行),只读,字段与 `UserRow` 的列一一对应;`page` 里换成 `<SettingsUsersDetail row={viewing} ...>`,砍掉 `Avatar` / `Badge` / `BadgeList` / `DetailRow` / `DetailDialog` 五组 import |
+| 文件角色 | **字典**是 12 个域里**唯一**有 `settings-dictionary-types.ts` 的(`Row` 在 `*-table.tsx` 是约定,`FormValues` 在 `*-form.tsx` 是约定) | `SettingsDictRow` 移进 `settings-dictionary-table.tsx` 顶部;`DictFormValues` / `emptyDictForm` / `dictToForm` 移进 `settings-dictionary-form.tsx`(form 自有可控状态的形状与重置工具);**整个 `settings-dictionary-types.ts` 文件删除**;4 个 import 点(excel / page / form / detail)同步改 |
+| 文件命名 | `settings-tags-form-dialog.tsx` —— 其他 11 个域的表单都叫 `settings-X-form.tsx`,只有 tags 多了个 `-dialog` 后缀 | `git mv` 重命名 + `SettingsTagsFormDialog` → `SettingsTagsForm`(函数名也一并对齐) |
+
+体量:**10 files changed, +93 / −132**(净 −39 行);新增 `settings-users-detail.tsx`(71 行) + 删除 `settings-dictionary-types.ts`(38 行) + 重命名 `settings-tags-form-dialog.tsx` → `settings-tags-form.tsx`。
+
+基线:`pnpm typecheck` 0 · `pnpm check` 284 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
+
 ---
 
 ## 延伸阅读

@@ -6,14 +6,17 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsDictionaryDetail } from "#/components/modules/settings/settings-dictionary-detail";
 import { DICT_EXCEL_COLUMNS, dictExcelRows } from "#/components/modules/settings/settings-dictionary-excel";
-import { SettingsDictionaryForm } from "#/components/modules/settings/settings-dictionary-form";
-import { dictionaryColumns, type SettingsDictCallbacks } from "#/components/modules/settings/settings-dictionary-table";
 import {
 	type DictFormValues,
 	dictToForm,
 	emptyDictForm,
+	SettingsDictionaryForm,
+} from "#/components/modules/settings/settings-dictionary-form";
+import {
+	dictionaryColumns,
+	type SettingsDictCallbacks,
 	type SettingsDictRow,
-} from "#/components/modules/settings/settings-dictionary-types";
+} from "#/components/modules/settings/settings-dictionary-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";

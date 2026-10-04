@@ -2,7 +2,7 @@ import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { EnabledBadge } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
-import type { SettingsDictRow } from "./settings-dictionary-types";
+import type { SettingsDictRow } from "./settings-dictionary-table";
 
 /**
  * 字典详情(只读)。

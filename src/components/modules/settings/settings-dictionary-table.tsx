@@ -2,7 +2,21 @@ import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
-import type { SettingsDictRow } from "./settings-dictionary-types";
+
+/**
+ * 字段管理页用到的字典行(`sys_dict` 的一行)—— **与 `sys_dict` 的列一一对应**。
+ * `id` 是 nanoid 主键,业务一律用 `code`。
+ */
+export type SettingsDictRow = {
+	id: string;
+	code: string;
+	name: string;
+	items: Array<{ label: string; value: string }>;
+	remark: string | null;
+	status: number;
+	createTime: string | null;
+	updateTime: string | null;
+};
 
 export type SettingsDictCallbacks = {
 	onView: (row: SettingsDictRow) => void;

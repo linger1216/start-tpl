@@ -20,7 +20,7 @@ export type TagFormValues = { label: string; value: string | null; desc: string 
  * 标签节点表单 —— 同时服务「新增」(在某父节点下挂一个)与「编辑」(改 label / value / desc)。
  * 不在这层写库:把值抛回页面,由页面走 tRPC。
  */
-export function SettingsTagsFormDialog({
+export function SettingsTagsForm({
 	open,
 	mode,
 	parentLabel,

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
+import { SettingsUsersDetail } from "#/components/modules/settings/settings-users-detail";
 import {
 	USER_EXCEL_COLUMNS,
 	USER_IMPORT_FIELDS,
@@ -13,18 +14,13 @@ import {
 import { SettingsUsersForm, type UserFormPayload } from "#/components/modules/settings/settings-users-form";
 import { type UserRow, userColumns } from "#/components/modules/settings/settings-users-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
-import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import type { MultiSelectOption } from "#/components/modules/shared/multi-select";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -47,7 +43,7 @@ export function SettingsUsersPage() {
 	const users = (usersQuery.data ?? []) as UserRow[];
 
 	const [keyword, setKeyword] = useState("");
-	const [detailFor, setDetailFor] = useState<UserRow | null>(null);
+	const [viewing, setViewing] = useState<UserRow | null>(null);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [editing, setEditing] = useState<UserRow | null>(null);
 	const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
@@ -127,7 +123,7 @@ export function SettingsUsersPage() {
 	const excelRows = useMemo(() => userExcelRows(filtered), [filtered]);
 
 	const columns = useMemo(
-		() => userColumns({ onView: setDetailFor, onEdit: setEditing, onDelete: setPendingDelete }),
+		() => userColumns({ onView: setViewing, onEdit: setEditing, onDelete: setPendingDelete }),
 		[],
 	);
 	const { table, persistColumns } = useLedgerTable({
@@ -218,68 +214,17 @@ export function SettingsUsersPage() {
 				table={table}
 			/>
 
-			<DetailDialog
-				open={detailFor !== null}
+			<SettingsUsersDetail
+				row={viewing}
+				open={viewing !== null}
 				onOpenChange={(next) => {
-					if (!next) setDetailFor(null);
+					if (!next) setViewing(null);
 				}}
-				title={`用户详情 · ${detailFor?.name ?? ""}`}
-				description={detailFor?.email ?? ""}
-				badge={
-					detailFor ? (
-						<Badge variant={detailFor.emailVerified ? "secondary" : "outline"} className="text-xs">
-							{detailFor.emailVerified ? "邮箱已验证" : "邮箱未验证"}
-						</Badge>
-					) : null
-				}
-				meta={{ createdAt: detailFor?.createdAt, updatedAt: detailFor?.updatedAt }}
-				onEdit={() => {
-					if (detailFor) setEditing(detailFor);
+				onEdit={(row) => {
+					setViewing(null);
+					setEditing(row);
 				}}
-			>
-				{detailFor ? (
-					<div className="flex flex-col gap-0">
-						<DetailRow label="ID">
-							<span className="font-mono text-xs">{detailFor.id}</span>
-						</DetailRow>
-						<DetailRow label="姓名">
-							<span className="text-sm font-medium">{detailFor.name}</span>
-						</DetailRow>
-						<DetailRow label="邮箱">{detailFor.email}</DetailRow>
-						<DetailRow label="邮箱已验证">{detailFor.emailVerified ? "是" : "否"}</DetailRow>
-						<DetailRow label="头像">
-							<div className="flex items-center gap-2">
-								<Avatar className="size-8">
-									{detailFor.image ? <AvatarImage src={detailFor.image} alt={detailFor.name} /> : null}
-									<AvatarFallback className="text-xs">{(detailFor.name || "?").slice(0, 1)}</AvatarFallback>
-								</Avatar>
-								<span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-									{detailFor.image ?? "—"}
-								</span>
-							</div>
-						</DetailRow>
-
-						<DetailRow label="部门">
-							{" "}
-							<BadgeList
-								values={detailFor.departmentNames}
-								layout="wrap"
-								color="stable"
-								emptyPlaceholder="未加入部门"
-							/>
-						</DetailRow>
-						<DetailRow label="角色">
-							{" "}
-							<BadgeList
-								values={detailFor.roleNames}
-								layout="wrap"
-								color="stable"
-								emptyPlaceholder="未分配(看不到任何菜单)"
-							/>
-						</DetailRow>
-					</div>
-				) : null}
-			</DetailDialog>
+			/>
 
 			<SettingsUsersForm
 				user={editing}

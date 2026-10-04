@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsTagsFormDialog, type TagFormValues } from "#/components/modules/settings/settings-tags-form-dialog";
+import { SettingsTagsForm, type TagFormValues } from "#/components/modules/settings/settings-tags-form";
 import { SettingsTagsTree, type TagNode, type TagRow } from "#/components/modules/settings/settings-tags-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { ActionButton } from "#/components/ui/action-button";
@@ -269,7 +269,7 @@ export function SettingsTagsPage() {
 				</Card>
 			</div>
 
-			<SettingsTagsFormDialog
+			<SettingsTagsForm
 				open={formOpen}
 				mode={formMode}
 				parentLabel={formParentLabel}
