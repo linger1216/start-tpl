@@ -6,15 +6,17 @@
  * **列头与列宽不在这里** —— 各域自己的 `XXX_EXCEL_COLUMNS` 才是真源(理由见 `lib/excel.ts` 的文件头);
  * 导入字段与导出一致时直接复用同一份,只有多/少列时才另立一份(如 users 域多了「初始密码」)。
  *
- * 家族归属:「导出」是工具条里的操作按钮,走 `ActionButton`(纯文字、不带图标),与「列」`ColumnToggle`、
- * 「刷新」`RefreshButton` 并排;「导入」会开对话框,按约定用 `Button`(可带图标)—— 示例见
- * `workbench/ui-gallery-table.tsx` 的工具条与 `doc/界面约定.md` 的按钮分族。
+ * 家族归属:导入 / 导出是工具条右端的一对,共享**同一族** `Button size="sm" variant="outline"` +
+ * icon(`Upload` / `Download` 两两配对)—— 同样的尺寸、同样的描边、同样的图标尺寸,视觉上是一对。
+ * 「导入」开对话框,沿用 `Button` 是约定;把「导出」从原来的 `ActionButton`(纯文字链接)拉进
+ * 同一族,是因为它跟「导入」在工具条上是同一组数据 I/O,单独看是细节、**并排看是配对**。
+ * 这条边界的例外写在这里,「按钮分两族」的通用规则见 `doc/界面约定.md` 与
+ * `workbench/ui-gallery-table.tsx`。
  */
-import { Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
 
-import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import type { ExcelColumn, ImportField, ImportResult, ImportRow } from "#/lib/excel";
 
@@ -40,7 +42,9 @@ export function ExcelExportButton<Key extends string>({
 	const empty = rows.length === 0;
 
 	return (
-		<ActionButton
+		<Button
+			size="sm"
+			variant="outline"
 			disabled={busy || empty}
 			title={empty ? "没有可导出的行" : undefined}
 			onClick={async () => {
@@ -58,8 +62,9 @@ export function ExcelExportButton<Key extends string>({
 				}
 			}}
 		>
+			<Download className="size-3.5" />
 			{busy ? "导出中…" : "导出"}
-		</ActionButton>
+		</Button>
 	);
 }
 
