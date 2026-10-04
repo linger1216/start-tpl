@@ -70,7 +70,7 @@ type EffectiveMenus = {
  * 菜单访问的**完整**计算结果 —— 比 `EffectiveMenus` 多一张"全站菜单驱动的页面"表。
  *
  * 路由守卫要区分三种路径:① 菜单驱动的页面 → 按菜单授权判;② 登录落地页/通知中心 → 放行;
- * ③ 压根不在菜单表里的页面(如 `/blank`)→ 放行。这张表 + `ALWAYS_VIEWABLE_PATHS` 就是全部判据。
+ * ③ 压根不在菜单表里的页面(如 `/settings/profile`)→ 放行。这张表 + `ALWAYS_VIEWABLE_PATHS` 就是全部判据。
  */
 type MenuAccess = EffectiveMenus & {
 	/** 菜单驱动的页面:**路径 → 菜单名**(菜单名给 403 页显示"「X」没有授权") */
@@ -441,6 +441,6 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"user.roles",
 	// 类别 2:天生自限范围 —— 个人资料页(`/settings/profile`)。SQL 只按 `ctx.user.id` 读自己那一行;
 	// 页面本身刻意**不挂菜单授权**(不然"没勾设置菜单的人连自己资料都看不到"),
-	// 入口在顶栏用户菜单里,与 `/blank` 那类"不在菜单表里的页面"同一个口径(见 `canViewPath`)。
+	// 入口在顶栏用户菜单里,与 `/demo/*` 那类"不在菜单表里的页面"同一个口径(见 `canViewPath`)。
 	"user.profile",
 ];

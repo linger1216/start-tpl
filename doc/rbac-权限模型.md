@@ -84,7 +84,7 @@ sys_casbin_rule:p(role, menu)                      角色能看见哪些菜单 /
 - 合成码 **`page:<路径折算>:view`**(`pagePermOf()`:非字母数字折成 `_`,小写,去前导斜杠)
   —— `/settings/logs` → `page:settings_logs:view`。语义就是"这个人在菜单里能不能看见这一页"。
 - 放行的三种情况:**权限体系未启用**(一条 `p` 行都没有 ⇒ `perms === null`)、
-  `ALWAYS_VIEWABLE_PATHS`(`/`、`/notices`)、**不在菜单表里的地址**(demo 页、`/blank` 等)。
+  `ALWAYS_VIEWABLE_PATHS`(`/`、`/notices`)、**不在菜单表里的地址**(demo 页、`/settings/profile` 等)。
 - 拿不到会话 → `redirect` 到 `/login?redirect=<原地址>`;有会话但没授权 →
   `notFound({ data: { forbidden: true, pageName } })`。
 - ⚠️ **为什么是 404 而不是 403**:框架对**任何错误终态**都写死 `status: 500`

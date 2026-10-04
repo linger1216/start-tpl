@@ -25,6 +25,7 @@ pnpm dev                       # http://localhost:3000
 
 > **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
 > `/settings` 十页全部读真库,没配 `DATABASE_URL` 会落到错误边界。演示账号见 `doc/测试数据/README.md`(密码统一 `Passw0rd123`,管理员 `admin@example.com`)。
+> 不想在本机装 MySQL / MinIO:`docker compose` 一套起齐,见下文「Docker / 容器化」。
 
 ---
 
@@ -51,7 +52,6 @@ src/
 │   ├── (main)/                   # 无路径布局组(URL 中不出现 "(main)")
 │   │   ├── route.tsx             # 后台外壳 + 页面级权限守卫(beforeLoad 读会话 / 判页面权限)
 │   │   ├── index.tsx             # 工作台(入口页 + UI 示例)
-│   │   ├── blank.tsx             # 空白页(PageHeader + EmptyState 手写占位)
 │   │   ├── notices.tsx           # 通知中心
 │   │   ├── demo/                 # 框架能力样例(7 页)
 │   │   └── settings/             # 系统设置(11 个路由文件 = 索引 + 10 页)
@@ -218,6 +218,32 @@ src/
 
 ---
 
+## Docker / 容器化
+
+本机不装 MySQL / MinIO 也能起全栈:`docker-compose.yml` 是唯一环境定义,devcontainer 只是它的叠加层。
+
+```bash
+cp .env.example .env.local                            # 至少填 BETTER_AUTH_SECRET
+docker compose --profile setup run --rm bootstrap     # 建表 + 四个种子 + 建 MinIO 桶(幂等,可重跑)
+docker compose up -d                                  # http://localhost:3000
+```
+
+| 服务 | 宿主端口 | 说明 |
+| --- | --- | --- |
+| `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
+| `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
+| `minio` | `9000` / `9001` | 对象存储 + 控制台 |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 19 张表 + 四个种子 + `db:minio:init` |
+
+端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
+「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
+
+> 一个反直觉但必须知道的事实:**Nitro 的 `.output` 不是自包含的** —— `instrument.server.mjs` 是按包名
+> import 的,所以运行镜像里必须 `pnpm install --prod`。完整口径、可覆盖变量表与踩过的坑见
+> [`doc/容器化.md`](doc/容器化.md)。
+
+---
+
 ## 环境变量
 
 `.env.example` 是**唯一**随模板分发的 env 文件,不含真实凭据。
@@ -361,7 +387,7 @@ function UsersPage() {
 2. 跑 `pnpm generate-routes`
 3. 在 `src/components/layout/nav-config.ts` 的 `NAV_NODES` 里注册菜单(支持子菜单,`icon` 用 `NAV_ICON_MAP` 里登记的 kebab-case 名)
 
-页面骨架未定时照 `src/routes/(main)/blank.tsx` 那样用 `PageHeader` + `EmptyState` 拼一个占位页(它就是范例)。想脱离后台外壳(如独立登录页)就放到 `src/routes/` 根下。
+页面骨架未定时用 `PageHeader` + `EmptyState` 拼一个占位页(模板里不再有现成的空白页)。想脱离后台外壳(如独立登录页)就放到 `src/routes/` 根下。
 
 **改完必跑** `pnpm generate-routes && pnpm typecheck`。
 
@@ -605,6 +631,7 @@ pnpm check
 - `doc/审计日志.md` —— 日志覆盖率、事件字典、30 分钟清理
 - `doc/通知中心.md` · `doc/文件管理.md` —— 通知与 MinIO 文件的能力边界
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
+- `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)
 - `DESIGN.md` —— 视觉规范(品牌 7 色 + 点缀 6 色相 + 间距 / 圆角 / 阴影 / 动效原语清单)

@@ -1,0 +1,25 @@
+# 构建上下文里不该出现的东西。
+#
+# 三条最要紧的:
+#   .env.local  —— 机密,运行期用 `-e` / compose 注入,不能烤进镜像
+#   .npmrc      —— 本地文件,里面常写 `store-dir=/Users/xxx/...` 这种宿主机绝对路径,
+#                  进容器后 pnpm 会去写宿主机才有的目录(见 doc/容器化.md)
+#   node_modules / .output —— 要么容器里重装,要么由 build 阶段产出
+.env
+.env.*
+!.env.example
+.npmrc
+node_modules
+**/node_modules
+.output
+.tanstack
+.nitro
+dist
+coverage
+.pnpm-store
+.git
+.github
+.idea
+.DS_Store
+*.log
+doc/archive

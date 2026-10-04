@@ -1,0 +1,134 @@
+# 本机开发用的一整套容器:MySQL + MinIO + 应用(+ 一次性初始化任务)。
+#
+#   cp .env.example .env.local                          # 至少填 BETTER_AUTH_SECRET
+#   docker compose --profile setup run --rm bootstrap   # 建表 + 四个种子 + 建桶(幂等,可重复跑)
+#   docker compose up -d                                # http://localhost:3000
+#
+# 之后跟着 README 的「快速开始」走即可(演示数据:`docker compose --profile setup run --rm bootstrap sh -c "pnpm db:seed:demo"`)。
+#
+# 端口默认避开宿主机常用的 3306(这里 MySQL 用 3307),且只绑 127.0.0.1 —— 不对局域网暴露。
+# 所有变量都能用 shell 环境变量或根目录 `.env` 覆盖:
+#   APP_PORT=3100 MYSQL_IMAGE=mysql:9.1 docker compose up -d
+#
+# 注意:`docker compose` 只会自动读**根目录的 `.env`**;`.env.local` 是应用自己的文件,
+# 这里用 `env_file` 显式喂给容器(文件不存在也不报错 —— 那样应用会以「缺 DATABASE_URL」
+# 这种明确错误退出,而不是带着半份配置跑起来)。
+#
+# 这里**不写** `name:` —— 项目名默认取目录名,用 new-project.sh 派生出的新项目自动就是
+# 自己的名字(容器名 / 卷名都跟着走)。
+
+# 应用与初始化任务共用的连接信息 —— 容器内用**服务名**互联,不是 localhost。
+x-service-env: &service-env
+  DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-tpl-local-root}@mysql:3306/${MYSQL_DATABASE:-eg}
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: "9000"
+  MINIO_USE_SSL: "false"
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-app-public}
+  MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-app-private}
+  # 浏览器直链走宿主端口,不能写成容器内的 minio:9000
+  MINIO_PUBLIC_URL: http://localhost:${MINIO_API_PORT:-9000}
+
+services:
+  mysql:
+    # 默认 8.4(LTS,镜像最全)。本机开发用的是 9.1,想完全对齐:
+    #   MYSQL_IMAGE=mysql:9.1 docker compose up -d
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-tpl-local-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-eg}
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 密码由 compose 在解析期插值进命令(不写 `$$VAR` —— 那要靠容器里的 shell 展开,
+      # 而 `$$` 到底是「转义后的 `$`」还是「字面两个 `$`」在 `docker compose config`
+      # 的输出里看不出来)。本机开发密码因此会出现在 `docker compose config` 里,可接受。
+      # 注意:密码里别放单引号。
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p'${MYSQL_ROOT_PASSWORD:-tpl-local-root}' --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # 镜像自带 `mc`(没有 curl);`local` 是镜像内置的指向自身的别名。
+      # 万一某个 tag 没有这个别名,换成:["CMD", "mc", "ready", "http://127.0.0.1:9000"]
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      target: runtime
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      <<: *service-env
+      NODE_ENV: production
+      PORT: "3000"
+      # 换 APP_PORT 时记得同步放行 origin(代码内置只认 http://localhost:3000):
+      #   BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3100
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 一次性初始化:建 19 张系统表 + 四个种子 + 建 MinIO 两个桶。
+  #   全量:docker compose --profile setup run --rm bootstrap
+  #   只灌演示数据:docker compose --profile setup run --rm bootstrap sh -c "pnpm db:seed:demo"
+  # 用 dev 镜像(要跑 tsx 脚本),不常驻 —— profile 保证 `up -d` 不会带上它。
+  bootstrap:
+    profiles: ["setup"]
+    build:
+      context: .
+      target: dev
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      <<: *service-env
+      NODE_ENV: development
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        pnpm db:create &&
+        pnpm db:seed:menus &&
+        pnpm db:seed:rbac &&
+        pnpm db:seed:paras &&
+        pnpm db:seed:dicts &&
+        pnpm db:minio:init
+
+volumes:
+  mysql-data:
+  minio-data:

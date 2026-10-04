@@ -1,0 +1,52 @@
+# 开发容器叠加层 —— 只给 VS Code Dev Container 用
+# (`.devcontainer/devcontainer.json` 会把本文件与 `docker-compose.yml` 一起带上)。
+#
+# 手工等价用法:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d dev
+#   docker compose exec dev pnpm dev --host 0.0.0.0   # 从宿主机浏览器访问时才要 --host
+#
+# 两条约定:
+#   1. 仓库是**绑定挂载**进来的,`node_modules` 单独放命名卷 —— 不把宿主的依赖带进容器,
+#      也避开 macOS 绑定挂载的 I/O 拖慢 vite。
+#   2. `sleep infinity`:容器是给人用的工作台,具体跑什么由你在终端里敲。
+
+services:
+  dev:
+    build:
+      context: .
+      target: dev
+    env_file:
+      - path: .env.local
+        required: false
+    # 连接信息与 `docker-compose.yml` 的 `x-service-env` 保持一致 —— YAML 锚点不跨文件,
+    # 只能重复写一遍。
+    environment:
+      DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-tpl-local-root}@mysql:3306/${MYSQL_DATABASE:-eg}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-app-public}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-app-private}
+      MINIO_PUBLIC_URL: http://localhost:${MINIO_API_PORT:-9000}
+      NODE_ENV: development
+      # 仓库是挂进来的,宿主的 `.npmrc` 可能写着绝对路径 store;这里强制容器内路径
+      npm_config_store_dir: /pnpm/.data/pnpm/store
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - .:/app
+      - dev-node_modules:/app/node_modules
+      - dev-pnpm-store:/pnpm/.data
+    ports:
+      - "127.0.0.1:${DEV_PORT:-3000}:3000"
+    command: sleep infinity
+
+volumes:
+  dev-node_modules:
+  dev-pnpm-store:
