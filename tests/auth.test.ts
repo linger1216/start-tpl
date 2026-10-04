@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
-import { and, eq } from "drizzle-orm";
-import { sysAccount, sysLog, sysMenu, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { and, eq, inArray } from "drizzle-orm";
+import { sysAccount, sysLog, sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -35,6 +35,8 @@ const SUFFIX = uniqueSuffix();
 const createdLogIds: string[] = [];
 /** 「个人资料」用例造的真账号(`user.profile` 读的是 `sys_user` 真实行)—— 收尾连会话 / account 一起清 */
 const createdUserIds: string[] = [];
+/** 用例里建过的角色 —— `role.remove` 现在是软删,行会留在库里,收尾必须按 id 物理清 */
+const createdRoleIds: string[] = [];
 
 const def = (trpcRouter as unknown as { _def: { procedures: Record<string, { _def?: { type?: string } }> } })._def;
 const PROCEDURES = Object.keys(def.procedures ?? {});
@@ -73,6 +75,7 @@ after(async () => {
 		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
 		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
+	if (createdRoleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds));
 	await closeDb();
 });
 
@@ -213,6 +216,7 @@ describe("审计日志", () => {
 
 		const createdName = `${TEST_PREFIX}审计角色${SUFFIX}`;
 		const created = await caller.role.create({ name: createdName, remark: "" });
+		createdRoleIds.push(created.id);
 		try {
 			const row = await waitForOwnLog("role.create", createdName);
 			assert.ok(row, "写调用要留下审计行");
@@ -263,6 +267,7 @@ describe("审计日志", () => {
 		// 角色名现在是唯一可挑的入参关键字(已没有 code 字段)⇒ 用同一个 name 撞两次,第二次会被 CONFLICT 拒
 		const failingName = `${TEST_PREFIX}审计失败_${SUFFIX}`;
 		const first = await caller.role.create({ name: failingName, remark: "" });
+		createdRoleIds.push(first.id);
 		try {
 			await assertRejects(() => caller.role.create({ name: failingName, remark: "" }), "");
 			// 失败的这一次也会写一行:同 name 下应该出现 status=0 的那条
@@ -289,6 +294,7 @@ describe("审计日志", () => {
 			email,
 			password: "S3cret-Passw0rd",
 		});
+		createdUserIds.push(created.id);
 		try {
 			const snapshot = (await waitForOwnLog("user.create", email))?.input ?? "";
 			assert.ok(snapshot.includes("***"), `入参快照应已脱敏,实际:${snapshot.slice(0, 200)}`);

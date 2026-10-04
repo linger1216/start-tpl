@@ -13,13 +13,14 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import { sysDict } from "#/db/data-base-schema";
 import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 字典编码规则:小写字母/数字/下划线,字母开头 —— 与建表的唯一键口径一致 */
@@ -57,16 +58,27 @@ function toDict(row: typeof sysDict.$inferSelect) {
 	};
 }
 
-async function getByCode(code: string) {
-	const [row] = await db.select().from(sysDict).where(eq(sysDict.code, code)).limit(1);
+/**
+ * 按编码取一行字典。
+ *
+ * `includeDeleted` 只有 `delete` 会传(软删要拿当前 `code` + `id` 写墓碑);
+ * 其余调用点(byCode / create 查重 / update 取行)一律带 `alive()`,否则已删除的字典会重新露出来。
+ */
+async function getByCode(code: string, includeDeleted = false) {
+	const [row] = await db
+		.select()
+		.from(sysDict)
+		.where(includeDeleted ? eq(sysDict.code, code) : and(eq(sysDict.code, code), alive(sysDict)))
+		.limit(1);
 	return row ?? null;
 }
 
 export const dictRouter = createTRPCRouter({
 	/** 全部字典(前端按需取用;字典表很小,直接全给) */
 	list: protectedProcedure.query(async () => {
-		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 消费侧(useDict)自己只看启用的那些
-		const rows = await db.select().from(sysDict).orderBy(asc(sysDict.code));
+		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 消费侧(useDict)自己只看启用的那些。
+		// 但**软删**的行要过滤:它留着只是审计留痕,不该出现在「库里有这些字典」里
+		const rows = await db.select().from(sysDict).where(alive(sysDict)).orderBy(asc(sysDict.code));
 		return rows.map(toDict);
 	}),
 
@@ -86,6 +98,8 @@ export const dictRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
+			// 查重只看活着的行:软删字典的 `code` 已被 `tombstone()` 让位(= 有效字典只剩 `#d#…` 的墓碑),
+			// 所以同一个编码删掉之后能重新建,不会给一个无解的死胡同
 			if (await getByCode(input.code)) {
 				throw new TRPCError({ code: "CONFLICT", message: `字典编码「${input.code}」已存在` });
 			}
@@ -132,11 +146,19 @@ export const dictRouter = createTRPCRouter({
 	/**
 	 * 删除字典 —— 模板未接到「谁在用这个字典」的登记处,所以**不做引用计数校验**:
 	 * 真业务接回后,在这里补检查(常见引用方是治理规则的 `spec.category` 与档案写入路径)。
+	 *
+	 * 删除是**软删**(审计留痕:谁什么时候删了哪个编码);`code` 上有唯一索引,
+	 * 用 `tombstone()` 把编码改成墓碑值让位 —— 否则删掉的编码被死行永久占住,再也建不回来。
+	 * 读路径(列表 / byCode / 查重 / 导入先查)必须处处带 `alive()`,漏一处就把已删除的字典又暴露出去。
 	 */
 	delete: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
-		const existing = await getByCode(input.code);
+		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 要拿它当前的 `code` 写墓碑让位
+		const existing = await getByCode(input.code, true);
 		if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "这个字典不存在(可能已被删除)" });
-		await db.delete(sysDict).where(eq(sysDict.code, input.code));
+		await db
+			.update(sysDict)
+			.set({ ...softDeleted(), code: tombstone(existing.code, existing.id, 64) })
+			.where(eq(sysDict.code, input.code));
 		return { id: existing.id, code: input.code };
 	}),
 
@@ -201,11 +223,11 @@ export const dictRouter = createTRPCRouter({
 			});
 			if (groups.size === 0) return result;
 
-			// 2) 一次读出涉及的字典,避免每个编码一次查询
+			// 2) 一次读出涉及的字典,避免每个编码一次查询 —— 只认活着的行,已软删的编码按「没有」处理,走新建分支
 			const existing = await db
 				.select()
 				.from(sysDict)
-				.where(inArray(sysDict.code, [...groups.keys()]));
+				.where(and(inArray(sysDict.code, [...groups.keys()]), alive(sysDict)));
 			const byCode = new Map(existing.map((row) => [row.code, row]));
 
 			// 3) 逐个落库

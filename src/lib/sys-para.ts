@@ -16,6 +16,7 @@ import { db } from "#/db";
 import { sysPara } from "#/db/data-base-schema";
 import { FILE_ALLOW_EXT_DEFAULT, FILE_MAX_SIZE_MB_DEFAULT, PARA_TYPE, type ParaType } from "./para-spec";
 import { SIDEBAR_COLLAPSE_MODE_DEFAULT, SIDEBAR_MODE_CONFIG_KEY } from "./sidebar-mode";
+import { alive } from "./soft-delete";
 
 /** 代码内置的默认参数(库里没有时用这些,并作为"参数管理"页的初始清单) */
 export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; group: string; remark: string }> = {
@@ -89,7 +90,7 @@ let cache: { at: number; map: Map<string, string> } | null = null;
 export async function getParaMap(force = false): Promise<Map<string, string>> {
 	if (!force && cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.map;
 	const map = new Map(Object.entries(PARA_DEFAULTS).map(([key, item]) => [key, item.value]));
-	for (const row of await db.select().from(sysPara)) {
+	for (const row of await db.select().from(sysPara).where(alive(sysPara))) {
 		map.set(row.para_key, row.para_value);
 	}
 	cache = { at: Date.now(), map };

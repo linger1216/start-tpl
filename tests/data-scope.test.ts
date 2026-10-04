@@ -61,9 +61,15 @@ after(async () => {
 	for (const id of ruleIds) {
 		await db.delete(sysDataPolicy).where(eq(sysDataPolicy.id, id));
 	}
-	// 兜底:按插件标识再扫一遍(防中途崩溃留下的规则)
-	await db.delete(sysDataPolicy).where(eq(sysDataPolicy.plugin_key, PLUGIN_KEY));
-	await db.delete(sysDataPlugin).where(eq(sysDataPlugin.plugin_key, PLUGIN_KEY));
+	// 兜底:按 `__test__` 前缀扫全表把本文件造的行收成 id —— 删除现在是软删,`plugin_key` 已被
+	// `tombstone()` 改成 `...#d#<id 尾段>`,再按 key 查就查不到了(会留一堆软删行)
+	const plugins = await db.select({ id: sysDataPlugin.id, pluginKey: sysDataPlugin.plugin_key }).from(sysDataPlugin);
+	const pluginIds = plugins.filter((row) => row.pluginKey.includes(TEST_PREFIX)).map((row) => row.id);
+	if (pluginIds.length > 0) await db.delete(sysDataPlugin).where(inArray(sysDataPlugin.id, pluginIds));
+	const rules = await db.select({ id: sysDataPolicy.id, pluginKey: sysDataPolicy.plugin_key }).from(sysDataPolicy);
+	const staleRuleIds = rules.filter((row) => (row.pluginKey ?? "").includes(TEST_PREFIX)).map((row) => row.id);
+	if (staleRuleIds.length > 0) await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.id, staleRuleIds));
+	// 没被软删过的那几个(用例中途失败时)按原始 key 直接清
 	for (const pluginKey of pluginKeys) {
 		await db.delete(sysDataPlugin).where(eq(sysDataPlugin.plugin_key, pluginKey));
 	}

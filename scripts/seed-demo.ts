@@ -9,6 +9,7 @@
  *  · **网格**:按 `name + town_name` 判重,只补不覆盖 —— 你在界面上改过的 `owner_id` 不会被冲掉。
  *
  * 两段都只碰演示数据,不涉及任何初始化必需的表结构 / 权限。
+ * 判重一律只看**活着的行**(`deleted_at is null`):软删的用户 / 部门 / 网格都不该再被拿来当锚点。
  */
 import { eq } from "drizzle-orm";
 import * as XLSXNS from "xlsx";
@@ -16,6 +17,7 @@ import { sysDemoGrid, sysDept, sysNotice, sysUser } from "../src/db/data-base-sc
 import { db, dmPool } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
 import { notify } from "../src/lib/notice.ts";
+import { alive } from "../src/lib/soft-delete.ts";
 
 // ── 一、演示通知 ────────────────────────────────────────────────
 
@@ -46,7 +48,8 @@ const DEMO_NOTICES: Array<{
 ];
 
 async function seedNotices(): Promise<void> {
-	const users = await db.select({ id: sysUser.id, email: sysUser.email }).from(sysUser);
+	// 只给活着的账号补通知(软删账号不用再收到演示通知)
+	const users = await db.select({ id: sysUser.id, email: sysUser.email }).from(sysUser).where(alive(sysUser));
 	let created = 0;
 	for (const user of users) {
 		const existing = await db
@@ -78,7 +81,8 @@ async function seedDemoGrid(): Promise<void> {
 	const data = rows.slice(2).filter((row) => text(row[2]));
 
 	// 街镇 → dept.id:优先「镇、街道」这个分组下的节点(那才是街镇),否则按名字兜底
-	const depts = await db.select().from(sysDept);
+	// 只认活着的部门:软删的街镇不能再被写成新网格的 town_id
+	const depts = await db.select().from(sysDept).where(alive(sysDept));
 	const group = depts.find((d) => d.name === "镇、街道");
 	const townIdOf = (name: string): string | null => {
 		const under = depts.find((d) => d.name === name && d.parent_id === group?.id);
@@ -86,7 +90,10 @@ async function seedDemoGrid(): Promise<void> {
 		return depts.find((d) => d.name === name)?.id ?? null;
 	};
 
-	const existing = await db.select({ name: sysDemoGrid.name, town: sysDemoGrid.town_name }).from(sysDemoGrid);
+	const existing = await db
+		.select({ name: sysDemoGrid.name, town: sysDemoGrid.town_name })
+		.from(sysDemoGrid)
+		.where(alive(sysDemoGrid));
 	const seen = new Set(existing.map((r) => `${r.name}|${r.town ?? ""}`));
 	const missingTowns = new Set<string>();
 	let created = 0;
@@ -110,7 +117,7 @@ async function seedDemoGrid(): Promise<void> {
 		seen.add(`${name}|${townName}`);
 		created += 1;
 	}
-	console.log(`✓ 网格种子完成:本次新增 ${created} 行,表内共 ${existing.length + created} 行`);
+	console.log(`✓ 网格种子完成:本次新增 ${created} 行,表内有效 ${existing.length + created} 行`);
 	console.log(`  xlsx 数据行 ${data.length} 行;街镇 ${new Set(data.map((r) => text(r[1]))).size} 个`);
 	if (missingTowns.size > 0) {
 		console.log(`  ⚠️ 这些街镇在部门树里没找到(已写成 town_id = null):${[...missingTowns].join(" / ")}`);

@@ -1,6 +1,10 @@
 /**
  * 标签路由 —— 读写 `sys_tag` 表(自关联树),供「系统设置 ▸ 标签管理」维护。
  *
+ * 软删口径见 `lib/soft-delete.ts`:`sys_tag` 有 `deleted_at`(删除 = 写时间戳,行留在库里给审计留痕),
+ * 所以本文件**所有** `from(sysTag)` 的读路径都要带 `alive(sysTag)`;`sys_tag_relation` 是纯 join 表
+ * (没有这一列),继续硬删 —— 但凡是 join 到 `sys_tag` 的读都要保证 tag 行活着。
+ *
  * 标签体系是两级树:**维度**(一级,`parent_id` 为 null)→ **标签**(叶子,`parent_id` 指向维度)。
  * 每个节点有 `label`(展示名)/ `value`(取值)/ `desc`(含义)。
  *
@@ -9,7 +13,7 @@
  * | `list` | query | 全部标签行(按 `sort`,再按 `label`);树在前端拼 |
  * | `create` | mutation | 新增节点(`parent_id` + `label`,可选 `value` / `desc`);追加到同级末尾 |
  * | `update` | mutation | 改一个节点的 `label` / `value` / `desc` |
- * | `delete` | mutation | **级联删除**:连子节点 + 它们的关联关系一起删 |
+ * | `delete` | mutation | **级联软删**:根 + 子节点一起写 `deleted_at`;关联关系行硬删(join 表,没有软删列) |
  * | `move` | mutation | **同级重排 / 跨父迁移**:把节点挂到新父下,并按给定顺序重写同级 `sort` |
  *
  * 标签 ↔ 业务对象(sys_tag_relation)四个:
@@ -26,12 +30,13 @@
  * 树不在这里拼:服务端只回平铺行,拼树 + 过滤是纯函数,放前端更好测(见 `settings-tags-page.tsx` 的 `buildTagTree`)。
  */
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import { sysTag, sysTagRelation } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
@@ -48,19 +53,37 @@ function toTag(row: typeof sysTag.$inferSelect) {
 	};
 }
 
+/**
+ * 取一个标签行,**故意不过滤软删** —— `delete` 要操作的那一行正是它(重复删除 / 拿到已软删的节点都要能读到)。
+ * 读路径请用下面的 `getAliveTagRow()`,别直接把已软删的节点当"存在"。
+ */
 async function getTagRow(id: string) {
 	const [row] = await db.select().from(sysTag).where(eq(sysTag.id, id)).limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个标签节点不存在(可能已被删除)" });
 	return row;
 }
 
-/** 递归收集某节点及其全部子孙 id(级联删除用) */
+/** 读路径取行:已软删的节点**等同不存在**(报的还是同一句 NOT_FOUND,对外文案不变) */
+async function getAliveTagRow(id: string) {
+	const [row] = await db
+		.select()
+		.from(sysTag)
+		.where(and(eq(sysTag.id, id), alive(sysTag)))
+		.limit(1);
+	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个标签节点不存在(可能已被删除)" });
+	return row;
+}
+
+/** 递归收集某节点及其全部子孙 id(级联软删用)。**只看活着的节点** —— 否则会顺着已软删的中间节点捞出一堆无关 id */
 async function collectSubtreeIds(rootId: string): Promise<string[]> {
 	const result = [rootId];
 	const queue = [rootId];
 	while (queue.length > 0) {
 		const current = queue.shift() as string;
-		const children = await db.select({ id: sysTag.id }).from(sysTag).where(eq(sysTag.parent_id, current));
+		const children = await db
+			.select({ id: sysTag.id })
+			.from(sysTag)
+			.where(and(eq(sysTag.parent_id, current), alive(sysTag)));
 		for (const child of children) {
 			result.push(child.id);
 			queue.push(child.id);
@@ -71,7 +94,7 @@ async function collectSubtreeIds(rootId: string): Promise<string[]> {
 
 export const tagRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));
+		const rows = await db.select().from(sysTag).where(alive(sysTag)).orderBy(asc(sysTag.sort), asc(sysTag.label));
 		return rows.map(toTag);
 	}),
 
@@ -86,17 +109,22 @@ export const tagRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
-			if (parentId) await getTagRow(parentId);
+			// 父节点必须**活着**:挂在已软删的维度下面,这条新标签在树上永远挂不出来
+			if (parentId) await getAliveTagRow(parentId);
 			const label = input.label.trim();
 
-			// 同级同名 = 重复节点(业务键就是 (parent_id, label),种子脚本也按它判重)
+			// 同级同名 = 重复节点(业务键就是 (parent_id, label),种子脚本也按它判重);
+			// **只看活着的行** —— 软删不是真删,同一个名字软删之后必须还能重建
 			const [duplicate] = await db
 				.select({ id: sysTag.id })
 				.from(sysTag)
 				.where(
-					parentId === null
-						? sql`${sysTag.parent_id} is null and ${sysTag.label} = ${label}`
-						: sql`${sysTag.parent_id} = ${parentId} and ${sysTag.label} = ${label}`,
+					and(
+						parentId === null
+							? sql`${sysTag.parent_id} is null and ${sysTag.label} = ${label}`
+							: sql`${sysTag.parent_id} = ${parentId} and ${sysTag.label} = ${label}`,
+						alive(sysTag),
+					),
 				)
 				.limit(1);
 			if (duplicate) {
@@ -107,7 +135,9 @@ export const tagRouter = createTRPCRouter({
 			const siblings = await db
 				.select({ sort: sysTag.sort })
 				.from(sysTag)
-				.where(parentId === null ? sql`${sysTag.parent_id} is null` : eq(sysTag.parent_id, parentId));
+				.where(
+					and(parentId === null ? sql`${sysTag.parent_id} is null` : eq(sysTag.parent_id, parentId), alive(sysTag)),
+				);
 			const sort = siblings.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
 			await db.insert(sysTag).values({
 				id,
@@ -130,7 +160,8 @@ export const tagRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
-			await getTagRow(input.id);
+			// 已软删的节点等同不存在:不能再改(否则会写回一行谁也看不见的数据)
+			await getAliveTagRow(input.id);
 			await db
 				.update(sysTag)
 				.set({
@@ -144,15 +175,16 @@ export const tagRouter = createTRPCRouter({
 		}),
 
 	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+		// 删除目标那一行**故意不过滤软删**:`getTagRow` 拿到它,重复删除仍按原语义返回
 		await getTagRow(input.id);
 		const ids = await collectSubtreeIds(input.id);
-		// 关联关系先清:标签没了,「谁贴过它」的行留着就是脏数据(表上没有外键,不会自动清)
+		// 关联关系先清:标签软删之后「谁贴过它」的行留着就是脏数据(表上没有外键,不会自动清)。
+		// `sys_tag_relation` 是纯 join 表(**没有 `deleted_at`**),所以这一处仍然是硬删。
 		const removedLinks = await db.delete(sysTagRelation).where(inArray(sysTagRelation.tag_id, ids));
-		await db.delete(sysTag).where(eq(sysTag.id, input.id));
-		// 级联:父被删,子节点也跟着删(子节点的 parent_id 现在指向已不存在的父,留着会变成孤儿)
-		if (ids.length > 1) {
-			await db.delete(sysTag).where(inArray(sysTag.id, ids.slice(1)));
-		}
+		// 根 + 全部后代一起**软删**:写 `deleted_at` 而不是删行,审计里还看得见"删掉了哪棵树";
+		// 读路径统一带 `alive(sysTag)`,所以列表 / 树上不会再出现。
+		// (级联的意义不变:父没了、子还活着就会变成树上挂不出来的孤儿)
+		await db.update(sysTag).set(softDeleted()).where(inArray(sysTag.id, ids));
 		const affected = (removedLinks as unknown as Array<{ affectedRows?: number }>)[0]?.affectedRows ?? 0;
 		return { deleted: ids.length, removedLinks: Number(affected) };
 	}),
@@ -171,11 +203,18 @@ export const tagRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			const newParentId = input.newParentId ?? null;
-			if (newParentId) await getTagRow(newParentId);
+			// 目标父节点必须**活着**:迁到已软删的维度下面,这条节点在树上就挂不出来了
+			if (newParentId) await getAliveTagRow(newParentId);
+			// 同级清单只看活着的节点:已软删的不占顺序位,也不该逼调用方把它列进来
 			const siblings = await db
 				.select({ id: sysTag.id, parentId: sysTag.parent_id })
 				.from(sysTag)
-				.where(newParentId === null ? sql`${sysTag.parent_id} is null` : eq(sysTag.parent_id, newParentId));
+				.where(
+					and(
+						newParentId === null ? sql`${sysTag.parent_id} is null` : eq(sysTag.parent_id, newParentId),
+						alive(sysTag),
+					),
+				);
 			const siblingIds = new Set(siblings.map((row) => row.id));
 			const unknown = input.orderedSiblingIds.filter((sib) => !siblingIds.has(sib));
 			if (unknown.length > 0) {
@@ -194,7 +233,7 @@ export const tagRouter = createTRPCRouter({
 					await tx.update(sysTag).set({ sort: index, update_time: new Date() }).where(eq(sysTag.id, sibId));
 				}
 			});
-			const rows = await db.select().from(sysTag).orderBy(asc(sysTag.sort), asc(sysTag.label));
+			const rows = await db.select().from(sysTag).where(alive(sysTag)).orderBy(asc(sysTag.sort), asc(sysTag.label));
 			return { updated: input.orderedSiblingIds.length, rows: rows.map(toTag) };
 		}),
 
@@ -217,7 +256,8 @@ export const tagRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
-			const tag = await getTagRow(input.tagId);
+			// 被贴的标签 / 维度必须**活着**:软删的标签不能再贴到任何对象上
+			const tag = await getAliveTagRow(input.tagId);
 			if (!tag.parent_id) {
 				throw new TRPCError({ code: "BAD_REQUEST", message: "「维度」不能贴到对象上,请选维度下的标签" });
 			}
@@ -272,10 +312,15 @@ export const tagRouter = createTRPCRouter({
 			const rows = await db
 				.select({ objId: sysTagRelation.obj_id })
 				.from(sysTagRelation)
+				// join 回 `sys_tag` 只为过 `alive()`:软删标签的关联行不再算数(顺手把脏关联挡掉)
+				.innerJoin(sysTag, eq(sysTag.id, sysTagRelation.tag_id))
 				.where(
-					input.objType === undefined
-						? eq(sysTagRelation.tag_id, input.tagId)
-						: sql`${sysTagRelation.tag_id} = ${input.tagId} and ${sysTagRelation.obj_type} = ${input.objType}`,
+					and(
+						input.objType === undefined
+							? eq(sysTagRelation.tag_id, input.tagId)
+							: sql`${sysTagRelation.tag_id} = ${input.tagId} and ${sysTagRelation.obj_type} = ${input.objType}`,
+						alive(sysTag),
+					),
 				);
 			// 去重后排序:同一个对象只会有一条关联(唯一键),但排序让结果稳定可断言
 			return [...new Set(rows.map((row) => row.objId))].sort();
@@ -293,7 +338,14 @@ export const tagRouter = createTRPCRouter({
 			const rows = await db
 				.select({ tagId: sysTagRelation.tag_id })
 				.from(sysTagRelation)
-				.where(sql`${sysTagRelation.obj_type} = ${input.objType} and ${sysTagRelation.obj_id} = ${input.objId}`);
+				// 同 `objectIdsOfTag`:只回**活着**的标签 id,已软删的标签不该再被算成"这个对象的标签"
+				.innerJoin(sysTag, eq(sysTag.id, sysTagRelation.tag_id))
+				.where(
+					and(
+						sql`${sysTagRelation.obj_type} = ${input.objType} and ${sysTagRelation.obj_id} = ${input.objId}`,
+						alive(sysTag),
+					),
+				);
 			return [...new Set(rows.map((row) => row.tagId))].sort();
 		}),
 
@@ -312,14 +364,25 @@ export const tagRouter = createTRPCRouter({
 				input.objType === undefined
 					? sql`${sysTagRelation.tag_id} = ${input.tagId}`
 					: sql`${sysTagRelation.tag_id} = ${input.tagId} and ${sysTagRelation.obj_type} = ${input.objType}`;
+			// join 回 `sys_tag` 并过 `alive()`:标签被软删之后,它的关联行不再算这个标签的对象
 			const rows = await db
-				.select()
+				.select({
+					id: sysTagRelation.id,
+					tag_id: sysTagRelation.tag_id,
+					obj_id: sysTagRelation.obj_id,
+					obj_type: sysTagRelation.obj_type,
+					create_time: sysTagRelation.create_time,
+				})
 				.from(sysTagRelation)
-				.where(where)
+				.innerJoin(sysTag, eq(sysTag.id, sysTagRelation.tag_id))
+				.where(and(where, alive(sysTag)))
 				.orderBy(asc(sysTagRelation.create_time), asc(sysTagRelation.obj_id))
 				.limit(input.limit)
 				.offset(input.offset);
-			const [counted] = await db.execute(sql`select count(*) as n from ${sysTagRelation} where ${where}`);
+			// 总数必须与上面同一条件(同 join 同 `alive`),否则"共 N 条"和列表对不上
+			const [counted] = await db.execute(
+				sql`select count(*) as n from ${sysTagRelation} inner join ${sysTag} on ${sysTag.id} = ${sysTagRelation.tag_id} where ${where} and ${alive(sysTag)}`,
+			);
 			const total = Number((counted as unknown as Array<{ n?: number }>)[0]?.n ?? 0);
 			return {
 				total,
@@ -344,7 +407,11 @@ export const tagRouter = createTRPCRouter({
 			if (links.length === 0) return { items: [] };
 
 			const tagIds = links.map((link) => link.tag_id);
-			const tags = await db.select().from(sysTag).where(inArray(sysTag.id, tagIds));
+			// 只读**活着**的标签:已软删的取不到名字,下面的兜底会显示 id(而不是把软删的标签名继续回给前端)
+			const tags = await db
+				.select()
+				.from(sysTag)
+				.where(and(inArray(sysTag.id, tagIds), alive(sysTag)));
 			const tagById = new Map(tags.map((tag) => [tag.id, tag]));
 			return {
 				items: links

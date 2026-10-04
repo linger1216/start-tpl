@@ -319,7 +319,7 @@ export function SettingsUsersPage() {
 					if (!next) setPendingDelete(null);
 				}}
 				title={`删除账号「${pendingDelete?.email ?? ""}」?`}
-				description="会同时清掉它的登录会话、密码记录、部门成员关系与角色分配。账号可以再建,但授权信息不会回来。"
+				description="会同时清掉它的登录会话、密码记录、部门成员关系与角色分配(账号行保留为「已删除」,审计留痕)。同一个邮箱可以再建新账号,但旧的授权信息不会回来。"
 				confirmText="删除"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}

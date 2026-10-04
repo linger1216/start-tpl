@@ -203,7 +203,8 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 		email: `${TEST_PREFIX}del_${SUFFIX}@example.com`,
 		password: PASSWORD,
 	});
-	// 不 push 到 createdIds —— 这条用例自己要把它删干净
+	// 要 push 进 createdIds:`remove` 现在是软删,行会留在库里,清理归 `after`(断言期间它必须在)
+	createdIds.push(created.id);
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}删除测试部门_${SUFFIX}` });
 	tempDeptIds.push(dept.id);
 	// 取第一个**非 admin** 的角色 —— 见上文 user.update 用例的同样解释
@@ -226,7 +227,11 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 
 	await caller.user.remove({ id: created.id });
 
-	assert.equal((await db.select().from(sysUser).where(eq(sysUser.id, created.id))).length, 0, "sys_user 应该没了");
+	// 软删:行还在(审计留痕)、deleted_at 写上、邮箱让位(墓碑)—— 登录凭证才是真删
+	const [soft] = await db.select().from(sysUser).where(eq(sysUser.id, created.id));
+	assert.ok(soft, "软删要留行,不是物理删除");
+	assert.ok(soft.deleted_at, "deleted_at 应被写上");
+	assert.notEqual(soft.email, created.email, "邮箱让位(加墓碑后缀),同一个邮箱才能再注册");
 	assert.equal(
 		(await db.select().from(sysSession).where(eq(sysSession.userId, created.id))).length,
 		0,
@@ -253,7 +258,7 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 		"角色分配行(策略表的 `g` 行)也应该被清掉",
 	);
 	await caller.department.remove({ id: dept.id });
-	tempDeptIds.pop();
+	// 不能 `tempDeptIds.pop()`:`remove` 现在是软删,行还在库里 —— 物理清归 `after`(按 id)
 });
 
 test("user.remove:账号不存在时给 NOT_FOUND 而不是静默成功", async () => {

@@ -34,7 +34,8 @@ import { matchKeyword } from "#/lib/table";
  * 页面**只展示数据库里的参数行**(`sys_para`)加代码内置默认值,不附带任何"后台任务"入口。
  * 每条参数被谁读、读来干什么,看 `lib/sys-para.ts` 的 `PARA_DEFAULTS` 注释。
  *
- * 支持**完整 CRUD**:新增(指定类型 / 分组 / 说明)、修改(按类型校验)、删除(回到默认值或彻底消失)。
+ * 支持**完整 CRUD**:新增(指定类型 / 分组 / 说明)、修改(按类型校验)、删除(回到默认值;自建的那行被软删,
+ * 记录留着、参数名让位可以再建 —— 见 `lib/soft-delete.ts`)。
  * 类型含 string / int / bool / json / array / map,json 类用多行 JSON 文本录入。
  */
 export function SettingsParametersPage() {
@@ -259,7 +260,7 @@ export function SettingsParametersPage() {
 					if (!next) setPendingDelete(null);
 				}}
 				title="删除参数"
-				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值,界面新建的参数会彻底消失。`}
+				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值;界面新建的参数会被删除(记录保留为「已删除」,同一个参数名还能再建)。`}
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ key: pendingDelete.key })}
 			/>
 		</PageFrame>

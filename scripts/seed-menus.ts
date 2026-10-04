@@ -11,6 +11,9 @@
  *  主键是 nanoid,每次生成都不同,**绝不能拿它当判重依据**(那样每跑一次就多出一份菜单)。
  *  这也正是把 id 换成 nanoid 之后本脚本必须改的地方。
  *
+ * **只认活着的行**(`deleted_at is null`):菜单被软删后要能按同一个 `path` 重建出来;
+ * 软删的父节点也绝不能当锚点,否则新插的子菜单会挂在一棵已经下线的枝上。
+ *
  * 用法:
  *   pnpm db:seed:menus
  */
@@ -20,6 +23,7 @@ import { NAV_NODES, type NavNode } from "../src/components/layout/nav-config.ts"
 import { sysMenu } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
+import { alive } from "../src/lib/soft-delete.ts";
 
 type ExistingRow = { id: string; parent_id: string | null; name: string; path: string };
 type DraftRow = { key: string; parentKey: string | null; name: string; path: string; icon: string };
@@ -62,7 +66,8 @@ function flatten(
 
 const existing: ExistingRow[] = await db
 	.select({ id: sysMenu.id, parent_id: sysMenu.parent_id, name: sysMenu.name, path: sysMenu.path })
-	.from(sysMenu);
+	.from(sysMenu)
+	.where(alive(sysMenu));
 /** path → 已存在的行(有 path 的节点按它认) */
 const byPath = new Map(existing.map((row) => [row.path, row]));
 
@@ -94,9 +99,9 @@ for (const [index, draft] of drafts.entries()) {
 
 if (toInsert.length > 0) await db.insert(sysMenu).values(toInsert);
 
-const all = await db.select({ id: sysMenu.id }).from(sysMenu);
+const all = await db.select({ id: sysMenu.id }).from(sysMenu).where(alive(sysMenu));
 console.log(
-	`✓ 菜单种子完成:配置里 ${drafts.length} 个有路由的节点,本次新增 ${toInsert.length} 行,表内共 ${all.length} 行(已存在的未覆盖)` +
+	`✓ 菜单种子完成:配置里 ${drafts.length} 个有路由的节点,本次新增 ${toInsert.length} 行,表内有效 ${all.length} 行(已存在的未覆盖)` +
 		(grouped.length > 0 ? `\n  把 ${grouped.length} 个纯分组用合成 path 并进了菜单树:${grouped.join("、")}` : ""),
 );
 process.exit(0);

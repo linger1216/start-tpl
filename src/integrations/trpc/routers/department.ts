@@ -7,7 +7,7 @@
  * | `create` | mutation | 新增(父节点 + 名称);同级重名回 `CONFLICT` |
  * | `update` | mutation | 改名 / 启停 / **换父级**(不能挂到自己或自己的后代下) |
  * | `reorder` | mutation | **同级**重排(同 `menu.reorder` 的口径:必须给全该级的 id 顺序) |
- * | `remove` | mutation | 删除;**有子部门或有成员时拒绝** |
+ * | `remove` | mutation | 删除(**软删**);**有子部门或有成员时拒绝** |
  * | `members` | query | 某部门的成员(带用户与角色名) |
  * | `setMemberRole` | mutation | 加人 / 改这个人在这个部门的角色(靠 `uk_sys_dm_unique` 唯一) |
  * | `removeMember` | mutation | 把某人移出这个部门 |
@@ -24,6 +24,7 @@ import { sysDept, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { allUserRoles } from "#/lib/casbin";
 import { clearDeptCache } from "#/lib/data-scope-plugins";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参 */
@@ -41,6 +42,7 @@ function toDepartment(row: typeof sysDept.$inferSelect) {
 }
 
 async function getDepartmentRow(id: string) {
+	// 故意**不带** `alive()`:它也是 `remove` 的删除目标,软删过的行同样要取得到(口径不变)
 	const [row] = await db.select().from(sysDept).where(eq(sysDept.id, id)).limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个部门不存在(可能已被删除)" });
 	return row;
@@ -53,10 +55,13 @@ async function getDepartmentRow(id: string) {
  * `unique(parent_id, name)` 对顶级节点形同虚设(半吊子约束比没有更糟,它会让人以为已经防住了)。
  */
 async function assertDeptNameUnique(parentId: string | null, name: string, excludeDeptId?: string) {
+	// 查重只看活着的部门:软删的「测试部」不该拦住同级再建一个同名部门
 	const siblings = await db
 		.select({ id: sysDept.id, name: sysDept.name })
 		.from(sysDept)
-		.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
+		.where(
+			and(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId), alive(sysDept)),
+		);
 	const clash = siblings.find((row) => row.name === name && row.id !== excludeDeptId);
 	if (clash) throw new TRPCError({ code: "CONFLICT", message: `同一级下已经有叫「${name}」的部门了` });
 }
@@ -65,7 +70,8 @@ async function assertDeptNameUnique(parentId: string | null, name: string, exclu
 async function assertNotDescendant(id: string, parentId: string | null) {
 	if (!parentId) return;
 	if (parentId === id) throw new TRPCError({ code: "BAD_REQUEST", message: "不能把部门挂到它自己下面" });
-	const rows = await db.select({ id: sysDept.id, parentId: sysDept.parent_id }).from(sysDept);
+	// 只爬活着的部门:软删节点已不在树上,若仍参与爬链会把"父级"指回一个界面上不存在的环
+	const rows = await db.select({ id: sysDept.id, parentId: sysDept.parent_id }).from(sysDept).where(alive(sysDept));
 	const parentOf = new Map(rows.map((row) => [row.id, row.parentId ?? null]));
 	let cursor: string | null = parentId;
 	const seen = new Set<string>();
@@ -81,13 +87,16 @@ async function nextSort(parentId: string | null) {
 	const siblings = await db
 		.select({ sort: sysDept.sort })
 		.from(sysDept)
-		.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
+		.where(
+			and(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId), alive(sysDept)),
+		);
 	return siblings.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
 }
 
 export const departmentRouter = createTRPCRouter({
 	tree: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysDept).orderBy(asc(sysDept.sort), asc(sysDept.name));
+		// 读路径必须带 `alive()`:软删部门留在库里只为审计留痕,不能让它在部门树上继续出现
+		const rows = await db.select().from(sysDept).where(alive(sysDept)).orderBy(asc(sysDept.sort), asc(sysDept.name));
 		return rows.map(toDepartment);
 	}),
 
@@ -163,10 +172,13 @@ export const departmentRouter = createTRPCRouter({
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
+			// 排序清单只认活着的兄弟:软删部门已被踢出该级,不该再要求它出现在清单里
 			const siblings = await db
 				.select({ id: sysDept.id })
 				.from(sysDept)
-				.where(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId));
+				.where(
+					and(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId), alive(sysDept)),
+				);
 			const siblingIds = new Set(siblings.map((row) => row.id));
 			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
 			if (unknown.length > 0) {
@@ -188,7 +200,11 @@ export const departmentRouter = createTRPCRouter({
 
 	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const row = await getDepartmentRow(input.id);
-		const children = await db.select({ id: sysDept.id }).from(sysDept).where(eq(sysDept.parent_id, input.id));
+		// 护栏只数**活着的**子部门 / 成员:软删的子部门与用户已经不在组织架构里,不该再堵住删除
+		const children = await db
+			.select({ id: sysDept.id })
+			.from(sysDept)
+			.where(and(eq(sysDept.parent_id, input.id), alive(sysDept)));
 		if (children.length > 0) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
@@ -198,14 +214,16 @@ export const departmentRouter = createTRPCRouter({
 		const members = await db
 			.select({ id: sysUserDept.id })
 			.from(sysUserDept)
-			.where(eq(sysUserDept.department_id, input.id));
+			.innerJoin(sysUser, eq(sysUser.id, sysUserDept.user_id))
+			.where(and(eq(sysUserDept.department_id, input.id), alive(sysUser)));
 		if (members.length > 0) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
 				message: `「${row.name}」里还有 ${members.length} 个成员,请先把人移出去`,
 			});
 		}
-		await db.delete(sysDept).where(eq(sysDept.id, input.id));
+		// **软删**:部门行留着做审计留痕。`sys_dept` 没有唯一索引,不存在键被死行占住的问题,所以不用 tombstone
+		await db.update(sysDept).set(softDeleted()).where(eq(sysDept.id, input.id));
 		// 部门没了 ⇒ 数据权限的部门链缓存作废
 		clearDeptCache();
 		return { success: true };
@@ -213,6 +231,7 @@ export const departmentRouter = createTRPCRouter({
 
 	/** 某部门的成员(一个部门里一人一条)。角色是**全局**的,顺带带出来只读展示。 */
 	members: protectedProcedure.input(z.object({ departmentId: z.string().min(1) })).query(async ({ input }) => {
+		// join 出来的 `sys_user` 要过 `alive()`:软删用户不能继续列在部门成员里
 		const rows = await db
 			.select({
 				id: sysUserDept.id,
@@ -222,16 +241,20 @@ export const departmentRouter = createTRPCRouter({
 			})
 			.from(sysUserDept)
 			.innerJoin(sysUser, eq(sysUser.id, sysUserDept.user_id))
-			.where(eq(sysUserDept.department_id, input.departmentId))
+			.where(and(eq(sysUserDept.department_id, input.departmentId), alive(sysUser)))
 			.orderBy(asc(sysUser.name));
 
 		const userIds = rows.map((row) => row.userId);
 		// 角色成员关系在策略表的 `g` 行里(存的就是**角色 id**)—— 一次拉全再按本部门的人筛,不 N+1
 		const wanted = new Set(userIds);
 		const memberRows = (await allUserRoles()).filter((row) => wanted.has(row.userId));
-		// 认不出的 id(角色刚被删、`g` 行还没清)跳过,与装载时「跳过孤儿菜单」同一口径
+		// 认不出的 id(角色刚被删、`g` 行还没清)跳过,与装载时「跳过孤儿菜单」同一口径;
+		// 名字映射同样只看活着的角色 —— 软删角色不能显示成成员身上的角色
 		const roleNames = new Map(
-			(await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).map((row) => [row.id, row.name]),
+			(await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole).where(alive(sysRole))).map((row) => [
+				row.id,
+				row.name,
+			]),
 		);
 		const rolesOf = new Map<string, string[]>();
 		for (const row of memberRows) {
@@ -259,7 +282,12 @@ export const departmentRouter = createTRPCRouter({
 		.input(z.object({ departmentId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await getDepartmentRow(input.departmentId);
-			const [user] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.id, input.userId)).limit(1);
+			// 只认活着的用户:软删账号不能再被加进部门
+			const [user] = await db
+				.select({ id: sysUser.id })
+				.from(sysUser)
+				.where(and(eq(sysUser.id, input.userId), alive(sysUser)))
+				.limit(1);
 			if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "这个用户不存在" });
 
 			const [existing] = await db

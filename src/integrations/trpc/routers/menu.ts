@@ -9,7 +9,7 @@
  * | `update` | mutation | 改一个节点的名称 / 路径 / 图标 / 上下线(`path` 冲突回 `CONFLICT`) |
  * | `reorder` | mutation | **同级**重排:传入父节点 + 该父下的完整 id 顺序,逐行写 `sort` |
  * | `create` | mutation | 新增(父节点 + 名称,可选路径 / 图标);排序追加到同级末尾 |
- * | `delete` | mutation | 删除(**连带清掉这个菜单上的角色授权**);**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
+ * | `delete` | mutation | **软删**(审计留痕;`path` 用 `tombstone()` 让位,连带清掉这个菜单上的角色授权);**有子菜单时拒绝**(先删子菜单,避免误删整枝) |
  *
  * 写接口末尾为什么要 `clearCasbinCache()`:判定用的策略是 `lib/casbin.ts` 装载时**展开**出来的,
  * 菜单的 `perm` / `path` / 父子关系一变,展开结果就变 —— 哪怕 `sys_casbin_rule` 一行都没动。
@@ -20,7 +20,7 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -31,6 +31,7 @@ import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType } from "#/lib/menu-spec";
 import { effectiveMenusFor, PERM_FORMAT } from "#/lib/rbac";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 库行 → 接口出参(时间列不回,前端用不到) */
@@ -50,8 +51,18 @@ function toMenu(row: typeof sysMenu.$inferSelect) {
 	};
 }
 
-async function getMenuRow(id: string) {
-	const [row] = await db.select().from(sysMenu).where(eq(sysMenu.id, id)).limit(1);
+/**
+ * 取一行菜单。
+ *
+ * `includeDeleted` 只有**删除过程**会传 —— 软删要把 `path` 写成墓碑让位,必须拿到那一行;
+ * 其余读路径(update 取行 / create 校父节点)一律带 `alive()`,否则已删除的菜单会重新露出来。
+ */
+async function getMenuRow(id: string, includeDeleted = false) {
+	const [row] = await db
+		.select()
+		.from(sysMenu)
+		.where(includeDeleted ? eq(sysMenu.id, id) : and(eq(sysMenu.id, id), alive(sysMenu)))
+		.limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个菜单不存在(可能已被删除)" });
 	return row;
 }
@@ -59,10 +70,16 @@ async function getMenuRow(id: string) {
 /** 路径唯一性:`path` 决定路由,重了两条菜单会指向同一个页面 */
 async function assertPathFree(path: string | null, selfId?: string) {
 	if (!path) return; // 兼容 update 传空串的场景(上面已单独拦过)
+	// 查重只看**活着**的行:已软删菜单的 path 已被 `tombstone()` 让位,那个路径要能重新启用
 	const rows = await db
 		.select({ id: sysMenu.id, name: sysMenu.name })
 		.from(sysMenu)
-		.where(selfId ? sql`${sysMenu.path} = ${path} and ${sysMenu.id} <> ${selfId}` : eq(sysMenu.path, path));
+		.where(
+			and(
+				alive(sysMenu),
+				selfId ? sql`${sysMenu.path} = ${path} and ${sysMenu.id} <> ${selfId}` : eq(sysMenu.path, path),
+			),
+		);
 	if (rows.length === 0) return;
 	// 参数化菜单(path = <前缀>/<记录 id>)的冲突要说人话:
 	// 这不是"路径被别人占了",而是"这条记录已经挂在一个菜单下面了"(一条记录只能挂一处)
@@ -92,7 +109,8 @@ const permField = z
 
 export const menuRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+		// 软删的菜单行留在库里只为审计留痕,列表不能把它当成"库里有什么"回给管理员
+		const rows = await db.select().from(sysMenu).where(alive(sysMenu)).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 		return rows.map(toMenu);
 	}),
 
@@ -156,10 +174,13 @@ export const menuRouter = createTRPCRouter({
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
 			const parentId = input.parentId ?? null;
+			// 同级集合只看活着的:已软删的兄弟不该出现在"必须包含全部同级"的清单里
 			const siblings = await db
 				.select({ id: sysMenu.id, parentId: sysMenu.parent_id })
 				.from(sysMenu)
-				.where(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId));
+				.where(
+					and(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId), alive(sysMenu)),
+				);
 			const siblingIds = new Set(siblings.map((row) => row.id));
 			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
 			if (unknown.length > 0) {
@@ -177,7 +198,7 @@ export const menuRouter = createTRPCRouter({
 					await tx.update(sysMenu).set({ sort: index, update_time: new Date() }).where(eq(sysMenu.id, id));
 				}
 			});
-			const rows = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+			const rows = await db.select().from(sysMenu).where(alive(sysMenu)).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 			return { updated: input.orderedIds.length, rows: rows.map(toMenu) };
 		}),
 
@@ -208,7 +229,9 @@ export const menuRouter = createTRPCRouter({
 			const siblings = await db
 				.select({ sort: sysMenu.sort })
 				.from(sysMenu)
-				.where(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId));
+				.where(
+					and(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId), alive(sysMenu)),
+				);
 			const sort = siblings.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
 			await db.insert(sysMenu).values({
 				id,
@@ -227,8 +250,13 @@ export const menuRouter = createTRPCRouter({
 		}),
 
 	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
-		await getMenuRow(input.id);
-		const children = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.parent_id, input.id));
+		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 要拿它当前的 `path` 写墓碑让位
+		const row = await getMenuRow(input.id, true);
+		// 子菜单护栏只数**活着**的子菜单:已软删的子菜单不该把父菜单永久锁死
+		const children = await db
+			.select({ id: sysMenu.id })
+			.from(sysMenu)
+			.where(and(eq(sysMenu.parent_id, input.id), alive(sysMenu)));
 		if (children.length > 0) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
@@ -238,7 +266,12 @@ export const menuRouter = createTRPCRouter({
 		// 这个菜单上的角色授权要显式清掉 —— `sys_role_menu` 连同它的 cascade 外键一起没了,
 		// 现在授权是 `sys_casbin_rule` 的行(没有外键可依),必须自己按 `menu:<id>` 清
 		await removeMenuPolicies(input.id);
-		await db.delete(sysMenu).where(eq(sysMenu.id, input.id));
+		// 行**软删**(审计留痕:谁在什么时候删了哪个菜单),不是真删;
+		// `path` 上有唯一索引,用 `tombstone()` 改成墓碑值让位 —— 否则那个路由被死行永久占住,再也建不回来
+		await db
+			.update(sysMenu)
+			.set({ ...softDeleted(), path: tombstone(row.path, row.id, 128) })
+			.where(eq(sysMenu.id, input.id));
 		clearCasbinCache();
 		return { success: true };
 	}),

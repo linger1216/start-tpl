@@ -2,6 +2,7 @@
  * 参数种子 —— 把代码内置的默认参数(`lib/sys-para.ts` 的 `PARA_DEFAULTS`)落到库里。
  *
  * **只补不覆盖**:库里已存在的参数一条都不动(你在「参数管理」页调过的值不会被打回默认)。
+ * 只把**活着的行**当"已存在" —— 参数被软删之后,这里要能按同一个 para_key 重建。
  *
  * 表是 `sys_para`(旧名 `sys_config`):
  *  - 主键 `para_key`;`id` 是 not null 的普通列,**没有默认值,必须自己生成**(`newId()`);
@@ -14,9 +15,11 @@ import "dotenv/config";
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
+import { alive } from "../src/lib/soft-delete.ts";
 import { PARA_DEFAULTS } from "../src/lib/sys-para.ts";
 
-const existing = new Set((await db.select().from(sysPara)).map((row) => row.para_key));
+// 只认活着的行:参数被软删之后要能重建(软删时 para_key 被改成 `#d#…`,活着的集合里自然没有它)
+const existing = new Set((await db.select().from(sysPara).where(alive(sysPara))).map((row) => row.para_key));
 
 let inserted = 0;
 for (const [key, item] of Object.entries(PARA_DEFAULTS)) {
@@ -34,8 +37,8 @@ for (const [key, item] of Object.entries(PARA_DEFAULTS)) {
 	inserted += 1;
 }
 
-const all = await db.select({ key: sysPara.para_key }).from(sysPara);
-console.log(`✓ 参数种子完成:本次新增 ${inserted} 条,表内共 ${all.length} 条`);
+const all = await db.select({ key: sysPara.para_key }).from(sysPara).where(alive(sysPara));
+console.log(`✓ 参数种子完成:本次新增 ${inserted} 条,表内有效 ${all.length} 条`);
 
 // 显式退出:MySQL 连接池是空闲句柄,不关进程不退出(其它 seed 脚本同理)
 process.exit(0);

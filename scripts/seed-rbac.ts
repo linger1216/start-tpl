@@ -20,16 +20,20 @@
  * 角色怎么按业务键定位:`sys_role` 没有 `code` 列 —— 整个程序内部一律以 `id` 引用,
  * 策略表里也是 `role:<id>`。这里按**名字**查重,「系统管理员」是脚本唯一的种子角色,
  * 名字稳定、可作为种子键。
+ *
+ * **判重只认活着的行**(`deleted_at is null`):角色 / 菜单被软删之后,本脚本要能把它们重建出来;
+ * 更关键的是**绝不能把软删行的 id 再分配出去** —— 那会造出指向"已删角色 / 已删父菜单"的脏引用。
  */
 import "dotenv/config";
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { ADMIN_ROLE_NAME, addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, withAncestorIds } from "../src/lib/rbac.ts";
+import { alive } from "../src/lib/soft-delete.ts";
 
 /**
  * ⚠️ **只用于首次初始化演示数据,不要拿它去"修"数据。**
@@ -46,7 +50,12 @@ const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, use
 
 // ── 角色 ──────────────────────────────────────────────────────────
 async function upsertRoleByName(name: string, sort: number, remark: string): Promise<string> {
-	const [existing] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.name, name)).limit(1);
+	// 只认活着的角色:软删的「系统管理员」必须重建,否则会把一个已删角色的 id 继续分配/授权出去
+	const [existing] = await db
+		.select({ id: sysRole.id })
+		.from(sysRole)
+		.where(and(eq(sysRole.name, name), alive(sysRole)))
+		.limit(1);
 	if (existing) return existing.id;
 	const id = newId();
 	await db
@@ -59,7 +68,12 @@ async function upsertRoleByName(name: string, sort: number, remark: string): Pro
 // ── 按钮权限点(挂在「角色管理」下;type = 3,不进侧边栏)────────────
 async function upsertButton(parentId: string, name: string, perm: string, sort: number): Promise<string> {
 	const path = `#perm/${perm}`; // 不指向任何路由的占位路径(表定义要求 path 非空且唯一)
-	const [existing] = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.path, path)).limit(1);
+	// 只认活着的行:软删的按钮要能重建(否则新按钮会挂到一个已删父节点下,授权树上看不见)
+	const [existing] = await db
+		.select({ id: sysMenu.id })
+		.from(sysMenu)
+		.where(and(eq(sysMenu.path, path), alive(sysMenu)))
+		.limit(1);
 	if (existing) return existing.id;
 	const id = newId();
 	await db.insert(sysMenu).values({
@@ -81,7 +95,11 @@ async function upsertButton(parentId: string, name: string, perm: string, sort: 
 // ── 授权(只在"这个角色还一条授权都没有"时写入 = 只补不覆盖)────────
 // ── 隐藏分组(只用来承载"运维"这类权限点:visible = 0,不进侧边栏)──────
 async function upsertHiddenGroup(name: string, path: string, sort: number): Promise<string> {
-	const [existing] = await db.select({ id: sysMenu.id }).from(sysMenu).where(eq(sysMenu.path, path)).limit(1);
+	const [existing] = await db
+		.select({ id: sysMenu.id })
+		.from(sysMenu)
+		.where(and(eq(sysMenu.path, path), alive(sysMenu)))
+		.limit(1);
 	if (existing) return existing.id;
 	const id = newId();
 	await db.insert(sysMenu).values({
@@ -127,7 +145,7 @@ async function main() {
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
 	// 否则下面"给系统管理员全部授权"的那份清单会漏掉刚建的两个按钮(实测踩过)。
-	const seeded = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+	const seeded = await db.select().from(sysMenu).where(alive(sysMenu)).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 	const byPath = new Map(seeded.map((row) => [row.path, row]));
 	const rolesMenuId = byPath.get("/settings/roles")?.id;
 	if (rolesMenuId) {
@@ -247,7 +265,11 @@ async function main() {
 	console.log(`  本次写入 ${created.grant} 条授权行(已配过的角色不动)`);
 
 	console.log("── 部门成员 + 全局角色 ──");
-	const [admin] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, ADMIN_EMAIL)).limit(1);
+	const [admin] = await db
+		.select({ id: sysUser.id })
+		.from(sysUser)
+		.where(and(eq(sysUser.email, ADMIN_EMAIL), alive(sysUser)))
+		.limit(1);
 	if (admin) {
 		await assignRoleIfAbsent(admin.id, adminRoleId, `${ADMIN_EMAIL} → ${ADMIN_ROLE_NAME}`);
 	}

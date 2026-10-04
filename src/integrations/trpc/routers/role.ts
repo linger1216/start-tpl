@@ -7,7 +7,7 @@
  * | `create` | mutation | 新增 |
  * | `import` | mutation | 从 Excel 批量导入 —— **按角色名 upsert**(复用「新增」权限点) |
  * | `update` | mutation | 改名 / 启停 / 说明 |
- * | `remove` | mutation | 删除;**还有人挂在这个角色上时拒绝** |
+ * | `remove` | mutation | 删除(**软删**);**还有人挂在这个角色上时拒绝** |
  * | `menuIds` | query | 这个角色勾了哪些菜单 / 按钮(授权树的选中态) |
  * | `setMenus` | mutation | 覆盖式保存授权 —— **落库前补全祖先链**(见下) |
  *
@@ -19,7 +19,7 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -37,6 +37,7 @@ import {
 import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { withAncestorIds } from "#/lib/rbac";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 function toRole(row: typeof sysRole.$inferSelect, memberCount = 0) {
@@ -53,6 +54,7 @@ function toRole(row: typeof sysRole.$inferSelect, memberCount = 0) {
 }
 
 async function getRoleRow(id: string) {
+	// 故意**不带** `alive()`:它也是 `remove` 的删除目标,软删过的行同样要取得到(存在性校验的口径不变)
 	const [row] = await db.select().from(sysRole).where(eq(sysRole.id, id)).limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个角色不存在(可能已被删除)" });
 	return row;
@@ -60,20 +62,21 @@ async function getRoleRow(id: string) {
 
 /** `name` 是界面上唯一可挑的入参关键字 —— 没有 `code` 列了,这里就是唯一性判据 */
 async function assertRoleNameUnique(name: string, excludeRoleId?: string) {
+	// 查重只看活着的角色:软删角色的名字已被 `tombstone()` 让位,那个名字必须能重新启用
 	const rows = await db
 		.select({ id: sysRole.id })
 		.from(sysRole)
-		.where(
-			excludeRoleId ? sql`${sysRole.name} = ${name} and ${sysRole.id} <> ${excludeRoleId}` : eq(sysRole.name, name),
-		);
-	if (rows.length > 0) {
+		.where(and(eq(sysRole.name, name), alive(sysRole)));
+	const clash = rows.find((row) => row.id !== excludeRoleId);
+	if (clash) {
 		throw new TRPCError({ code: "CONFLICT", message: `角色名「${name}」已被占用` });
 	}
 }
 
 export const roleRouter = createTRPCRouter({
 	list: protectedProcedure.query(async () => {
-		const roles = await db.select().from(sysRole).orderBy(asc(sysRole.sort), asc(sysRole.name));
+		// 读路径必须带 `alive()`:软删的角色留在库里只为审计留痕,不能出现在角色台账 / 下拉里
+		const roles = await db.select().from(sysRole).where(alive(sysRole)).orderBy(asc(sysRole.sort), asc(sysRole.name));
 		// 一次查完所有角色的成员数,别在循环里逐条 count(N+1)。
 		// 键是**角色 id** —— 策略表的 `g` 行里存的是 `role:<id>`,与 `sys_role.id` 一致
 		const counts = await memberCountsOfRole();
@@ -92,8 +95,8 @@ export const roleRouter = createTRPCRouter({
 			const name = input.name.trim();
 			await assertRoleNameUnique(name);
 			const id = newId();
-			// 不传 sort 就排到最后(表单留空时的默认);传了就用传的
-			const roles = await db.select({ sort: sysRole.sort }).from(sysRole);
+			// 不传 sort 就排到最后(表单留空时的默认);传了就用传的。算 max 时只看活着的角色
+			const roles = await db.select({ sort: sysRole.sort }).from(sysRole).where(alive(sysRole));
 			const sort = input.sort ?? roles.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1) + 1;
 			await db.insert(sysRole).values({
 				id,
@@ -149,7 +152,12 @@ export const roleRouter = createTRPCRouter({
 		}
 		// 授权行与成员行本来靠外键 cascade 随角色一起删;策略表不是关系表、没有外键可依,必须显式清
 		await removeRoleEverywhere(row.id);
-		await db.delete(sysRole).where(eq(sysRole.id, input.id));
+		// 角色行**软删**(审计留痕)+ 角色名墓碑:`uk_sys_role_name` 是唯一索引,不让位的话
+		// 「测试角色」这个名字会被死行永久占住,管理员再也建不出同名角色
+		await db
+			.update(sysRole)
+			.set({ ...softDeleted(), name: tombstone(row.name, row.id, 32) })
+			.where(eq(sysRole.id, input.id));
 		return { success: true };
 	}),
 
@@ -230,8 +238,9 @@ export const roleRouter = createTRPCRouter({
 			});
 			if (parsed.length === 0) return result;
 
-			// ② 一次读出全部角色(角色是配置表,量小),按角色名索引
-			const existing = await db.select().from(sysRole);
+			// ② 一次读出全部**活着**的角色(角色是配置表,量小),按角色名索引
+			// 软删角色已被 tombstone 改名,不能参与 upsert —— 否则会把新数据写进已删行
+			const existing = await db.select().from(sysRole).where(alive(sysRole));
 			const byName = new Map(existing.map((row) => [row.name, row]));
 			let maxSort = existing.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1);
 
@@ -294,17 +303,18 @@ export const roleRouter = createTRPCRouter({
 		const userIds = await userIdsOfRole(input.roleId);
 		if (userIds.length === 0) return [];
 
+		// join 出来的 sys_user 要过 `alive()`:软删用户不能继续算这个角色的成员
 		const users = await db
 			.select({ userId: sysUser.id, userName: sysUser.name, userEmail: sysUser.email })
 			.from(sysUser)
-			.where(inArray(sysUser.id, userIds))
+			.where(and(inArray(sysUser.id, userIds), alive(sysUser)))
 			.orderBy(asc(sysUser.name));
 
 		const userDeptRows = await db
 			.select({ userId: sysUserDept.user_id, deptName: sysDept.name })
 			.from(sysUserDept)
 			.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id))
-			.where(inArray(sysUserDept.user_id, userIds));
+			.where(and(inArray(sysUserDept.user_id, userIds), alive(sysDept)));
 		const deptNamesByUser = new Map<string, string[]>();
 		for (const row of userDeptRows) {
 			const list = deptNamesByUser.get(row.userId) ?? [];
@@ -331,7 +341,12 @@ export const roleRouter = createTRPCRouter({
 		.input(z.object({ roleId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			await getRoleRow(input.roleId);
-			const [user] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.id, input.userId)).limit(1);
+			// 只认活着的用户:软删的人不能再挂新角色(否则等于给已注销账号重新发权限)
+			const [user] = await db
+				.select({ id: sysUser.id })
+				.from(sysUser)
+				.where(and(eq(sysUser.id, input.userId), alive(sysUser)))
+				.limit(1);
 			if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "这个用户不存在" });
 
 			// 「先查再插」的幂等收在 `addUserRole` 里(那里同样不用 `on duplicate key update` —— 达梦不认)
@@ -342,8 +357,13 @@ export const roleRouter = createTRPCRouter({
 	removeUser: protectedProcedure
 		.input(z.object({ roleId: z.string().min(1), userId: z.string().min(1) }))
 		.mutation(async ({ input }) => {
-			// 角色不存在时**静默成功**(与旧行为一致:那时是一条 delete 匹配不到行);存在才落 id 去摘
-			const [role] = await db.select({ id: sysRole.id }).from(sysRole).where(eq(sysRole.id, input.roleId)).limit(1);
+			// 角色不存在时**静默成功**(与旧行为一致:那时是一条 delete 匹配不到行);存在才落 id 去摘。
+			// 软删角色同样算「不存在」—— 它的授权已被 `removeRoleEverywhere` 清干净,再摘也是空操作
+			const [role] = await db
+				.select({ id: sysRole.id })
+				.from(sysRole)
+				.where(and(eq(sysRole.id, input.roleId), alive(sysRole)))
+				.limit(1);
 			if (role) await removeUserRole(input.userId, input.roleId);
 			return { success: true };
 		}),

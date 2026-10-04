@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { sysDict } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
@@ -26,9 +26,22 @@ const CODE = `t${TEST_PREFIX}dict_${uniqueSuffix()}`.toLowerCase();
 const IMPORT_CODE = `t${TEST_PREFIX}imp_${uniqueSuffix()}`.toLowerCase();
 const IMPORT_NAME = `${TEST_PREFIX}导入字典`;
 
+/** 统一软删只写 `deleted_at`、**行还在** —— 测试必须自己把造出来的行物理删掉(按 id 收口,别用 LIKE) */
+const createdIds: string[] = [];
+
 after(async () => {
+	// 先按 `__test__` 前缀扫全表把本文件造的行收成 id(**必须在 router 软删之前**):
+	// 软删会把 code 换成墓碑(`...#d#<id 尾段>`),之后再按 code 就查不到了。
+	const leftovers = await db.select({ id: sysDict.id, code: sysDict.code, name: sysDict.name }).from(sysDict);
+	for (const row of leftovers) {
+		if (row.code.includes(TEST_PREFIX) || row.name.includes(TEST_PREFIX)) createdIds.push(row.id);
+	}
 	await caller.dict.delete({ code: CODE }).catch(() => undefined);
 	await caller.dict.delete({ code: IMPORT_CODE }).catch(() => undefined);
+	const ids = [...new Set(createdIds)];
+	if (ids.length > 0) {
+		await db.delete(sysDict).where(inArray(sysDict.id, ids));
+	}
 });
 
 test("新建字典:服务端生成 nanoid 主键,业务键是 code", async () => {
@@ -43,6 +56,7 @@ test("新建字典:服务端生成 nanoid 主键,业务键是 code", async () =>
 	});
 	assert.equal(created.code, CODE);
 	assertNanoid(created.id, "dict.create 返回的 id");
+	createdIds.push(created.id);
 
 	const [stored] = await db.select().from(sysDict).where(eq(sysDict.code, CODE)).limit(1);
 	assert.ok(stored);
@@ -120,14 +134,36 @@ test("更新不存在的编码 → NOT_FOUND", async () => {
 	);
 });
 
-test("删除:按 code 删,删完 byCode 返回 null", async () => {
+test("删除:按 code 软删,行保留(deleted_at 非空),byCode 就当它不存在", async () => {
+	const before = await caller.dict.byCode({ code: CODE });
+	assert.ok(before, "删除前应读得到");
 	await caller.dict.delete({ code: CODE });
 	assert.equal(await caller.dict.byCode({ code: CODE }), null);
-	assert.equal((await db.select().from(sysDict).where(eq(sysDict.code, CODE))).length, 0);
+	const [kept] = await db.select().from(sysDict).where(eq(sysDict.id, before.id));
+	assert.ok(kept, "软删要留行(审计留痕),不是物理删除");
+	assert.ok(kept.deleted_at, "deleted_at 应被写上");
+	assert.notEqual(kept.code, CODE, "业务键让位(加墓碑后缀),同一个 code 才能再建");
+	createdIds.push(before.id);
 });
 
 test("删除不存在的编码 → NOT_FOUND", async () => {
 	await assertRejects(() => caller.dict.delete({ code: `t_missing_y_${uniqueSuffix()}` }), "不存在");
+});
+
+/**
+ * 软删最容易踩的坑:唯一的 `code` 被已删的行占着 ⇒ 想用同一个编码重建会撞唯一键。
+ * 所以删除时把 code 写成墓碑(见 `lib/soft-delete.ts` 的 `tombstone()`),这条用例守住这个行为。
+ */
+test("软删后能用同一个 code 再建(墓碑让位,不撞唯一键)", async () => {
+	const again = await caller.dict.create({
+		code: CODE,
+		name: "测试字典(重建)",
+		remark: "",
+		items: [{ label: "甲", value: "a" }],
+	});
+	createdIds.push(again.id);
+	assert.equal(again.code, CODE);
+	assert.equal((await caller.dict.byCode({ code: CODE }))?.name, "测试字典(重建)");
 });
 
 /**

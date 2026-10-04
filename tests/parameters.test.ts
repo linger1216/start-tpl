@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
@@ -33,7 +33,13 @@ const LOCKED_KEY = `${TEST_PREFIX}parameters.locked.${SUFFIX}`;
 
 after(async () => {
 	for (const key of [KEY, INT_KEY, BOOL_KEY, UPSERT_KEY, IMPORT_KEY, IMPORT_INT_KEY, LOCKED_KEY]) {
-		await caller.para.delete({ key });
+		await caller.para.delete({ key }).catch(() => undefined); // 有的用例没建过它,现在 delete 会 NOT_FOUND
+	}
+	// 软删只写 deleted_at、行还在,而且主键 para_key 已被墓碑改掉 —— 按 key 查不到,只能扫全表认 `__test__` 前缀
+	const rows = await db.select({ id: sysPara.id, key: sysPara.para_key }).from(sysPara);
+	const ids = rows.filter((row) => row.key.includes(TEST_PREFIX)).map((row) => row.id);
+	if (ids.length > 0) {
+		await db.delete(sysPara).where(inArray(sysPara.id, ids));
 	}
 });
 
@@ -104,10 +110,16 @@ test("布尔参数只接受 true / false", async () => {
 	await assertRejects(() => caller.para.update({ key: BOOL_KEY, value: "yes" }), "true / false");
 });
 
-test("delete:删完 byKey 回落代码默认值(空串)", async () => {
+test("delete:软删(行保留、deleted_at 非空),byKey 回落代码默认值(空串)", async () => {
+	const [before] = await db.select().from(sysPara).where(eq(sysPara.para_key, KEY)).limit(1);
+	assert.ok(before, "删除前库里应有这一行");
 	await caller.para.delete({ key: KEY });
 	assert.equal((await caller.para.byKey({ key: KEY })).value, "");
-	assert.equal((await db.select().from(sysPara).where(eq(sysPara.para_key, KEY))).length, 0);
+	// 软删:按 para_key 查不到了(主键已让位),但行还在 —— 只能按 id 找
+	const [kept] = await db.select().from(sysPara).where(eq(sysPara.id, before.id));
+	assert.ok(kept, "软删要留行(审计留痕),不是物理删除");
+	assert.ok(kept.deleted_at, "deleted_at 应被写上");
+	assert.notEqual(kept.para_key, KEY, "主键让位,同一个 key 才能再建");
 });
 
 test("代码内置的参数:即使库里没有行,清单也要列出它(否则人不知道能调什么)", async () => {

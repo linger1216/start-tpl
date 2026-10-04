@@ -76,6 +76,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_menu", column: "perm", comment: "权限标识,如 sys:role:write;前端 useHasPerm() 认它" },
 	{ table: "sys_menu", column: "create_time", comment: "创建时间" },
 	{ table: "sys_menu", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_menu",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_dict
 	{ table: "sys_dict", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_dict", column: "code", comment: "字典编码(业务键),如 entity_category —— 读写都按它" },
@@ -85,6 +90,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dict", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_dict", column: "create_time", comment: "创建时间" },
 	{ table: "sys_dict", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_dict",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_para
 	{ table: "sys_para", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_para", column: "para_key", comment: "参数名,如 log.enabled(表的主键)" },
@@ -96,6 +106,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_para", column: "editable", comment: "0 = 代码内置不允许改" },
 	{ table: "sys_para", column: "create_time", comment: "创建时间" },
 	{ table: "sys_para", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_para",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_tag
 	{ table: "sys_tag", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_tag", column: "parent_id", comment: "父节点 id(nanoid);null = 维度(一级节点)" },
@@ -105,6 +120,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_tag", column: "sort", comment: "同级排序,越小越靠前" },
 	{ table: "sys_tag", column: "create_time", comment: "创建时间" },
 	{ table: "sys_tag", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_tag",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_tag_relation
 	{ table: "sys_tag_relation", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_tag_relation", column: "tag_id", comment: "标签 id → sys_tag.id(只允许叶子标签)" },
@@ -124,6 +144,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_user", column: "image", comment: "头像 URL(可空)" },
 	{ table: "sys_user", column: "created_at", comment: "创建时间(better-auth 口径,注意不是 create_time)" },
 	{ table: "sys_user", column: "updated_at", comment: "更新时间(better-auth 口径)" },
+	{
+		table: "sys_user",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_session
 	{ table: "sys_session", column: "id", comment: "主键(better-auth 生成)" },
 	{ table: "sys_session", column: "expires_at", comment: "过期时间(过了它 better-auth 就不再认这条会话)" },
@@ -178,6 +203,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dept", column: "remark", comment: "备注" },
 	{ table: "sys_dept", column: "create_time", comment: "创建时间" },
 	{ table: "sys_dept", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_dept",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_role
 	{ table: "sys_role", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_role", column: "name", comment: "角色名(中文)" },
@@ -186,6 +216,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role", column: "remark", comment: "说明" },
 	{ table: "sys_role", column: "create_time", comment: "创建时间" },
 	{ table: "sys_role", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_role",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 	// sys_user_dept
 	{ table: "sys_user_dept", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_user_dept", column: "department_id", comment: "部门 id → sys_dept.id(级联删除)" },
@@ -257,6 +292,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "demo_grid", column: "remark", comment: "备注" },
 	{ table: "demo_grid", column: "create_time", comment: "创建时间" },
 	{ table: "demo_grid", column: "update_time", comment: "更新时间" },
+	{
+		table: "demo_grid",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 
 	// sys_data_policy(数据权限:规则 —— 谁看得到哪些行,见 src/lib/data-scope.ts)
 	{ table: "sys_data_policy", column: "id", comment: "主键(nanoid,由代码生成)" },
@@ -277,6 +317,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_data_policy", column: "remark", comment: "备注" },
 	{ table: "sys_data_policy", column: "create_time", comment: "创建时间" },
 	{ table: "sys_data_policy", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_data_policy",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 
 	// sys_data_plugin(数据权限:值域插件登记 —— v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置)
 	{ table: "sys_data_plugin", column: "id", comment: "主键(nanoid,由代码生成)" },
@@ -294,6 +339,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_data_plugin", column: "remark", comment: "备注" },
 	{ table: "sys_data_plugin", column: "create_time", comment: "创建时间" },
 	{ table: "sys_data_plugin", column: "update_time", comment: "更新时间" },
+	{
+		table: "sys_data_plugin",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
 ];
 
 /**

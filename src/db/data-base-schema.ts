@@ -106,6 +106,8 @@ export const sysMenu = mysqlTable(
 		status: tinyint("status").notNull().default(1),
 		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [
 		index("idx_sys_menu_parent_sort").on(table.parent_id, table.sort),
@@ -140,6 +142,8 @@ export const sysDict = mysqlTable(
 		status: tinyint("status").notNull().default(1),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [uniqueIndex("uk_sys_dict_code").on(table.code)],
 );
@@ -180,6 +184,8 @@ export const sysPara = mysqlTable(
 		editable: tinyint("editable").notNull().default(1),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [index("idx_para_group").on(table.para_group)],
 );
@@ -217,6 +223,8 @@ export const sysTag = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [index("idx_sys_tag_parent_sort").on(table.parent_id, table.sort)],
 );
@@ -285,6 +293,8 @@ export const sysUser = mysqlTable(
 		image: varchar("image", { length: 512 }),
 		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [uniqueIndex("uk_sys_user_email").on(table.email)],
 );
@@ -425,6 +435,8 @@ export const sysDept = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [index("idx_sys_department_parent_sort").on(table.parent_id, table.sort)],
 );
@@ -449,6 +461,8 @@ export const sysRole = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [uniqueIndex("uk_sys_role_name").on(table.name)],
 );
@@ -636,6 +650,8 @@ export const sysDemoGrid = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [index("idx_demo_grid_town").on(table.town_id), index("idx_demo_grid_owner").on(table.owner_id)],
 );
@@ -721,6 +737,8 @@ export const sysDataPolicy = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [index("idx_sys_data_policy_resource").on(table.resource, table.status)],
 );
@@ -764,6 +782,8 @@ export const sysDataPlugin = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
 		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
+		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [uniqueIndex("uk_sys_data_plugin_key").on(table.plugin_key)],
 );

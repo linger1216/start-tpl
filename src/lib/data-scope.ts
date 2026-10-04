@@ -28,7 +28,7 @@
  * 4. **缓存 30 秒 + 写后即清**:规则缓存住;策略 / 插件增删改后调 `clearDataScopeCache()`
  *    (插件缓存另有一把 `clearPluginCache()`)。
  */
-import { asc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "#/db";
 import { sysDataPolicy, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
@@ -47,6 +47,7 @@ import {
 	type Subject,
 } from "#/lib/data-scope-spec";
 import { logger } from "#/lib/logger";
+import { alive } from "#/lib/soft-delete";
 import { collectDescendantIds } from "#/lib/tree";
 
 async function selectRows(query: SQL): Promise<Record<string, unknown>[]> {
@@ -82,7 +83,7 @@ async function rolesOf(ids: string[]): Promise<PolicyRole[]> {
 	return db
 		.select({ id: sysRole.id, name: sysRole.name })
 		.from(sysRole)
-		.where(inArray(sysRole.id, ids))
+		.where(and(inArray(sysRole.id, ids), alive(sysRole)))
 		.orderBy(asc(sysRole.sort), asc(sysRole.name));
 }
 
@@ -142,7 +143,11 @@ function deptTreeOf(nodes: DeptNode[], mineIds: string[]): PolicyDept[] {
  */
 export async function buildPolicyCtx(userId: string): Promise<PolicyCtx> {
 	const [[user], roleIds, deptRows] = await Promise.all([
-		db.select({ id: sysUser.id, name: sysUser.name }).from(sysUser).where(eq(sysUser.id, userId)).limit(1),
+		db
+			.select({ id: sysUser.id, name: sysUser.name })
+			.from(sysUser)
+			.where(and(eq(sysUser.id, userId), alive(sysUser)))
+			.limit(1),
 		roleIdsOf(userId),
 		db.select({ departmentId: sysUserDept.department_id }).from(sysUserDept).where(eq(sysUserDept.user_id, userId)),
 	]);
@@ -196,7 +201,10 @@ async function loadRules(): Promise<Map<string, LoadedRule[]>> {
 	if (ruleCache && Date.now() - ruleCache.at < RULE_CACHE_TTL_MS) return ruleCache.byResource;
 
 	const byResource = new Map<string, LoadedRule[]>();
-	const rows = await db.select().from(sysDataPolicy).where(eq(sysDataPolicy.status, POLICY_STATUS.live));
+	const rows = await db
+		.select()
+		.from(sysDataPolicy)
+		.where(and(eq(sysDataPolicy.status, POLICY_STATUS.live), alive(sysDataPolicy)));
 
 	for (const row of rows) {
 		const subject = parseSubject(row.subject);

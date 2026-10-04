@@ -6,6 +6,7 @@
  *
  * 判重口径(**业务键,不是主键**):`(parent_id, label)` —— 同一维度下同名标签视为同一行。
  * 主键是 nanoid,每次生成都不同,拿它判重会导致每次重跑都多一份标签体系。
+ * **只认活着的行**:维度被软删后要能重建,新标签也绝不能挂到软删的维度下。
  *
  * 用法:
  *   pnpm db:seed:tags
@@ -15,13 +16,16 @@ import "dotenv/config";
 import { sysTag } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
+import { alive } from "../src/lib/soft-delete.ts";
 import { TAG_DIMENSION_SEED, TAG_SEED } from "./tag-seed-data.ts";
 
 type ExistingRow = { id: string; parent_id: string | null; label: string };
 
+// 只认活着的行:维度被软删后要能重建,而且新标签绝不能挂到软删的维度下(树会断在半空)
 const existing: ExistingRow[] = await db
 	.select({ id: sysTag.id, parent_id: sysTag.parent_id, label: sysTag.label })
-	.from(sysTag);
+	.from(sysTag)
+	.where(alive(sysTag));
 /** `${parentId ?? ""}::${label}` → 已存在的行 */
 const byKey = new Map(existing.map((row) => [`${row.parent_id ?? ""}::${row.label}`, row]));
 
@@ -69,8 +73,8 @@ for (const [index, tag] of TAG_SEED.entries()) {
 
 if (toInsert.length > 0) await db.insert(sysTag).values(toInsert);
 
-const all = await db.select({ id: sysTag.id }).from(sysTag);
+const all = await db.select({ id: sysTag.id }).from(sysTag).where(alive(sysTag));
 console.log(
-	`✓ 标签种子完成:维度 ${TAG_DIMENSION_SEED.length} 个(新增 ${addedDims})+ 标签 ${TAG_SEED.length} 条(新增 ${addedTags}),表内共 ${all.length} 行(已存在的未覆盖)`,
+	`✓ 标签种子完成:维度 ${TAG_DIMENSION_SEED.length} 个(新增 ${addedDims})+ 标签 ${TAG_SEED.length} 条(新增 ${addedTags}),表内有效 ${all.length} 行(已存在的未覆盖)`,
 );
 process.exit(0);

@@ -162,11 +162,19 @@ test("删维度:连子标签和它们身上的关联一起清掉", async () => {
 	assert.equal(result.deleted, 2, "维度 + 它下面的 1 个标签");
 	assert.equal(result.removedLinks, 1, "标签身上的关联也要清");
 
-	// 标签节点没了
-	assert.equal((await db.select().from(sysTag).where(eq(sysTag.id, created.tagId))).length, 0);
+	// 标签节点还在,但已经是"软删"状态(列表 / 详情都当它不存在,行留下来做审计留痕)
+	const deletedRows = await db
+		.select()
+		.from(sysTag)
+		.where(inArray(sysTag.id, [created.dimId, created.tagId]));
+	assert.equal(deletedRows.length, 2, "软删不物理删行");
+	for (const row of deletedRows) assert.ok(row.deleted_at, `${row.label} 的 deleted_at 应被写上`);
+	const labels = (await caller.tag.list()).map((row) => row.id);
+	assert.ok(!labels.includes(created.tagId), "list 里读不到已删节点");
 	// 关联也没了(再查对象应是空)
 	const { items } = await caller.tag.tagsOfObject({ objId: OBJ_ID, objType: OBJ_TYPE });
 	assert.equal(items.length, 0);
+	// after 的兜底清扫按 id 物理删,产物必须留下 id
 	created.dimId = undefined;
 	created.tagId = undefined;
 });

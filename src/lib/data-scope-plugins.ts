@@ -35,12 +35,13 @@
  *    超管专属(m21097)—— 与「数据范围」页同口径,路由只挂 `protectedProcedure`,
  *    守权限靠菜单授权与 `sys:plugin:add` / `sys:plugin:edit` / `sys:plugin:remove` 三个按钮权限点。
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "#/db";
 import { sysDataPlugin, sysDept } from "#/db/data-base-schema";
 import { ctxDeptIds, type PolicyCtx, parseItems } from "#/lib/data-scope-spec";
 import { logger } from "#/lib/logger";
+import { alive } from "#/lib/soft-delete";
 import { collectDescendantIds } from "#/lib/tree";
 
 // ── 类型 ────────────────────────────────────────────────────────────────────
@@ -179,7 +180,10 @@ export function clearDeptCache(): void {
 /** 整棵组织树(id + 名字 + 父级),给引擎算 `ctx.depts`、给插件算子树用 */
 export async function loadDeptNodes(): Promise<DeptNode[]> {
 	if (deptCache && Date.now() - deptCache.at < DEPT_CACHE_TTL_MS) return deptCache.nodes;
-	const nodes = await db.select({ id: sysDept.id, name: sysDept.name, parentId: sysDept.parent_id }).from(sysDept);
+	const nodes = await db
+		.select({ id: sysDept.id, name: sysDept.name, parentId: sysDept.parent_id })
+		.from(sysDept)
+		.where(alive(sysDept));
 	deptCache = { at: Date.now(), nodes };
 	return nodes;
 }
@@ -452,7 +456,10 @@ export async function loadPlugins(): Promise<Map<string, ResolvedPlugin>> {
 	const map = new Map<string, ResolvedPlugin>();
 	for (const plugin of BUILTIN_PLUGINS) map.set(plugin.key, plugin);
 
-	const rows = await db.select().from(sysDataPlugin).where(eq(sysDataPlugin.status, 1));
+	const rows = await db
+		.select()
+		.from(sysDataPlugin)
+		.where(and(eq(sysDataPlugin.status, 1), alive(sysDataPlugin)));
 	for (const row of rows) {
 		if (map.has(row.plugin_key)) {
 			logger.warn("data_scope.plugin_shadowed", { key: row.plugin_key });

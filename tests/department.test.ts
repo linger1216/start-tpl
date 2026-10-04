@@ -105,6 +105,8 @@ test("部门成员:同一部门不重复加入(addMember 幂等);一人可跨部
 
 test("部门:有成员时不让删;成员移出后可以删", async () => {
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}待删_${SUFFIX}` });
+	// 软删之后 `remove` 只写 `deleted_at`,行还留在库里 —— 不登记 id 就永远清不掉(真的漏过)
+	deptIds.push(dept.id);
 	const user = await makeUser("todelete");
 	await caller.department.addMember({ departmentId: dept.id, userId: user });
 

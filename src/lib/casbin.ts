@@ -28,6 +28,7 @@ import { sysCasbinRule, sysMenu, sysRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { logger } from "#/lib/logger";
 import { isPermPattern, pagePermOf, permMatches } from "#/lib/perm-code";
+import { alive } from "#/lib/soft-delete";
 import { collectAncestorIds } from "#/lib/tree";
 
 /**
@@ -109,8 +110,11 @@ class CasbinRuleAdapter implements Adapter {
 					v2: sysCasbinRule.v2,
 				})
 				.from(sysCasbinRule),
-			db.select({ id: sysMenu.id, parentId: sysMenu.parent_id, perm: sysMenu.perm, path: sysMenu.path }).from(sysMenu),
-			db.select({ id: sysRole.id, status: sysRole.status }).from(sysRole),
+			db
+				.select({ id: sysMenu.id, parentId: sysMenu.parent_id, perm: sysMenu.perm, path: sysMenu.path })
+				.from(sysMenu)
+				.where(alive(sysMenu)),
+			db.select({ id: sysRole.id, status: sysRole.status }).from(sysRole).where(alive(sysRole)),
 		]);
 		const menuById = new Map(menus.map((row) => [row.id, row]));
 
@@ -347,7 +351,7 @@ export async function isAdminUser(userId: string, isSuper = false): Promise<bool
 	const [row] = await db
 		.select({ n: sql<number>`count(*)` })
 		.from(sysRole)
-		.where(and(inArray(sysRole.id, ids), eq(sysRole.name, ADMIN_ROLE_NAME)));
+		.where(and(inArray(sysRole.id, ids), eq(sysRole.name, ADMIN_ROLE_NAME), alive(sysRole)));
 	return Number(row?.n ?? 0) > 0;
 }
 

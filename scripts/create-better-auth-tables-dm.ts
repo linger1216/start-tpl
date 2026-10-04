@@ -43,6 +43,7 @@ const STATEMENTS: string[] = [
 		"image" varchar(512),
 		"created_at" datetime default current_timestamp not null,
 		"updated_at" datetime default current_timestamp not null,
+		"deleted_at" datetime,
 		primary key ("id")
 	)`,
 	`create unique index if not exists "uk_sys_user_email" on ${S}."sys_user" ("email")`,
@@ -130,6 +131,7 @@ const STATEMENTS: string[] = [
 		"remark" varchar(255),
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
+		"deleted_at" datetime,
 		primary key ("id")
 	)`,
 	`create index if not exists "idx_sys_department_parent_sort" on ${S}."sys_dept" ("parent_id", "sort")`,
@@ -142,6 +144,7 @@ const STATEMENTS: string[] = [
 		"remark" varchar(255),
 		"create_time" datetime default current_timestamp not null,
 		"update_time" datetime default current_timestamp not null,
+		"deleted_at" datetime,
 		primary key ("id"),
 		unique ("name")
 	)`,
@@ -239,6 +242,7 @@ const STATEMENTS: string[] = [
       "remark" varchar(255),
       "create_time" datetime default current_timestamp not null,
       "update_time" datetime default current_timestamp not null,
+      "deleted_at" datetime,
       primary key ("id")
     )`,
 	`create index if not exists "idx_demo_grid_town" on ${S}."demo_grid" ("town_id")`,
@@ -261,6 +265,7 @@ const STATEMENTS: string[] = [
       "remark" varchar(255),
       "create_time" datetime default current_timestamp not null,
       "update_time" datetime default current_timestamp not null,
+      "deleted_at" datetime,
       primary key ("id")
     )`,
 	`create index if not exists "idx_sys_data_policy_resource" on ${S}."sys_data_policy" ("resource", "status")`,
@@ -279,6 +284,7 @@ const STATEMENTS: string[] = [
       "remark" varchar(255),
       "create_time" datetime default current_timestamp not null,
       "update_time" datetime default current_timestamp not null,
+      "deleted_at" datetime,
       primary key ("id")
     )`,
 	`create unique index if not exists "uk_sys_data_plugin_key" on ${S}."sys_data_plugin" ("plugin_key")`,
@@ -387,6 +393,17 @@ async function main() {
 		{ table: "sys_data_plugin", column: "output_values", ddl: "text" },
 		// m23422:规则多一列「从插件输出行里取哪个 key 的值去比」
 		{ table: "sys_data_policy", column: "value_key", ddl: "varchar(64)" },
+		// 统一软删 (m27126 #9):业务表补 `deleted_at`(sys_file 已有 status=2 行级软删,不叠这一列)
+		{ table: "sys_menu", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_dict", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_para", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_tag", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_user", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_dept", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_role", column: "deleted_at", ddl: "datetime" },
+		{ table: "demo_grid", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_data_policy", column: "deleted_at", ddl: "datetime" },
+		{ table: "sys_data_plugin", column: "deleted_at", ddl: "datetime" },
 	];
 	for (const upgrade of columnUpgrades) {
 		const cols = await q(

@@ -44,6 +44,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`status\` tinyint not null default 1,
 			\`create_time\` datetime(3) not null default current_timestamp(3),
 			\`update_time\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_menu_path\` (\`path\`),
 			key \`idx_sys_menu_parent_sort\` (\`parent_id\`, \`sort\`)
@@ -60,6 +61,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`status\` tinyint not null default 1,
 			\`create_time\` datetime default current_timestamp,
 			\`update_time\` datetime default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_dict_code\` (\`code\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '系统字典(全系统共用)'`,
@@ -77,6 +79,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`editable\` tinyint not null default 1,
 			\`create_time\` datetime default current_timestamp,
 			\`update_time\` datetime default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`para_key\`),
 			key \`idx_para_group\` (\`para_group\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '系统参数(系统设置 ▸ 参数管理)'`,
@@ -92,6 +95,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			key \`idx_sys_tag_parent_sort\` (\`parent_id\`, \`sort\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '标签体系(维度 → 标签 两级)'`,
@@ -124,6 +128,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`image\` varchar(512) default null,
 			\`created_at\` timestamp not null default current_timestamp,
 			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_user_email\` (\`email\`)
 		)`,
@@ -221,6 +226,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			key \`idx_sys_department_parent_sort\` (\`parent_id\`, \`sort\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '部门树'`,
@@ -235,6 +241,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
 			\`create_time\` datetime not null default current_timestamp,
 			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_role_name\` (\`name\`)
 		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '角色(全局定义;谁有哪些角色见 sys_casbin_rule 的 g 行)'`,
@@ -346,6 +353,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`create_time\` datetime not null default current_timestamp,
     \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`deleted_at\` datetime default null,
     primary key (\`id\`),
     key \`idx_demo_grid_town\` (\`town_id\`),
     key \`idx_demo_grid_owner\` (\`owner_id\`)
@@ -375,6 +383,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`create_time\` datetime not null default current_timestamp,
     \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`deleted_at\` datetime default null,
     primary key (\`id\`),
     key \`idx_sys_data_policy_resource\` (\`resource\`, \`status\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '数据权限规则(谁看得到哪些行,见 src/lib/data-scope.ts)'`,
@@ -400,6 +409,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`create_time\` datetime not null default current_timestamp,
     \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`deleted_at\` datetime default null,
     primary key (\`id\`),
     unique key \`uk_sys_data_plugin_key\` (\`plugin_key\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)'`,
@@ -481,6 +491,57 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		table: "sys_data_policy",
 		column: "value_key",
 		ddl: "varchar(64) collate utf8mb4_unicode_ci default null",
+	},
+	// 统一软删 (m27126 #9):业务表补 `deleted_at`(sys_file 已有 status=2 行级软删,不叠这一列)
+	{
+		table: "sys_menu",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_dict",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_para",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_tag",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_user",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_dept",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_role",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "demo_grid",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_data_policy",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
+	{
+		table: "sys_data_plugin",
+		column: "deleted_at",
+		ddl: "datetime default null",
 	},
 ];
 

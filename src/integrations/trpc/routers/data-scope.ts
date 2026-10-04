@@ -22,7 +22,7 @@
  * 每一个 mutation 尾部都要 `clearDataScopeCache()` —— 缓存 30 秒,不清就得等它过期。
  */
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -42,6 +42,7 @@ import {
 	validatePolicyCombo,
 } from "#/lib/data-scope-spec";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 /** 资源 / 列下拉用的字段清单(元数据读不到时是空的,表单允许手输 —— 达梦上没有 `database()`) */
@@ -80,9 +81,16 @@ export const dataScopeRouter = createTRPCRouter({
 	 */
 	plugins: protectedProcedure.query(async () => listPlugins()),
 
-	/** 规则台账:库里全部规则(含停用的)+ 把主体 / 资源 / 插件翻译成人能看的名字 */
+	/**
+	 * 规则台账:库里全部**活着**的规则(含停用的)+ 把主体 / 资源 / 插件翻译成人能看的名字。
+	 * 软删的规则只为审计留痕(见 `lib/soft-delete.ts`),读路径必须过 `alive()`,台账里不能再出现。
+	 */
 	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysDataPolicy).orderBy(asc(sysDataPolicy.resource), asc(sysDataPolicy.subject));
+		const rows = await db
+			.select()
+			.from(sysDataPolicy)
+			.where(alive(sysDataPolicy))
+			.orderBy(asc(sysDataPolicy.resource), asc(sysDataPolicy.subject));
 
 		const roleIds = rows.map((row) => subjectIdOf(row.subject, "role")).filter((id): id is string => Boolean(id));
 		const deptIds = rows.map((row) => subjectIdOf(row.subject, "dept")).filter((id): id is string => Boolean(id));
@@ -142,10 +150,15 @@ export const dataScopeRouter = createTRPCRouter({
 			const targetId = input.userId ?? me.id;
 			const policyCtx = await buildPolicyCtx(targetId);
 
-			// 被预览的规则按 id 直读、**不过滤 status** —— 要看的常常正是那条还没上线的
+			// 被预览的规则按 id 直读、**不过滤 status** —— 要看的常常正是那条还没上线的;
+			// 但已软删的规则不再可预览(读路径一律过 `alive()`,不然会给一条已删除的规则算出样张)
 			let trialRow: typeof sysDataPolicy.$inferSelect | undefined;
 			if (input.ruleId) {
-				[trialRow] = await db.select().from(sysDataPolicy).where(eq(sysDataPolicy.id, input.ruleId)).limit(1);
+				[trialRow] = await db
+					.select()
+					.from(sysDataPolicy)
+					.where(and(eq(sysDataPolicy.id, input.ruleId), alive(sysDataPolicy)))
+					.limit(1);
 				if (!trialRow) throw new TRPCError({ code: "NOT_FOUND", message: "没有这条数据范围规则" });
 				if (trialRow.resource !== input.resource) {
 					throw new TRPCError({ code: "BAD_REQUEST", message: "这条规则不是这张资源表上的" });
@@ -183,7 +196,7 @@ export const dataScopeRouter = createTRPCRouter({
 					: db
 							.select({ id: sysDept.id, name: sysDept.name })
 							.from(sysDept)
-							.where(inArray(sysDept.id, policyCtx.descendants)),
+							.where(and(inArray(sysDept.id, policyCtx.descendants), alive(sysDept))),
 			]);
 			return {
 				...preview,
@@ -267,7 +280,12 @@ export const dataScopeRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
-			const [row] = await db.select().from(sysDataPolicy).where(eq(sysDataPolicy.id, input.id)).limit(1);
+			// 读路径一律过 `alive()`:已软删的规则等同不存在,不能再改(报的还是同一句 NOT_FOUND)
+			const [row] = await db
+				.select()
+				.from(sysDataPolicy)
+				.where(and(eq(sysDataPolicy.id, input.id), alive(sysDataPolicy)))
+				.limit(1);
 			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "没有这条数据范围规则" });
 
 			// 没给的沿用旧值 —— 组合校验必须按"合并之后的形态"判,不然单独改备注会被判成缺列
@@ -306,6 +324,12 @@ export const dataScopeRouter = createTRPCRouter({
 			return { id: input.id, status, demoted };
 		}),
 
+	/**
+	 * 删除规则 —— **软删**:只写 `deleted_at`,行本身留在库里给审计留痕(硬删之后审计里只剩一串 id,
+	 * 谁也说不清删了什么)。读路径统一带 `alive(sysDataPolicy)`,所以台账 / 预览都不会再看到它。
+	 *
+	 * 预查这一行**故意不带 `alive()`** —— 它正是删除过程要操作的那一行(重复删除仍按原语义返回)。
+	 */
 	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		const [row] = await db
 			.select({ id: sysDataPolicy.id })
@@ -313,7 +337,7 @@ export const dataScopeRouter = createTRPCRouter({
 			.where(eq(sysDataPolicy.id, input.id))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "没有这条数据范围规则" });
-		await db.delete(sysDataPolicy).where(eq(sysDataPolicy.id, input.id));
+		await db.update(sysDataPolicy).set(softDeleted()).where(eq(sysDataPolicy.id, input.id));
 		clearDataScopeCache();
 		return { id: input.id, removed: true };
 	}),
@@ -348,13 +372,16 @@ async function subjectNameOf(raw: string): Promise<string> {
 	return `${kind}:${names.get(subject.id) ?? subject.id}`;
 }
 
-/** 一批 id → 名字(空数组直接回空表,不白跑一次 SQL) */
+/** 一批 id → 名字(空数组直接回空表,不白跑一次 SQL;已软删的主体不再解析出名字,回落到显示 id) */
 async function namesById(
 	table: typeof sysRole | typeof sysDept | typeof sysUser,
 	ids: string[],
 ): Promise<Map<string, string>> {
 	if (ids.length === 0) return new Map();
-	const rows = await db.select({ id: table.id, name: table.name }).from(table).where(inArray(table.id, ids));
+	const rows = await db
+		.select({ id: table.id, name: table.name })
+		.from(table)
+		.where(and(inArray(table.id, ids), alive(table)));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 

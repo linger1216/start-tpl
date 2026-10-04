@@ -618,6 +618,25 @@ pnpm check
 
 ---
 
+### 第七轮:模板待完善八项(2026-10)
+
+这是「作为管理后台模板,还有哪些功能待发现 / 完成 / 待完善」那一问的落地清单(逐项一个 commit)。
+
+| 改了什么 | 说明 |
+| --- | --- |
+| **#15 删占位页** | `/blank`(「功能开发中」)整文件删除 —— 它的"派生脚手架"作用已被 `LedgerCard` + `useLedgerTable` 的新页面版式取代;顺手清掉 `rbac.ts` 里 `/blank` 的两处登记与文档引用 |
+| **#2 服务端登录校验** | 复核后确认**本来就是齐的**(所有业务过程都是 `protectedProcedure`,中间件链 `logging → requireUser → audit → perm → dataScope`),只有 `file.ts` 的注释还写着「⚠️ 这里没有服务端登录校验」→ 改成事实描述,`doc/文件管理.md` 的「已知缺口」同步更正 |
+| **#4 个人资料页** | 新增 `/settings/profile`:账号信息(姓名 / 邮箱 + 是否已验证 / 角色 / 部门 / 创建时间)、改姓名、改密码(`changePassword` 带 `revokeOtherSessions`)、发验证邮件、换邮箱。配套 `src/lib/mailer.ts`(默认 **console 驱动**:链接打到终端,不挑服务商、不要 API key,换驱动只加一个分支)与新接口 `user.profile`(只读自己那一行:不挂菜单授权,但必须登录) |
+| **#3 文件内联预览** | 文件详情里图片仍走 `<img>`;**PDF / 文本走社区包**(`react-pdf` 懒加载,不自己写渲染器 —— 用户明确要求)。注意 minio 桶要配 GET CORS:PDF/文本要 `fetch()` 预签名地址,`<img src>` 那条路不需要 |
+| **#5 日志导出** | 审计日志页接入 `ExcelExportButton`,导出当前筛选结果 |
+| **#1 Excel 四页** | 用户 / 角色 / 字典 / 参数四页接入导出 + 导入。`settings-*-excel.ts` 是各域表头**唯一真源**(导出列与导入列**可以不同**,如用户的「初始密码」只能手补 —— 密码是散列);导入语义按域定义(user **只建不改**、role / para 按名 upsert、dict 合并字典项);权限点复用各域的 `*:add`;`xlsx` 只在点按钮时动态 `import()`,不进首屏包 |
+| **#6 容器化** | `Dockerfile` 四个目标 + `docker-compose.yml`(mysql + minio + app + `bootstrap` 初始化服务)+ `.devcontainer/`。关键坑:`.output` **不自包含**(`instrument.server.mjs` 是原样拷进产物的,靠 `dependencies` 里的 `@sentry/tanstackstart-react`)⇒ 运行镜像必须 `pnpm install --prod`;`.npmrc` 里是宿主机绝对 store 路径,不能进构建上下文 |
+| **#9 统一软删** | 10 张业务表补 `deleted_at`,读路径一律 `alive(表)`,11 处硬删改软删;带唯一业务键的表用 `tombstone()` **让位**(否则删掉「测试角色」后再也建不出同名角色),口径见 `doc/数据库与认证.md` 的同名小节。`sys_file` 不叠这一列(它已有 `status = 2` 的行级软删),关联表与运维表不加。测试收尾改成按 `__test__` 前缀**扫表收 id**:以前先软删再按业务键查,键已变墓碑 ⇒ 查不到就攒残留(本轮顺手清掉 12 行并修好 5 处收尾) |
+
+基线:`pnpm typecheck` 0 · `npx biome check .` Checked 281 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm db:create` 幂等 · `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191**(+5 是新增的 `tests/soft-delete.test.ts`)。行为验收:生产包 + 带 cookie 的 SSR 请求,16 个页面全 200(未登录 `/settings/users` 仍是 307、未知路径 404),跑完测试真库 `__test__` 残留 **0**、`sys_user` 38 / `sys_role` 13 / `sys_dept` 3700 与基线一致。
+
+---
+
 ## 延伸阅读
 
 项目内文档:

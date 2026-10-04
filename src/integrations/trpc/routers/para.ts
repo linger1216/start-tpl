@@ -9,7 +9,7 @@
  * `src/components/modules/settings/settings-parameters-excel.ts` —— 导出与导入共用同一组表头,导出的文件能直接回导。
  */
 import { TRPCError } from "@trpc/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -26,6 +26,7 @@ import {
 	type ParaType,
 	validateParaValue,
 } from "#/lib/para-spec";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { clearParaCache, PARA_DEFAULTS } from "#/lib/sys-para";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -75,7 +76,8 @@ type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message
 export const paraRouter = createTRPCRouter({
 	/** 参数清单:代码默认值 + 库里的覆盖值(库里没有的参数也列出来,否则人不知道能调什么) */
 	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysPara);
+		// 只合并**活着**的覆盖值:软删行留着是审计留痕,不能让它盖住代码默认值
+		const rows = await db.select().from(sysPara).where(alive(sysPara));
 		const stored = new Map(rows.map((row) => [row.para_key, row]));
 		const keys = [...new Set([...Object.keys(PARA_DEFAULTS), ...rows.map((row) => row.para_key)])];
 		return keys
@@ -90,7 +92,12 @@ export const paraRouter = createTRPCRouter({
 	 * 没必要为它拉全表。键不存在时回空串,由解析侧回落默认值。
 	 */
 	byKey: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).query(async ({ input }) => {
-		const [row] = await db.select().from(sysPara).where(eq(sysPara.para_key, input.key)).limit(1);
+		// 已软删的覆盖值不算数 —— 删掉覆盖值就等于回到代码默认值
+		const [row] = await db
+			.select()
+			.from(sysPara)
+			.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
+			.limit(1);
 		return { key: input.key, value: row?.para_value ?? PARA_DEFAULTS[input.key]?.value ?? "" };
 	}),
 
@@ -109,7 +116,12 @@ export const paraRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			const fallback = PARA_DEFAULTS[input.key];
-			const [row] = await db.select().from(sysPara).where(eq(sysPara.para_key, input.key)).limit(1);
+			// upsert 的先查只看活着的行:已软删的 key 已被 `tombstone()` 让位(见下面 delete),这里会走插入
+			const [row] = await db
+				.select()
+				.from(sysPara)
+				.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
+				.limit(1);
 			if (row && Number(row.editable ?? 1) === 0) {
 				throw new TRPCError({ code: "FORBIDDEN", message: `参数 ${input.key} 是代码内置的,不允许在界面上修改` });
 			}
@@ -165,7 +177,7 @@ export const paraRouter = createTRPCRouter({
 			const [existing] = await db
 				.select({ key: sysPara.para_key })
 				.from(sysPara)
-				.where(eq(sysPara.para_key, input.key))
+				.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
 				.limit(1);
 			if (existing) throw new TRPCError({ code: "CONFLICT", message: `参数 ${input.key} 已存在,改值请走「修改」` });
 			const fallback = PARA_DEFAULTS[input.key];
@@ -247,9 +259,12 @@ export const paraRouter = createTRPCRouter({
 					.select()
 					.from(sysPara)
 					.where(
-						inArray(
-							sysPara.para_key,
-							parsed.map((row) => row.key),
+						and(
+							inArray(
+								sysPara.para_key,
+								parsed.map((row) => row.key),
+							),
+							alive(sysPara),
 						),
 					);
 				for (const row of found) stored.set(row.para_key, row);
@@ -311,9 +326,30 @@ export const paraRouter = createTRPCRouter({
 			return result;
 		}),
 
-	/** 删除一个参数的库里覆盖值:代码内置的默认参数删完回到默认值,界面新建的参数删完即消失。 */
+	/**
+	 * 删除一个参数的库里覆盖值 —— **软删**(`deleted_at` 打时间戳),不是真删。
+	 *
+	 * 为什么软删:删覆盖值本身是审计事件(谁把哪个开关关了),硬删之后库里什么都不剩,查不回来。
+	 * 语义上「删除 = 恢复默认」:`PARA_DEFAULTS` 里的内置参数删完,`list` / `byKey` 又只剩代码默认值;
+	 * `scripts/seed-paras.ts` 是「只补不覆盖」,这个 key 让位之后也能被重新插回来。
+	 *
+	 * `para_key` 是**主键**,软删时必须用 `tombstone()` 把它改掉(靠 UPDATE 主键让位)——
+	 * 否则新行插不进同一个 key,`create` / `import` 想重建这条参数会直接撞主键。
+	 * 读路径(list / byKey / 查重 / 导入先查)一律要带 `alive()`,漏一处就把删除的行又当成了覆盖值。
+	 */
 	delete: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
-		await db.delete(sysPara).where(eq(sysPara.para_key, input.key));
+		// 先按 key 查出这一行 —— 软删要拿它的 `para_key` 写墓碑(主键让位)。查询带 `alive()`:
+		// 已经软删过的行不该再删一次(list 里也看不见它),所以查不到就是 NOT_FOUND
+		const [row] = await db
+			.select()
+			.from(sysPara)
+			.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
+			.limit(1);
+		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个参数不存在(可能已被删除)" });
+		await db
+			.update(sysPara)
+			.set({ ...softDeleted(), para_key: tombstone(row.para_key, row.id, 64) })
+			.where(eq(sysPara.para_key, input.key));
 		clearParaCache();
 		return { key: input.key };
 	}),

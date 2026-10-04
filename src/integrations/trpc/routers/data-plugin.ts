@@ -31,6 +31,7 @@ import { buildPolicyCtx } from "#/lib/data-scope";
 import { BUILTIN_PLUGIN_KEYS, clearPluginCache, listPlugins, testPlugin } from "#/lib/data-scope-plugins";
 import { PLUGIN_ITEM_KEY_MAX, PLUGIN_ITEM_VALUE_MAX, PLUGIN_ITEMS_MAX } from "#/lib/data-scope-spec";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 const pluginKeySchema = z
@@ -95,17 +96,23 @@ function parseOutputValues(raw: unknown): Array<{ key: string; value: string }> 
 
 /** 还有几条启用中的规则在用这个插件(删之前要提醒,否则那些规则会静默变成"一行也看不到") */
 async function rulesUsing(pluginKey: string): Promise<number> {
+	// 只数**活着**的规则:已软删的规则不参与求值,不该再拦着插件删除
 	const rows = await db
 		.select({ id: sysDataPolicy.id })
 		.from(sysDataPolicy)
-		.where(and(eq(sysDataPolicy.plugin_key, pluginKey), eq(sysDataPolicy.status, 1)));
+		.where(and(eq(sysDataPolicy.plugin_key, pluginKey), eq(sysDataPolicy.status, 1), alive(sysDataPolicy)));
 	return rows.length;
 }
 
 export const dataPluginRouter = createTRPCRouter({
 	/** 清单:内置四个(代码里,`impl: "builtin"` 那批)+ 表里的自定义行(含停用的) */
 	list: protectedProcedure.query(async () => {
-		const rows = await db.select().from(sysDataPlugin).orderBy(asc(sysDataPlugin.plugin_key));
+		// 过 `alive()`:软删的插件行留着只是审计留痕,不能再出现在「自定义插件」清单里
+		const rows = await db
+			.select()
+			.from(sysDataPlugin)
+			.where(alive(sysDataPlugin))
+			.orderBy(asc(sysDataPlugin.plugin_key));
 		const builtin = (await listPlugins()).filter((plugin) => plugin.impl === "builtin");
 		return { builtin, custom: rows.map(toPluginRow) };
 	}),
@@ -136,7 +143,7 @@ export const dataPluginRouter = createTRPCRouter({
 				: await db
 						.select({ id: sysDept.id, name: sysDept.name })
 						.from(sysDept)
-						.where(inArray(sysDept.id, policyCtx.descendants));
+						.where(and(inArray(sysDept.id, policyCtx.descendants), alive(sysDept)));
 		return {
 			pluginKey: input.pluginKey,
 			userName: userNames.get(me.id) ?? me.id,
@@ -172,7 +179,7 @@ export const dataPluginRouter = createTRPCRouter({
 			const exists = await db
 				.select({ id: sysDataPlugin.id })
 				.from(sysDataPlugin)
-				.where(eq(sysDataPlugin.plugin_key, input.pluginKey))
+				.where(and(eq(sysDataPlugin.plugin_key, input.pluginKey), alive(sysDataPlugin)))
 				.limit(1);
 			if (exists.length > 0) throw new TRPCError({ code: "CONFLICT", message: `插件标识已被占用:${input.pluginKey}` });
 
@@ -212,7 +219,12 @@ export const dataPluginRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
-			const [row] = await db.select().from(sysDataPlugin).where(eq(sysDataPlugin.plugin_key, input.pluginKey)).limit(1);
+			// 取行只看活着的:已软删的插件已经不是"这个插件"了,改不了
+			const [row] = await db
+				.select()
+				.from(sysDataPlugin)
+				.where(and(eq(sysDataPlugin.plugin_key, input.pluginKey), alive(sysDataPlugin)))
+				.limit(1);
 			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `没有这个插件:${input.pluginKey}` });
 
 			await db
@@ -232,6 +244,10 @@ export const dataPluginRouter = createTRPCRouter({
 	/**
 	 * 删插件。还有启用中的规则在用它时**默认拒绝** —— 删掉之后那些规则会静默变成"一行也看不到"
 	 * (这是设计好的失败关闭,但对管理员来说很难查)。确实要删就带上 `force`。
+	 *
+	 * 删除是**软删**(审计留痕);`plugin_key` 上有唯一索引,用 `tombstone()` 改成墓碑值让位,
+	 * 否则删掉的标识被死行永久占住,同一个 key 再也建不回来。
+	 * 读路径(清单 / 改 / 查重 / `rulesUsing` 的规则统计)必须处处带 `alive()`。
 	 */
 	remove: protectedProcedure
 		.input(z.object({ pluginKey: z.string().min(1), force: z.boolean().optional() }))
@@ -239,10 +255,11 @@ export const dataPluginRouter = createTRPCRouter({
 			if (BUILTIN_PLUGIN_KEYS.includes(input.pluginKey)) {
 				throw new TRPCError({ code: "FORBIDDEN", message: `「${input.pluginKey}」是内置插件,不能删` });
 			}
+			// 这一行就是删除过程要操作的目标:`id` 与 `plugin_key` 都要拿来写墓碑(只查活着的行 —— 已经删过的不该再删)
 			const [row] = await db
-				.select({ id: sysDataPlugin.id })
+				.select({ id: sysDataPlugin.id, plugin_key: sysDataPlugin.plugin_key })
 				.from(sysDataPlugin)
-				.where(eq(sysDataPlugin.plugin_key, input.pluginKey))
+				.where(and(eq(sysDataPlugin.plugin_key, input.pluginKey), alive(sysDataPlugin)))
 				.limit(1);
 			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `没有这个插件:${input.pluginKey}` });
 
@@ -256,7 +273,11 @@ export const dataPluginRouter = createTRPCRouter({
 				}
 			}
 
-			await db.delete(sysDataPlugin).where(eq(sysDataPlugin.plugin_key, input.pluginKey));
+			// 行**软删** + `plugin_key` 墓碑:唯一键让出来,同一个标识才能重新建
+			await db
+				.update(sysDataPlugin)
+				.set({ ...softDeleted(), plugin_key: tombstone(row.plugin_key, row.id, 64) })
+				.where(eq(sysDataPlugin.plugin_key, input.pluginKey));
 			clearPluginCache();
 			return { pluginKey: input.pluginKey, removed: true };
 		}),
@@ -265,6 +286,10 @@ export const dataPluginRouter = createTRPCRouter({
 /** 一批 id → 名字(空数组直接回空表,不白跑一次 SQL) —— 与 `data-scope.ts` 同款 */
 async function namesById(table: typeof sysUser, ids: string[]): Promise<Map<string, string>> {
 	if (ids.length === 0) return new Map();
-	const rows = await db.select({ id: table.id, name: table.name }).from(table).where(inArray(table.id, ids));
+	// 过 `alive()`:软删的人不该再被解出名字(与 `list` / `test` 的读口径一致)
+	const rows = await db
+		.select({ id: table.id, name: table.name })
+		.from(table)
+		.where(and(inArray(table.id, ids), alive(table)));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }

@@ -6,7 +6,7 @@
  * | `list` | query | 用户台账(派生出全部字段) |
  * | `create` | mutation | **建账号** —— 转调 Better Auth 的 `signUpEmail`(密码哈希由它做) |
  * | `update` | mutation | 改姓名 / 邮箱(账号本身仍是 BA 的表,这里只动这两列) |
- * | `remove` | mutation | 删账号:先清会话 / account / 部门成员,再删 `sys_user`(拒绝删自己) |
+ * | `remove` | mutation | 删账号:先清会话 / account / 部门成员,再把 `sys_user` **软删**(拒绝删自己) |
  * | `import` | mutation | 从 Excel 批量开账号 —— **只建不改**,复用的还是 `signUpEmail` |
  * | `roles` | query | 这个人的全局角色(用户详情里的角色指派) |
  * | `profile` | query | **当前登录者**自己的资料(个人资料页:姓名 / 邮箱 / 验证状态 / 角色 / 部门) |
@@ -20,7 +20,7 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -30,6 +30,7 @@ import { allUserRoles, isAdminUser, removeAllRolesOfUser, roleIdsOf, setUserRole
 import { getCurrentUserId } from "#/lib/current-user";
 import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
+import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 export const userRouter = createTRPCRouter({
@@ -92,8 +93,9 @@ export const userRouter = createTRPCRouter({
 
 	list: protectedProcedure.query(async () => {
 		const [users, deptRows, roleRows, roles] = await Promise.all([
-			db.select().from(sysUser).orderBy(asc(sysUser.name), asc(sysUser.email)),
-			// 组织架构：属于哪些部门
+			// 读路径一律过 `alive()`:软删的用户行留在库里只为审计留痕,不能出现在台账里
+			db.select().from(sysUser).where(alive(sysUser)).orderBy(asc(sysUser.name), asc(sysUser.email)),
+			// 组织架构：属于哪些部门（join 出来的部门同样只认活着的，软删部门的归属等于已失效）
 			db
 				.select({
 					userId: sysUserDept.user_id,
@@ -101,10 +103,12 @@ export const userRouter = createTRPCRouter({
 					name: sysDept.name,
 				})
 				.from(sysUserDept)
-				.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id)),
+				.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id))
+				.where(alive(sysDept)),
 			// 全局角色：sys_casbin_rule 里的 g 行（role:<id>）
 			allUserRoles(),
-			db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole),
+			// 角色名映射也要过滤：软删角色留在库里只为审计，不能再显示成人身上的角色
+			db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole).where(alive(sysRole)),
 		]);
 
 		const roleById = new Map(roles.map((r) => [r.id, r]));
@@ -170,7 +174,12 @@ export const userRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			const email = input.email.trim().toLowerCase();
-			const [existing] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, email)).limit(1);
+			// 查重只看活着的行:软删用户的邮箱已被 `tombstone()` 让位,同名邮箱可以重新启用
+			const [existing] = await db
+				.select({ id: sysUser.id })
+				.from(sysUser)
+				.where(and(eq(sysUser.email, email), alive(sysUser)))
+				.limit(1);
 			if (existing) throw new TRPCError({ code: "CONFLICT", message: `邮箱 ${email} 已经被占用` });
 
 			let result: Awaited<ReturnType<typeof auth.api.signUpEmail>>;
@@ -231,7 +240,12 @@ export const userRouter = createTRPCRouter({
 				}
 			}
 			const email = input.email.trim().toLowerCase();
-			const [other] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.email, email)).limit(1);
+			// 查重只看活着的行:软删用户的邮箱已被 `tombstone()` 让位,不会永久占住这个邮箱
+			const [other] = await db
+				.select({ id: sysUser.id })
+				.from(sysUser)
+				.where(and(eq(sysUser.email, email), alive(sysUser)))
+				.limit(1);
 			if (other && other.id !== input.id) {
 				throw new TRPCError({ code: "CONFLICT", message: `邮箱 ${email} 已经被别人占用` });
 			}
@@ -239,9 +253,12 @@ export const userRouter = createTRPCRouter({
 			const roleIds = [...new Set(input.roleIds)];
 			const knownRoles = roleIds.length
 				? new Set(
-						(await db.select({ id: sysRole.id }).from(sysRole).where(inArray(sysRole.id, roleIds))).map(
-							(row) => row.id,
-						),
+						(
+							await db
+								.select({ id: sysRole.id })
+								.from(sysRole)
+								.where(and(inArray(sysRole.id, roleIds), alive(sysRole)))
+						).map((row) => row.id),
 					)
 				: new Set<string>();
 			// 显式报错,不静默丢弃未知 id
@@ -256,9 +273,12 @@ export const userRouter = createTRPCRouter({
 			const departmentIds = [...new Set(input.departmentIds)];
 			const knownDepartments = departmentIds.length
 				? new Set(
-						(await db.select({ id: sysDept.id }).from(sysDept).where(inArray(sysDept.id, departmentIds))).map(
-							(row) => row.id,
-						),
+						(
+							await db
+								.select({ id: sysDept.id })
+								.from(sysDept)
+								.where(and(inArray(sysDept.id, departmentIds), alive(sysDept)))
+						).map((row) => row.id),
 					)
 				: new Set<string>();
 			const unknownDepartments = departmentIds.filter((id) => !knownDepartments.has(id));
@@ -314,7 +334,12 @@ export const userRouter = createTRPCRouter({
 		}),
 
 	/**
-	 * 删账号 —— 会话 / account / 部门成员**先清掉**再删用户。
+	 * 删账号 —— 会话 / account / 部门成员**先清掉**,再把用户**软删**。
+	 *
+	 * 为什么凭证必须硬删、用户行只能软删:会话 / account 是「能不能登进来」的凭据,留着就是留着后门,
+	 * 所以它们**真删**;而 `sys_user` 行是审计留痕(谁被删了、什么时候删的),硬删之后日志里只剩一串 id。
+	 * 软删时用 `tombstone()` 把邮箱让位,否则那条唯一键会被死行永久占住,这个邮箱再也开不出新账号。
+	 * 读路径(列表 / 详情 / 查重)必须处处带 `alive()` —— 漏一处就把已删除的人重新暴露出来。
 	 *
 	 * 外键上虽然写了 `on delete cascade`,但 BA 的 session / account 两张表**不归我们建**,
 	 * 依赖它们的级联行为太脆;显式删一遍最坏也只是多几条 delete。
@@ -336,15 +361,25 @@ export const userRouter = createTRPCRouter({
 		if (me && me === input.id) {
 			throw new TRPCError({ code: "FORBIDDEN", message: "不能删除当前登录的账号" });
 		}
-		const [row] = await db.select({ id: sysUser.id }).from(sysUser).where(eq(sysUser.id, input.id)).limit(1);
+		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 已软删的行也要能拿到 email 让位
+		const [row] = await db
+			.select({ id: sysUser.id, email: sysUser.email })
+			.from(sysUser)
+			.where(eq(sysUser.id, input.id))
+			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个账号不存在(可能已被删除)" });
 
+		// ①~③ 登录凭据与组织关系**硬删**:凭证真没掉才算真的注销,join 表本身不参与软删口径
 		await db.delete(sysSession).where(eq(sysSession.userId, input.id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, input.id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, input.id));
 		// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
 		await removeAllRolesOfUser(input.id);
-		await db.delete(sysUser).where(eq(sysUser.id, input.id));
+		// ⑤ 用户行**软删** + 邮箱墓碑:`tombstone()` 把唯一键让出来,新账号才能用同一个邮箱重开
+		await db
+			.update(sysUser)
+			.set({ ...softDeleted(), email: tombstone(row.email, row.id, 255) })
+			.where(eq(sysUser.id, input.id));
 		return { id: input.id, success: true };
 	}),
 
@@ -397,10 +432,18 @@ export const userRouter = createTRPCRouter({
 				}
 				return { map, duplicated };
 			};
-			// 角色与部门都是配置表,量小 —— 一次查全,别逐行查库
-			const roles = idByName(await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole));
-			const depts = idByName(await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept));
-			const existingEmails = new Set((await db.select({ email: sysUser.email }).from(sysUser)).map((row) => row.email));
+			// 角色与部门都是配置表,量小 —— 一次查全,别逐行查库。
+			// 必须带 `alive()`:软删的角色 / 部门不能拿来给新用户(那等于把已删的权限发出去)。
+			const roles = idByName(
+				await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole).where(alive(sysRole)),
+			);
+			const depts = idByName(
+				await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).where(alive(sysDept)),
+			);
+			// 邮箱查重集合:软删用户的邮箱已被 `tombstone()` 让位,这里的 `alive()` 只保证口径统一
+			const existingEmails = new Set(
+				(await db.select({ email: sysUser.email }).from(sysUser).where(alive(sysUser))).map((row) => row.email),
+			);
 
 			// ① 逐行校验(不碰数据库,一次把错误报全)
 			const parsed: Parsed[] = [];
@@ -517,7 +560,7 @@ export const userRouter = createTRPCRouter({
 		return db
 			.select({ roleId: sysRole.id, roleName: sysRole.name })
 			.from(sysRole)
-			.where(inArray(sysRole.id, ids))
+			.where(and(inArray(sysRole.id, ids), alive(sysRole)))
 			.orderBy(asc(sysRole.sort), asc(sysRole.name));
 	}),
 
@@ -533,6 +576,7 @@ export const userRouter = createTRPCRouter({
 	 */
 	profile: protectedProcedure.query(async ({ ctx }) => {
 		const me = requireCurrentUser(ctx);
+		// `alive()` 必带:账号被软删后这个人就不该再取到资料,要给 NOT_FOUND 而不是把他的资料继续显示出来
 		const [row] = await db
 			.select({
 				id: sysUser.id,
@@ -542,7 +586,7 @@ export const userRouter = createTRPCRouter({
 				createTime: sysUser.createdAt,
 			})
 			.from(sysUser)
-			.where(eq(sysUser.id, me.id))
+			.where(and(eq(sysUser.id, me.id), alive(sysUser)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "账号不存在(可能已被删除)" });
 
@@ -553,13 +597,13 @@ export const userRouter = createTRPCRouter({
 				: await db
 						.select({ id: sysRole.id, name: sysRole.name })
 						.from(sysRole)
-						.where(inArray(sysRole.id, roleIds))
+						.where(and(inArray(sysRole.id, roleIds), alive(sysRole)))
 						.orderBy(asc(sysRole.sort), asc(sysRole.name));
 		const depts = await db
 			.select({ id: sysDept.id, name: sysDept.name })
 			.from(sysUserDept)
 			.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id))
-			.where(eq(sysUserDept.user_id, me.id))
+			.where(and(eq(sysUserDept.user_id, me.id), alive(sysDept)))
 			.orderBy(asc(sysDept.name));
 
 		return {

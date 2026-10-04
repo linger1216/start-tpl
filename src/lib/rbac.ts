@@ -24,6 +24,7 @@ import { sysMenu } from "#/db/data-base-schema";
 import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbin";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
+import { alive } from "#/lib/soft-delete";
 
 /**
  * 权限码的**形状与比较**住在 `lib/perm-code.ts` —— 功能权限的引擎(`lib/casbin.ts`)与本文件
@@ -87,7 +88,7 @@ type MenuAccess = EffectiveMenus & {
  */
 export async function withAncestorIds(ids: readonly string[]): Promise<string[]> {
 	if (ids.length === 0) return [];
-	const rows = await db.select({ id: sysMenu.id, parentId: sysMenu.parent_id }).from(sysMenu);
+	const rows = await db.select({ id: sysMenu.id, parentId: sysMenu.parent_id }).from(sysMenu).where(alive(sysMenu));
 	const parentOf = new Map(rows.map((row) => [row.id, row.parentId ?? null]));
 	const out = new Set<string>();
 	for (const id of ids) {
@@ -133,7 +134,7 @@ export async function canViewPath(
 
 /** `effectiveMenusFor` / `canViewPath` 的共同实现(一次查询同时满足两种问法,别各查一遍) */
 async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
-	const all = await db.select().from(sysMenu).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
+	const all = await db.select().from(sysMenu).where(alive(sysMenu)).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
 	const navigable = (rows: readonly SysMenuRow[]) => rows.filter((row) => Number(row.type) !== MENU_TYPE.BUTTON);
 	// 菜单驱动的页面:路径以 `/` 开头(分组节点是 `#group/…`、按钮是 `#perm/…`)。
 	// `sys_menu.path` 是 not null + unique,所以这里天然不重复。
