@@ -4,12 +4,8 @@ import { useMemo, useState } from "react";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsLogsDetail } from "#/components/modules/settings/settings-logs-detail";
-import {
-	LOG_EXCEL_COLUMNS,
-	type LogRow,
-	logColumns,
-	logExcelRows,
-} from "#/components/modules/settings/settings-logs-table";
+import { LOG_EXCEL_COLUMNS, logExcelRows } from "#/components/modules/settings/settings-logs-excel";
+import { type LogRow, logColumns } from "#/components/modules/settings/settings-logs-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";

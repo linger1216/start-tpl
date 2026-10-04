@@ -49,7 +49,7 @@ export function SettingsDictionaryPage() {
 	const [form, setForm] = useState<{ editing: SettingsDictRow | null } | null>(null);
 	const [values, setValues] = useState<DictFormValues>(emptyDictForm);
 	const [formError, setFormError] = useState<string | null>(null);
-	const [deleteTarget, setDeleteTarget] = useState<SettingsDictRow | null>(null);
+	const [pendingDelete, setPendingDelete] = useState<SettingsDictRow | null>(null);
 	const [viewing, setViewing] = useState<SettingsDictRow | null>(null);
 
 	/** 写完数据后让列表重新拉一次(⚠️ 调用处必须带括号,漏了就是"await 一个函数引用",什么都不会发生) */
@@ -79,11 +79,11 @@ export function SettingsDictionaryPage() {
 		trpc.dict.delete.mutationOptions({
 			onSuccess: async () => {
 				await invalidate();
-				setDeleteTarget(null);
+				setPendingDelete(null);
 				toast.success("已删除字典");
 			},
 			onError: (error) => {
-				setDeleteTarget(null);
+				setPendingDelete(null);
 				toast.error(toApiError(error).message);
 			},
 		}),
@@ -174,7 +174,7 @@ export function SettingsDictionaryPage() {
 					status: row.status !== 1,
 				});
 			},
-			onDelete: setDeleteTarget,
+			onDelete: setPendingDelete,
 		}),
 		[updateMutation],
 	);
@@ -288,17 +288,17 @@ export function SettingsDictionaryPage() {
 			/>
 
 			<ConfirmDialog
-				open={deleteTarget !== null}
+				open={pendingDelete !== null}
 				onOpenChange={(next) => {
-					if (!next) setDeleteTarget(null);
+					if (!next) setPendingDelete(null);
 				}}
-				title={`删除字典「${deleteTarget?.name ?? ""}」?`}
+				title={`删除字典「${pendingDelete?.name ?? ""}」?`}
 				description="删掉后用到它的地方会取不到候选;已经有功能在用它时会被拒绝。"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"
 				onConfirm={() => {
-					if (deleteTarget) deleteMutation.mutate({ code: deleteTarget.code });
+					if (pendingDelete) deleteMutation.mutate({ code: pendingDelete.code });
 				}}
 			/>
 		</PageFrame>

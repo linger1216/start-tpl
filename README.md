@@ -699,6 +699,29 @@ pnpm check
 
 基线:`pnpm typecheck` 0 · `pnpm check` 283 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
 
+### 第十轮:代码一致性 / 命名 / 文件角色(2026-10)
+
+第九轮的口径是「反对过度抽取」;这一轮是它的姊妹篇:用户的原话是「**再次精简一下代码,强调代码的一致性,包括文件命名,变量命名,函数命名,HTTP 等**」—— 也就是说,**抽与不抽**有尺度,**怎么起名**也要有尺度。本轮 4 处改动 + 1 处文档补全,**刻意不改**的 3 处都写进 `doc/界面约定.md` 的新章节里。
+
+| 类别 | 项 | 落地 |
+| --- | --- | --- |
+| 文件命名 | `DataScopeForm`(唯一 `Settings` 前缀漏掉) | `settings-data-scope-form.tsx` 内 `export function DataScopeForm → SettingsDataScopeForm`;`page` 的 import + 调用点同步 |
+| 文件角色 | 5 个域里 `<域>-excel.ts` 是真源,**唯独 `logs` 把 `LOG_EXCEL_COLUMNS` / `logExcelRows` / `LogExcelKey` 塞进了 `*-table.tsx`** | 新文件 `settings-logs-excel.ts` 持有这 63 行;`table` 只剩展示职责 + 把 `statusText` `export`(列表徽章与导出的单元格共用一份 `1 ? 成功 : 失败`);`page` 的 import 拆成两个 |
+| 变量名 | 6 个列表页的「待删行」叫 `pendingDelete`,**唯独** `dictionary-page` 用了 `deleteTarget` | sed 重命名为 `pendingDelete` + `setPendingDelete` |
+| 文档 | 新章节「命名 / 类型约定」(`doc/界面约定.md`) | 函数前缀语义表(get/load/list/find/read)、`Row` / `TreeNode` / `FormValues` / `FormPayload` 后缀边界、状态变量 `editing` / `viewing` / `pendingDelete` 固定叫法、`<域>-excel.ts` 真源化的"别再偷懒"提醒 |
+
+#### 决定不改的 3 处(写进 `doc/界面约定.md` 不再追)
+
+| 项 | 现状 | 为什么不动 |
+| --- | --- | --- |
+| `*.delete` vs `*.remove` | 4 个 router(`dict` / `menu` / `para` / `tag`)用 `delete`,7 个 router(`data-plugin` / `data-scope` / `department` / `demo-grid` / `role` / `file` / `user`)用 `remove` | **31 个文件**(测试 + 前端 mutation + 日志 + 文档)被引用,**改一个**要同步改全部,**对运行没有任何可观测的收益**;新加 router **统一用 `remove`** |
+| `FormValues`(4) vs `FormPayload`(7) | `FormValues` 是**树形编辑页**的可控状态形状(`useState<MenuFormValues>`);`FormPayload` 是**普通表单**的 `onSubmit(payload)` 入参 | 两类**确实不是同一种东西**,只是名字都叫 "form";**改名反会让"页面状态"和"接口入参"两套边界糊在一起**。文档里把 4 / 7 各列出 |
+| `tag.move` vs `menu/department.reorder` | `tag.move` = 改父节点(无 sort);`menu.reorder` / `department.reorder` = 同级内改 sort 序 | **根本不是同一操作**,只是都用动词命名 |
+
+体量:**4 files changed, +120 / −127**(净 −7 行);新增 `settings-logs-excel.ts`(58 行);`doc/界面约定.md` 加 1 个 `## 命名 / 类型约定` 章节(45 行)。
+
+基线:`pnpm typecheck` 0 · `pnpm check` 284 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
+
 ---
 
 ## 延伸阅读

@@ -60,7 +60,7 @@ const NO_PLUGIN = "__none__";
  * v2 (m20034)起:规则**不再带输出值** —— 清单装在插件自己(`sys_data_plugin.output_values`)里;
  * 这里只存「谁 · 资源表 · 列 · 插件 · key」(m23422 补上 key:一个清单可以放多类值,规则说取哪个)。
  */
-export function DataScopeForm({
+export function SettingsDataScopeForm({
 	open,
 	onOpenChange,
 	creating,

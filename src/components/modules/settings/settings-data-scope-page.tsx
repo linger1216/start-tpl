@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsDataScopeDetail } from "#/components/modules/settings/settings-data-scope-detail";
-import { DataScopeForm, type DataScopeFormPayload } from "#/components/modules/settings/settings-data-scope-form";
+import {
+	type DataScopeFormPayload,
+	SettingsDataScopeForm,
+} from "#/components/modules/settings/settings-data-scope-form";
 import { SettingsDataScopePreviewDialog } from "#/components/modules/settings/settings-data-scope-preview-dialog";
 import { type DataScopeRow, dataScopeColumns } from "#/components/modules/settings/settings-data-scope-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
@@ -239,7 +242,7 @@ export function SettingsDataScopePage() {
 				table={table}
 			/>
 
-			<DataScopeForm
+			<SettingsDataScopeForm
 				row={editing}
 				creating={creating}
 				open={formOpen}
