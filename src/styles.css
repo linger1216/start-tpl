@@ -406,6 +406,24 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/**
+ * `code-block` —— 跨域可滚动的 mono 预览块栈的**公共**chrome 包装(只放 5 站 *全* 有的部分):
+ * `font-mono text-xs whitespace-pre-wrap overflow-auto border border-border`。
+ *
+ * 变体(max-h / padding / bg / leading / break / text-color)留在调用点 —— 不收进 @apply,
+ * 因为 5 站的变体不同(token: bg-muted vs muted/40 vs background; rounded-lg vs rounded; leading
+ * 3/5 有, 2/5 没有; break-all 4/5, break-words 1/5; text-foreground 4/5 vs /90)。
+ * 收进越多的变体, 5 站里越多的站就要覆盖, 又回到 140 字。 严格交集反而最稳。
+ *
+ * 设计遵循(token / 不写任意值 / 不覆盖 Tailwind 命名空间):
+ *  - **只收 5 站都有的类**, 调用点仍写 `max-h-72 p-3 bg-muted leading-relaxed break-all text-foreground`
+ *    这类标准阶 —— `@utility` 不引入颜色字面量、不覆盖 `--radius-*` / `--font-*`。
+ *  - 调用点写 `className="code-block ..."` 即可, 等价于设计/审阅里「mono 预览栈」的口径。
+ */
+@utility code-block {
+  @apply font-mono text-xs whitespace-pre-wrap overflow-auto border border-border;
+}
+
 html,
 body,
 #app {

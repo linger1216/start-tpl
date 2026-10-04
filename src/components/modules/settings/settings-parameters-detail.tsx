@@ -65,7 +65,7 @@ export function SettingsParametersDetail({
 						{/* 完整值:不截断、不折行丢字,长 JSON 也能整段看完并复制 */}
 						<pre
 							translate="no"
-							className="max-h-72 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-foreground"
+							className="code-block max-h-72 rounded-lg bg-muted p-3 leading-relaxed break-all text-foreground"
 						>
 							{row.value === "" ? "(空)" : row.value}
 						</pre>

@@ -69,9 +69,7 @@ export function SettingsLogsDetail({
 					) : null}
 					<div className="space-y-1 py-2">
 						<div className="text-xs font-medium text-muted-foreground">入参快照(写入前已脱敏)</div>
-						<pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-2.5 font-mono text-xs break-all whitespace-pre-wrap">
-							{row.input ?? "(无入参)"}
-						</pre>
+						<pre className="code-block max-h-64 rounded-lg bg-muted/40 p-2.5 break-all">{row.input ?? "(无入参)"}</pre>
 					</div>
 				</>
 			) : null}

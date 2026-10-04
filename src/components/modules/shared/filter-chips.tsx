@@ -127,7 +127,10 @@ export function FilterChipBar({
 												// 计数也是显示值 → 用 Badge,别手拼小药丸(两态配色靠 className 覆盖)
 												<Badge
 													variant="secondary"
-													className={cn("ml-0.5 h-4 px-1.5 text-xs tabular-nums", on && "bg-black/10 text-inherit")}
+													className={cn(
+														"ml-0.5 h-4 px-1.5 text-xs tabular-nums",
+														on && "bg-foreground/10 text-inherit",
+													)}
 												>
 													{option.count}
 												</Badge>

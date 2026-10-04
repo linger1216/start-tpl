@@ -258,7 +258,7 @@ export function SettingsDataScopePreviewDialog({
 									<>
 										<pre
 											translate="no"
-											className="max-h-32 overflow-auto rounded-lg border border-border bg-muted p-2 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-foreground"
+											className="code-block max-h-32 rounded-lg bg-muted p-2 leading-relaxed break-all text-foreground"
 										>
 											{`-- 数出「能看到几行」\n${sql.count.text}\n-- 参数\n${sql.count.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)\n"}\n\n-- 贴出这些行\n${sql.rows.text}\n-- 参数\n${sql.rows.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)"}`}
 										</pre>

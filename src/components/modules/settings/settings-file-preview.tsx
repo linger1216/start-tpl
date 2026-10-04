@@ -129,9 +129,7 @@ function renderBody({
 
 	return (
 		<div className="space-y-1.5">
-			<pre className="max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap break-words">
-				{state.text}
-			</pre>
+			<pre className="code-block max-h-72 rounded-lg bg-muted/40 p-3 break-words">{state.text}</pre>
 			{state.truncated ? (
 				<div className="text-xs text-muted-foreground">
 					只显示前 {formatBytes(TEXT_PREVIEW_MAX_BYTES)},完整内容点「打开」

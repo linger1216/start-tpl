@@ -92,7 +92,7 @@ export function SettingsDataPluginsPreviewDialog({
 										) : null}
 									</p>
 									{testQuery.data.rows.length > 0 ? (
-										<pre className="max-h-48 overflow-auto rounded border border-border bg-background p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all text-foreground/90">
+										<pre className="code-block max-h-48 rounded bg-background p-2 leading-relaxed break-all text-foreground/90">
 											{testQuery.data.rows.map((item) => JSON.stringify(item)).join("\n")}
 										</pre>
 									) : null}
