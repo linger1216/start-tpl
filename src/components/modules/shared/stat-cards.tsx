@@ -64,7 +64,7 @@ function StatCell({
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-px">
 				<div className="flex items-baseline gap-1">
-					<span className="font-heading text-xl leading-none font-medium tracking-[-0.01em] tabular-nums text-foreground">
+					<span className="font-heading text-xl leading-none font-medium tracking-tight tabular-nums text-foreground">
 						{typeof value === "number" ? value.toLocaleString() : value}
 					</span>
 					{unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}

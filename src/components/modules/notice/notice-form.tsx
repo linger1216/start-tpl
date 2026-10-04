@@ -81,7 +81,7 @@ export function NoticeForm({
 
 				<div className="min-h-0 flex-1 space-y-1 overflow-y-auto py-1">
 					<DetailRow label="收件人(可多选)">
-						<div className="flex min-h-[140px] flex-col">
+						<div className="flex min-h-36 flex-col">
 							<MultiSelect
 								options={userOptions}
 								value={userIds}

@@ -96,7 +96,7 @@ export function MemberZone<T extends MemberZoneRow>({
 				<span className="text-xs text-muted-foreground">加人 / 移出即时生效,不用保存</span>
 			</div>
 			{/* 候选选择框:高度填满本区剩余空间;「加入」与搜索框同一行、靠最右 */}
-			<div className="flex min-h-[160px] flex-1 flex-col">
+			<div className="flex min-h-40 flex-1 flex-col">
 				<MultiSelect
 					options={addableOptions}
 					value={pickedIds}
