@@ -165,6 +165,42 @@ export async function purgeCasbinByUserIds(userIds: readonly string[]): Promise<
 	);
 }
 
+/**
+ * 清掉**这一个角色**在策略表里的全部引用 + 该角色行本身。
+ *
+ * 策略表里有两类行指向一个角色:
+ *  - `p` 行的 `v0 = "role:<id>"` — 这个角色的授权(给哪些菜单);
+ *  - `g` 行的 `v1 = "role:<id>"` — 谁继承了这个角色 / 它的成员。
+ *
+ * 直删表绕过了 `lib/casbin.ts` 的领域函数,调用方清完要自己 `clearCasbinCache()`
+ * (跟 `purgeCasbinByMenuIds` / `purgeCasbinByUserIds` 同口径)。4 个测试文件
+ * (casbin / role / user-crud / impersonate)都用同一段 `g`→`p`→`sys_role` 顺序清,集中到这里。
+ */
+export async function purgeRole(roleId: string): Promise<void> {
+	const subject = `role:${roleId}`;
+	await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), eq(sysCasbinRule.v0, subject)));
+	await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v1, subject)));
+	await db.delete(sysRole).where(eq(sysRole.id, roleId));
+}
+
+/** 批量版 —— 给 `roleIds: string[]` 一次性清;空数组早退。`inArray` 拼 SQL 比循环调 `purgeRole` 少 4×round-trip */
+export async function purgeRoles(roleIds: readonly string[]): Promise<void> {
+	if (roleIds.length === 0) return;
+	const subjects = roleIds.map((id) => `role:${id}`);
+	await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v0, subjects)));
+	await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v1, subjects)));
+	await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
+}
+
+/** 拿到库里**系统管理员**角色的 id —— admin-guard 用例反复在用,集中到这里免得每条用例自己筛 */
+export async function getSystemAdminRoleRow(): Promise<{ id: string }> {
+	const row = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
+		(item) => item.name === "系统管理员",
+	);
+	if (!row) throw new Error("库里没有「系统管理员」角色 —— 需要先跑 pnpm db:seed:rbac");
+	return row;
+}
+
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;
 
 /** 断言一个主键是 nanoid(21 位 URL 安全随机串) */

@@ -37,7 +37,15 @@ import {
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { pagePermOf, withAncestorIds } from "../src/lib/rbac.ts";
-import { caller, closeDb, purgeCasbinByMenuIds, purgeCasbinByUserIds, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import {
+	caller,
+	closeDb,
+	purgeCasbinByMenuIds,
+	purgeCasbinByUserIds,
+	purgeRoles,
+	TEST_PREFIX,
+	uniqueSuffix,
+} from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const roleIds: string[] = [];
@@ -117,13 +125,16 @@ after(async () => {
 	await purgeCasbinByMenuIds(menuIds);
 	await purgeCasbinByUserIds(userIds);
 	if (roleIds.length > 0) {
-		const subjects = roleIds.map((id) => `role:${id}`);
-		// 主体侧:授权 p 行 + 继承 g 行;客体侧:谁继承了它
-		await db.delete(sysCasbinRule).where(inArray(sysCasbinRule.v0, subjects));
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v1, subjects)));
+		// 主体侧:授权 p 行 + 继承 g 行;还可能有角色继承 `g, role:<id>, role:<other>` 把这个 id 写进 v0
+		await db.delete(sysCasbinRule).where(
+			inArray(
+				sysCasbinRule.v0,
+				roleIds.map((id) => `role:${id}`),
+			),
+		);
 	}
+	await purgeRoles(roleIds);
 	clearCasbinCache();
-	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
 	if (menuIds.length > 0) await db.delete(sysMenu).where(inArray(sysMenu.id, menuIds));
 	if (userIds.length > 0) await db.delete(sysUser).where(inArray(sysUser.id, userIds));
 	await closeDb();

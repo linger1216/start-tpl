@@ -29,7 +29,17 @@ import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
 import { addUserRole, clearCasbinCache, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
-import { assertRejects, caller, callerAs, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import {
+	assertRejects,
+	caller,
+	callerAs,
+	closeDb,
+	getSystemAdminRoleRow,
+	purgeCasbinByUserIds,
+	purgeRole,
+	TEST_PREFIX,
+	uniqueSuffix,
+} from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const EMAIL = `${TEST_PREFIX}created_${SUFFIX}@example.com`;
@@ -45,11 +55,7 @@ before(async () => {
 		.select({ id: sysRole.id })
 		.from(sysRole)
 		.where(like(sysRole.name, `${TEST_PREFIX}adm-ed_%`));
-	for (const row of leftover) {
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v1, `role:${row.id}`)));
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), eq(sysCasbinRule.v0, `role:${row.id}`)));
-		await db.delete(sysRole).where(eq(sysRole.id, row.id));
-	}
+	for (const row of leftover) await purgeRole(row.id);
 });
 
 const createdIds: string[] = [];
@@ -67,20 +73,17 @@ after(async () => {
 		await db.delete(sysSession).where(eq(sysSession.userId, id));
 		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
 		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, id));
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${id}`)));
 		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
+	// 删所有用户的成员关系 `g` 行(批量版比循环调 `db.delete` 少 4× round-trip)
+	await purgeCasbinByUserIds(createdIds);
 	for (const id of tempDeptIds) {
 		await db.delete(sysUserDept).where(eq(sysUserDept.department_id, id));
 		await db.delete(sysDept).where(eq(sysDept.id, id));
 	}
 	// admin 守卫测试里直插的 role —— `setRoleMenus` 写过 `p` 行,挂过 `g` 行(给测试用户),
 	// 三类一并清掉(顺序:`g` → `p` → `sys_role`),否则 `uk_sys_role_name` 下次撞
-	for (const id of createdRoleIds) {
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v1, `role:${id}`)));
-		await db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), eq(sysCasbinRule.v0, `role:${id}`)));
-		await db.delete(sysRole).where(eq(sysRole.id, id));
-	}
+	for (const id of createdRoleIds) await purgeRole(id);
 	// 上面是直接删表,绕过了 `lib/casbin.ts` 的领域函数 → 判定缓存要手动刷
 	clearCasbinCache();
 	await closeDb();
@@ -228,10 +231,10 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	await caller.user.remove({ id: created.id });
 
 	// 软删:行还在(审计留痕)、deleted_at 写上、邮箱让位(墓碑)—— 登录凭证才是真删
-	const [soft] = await db.select().from(sysUser).where(eq(sysUser.id, created.id));
-	assert.ok(soft, "软删要留行,不是物理删除");
-	assert.ok(soft.deleted_at, "deleted_at 应被写上");
-	assert.notEqual(soft.email, created.email, "邮箱让位(加墓碑后缀),同一个邮箱才能再注册");
+	const [afterRow] = await db.select().from(sysUser).where(eq(sysUser.id, created.id));
+	assert.ok(afterRow, "软删要留行,不是物理删除");
+	assert.ok(afterRow.deleted_at, "deleted_at 应被写上");
+	assert.notEqual(afterRow.email, created.email, "邮箱让位(加墓碑后缀),同一个邮箱才能再注册");
 	assert.equal(
 		(await db.select().from(sysSession).where(eq(sysSession.userId, created.id))).length,
 		0,
@@ -389,10 +392,7 @@ test("user.update:被改的人是 admin 时,非 admin 操作员被 FORBIDDEN 拦
 	const nonAdmin = await createPlainUser("non-admin-operator");
 
 	// target 持「系统管理员」
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
-		(r) => r.name === "系统管理员",
-	);
-	assert.ok(adminRoleRow, "前置条件:库里要有「系统管理员」角色(由 seed-rbac 建)");
+	const adminRoleRow = await getSystemAdminRoleRow();
 	await addUserRole(target.id, adminRoleRow.id);
 
 	// 操作员持「admin-guard-editor」(非 admin,且有 sys:user:edit 授权)
@@ -421,10 +421,7 @@ test("user.update:被改的人是 admin 时,非 admin 操作员被 FORBIDDEN 拦
 
 test("user.update:被改的人是 admin 时,admin 操作员放行", async () => {
 	const target = await createPlainUser("admin-target-2");
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
-		(r) => r.name === "系统管理员",
-	);
-	assert.ok(adminRoleRow);
+	const adminRoleRow = await getSystemAdminRoleRow();
 	await addUserRole(target.id, adminRoleRow.id);
 
 	// caller 是 TEST_USER(isSuper=true),他能改 admin
@@ -463,10 +460,7 @@ test("user.update:被改的人是普通用户时,非 admin 操作员也能改(�
 test("user.remove:被删的人是 admin 时拒", async () => {
 	const target = await createPlainUser("admin-remove-target");
 	const nonAdmin = await createPlainUser("non-admin-remover");
-	const adminRoleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
-		(r) => r.name === "系统管理员",
-	);
-	assert.ok(adminRoleRow);
+	const adminRoleRow = await getSystemAdminRoleRow();
 	await addUserRole(target.id, adminRoleRow.id);
 
 	const editor = await buildNonAdminEditorRole();
@@ -484,16 +478,13 @@ test("user.import:批量开账号 —— 新邮箱真能登录,角色 / 部门�
 	const emailA = `${TEST_PREFIX}import-a_${SUFFIX}@example.com`;
 	const emailB = `${TEST_PREFIX}import-b_${SUFFIX}@example.com`;
 	// 角色 / 部门都按**名字**解析 —— 用库里现成的一行
-	const roleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
-		(row) => row.name === "系统管理员",
-	);
-	assert.ok(roleRow, "库里应该有「系统管理员」角色");
+	const roleRow = await getSystemAdminRoleRow();
 	const [deptRow] = await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).limit(1);
 	assert.ok(deptRow, "库里应该有部门");
 
 	const result = await caller.user.import({
 		rows: [
-			{ name: "导入甲", email: emailA, password: PASSWORD, roles: roleRow.name, departments: deptRow.name },
+			{ name: "导入甲", email: emailA, password: PASSWORD, roles: "系统管理员", departments: deptRow.name },
 			// 邮箱大小写混写 → 库里应统一成小写
 			{ name: "导入乙", email: emailB.toUpperCase(), password: PASSWORD },
 		],

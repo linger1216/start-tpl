@@ -659,9 +659,45 @@ pnpm check
 | **测试脚手架** | `tests/helpers.ts` 新增 `purgeCasbinByMenuIds()` / `purgeCasbinByUserIds()`(casbin / role 两个套件的收尾各 19 行 → 2 行);`tests/data-scope.test.ts` 的试用用例复用 `busiestTown()`(连 `params` 一起回,删掉重复的 6 行算法) |
 | **刻意不做** | **不抽**「同级 `max(sort) + 1`」为 `nextSort` —— 5 处里 4 处是一行 `reduce` 表达式、1 处是滚动计数器、1 处带 `input.sort ??`,抽出来是零收益的薄封装;`sortable-tree.tsx` 剩下两处手写 `<button>` **不换** `ActionIconButton`(一处在折叠箭头的 `size-4` 占位 span 内、一处在搜索框里绝对定位,套上会丢定位与尺寸上下文);`ledger-excel.ts` 的 `importLedger` 确实零调用方,但按「Excel 相关文件永不删除」**只报告不删**(待拍板);`hover:bg-hover` 与 `hover:bg-black/10` 不是像素等价,未动 |
 
-体量:**61 files, +380 / −758**(净减约 **378 行**),新增 2 个件(`lib/reorder.ts` 51 行、`settings-data-plugins-preview-dialog.tsx` 115 行)—— 抽出的共用件比删掉的重复体量更大,换的是「口径只有一处」。
+体量:**65 files, +563 / −761**(净减约 **198 行**),新增 2 个件(`lib/reorder.ts` 51 行、`settings-data-plugins-preview-dialog.tsx` 115 行)—— 抽出的共用件比删掉的重复体量更大,换的是「口径只有一处」。
 
 基线:`pnpm typecheck` 0 · `npx biome check .` Checked 283 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191**。
+
+---
+
+### 第九轮:总体代码审阅 —— 反对过度抽取、删薄封装、修测试 cleanup 漏洞(2026-10)
+
+第八轮找的是「重复」(同一东西有没有第二份),这一轮找的是它的反面:「**过度抽取 / 设计为设计 / 单调用方件 / 命名不挣钱**」。用户的原话是「从公共类抽取不要过度,设计模式简单,避免为了设计而设计,一切以实用为主」—— 也就是说,**不抽** 和 **抽** 都要有理由,且理由得是「实用」不是「统一」。
+
+**审计方法**:逐个排查上一轮没动过的小件(`sidebar-mode` / `menu-detail-path` / `auth-debug` / `lib/api/` / `use-dict` / `use-stable-keys` / `use-perms` / `gridValues` / `reorderSiblings` / `data-scope-meta`)—— 全部留,因为每个都有真实的多调用方或显著简化;再扫 `init.ts` 与四个测试文件,找那些「3 行封装 / 1 处调用 / 复杂 docblock 掩盖了 1 行实质」的件。
+
+| 改了什么 | 说明 |
+| --- | --- |
+| **删两处薄封装(`init.ts`)** | `slowMs()`(3 行,1 处调用,内联是 `Number(process.env.LOG_SLOW_MS ?? 1500)`);`isTRPCError()`(6 行,1 处调用,文档理由是「避免 TRPCError 类型循环 import」—— 但 `TRPCError` 已在文件顶部 import,理由失效,改 `!(error instanceof TRPCError)` 即可) |
+| **测试 cleanup 抽 3 个助手(`tests/helpers.ts`)** | `purgeRole(id)`(清 `p` 行 v0 + `g` 行 v1 + `sys_role` 行,4 处测试 `after` 重复同一段)、`purgeRoles(ids)`(批量版,`inArray` 比循环少 4× round-trip)、`getSystemAdminRoleRow()`(3 条 admin-guard 用例的「库里找系统管理员」内联查找 —— 找不到时直接抛,前置条件断言自动覆盖) |
+| **修测试 cleanup 漏洞** | `tests/role.test.ts` 的 `after()` 之前**只删 `sysRole` 行、不删指向它的 `p` 行**—— `setRoleMenus` 写过 7 条 `p` 行就漏 7 条悬挂行,下次跑会撞 `uk_sys_role_name` 或让后续断言变飘。补 `purgeRoles(roleIds)` |
+| **测试样板收敛** | `user-crud.test.ts` 的 `before()` 4 行内联删除 → 1 行 `for ... await purgeRole(id)`;`after()` 5 行 `createdIds` cleanup → 4 行 + 1 行 `purgeCasbinByUserIds(createdIds)`(取代内联 `g` 行删除);`after()` 4 行 `createdRoleIds` cleanup → 1 行 `for ... await purgeRole(id)`;三条 admin-guard 用例的 admin-role lookup(3 处字字相同的内联 `find((r) => r.name === "系统管理员")`)→ `getSystemAdminRoleRow()` 一行;`impersonate.test.ts` 的 3 行 `cleanupStep("删除 role_menu/继承/role")` → 单行 `cleanupStep("清理测试角色", () => purgeRoles(createdRoleIds))`,内联 `g` 行删除 → `purgeCasbinByUserIds` |
+| **变量名** | `user-crud.test.ts:232-234` 的 `soft` → `afterRow`(原名误导,只是个 user row,不是 boolean 软删) |
+
+**审查后认定不抽的(11 类)**:
+
+| 件 | 不抽的理由 |
+| --- | --- |
+| `src/lib/sidebar-mode.ts` | 真单 config key + 解析函数,文档明确 |
+| `src/lib/menu-detail-path.ts` | 2 调用方(nav-config + menu router)+ 单源前缀常量 |
+| `src/lib/auth-debug.ts` | BA plugin + impersonate 端点,完整服务 |
+| `src/lib/api/`(单文件目录) | 风格选择(为以后扩展预留命名空间),与 `lib/` 扁平命名解耦 |
+| `src/hooks/use-dict.ts` | 0 直接 `src/` 调用方,但 `docs/` + `rbac.ts` 注释标为「字典前端统一入口」 |
+| `src/hooks/use-stable-keys.ts` / `use-perms.ts` | 多调用方,实质 |
+| `src/integrations/trpc/routers/demo-grid.ts` `gridValues` | 1 抽件 2 调用方(create / update 共用 7 字段映射) |
+| `src/lib/reorder.ts` `reorderSiblings` | 1 抽件 2 调用方(menu / department),`noun` / `parentNoun` 两个文案参数没膨胀到第三个轴 |
+| `src/lib/data-scope-meta.ts` | types + cached resource loader,实质 |
+| `data-scope.test.ts` `busiestTown` / `ctxWithDepts` | 第八轮已抽,用例复用,2 处 inline 的不同查询(town + owner 全集)不强求合并 |
+| 第八轮的 `nextSort` / `sortable-tree` 按钮 / `importLedger` / `hover:bg-hover` | 同第八轮结论 |
+
+体量:**6 files, +86 / −79**(净增 7 行,但测试 cleanup 口径收紧了 5 处,职责更明确),新增 3 个 helper(28 行,集中在 `tests/helpers.ts`)。
+
+基线:`pnpm typecheck` 0 · `pnpm check` 283 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
 
 ---
 

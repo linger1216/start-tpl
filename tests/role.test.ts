@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-import { sysCasbinRule, sysDept, sysMenu, sysRole, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
+import { sysCasbinRule, sysDept, sysMenu, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
@@ -29,6 +29,7 @@ import {
 	closeDb,
 	purgeCasbinByMenuIds,
 	purgeCasbinByUserIds,
+	purgeRoles,
 	TEST_PREFIX,
 	uniqueSuffix,
 } from "./helpers.ts";
@@ -74,9 +75,9 @@ after(async () => {
 	// 直接删表绕过了 `lib/casbin.ts` 的领域函数,所以末尾要手动刷判定缓存。
 	await purgeCasbinByMenuIds(menuIds);
 	await purgeCasbinByUserIds(userIds);
+	await purgeRoles(roleIds);
 	clearCasbinCache();
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
-	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));
 	for (const id of [...deptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, id));
 	if (menuIds.length > 0) await db.delete(sysMenu).where(inArray(sysMenu.id, menuIds));
 	if (userIds.length > 0) await db.delete(sysUser).where(inArray(sysUser.id, userIds));

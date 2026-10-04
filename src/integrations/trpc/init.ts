@@ -15,22 +15,6 @@ const t = initTRPC.create({
 	transformer: superjson,
 });
 
-/** 超过这个毫秒数记一条 warn(慢调用要能在日志里一眼看到) */
-function slowMs(): number {
-	return Number(process.env.LOG_SLOW_MS ?? 1500);
-}
-
-/**
- * `TRPCError` 是业务层的 4xx(权限、找不到、参数错) —— 预期内、不上送 Sentry。
- * 用 duck-type 判,避免在文件顶层 import 整套 TRPCError 类型带来循环。
- */
-function isTRPCError(error: unknown): boolean {
-	if (!error || typeof error !== "object") return false;
-	const name = (error as { name?: string }).name;
-	const trpcCode = (error as { code?: string }).code;
-	return name === "TRPCError" || (typeof trpcCode === "string" && /^[A-Z_]+$/.test(trpcCode));
-}
-
 /**
  * **后端日志的底座**:所有 procedure 都经过这里 —— 于是"每次后端调用都有日志"是**结构性保证**,
  * 不靠每个 resolver 记得加。
@@ -49,7 +33,7 @@ export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawI
 	try {
 		const result = await next({ ctx: { ...ctx, traceId } });
 		const ms = Date.now() - startedAt;
-		if (ms >= slowMs()) logger.warn("trpc.slow", { traceId, path, type, ms });
+		if (ms >= Number(process.env.LOG_SLOW_MS ?? 1500)) logger.warn("trpc.slow", { traceId, path, type, ms });
 		/**
 		 * 注意:`next()` 在 resolver 报错时**不抛**,而是 resolve 成 `{ ok: false, error }` ——
 		 * 不判它就会出现"调用失败却记成 ok"的假日志(实测踩到)。这里判一次,失败照常记 error,
@@ -73,7 +57,7 @@ export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawI
 		if (error instanceof Error) (error as Error & { traceId?: string }).traceId = traceId;
 		// 只有 5xx 才上送 Sentry —— `TRPCError` 是业务层的 4xx 信号(权限、找不到、参数错),
 		// 这些是预期内的错误,送过去只会刷屏(实测会把 Sentry 的 issue 数撑成「真崩」)。
-		if (!isTRPCError(error)) {
+		if (!(error instanceof TRPCError)) {
 			captureException(error, { traceId, path, type, ms });
 		}
 		throw error;

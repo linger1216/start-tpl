@@ -21,7 +21,7 @@ import { auth } from "../src/lib/auth.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
-import { closeDb, TEST_PREFIX } from "./helpers.ts";
+import { closeDb, purgeCasbinByUserIds, purgeRoles, TEST_PREFIX } from "./helpers.ts";
 
 const SUFFIX = `${Date.now().toString(36)}`;
 const PASSWORD = "Passw0rd!123";
@@ -147,27 +147,11 @@ after(async () => {
 	if (createdUserIds.length > 0) {
 		await cleanupStep("删除会话", () => db.delete(sysSession).where(inArray(sysSession.userId, createdUserIds)));
 		await cleanupStep("删除 account", () => db.delete(sysAccount).where(inArray(sysAccount.userId, createdUserIds)));
-		await cleanupStep("删除 user_role", () =>
-			db.delete(sysCasbinRule).where(
-				and(
-					eq(sysCasbinRule.ptype, "g"),
-					inArray(
-						sysCasbinRule.v0,
-						createdUserIds.map((userId) => `user:${userId}`),
-					),
-				),
-			),
-		);
+		await cleanupStep("删除成员关系 g 行", () => purgeCasbinByUserIds(createdUserIds));
 	}
 	if (createdRoleIds.length > 0) {
-		const subjects = createdRoleIds.map((roleId) => `role:${roleId}`);
-		await cleanupStep("删除 role_menu", () =>
-			db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "p"), inArray(sysCasbinRule.v0, subjects))),
-		);
-		await cleanupStep("删除角色继承", () =>
-			db.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, "g"), inArray(sysCasbinRule.v1, subjects))),
-		);
-		await cleanupStep("删除 role", () => db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds)));
+		// `p` 行(角色授权)+ `g` 行 v1(谁继承 / 是成员)+ 角色行 —— 同 `purgeRoles` 顺序
+		await cleanupStep("清理测试角色", () => purgeRoles(createdRoleIds));
 	}
 	if (createdUserIds.length > 0)
 		await cleanupStep("删除 user", () => db.delete(sysUser).where(inArray(sysUser.id, createdUserIds)));
