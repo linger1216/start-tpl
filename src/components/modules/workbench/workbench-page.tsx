@@ -38,7 +38,7 @@ const CHECKS = [
 	{
 		icon: Code2,
 		title: "改一处菜单",
-		desc: "改 src/components/layout/nav-config.ts → 侧边栏 / 工作台 / 面包屑全部跟着变",
+		desc: "改 src/components/layout/nav-config.ts 再跑 pnpm db:seed:menus —— 侧边栏 / 工作台 / 面包屑都从 menu.mine 读",
 	},
 	{
 		icon: Settings,

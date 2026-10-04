@@ -25,8 +25,6 @@ const PAGE_SIZE_FALLBACK = 20;
 
 /** 单个页面的列偏好:顺序 + 隐藏列 */
 type PageColumnPrefs = { order: string[]; hidden: string[] };
-/** 整段 JSON 的形状:页面标识 → 该页的列偏好 */
-type PageColumnsMap = Record<string, PageColumnPrefs>;
 /** 单个页面记下的"展开到哪" —— 已展开节点的 id */
 type PageTreePrefs = { expanded: string[] };
 
@@ -45,11 +43,6 @@ function parsePageRecord<T>(raw: string | null | undefined): Record<string, T> {
 	} catch {
 		return {};
 	}
-}
-
-/** 解析 `page.columns` 的值。 */
-function parsePageColumns(raw: string | null | undefined): PageColumnsMap {
-	return parsePageRecord<PageColumnPrefs>(raw);
 }
 
 /**
@@ -118,7 +111,7 @@ export function useColumnPrefs<TRow extends MockRow>(pageKey: string, table: Ret
 	useEffect(() => {
 		if (raw === undefined || appliedRef.current === raw) return;
 		appliedRef.current = raw;
-		const mine = parsePageColumns(raw)[pageKey];
+		const mine = parsePageRecord<PageColumnPrefs>(raw)[pageKey];
 		if (!mine) return;
 		/**
 		 * ⚠️ 保存的顺序必须**和当前列合并**再套用,不能原样 setColumnOrder。

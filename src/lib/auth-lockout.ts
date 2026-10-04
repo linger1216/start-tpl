@@ -13,7 +13,7 @@
  * 这一层按账号累计失败次数(5 次锁 15 分钟)。两层一起兜才稳 —— 攻击者
  * 每次换 IP 也会累计到这一层。
  */
-import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 
 import { db } from "#/db";
 import { sysAccountLockout } from "#/db/data-base-schema";
@@ -25,12 +25,6 @@ const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 /** 滑动窗口多宽(模板默认 5 分钟内的失败才叠加) */
 const FAILURE_WINDOW_MS = 5 * 60 * 1000;
-
-export const LOCKOUT_CONFIG = {
-	threshold: LOCKOUT_THRESHOLD,
-	durationMs: LOCKOUT_DURATION_MS,
-	windowMs: FAILURE_WINDOW_MS,
-} as const;
 
 /**
  * 锁定的剩余秒数 —— `locked_until > now()` 时返回正数,否则 0。
@@ -180,6 +174,3 @@ export function effectiveLockoutConfig(): { threshold: number; durationMs: numbe
 		windowMs: overrideConfig.windowMs ?? FAILURE_WINDOW_MS,
 	};
 }
-
-// Re-export `sql` for callers that want to compose; keep this file as the only surface that talks to the lockout table.
-export { sql };

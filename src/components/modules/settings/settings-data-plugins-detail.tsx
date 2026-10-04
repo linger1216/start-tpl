@@ -1,4 +1,5 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { EnabledBadge } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
 import { formatLocalMinute } from "#/lib/time";
@@ -35,9 +36,7 @@ export function SettingsDataPluginsDetail({
 							内置
 						</Badge>
 					) : (
-						<Badge variant={Number(row.status) === 1 ? "secondary" : "outline"} className="text-xs">
-							{Number(row.status) === 1 ? "启用" : "停用"}
-						</Badge>
+						<EnabledBadge status={row.status} />
 					)
 				) : null
 			}

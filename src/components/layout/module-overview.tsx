@@ -9,7 +9,7 @@ import { PageHeader } from "#/components/layout/page-header";
 /**
  * 模块首页(Menu 一级模块的落地页)—— 直接渲染该模块子树里的分组与页面。
  *
- * 内容全部来自 `NAV_NODES`,所以菜单和这页不可能漂移:加菜单项 = 这里自动出现。
+ * 内容全部来自 `useNavNodes()`(`menu.mine`,与侧边栏同源),所以菜单和这页不可能漂移:加菜单项 = 这里自动出现。
  */
 export function ModuleOverview({ path }: { path: string }) {
 	// 与侧边栏同一棵(动态)菜单树:菜单表改了,模块首页跟着变

@@ -22,14 +22,14 @@
  * 每一个 mutation 尾部都要 `clearPluginCache()` —— 缓存是 30 秒的,不清就得等它过期。
  */
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
-import { sysDataPlugin, sysDataPolicy, sysDept, sysUser } from "#/db/data-base-schema";
-import { buildPolicyCtx } from "#/lib/data-scope";
+import { sysDataPlugin, sysDataPolicy, sysUser } from "#/db/data-base-schema";
+import { buildPolicyCtx, namesById, policyContextOut } from "#/lib/data-scope";
 import { BUILTIN_PLUGIN_KEYS, clearPluginCache, listPlugins, testPlugin } from "#/lib/data-scope-plugins";
-import { PLUGIN_ITEM_KEY_MAX, PLUGIN_ITEM_VALUE_MAX, PLUGIN_ITEMS_MAX } from "#/lib/data-scope-spec";
+import { PLUGIN_ITEM_KEY_MAX, PLUGIN_ITEM_VALUE_MAX, PLUGIN_ITEMS_MAX, parseItems } from "#/lib/data-scope-spec";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
@@ -60,38 +60,12 @@ function toPluginRow(row: typeof sysDataPlugin.$inferSelect) {
 		/** 表里的行**只有**这一种实现(自定义);内置那批 `impl` 为 `"builtin"` */
 		impl: "fn" as const,
 		/** v2 起:清单内容,引擎按 `value` 拼 SQL 的 `in (...)`,`key` 是分类标签 */
-		outputValues: parseOutputValues(row.output_values),
+		outputValues: parseItems(row.output_values),
 		status: Number(row.status),
 		remark: row.remark ?? "",
 		createdAt: row.create_time ? row.create_time.toISOString() : null,
 		updatedAt: row.update_time ? row.update_time.toISOString() : null,
 	};
-}
-
-/**
- * 把库里读出来的 `output_values` 归一成 `[{key, value}]`(空 / null / 字符串 / 老形态 全部兼容)。
- * 与 `data-scope-spec.ts` 的 `parseItems()` 同款 —— 这一层只在 router 出参处走,
- * 引擎侧(`toPlugin` 已经直接读 `row.output_values`)也走 `parseItems`,结果一致。
- */
-function parseOutputValues(raw: unknown): Array<{ key: string; value: string }> {
-	if (raw === null || raw === undefined) return [];
-	if (typeof raw === "string") {
-		try {
-			raw = JSON.parse(raw) as unknown;
-		} catch {
-			return [];
-		}
-	}
-	if (!Array.isArray(raw)) return [];
-	const out: Array<{ key: string; value: string }> = [];
-	for (const item of raw) {
-		if (item && typeof item === "object" && "key" in item && "value" in item) {
-			const k = String((item as Record<string, unknown>).key ?? "").trim();
-			const v = String((item as Record<string, unknown>).value ?? "");
-			if (k && v) out.push({ key: k, value: v });
-		}
-	}
-	return out;
 }
 
 /** 还有几条启用中的规则在用这个插件(删之前要提醒,否则那些规则会静默变成"一行也看不到") */
@@ -134,23 +108,12 @@ export const dataPluginRouter = createTRPCRouter({
 		const me = requireCurrentUser(ctx);
 		const [policyCtx, userNames] = await Promise.all([buildPolicyCtx(me.id), namesById(sysUser, [me.id])]);
 		const result = await testPlugin(input.pluginKey, { ctx: policyCtx });
-		// 「我的部门及以下」解名字 + 标 mine —— 跟试用页 trial 同款(见 `data-scope.ts`)。
-		// 后端 `buildPolicyCtx` 只给 id 数组,前端显示需要 name + mine。
-		const mineIds = new Set(policyCtx.depts.filter((d) => d.mine).map((d) => d.id));
-		const descendantRows =
-			policyCtx.descendants.length === 0
-				? []
-				: await db
-						.select({ id: sysDept.id, name: sysDept.name })
-						.from(sysDept)
-						.where(and(inArray(sysDept.id, policyCtx.descendants), alive(sysDept)));
+		const contextOut = await policyContextOut(policyCtx);
 		return {
 			pluginKey: input.pluginKey,
 			userName: userNames.get(me.id) ?? me.id,
 			isMe: true,
-			roles: policyCtx.roles.map((role) => role.name),
-			ancestors: policyCtx.depts.map((dept) => ({ name: dept.name, mine: dept.mine })),
-			children: descendantRows.map((d) => ({ name: d.name, mine: mineIds.has(d.id) })),
+			...contextOut,
 			...result,
 		};
 	}),
@@ -282,14 +245,3 @@ export const dataPluginRouter = createTRPCRouter({
 			return { pluginKey: input.pluginKey, removed: true };
 		}),
 });
-
-/** 一批 id → 名字(空数组直接回空表,不白跑一次 SQL) —— 与 `data-scope.ts` 同款 */
-async function namesById(table: typeof sysUser, ids: string[]): Promise<Map<string, string>> {
-	if (ids.length === 0) return new Map();
-	// 过 `alive()`:软删的人不该再被解出名字(与 `list` / `test` 的读口径一致)
-	const rows = await db
-		.select({ id: table.id, name: table.name })
-		.from(table)
-		.where(and(inArray(table.id, ids), alive(table)));
-	return new Map(rows.map((row) => [row.id, row.name]));
-}

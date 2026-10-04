@@ -189,7 +189,7 @@ export function SettingsDictionaryPage() {
 
 	function openCreate() {
 		setFormError(null);
-		setValues(emptyDictForm);
+		setValues(emptyDictForm());
 		setForm({ editing: null });
 	}
 
@@ -294,7 +294,6 @@ export function SettingsDictionaryPage() {
 				}}
 				title={`删除字典「${deleteTarget?.name ?? ""}」?`}
 				description="删掉后用到它的地方会取不到候选;已经有功能在用它时会被拒绝。"
-				confirmText="删除"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

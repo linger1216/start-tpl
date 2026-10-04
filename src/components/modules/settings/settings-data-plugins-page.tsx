@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cable, Plus, RefreshCw, Users } from "lucide-react";
+import { Cable, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -9,23 +9,14 @@ import {
 	type PluginFormPayload,
 	SettingsDataPluginsForm,
 } from "#/components/modules/settings/settings-data-plugins-form";
+import { SettingsDataPluginsPreviewDialog } from "#/components/modules/settings/settings-data-plugins-preview-dialog";
 import { type PluginRow, pluginColumns } from "#/components/modules/settings/settings-data-plugins-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import { PolicyContextBlock } from "#/components/modules/shared/policy-context-block";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { DetailRow } from "#/components/ui/detail-row";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -39,11 +30,10 @@ import { matchKeyword } from "#/lib/table";
  * 没有「写一段函数体」那档子;内置 4 个插件写在代码里(`self` / `my_departments` /
  * `my_dept_ancestors` / `my_street`),界面上只读。
  *
- * 「**新增**」按钮只对超管显示(`useIsAdmin()`):清单的值会进入 SQL `column in (...)`,
- * 一条 `risk_level: 高` / `risk_level: 中` 是同 column 上的子集筛选 —— 与公式、枚举值一样敏感,
- * 限制改的人比限制看的人更紧。
+ * 「**新增**」按钮对所有登录用户显示(`m21097` / `m21161` 定稿:值域插件的增删改只跟
+ * `sys:plugin:add` / `edit` / `remove` 权限点走,不再另加超管门槛 —— 被授权点的人就是能改的人)。
  *
- * 写接口额外要求**超管**(`requireAdminUser`);每次写完清插件缓存,不用重启服务。
+ * 每次写完清插件缓存,不用重启服务。
  */
 export function SettingsDataPluginsPage() {
 	const trpc = useTRPC();
@@ -128,11 +118,6 @@ export function SettingsDataPluginsPage() {
 			},
 		}),
 	);
-
-	const testQuery = useQuery({
-		...trpc.dataPlugin.test.queryOptions({ pluginKey: testing?.pluginKey ?? "" }),
-		enabled: testing !== null,
-	});
 
 	function handleSubmit(payload: PluginFormPayload) {
 		if (creating) {
@@ -274,86 +259,13 @@ export function SettingsDataPluginsPage() {
 				}}
 			/>
 
-			{/* 预览值域:拿**当前登录人**真算一次,把取到的值原样列出来 —— 插件写错只会"一条都取不到",这里能当场看见。
-			    想换人就用系统的"切换身份",这里不另开通道(预览值域的"按谁的算"始终是当前人)。 */}
-			<Dialog
+			<SettingsDataPluginsPreviewDialog
+				row={testing}
 				open={testing !== null}
 				onOpenChange={(next) => {
 					if (!next) setTesting(null);
 				}}
-			>
-				<DialogContent className="sm:max-w-xl">
-					<DialogHeader>
-						<DialogTitle>预览值域 · {testing?.label ?? ""}</DialogTitle>
-						<DialogDescription>
-							这就是这个插件**当前身份**取到的值 —— 拿真实的人算,不是模拟。取不到值说明配置有问题,不是"这个人恰好没有"。
-						</DialogDescription>
-					</DialogHeader>
-					<div className="flex flex-col gap-3">
-						<DetailRow label="插件标识">
-							<span translate="no" className="font-mono text-xs">
-								{testing?.pluginKey}
-							</span>
-						</DetailRow>
-
-						{/* 当前上下文(谁) */}
-						<div className="flex flex-col gap-1.5">
-							<p className="text-[11px] text-muted-foreground">当前上下文</p>
-							{testQuery.data ? (
-								<PolicyContextBlock
-									userName={testQuery.data.userName}
-									isMe={testQuery.data.isMe}
-									roles={testQuery.data.roles}
-									ancestors={testQuery.data.ancestors}
-									departmentChildren={testQuery.data.children}
-									density="compact"
-								/>
-							) : (
-								<div className="rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs text-muted-foreground">
-									正在算…
-								</div>
-							)}
-						</div>
-
-						{/* 输出值(插件取到的) —— 一列:原始对象,是什么显示什么,不查名字(m18546);v1.4 m18655 起返对象数组,这里 JSON 化贴出 */}
-						<div className="flex flex-col gap-1.5">
-							<p className="text-[11px] text-muted-foreground">输出值(原始对象)</p>
-							<div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
-								{testQuery.isFetching ? (
-									<p className="text-muted-foreground">算着呢…</p>
-								) : testQuery.error ? (
-									<p className="text-destructive">{toApiError(testQuery.error).message}</p>
-								) : testQuery.data ? (
-									<div className="flex flex-col gap-1">
-										<p className="text-foreground">
-											取到 <span className="font-semibold tabular-nums">{testQuery.data.rows.length}</span> 行
-											{testQuery.data.message ? (
-												<span className="text-muted-foreground"> · {testQuery.data.message}</span>
-											) : null}
-										</p>
-										{testQuery.data.rows.length > 0 ? (
-											<pre className="max-h-48 overflow-auto rounded border border-border bg-background p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground/90">
-												{testQuery.data.rows.map((row) => JSON.stringify(row)).join("\n")}
-											</pre>
-										) : null}
-									</div>
-								) : (
-									<p className="text-muted-foreground">正在算…</p>
-								)}
-							</div>
-						</div>
-					</div>
-					<DialogFooter>
-						<Button type="button" variant="outline" onClick={() => setTesting(null)}>
-							关闭
-						</Button>
-						<Button type="button" disabled={testQuery.isFetching} onClick={() => void testQuery.refetch()}>
-							<RefreshCw className="size-3.5" />
-							刷新
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			/>
 
 			<ConfirmDialog
 				open={pendingDelete !== null}

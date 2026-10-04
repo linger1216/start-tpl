@@ -33,6 +33,23 @@ import { newId } from "#/lib/ids";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
+/**
+ * 校验一批外键 id **都还在**(软删过的不算)—— 用户授权只认活着的角色 / 部门;
+ * 缺了就显式报错,不静默丢弃未知 id。
+ */
+async function assertIdsExist(table: typeof sysRole | typeof sysDept, ids: string[], label: string): Promise<void> {
+	if (ids.length === 0) return;
+	const rows = await db
+		.select({ id: table.id })
+		.from(table)
+		.where(and(inArray(table.id, ids), alive(table)));
+	const known = new Set(rows.map((row) => row.id));
+	const unknown = ids.filter((id) => !known.has(id));
+	if (unknown.length > 0) {
+		throw new TRPCError({ code: "BAD_REQUEST", message: `这些${label}不存在(可能刚被删掉):${unknown.join("、")}` });
+	}
+}
+
 export const userRouter = createTRPCRouter({
 	/**
 	 * 用户台账 —— 带上每个人的**部门 / 角色分配**(表格里要显示,统计卡也要用)。
@@ -199,43 +216,9 @@ export const userRouter = createTRPCRouter({
 			}
 
 			const roleIds = [...new Set(input.roleIds)];
-			const knownRoles = roleIds.length
-				? new Set(
-						(
-							await db
-								.select({ id: sysRole.id })
-								.from(sysRole)
-								.where(and(inArray(sysRole.id, roleIds), alive(sysRole)))
-						).map((row) => row.id),
-					)
-				: new Set<string>();
-			// 显式报错,不静默丢弃未知 id
-			const unknownRoles = roleIds.filter((id) => !knownRoles.has(id));
-			if (unknownRoles.length > 0) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `这些角色不存在(可能刚被删掉):${unknownRoles.join("、")}`,
-				});
-			}
-
+			await assertIdsExist(sysRole, roleIds, "角色");
 			const departmentIds = [...new Set(input.departmentIds)];
-			const knownDepartments = departmentIds.length
-				? new Set(
-						(
-							await db
-								.select({ id: sysDept.id })
-								.from(sysDept)
-								.where(and(inArray(sysDept.id, departmentIds), alive(sysDept)))
-						).map((row) => row.id),
-					)
-				: new Set<string>();
-			const unknownDepartments = departmentIds.filter((id) => !knownDepartments.has(id));
-			if (unknownDepartments.length > 0) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `这些部门不存在(可能刚被删掉):${unknownDepartments.join("、")}`,
-				});
-			}
+			await assertIdsExist(sysDept, departmentIds, "部门");
 
 			const existingDepts = await db
 				.select({ id: sysUserDept.id, departmentId: sysUserDept.department_id })

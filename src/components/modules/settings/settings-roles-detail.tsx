@@ -1,4 +1,5 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { EnabledBadge } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -31,13 +32,7 @@ export function SettingsRolesDetail({
 			onOpenChange={onOpenChange}
 			title={`角色详情 · ${row?.name ?? ""}`}
 			description={row?.remark || "全局定义的角色 —— 谁有它记在「用户 → 角色」上"}
-			badge={
-				row ? (
-					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
-						{row.status === 1 ? "启用" : "停用"}
-					</Badge>
-				) : null
-			}
+			badge={row ? <EnabledBadge status={row.status} /> : null}
 			onEdit={() => row && onPerms(row)}
 			editLabel="菜单权限"
 			footerExtra={

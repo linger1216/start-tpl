@@ -42,9 +42,7 @@ export type PluginFormPayload = {
  *  - 一个插件一份清单,可以给多列复用;
  *  - 同一个插件的不同规则拿到的值一致 —— 不存在"这条规则的清单是 5 项,那条是 3 项"的歧义。
  *
- * ⚠️ 仍然只允许超管保存(`requireAdminUser`):清单里的值会进 SQL `column in (...)`,
- * 一行 `{risk_level: 高}` 配上 `column = risk_level:` 就是同列上的子集筛选,与"允许看哪些行"
- * 是同一档敏感度。
+ * 保存权限走 rbac 权限点(`sys:plugin:add` / `sys:plugin:edit`),不再有额外的超管门槛。
  */
 export function SettingsDataPluginsForm({
 	row,

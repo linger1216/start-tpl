@@ -8,6 +8,8 @@
  */
 import * as XLSX from "xlsx";
 
+import { joinMultiValue } from "#/lib/multi-value";
+
 /**
  * Excel 列定义:`key` 是行里的字段名,`label` 是表头,`width` 是列宽字符数。
  * `required` 只对导入模板有意义。
@@ -284,7 +286,7 @@ export type ImportOutcome = ImportResult & { duplicates: ImportFeedback[] };
  */
 function cellText(value: unknown): string | number | boolean | Date {
 	if (value === undefined || value === null) return "";
-	if (Array.isArray(value)) return value.join("、");
+	if (Array.isArray(value)) return joinMultiValue(value);
 	if (typeof value === "number" || typeof value === "boolean" || value instanceof Date) return value;
 	return String(value);
 }

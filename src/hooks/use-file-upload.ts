@@ -34,7 +34,7 @@ async function sha256Of(file: File): Promise<string | undefined> {
 
 /**
  * 直传并回报进度 —— **必须用 XHR**(`fetch` 没有上传进度事件)。
- * 导出给"想自己排队"的调用方也用得上。
+ * 模块私有:`useFileUpload()` 是唯一入口,调用方只管"把这个文件传上去"。
  */
 function putWithProgress(url: string, file: File, onPercent: (percent: number) => void): Promise<void> {
 	return new Promise((resolve, reject) => {
@@ -88,11 +88,5 @@ export function useFileUpload() {
 		[trpc, presign, confirm, queryClient],
 	);
 
-	return {
-		upload,
-		/** 队列批量上传后统一失效一次(单文件也可以直接依赖 upload 里的失效) */
-		invalidate: useCallback(async () => {
-			await queryClient.invalidateQueries(trpc.file.pathFilter());
-		}, [trpc, queryClient]),
-	};
+	return { upload };
 }

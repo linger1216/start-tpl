@@ -102,7 +102,7 @@ export type PluginInfo = Omit<ResolvedPlugin, "resolve" | "hidden">;
 // ── SQL 小工具 ──────────────────────────────────────────────────────────────
 
 // v2 起已删:`selectRows()` 没用了 —— 内置插件都只看 ctx,不走 SQL;`toPlugin()` 也不再编译函数体。
-// `normalizeRows` / `coerceRow` 仍保留作为防御层(以防用户代码/老插件代码意外走到这里)。
+// `toValueRows` / `coerceRow` 仍保留作为防御层(以防用户代码/老插件代码意外走到这里)。
 
 /**
  * 插件返回值归一:统一成 `Record<string, string>[]`(一行一个对象,每个字段都是字符串)。
@@ -120,7 +120,7 @@ export type PluginInfo = Omit<ResolvedPlugin, "resolve" | "hidden">;
  * v1.4 (m18655):从「只收字符串」改成「收对象 + 自动 coerce 字符串」,因为按 value 单形态
  * 撑不住"表里存的是街镇名/街镇 id"这类多字段场景。
  */
-function normalizeRows(value: unknown): Record<string, string>[] {
+function toValueRows(value: unknown): Record<string, string>[] {
 	if (!Array.isArray(value)) return [];
 	const seen = new Set<string>();
 	const out: Record<string, string>[] = [];
@@ -135,7 +135,7 @@ function normalizeRows(value: unknown): Record<string, string>[] {
 	return out;
 }
 
-/** 一项 → `{[k]: string}`;非对象 / 全空字段 一律回 `null`(被 `normalizeRows` 跳过) */
+/** 一项 → `{[k]: string}`;非对象 / 全空字段 一律回 `null`(被 `toValueRows` 跳过) */
 function coerceRow(item: unknown): Record<string, string> | null {
 	if (item === null || item === undefined) return null;
 	if (typeof item === "string") return item ? { value: item } : null;
@@ -525,7 +525,7 @@ export async function resolvePluginValues(key: string, args: ResolveArgs): Promi
 		return null;
 	}
 	try {
-		return normalizeRows(await withTimeout(plugin.resolve(args), PLUGIN_TIMEOUT_MS));
+		return toValueRows(await withTimeout(plugin.resolve(args), PLUGIN_TIMEOUT_MS));
 	} catch (error) {
 		logger.warn("data_scope.plugin_failed", {
 			key,
@@ -557,7 +557,7 @@ export async function testPlugin(
 	const plugin = (await loadPlugins()).get(key);
 	if (!plugin) return { ok: false, rows: [], message: `没有这个插件:${key}` };
 	try {
-		const rows = normalizeRows(await withTimeout(plugin.resolve(args), PLUGIN_TIMEOUT_MS));
+		const rows = toValueRows(await withTimeout(plugin.resolve(args), PLUGIN_TIMEOUT_MS));
 		return {
 			ok: true,
 			rows,

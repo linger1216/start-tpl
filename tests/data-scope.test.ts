@@ -240,20 +240,8 @@ test("给值插件 + 固定清单:预览命中行数与手算一致", async () =
 
 test("试用接口:换成指定账号算,并把逐条规则的账 + 真实样张一起给出来", async () => {
 	await resetRules();
-	const total = Number((await db.select({ n: sql<number>`count(*)` }).from(sysDemoGrid))[0]?.n ?? 0);
-
-	const towns = await db
-		.select({ town: sysDemoGrid.town_id, n: sql<number>`count(*)` })
-		.from(sysDemoGrid)
-		.where(isNotNull(sysDemoGrid.town_id))
-		.groupBy(sysDemoGrid.town_id)
-		.orderBy(desc(sql`count(*)`))
-		.limit(1);
-	const params = towns.map((row) => row.town).filter((town): town is string => Boolean(town));
-	const expected = Number(
-		(await db.select({ n: sql<number>`count(*)` }).from(sysDemoGrid).where(inArray(sysDemoGrid.town_id, params)))[0]
-			?.n ?? 0,
-	);
+	// 「行数最多的 town」+ 总行数:与状态流转那几个用例共用 `busiestTown()`(算口径只有一处)
+	const { expected, total, params } = await busiestTown();
 
 	// m20034 (v2):trial 也得用「用户自建 fixed 类插件」才有输出值。
 	const fixedPluginKey = `${TEST_PREFIX}ds_trialfixed_${SUFFIX}`;
@@ -808,8 +796,11 @@ test("插件形态 v1.3:插件只回答「哪些值算他的」,字段仅 plugin
 
 // ───────────────────────────── 状态流转:新建(启用)→ 试算 → 上线 ─────────────────────────────
 
-/** demo_grid 里取"行数最多的那个 town_id"以及它盖住的行数 —— 状态流转那几个用例都用它 */
-async function busiestTown(): Promise<{ expected: number; total: number }> {
+/**
+ * demo_grid 里取"行数最多的那个 town_id"、它盖住的行数、总行数 —— 试用与状态流转那几个用例都用它。
+ * `params` 也一并给出来:用例要拿它拼用户自建 fixed 插件的输出值。
+ */
+async function busiestTown(): Promise<{ expected: number; total: number; params: string[] }> {
 	const total = Number((await db.select({ n: sql<number>`count(*)` }).from(sysDemoGrid))[0]?.n ?? 0);
 	const towns = await db
 		.select({ town: sysDemoGrid.town_id, n: sql<number>`count(*)` })
@@ -823,7 +814,7 @@ async function busiestTown(): Promise<{ expected: number; total: number }> {
 		(await db.select({ n: sql<number>`count(*)` }).from(sysDemoGrid).where(inArray(sysDemoGrid.town_id, params)))[0]
 			?.n ?? 0,
 	);
-	return { expected, total };
+	return { expected, total, params };
 }
 
 test("状态流转:新建落「启用」(引擎不加载),试算通过后「上线」才真的生效", async () => {

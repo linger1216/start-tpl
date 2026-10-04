@@ -1,4 +1,5 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { EnabledBadge } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
 import type { SettingsDictRow } from "./settings-dictionary-types";
@@ -27,13 +28,7 @@ export function SettingsDictionaryDetail({
 			onOpenChange={onOpenChange}
 			title={`字典详情 · ${row?.name ?? ""}`}
 			description={<span className="font-mono">{row?.code ?? ""}</span>}
-			badge={
-				row ? (
-					<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
-						{row.status === 1 ? "启用" : "停用"}
-					</Badge>
-				) : null
-			}
+			badge={row ? <EnabledBadge status={row.status} /> : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (

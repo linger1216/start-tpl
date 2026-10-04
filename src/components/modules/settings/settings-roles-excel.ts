@@ -19,12 +19,12 @@ export const ROLE_EXCEL_COLUMNS: readonly ExcelColumn<RoleExcelKey>[] = [
 	{ key: "remark", label: "备注", width: 30 },
 ];
 
-/** 导出:一行一个角色;状态写中文,空值写空串(`writeSheet` 会把 null/undefined 落成空单元格) */
+/** 导出:一行一个角色;状态写中文(与 `table-kit` 的 `EnabledBadge` 同一判据:非 1 即停用),备注空值写空串 */
 export function roleExcelRows(rows: readonly RoleRow[]): Array<Record<RoleExcelKey, string>> {
 	return rows.map((row) => ({
 		name: row.name,
 		sort: String(row.sort),
-		status: Number(row.status ?? 1) === 1 ? "启用" : "停用",
+		status: Number(row.status) === 1 ? "启用" : "停用",
 		remark: row.remark ?? "",
 	}));
 }

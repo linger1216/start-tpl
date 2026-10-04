@@ -22,12 +22,12 @@
  * 每一个 mutation 尾部都要 `clearDataScopeCache()` —— 缓存 30 秒,不清就得等它过期。
  */
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import { sysDataPolicy, sysDept, sysRole, sysUser } from "#/db/data-base-schema";
-import { buildPolicyCtx, clearDataScopeCache, previewScope } from "#/lib/data-scope";
+import { buildPolicyCtx, clearDataScopeCache, namesById, policyContextOut, previewScope } from "#/lib/data-scope";
 import { loadResourceMeta } from "#/lib/data-scope-meta";
 import { listPlugins, loadPlugins } from "#/lib/data-scope-plugins";
 import {
@@ -44,11 +44,6 @@ import {
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
-
-/** 资源 / 列下拉用的字段清单(元数据读不到时是空的,表单允许手输 —— 达梦上没有 `database()`) */
-function describeColumns(columns: { column: string; label: string; dataType: string }[] | undefined) {
-	return (columns ?? []).map((item) => ({ column: item.column, label: item.label, dataType: item.dataType }));
-}
 
 export const dataScopeRouter = createTRPCRouter({
 	/**
@@ -68,7 +63,7 @@ export const dataScopeRouter = createTRPCRouter({
 				table: item.table,
 				label: item.label,
 				pk: item.pk,
-				columns: describeColumns(item.columns),
+				columns: item.columns ?? [],
 			}))
 			.sort((a, b) => a.label.localeCompare(b.label, "zh"));
 	}),
@@ -181,22 +176,12 @@ export const dataScopeRouter = createTRPCRouter({
 					: undefined,
 			});
 
-			// 角色只回名字(`ctx.roles[i].name`);部门回 `{name, mine}` —— `mine=true` 那段是
-			// "我**所属的**部门",链上其它节点是它的祖先(`my_dept_ancestors` 的语义)。
-			// 预览弹窗要靠 `mine` 把"我自己"在链上标出来,不然后端算出了根→叶的链路,
-			// 页面只能看到一长串名字,看不出"哪一段是我的"。
-			// `descendants` 是「我的部门及以下」的扁平列表(我 + 子孙,去重),跟 `depts`(祖先链)对偶 —
-			// 同样解名字 + 标 mine,两个预览弹窗共用一份形态。
-			const mineIds = new Set(policyCtx.depts.filter((d) => d.mine).map((d) => d.id));
-			const [meta, userNames, descendantRows] = await Promise.all([
+			// 角色 / 部门链 / 「我的部门及以下」都来自 `policyContextOut()` —— 与插件试算
+			// (`dataPlugin.test`)共用同一份形态,弹窗契约只有一处。
+			const [meta, userNames, contextOut] = await Promise.all([
 				loadResourceMeta(),
 				namesById(sysUser, [targetId]),
-				policyCtx.descendants.length === 0
-					? Promise.resolve([] as Array<{ id: string; name: string }>)
-					: db
-							.select({ id: sysDept.id, name: sysDept.name })
-							.from(sysDept)
-							.where(and(inArray(sysDept.id, policyCtx.descendants), alive(sysDept))),
+				policyContextOut(policyCtx),
 			]);
 			return {
 				...preview,
@@ -204,9 +189,7 @@ export const dataScopeRouter = createTRPCRouter({
 				userName: userNames.get(targetId) ?? targetId,
 				isMe: targetId === me.id,
 				resourceLabel: meta.get(input.resource)?.label ?? input.resource,
-				roles: policyCtx.roles.map((role) => role.name),
-				ancestors: policyCtx.depts.map((dept) => ({ name: dept.name, mine: dept.mine })),
-				children: descendantRows.map((d) => ({ name: d.name, mine: mineIds.has(d.id) })),
+				...contextOut,
 				trialRule: trialRow
 					? {
 							id: trialRow.id,
@@ -238,10 +221,11 @@ export const dataScopeRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			const shape = await checkRule(input);
+			const id = newId();
 			const now = new Date();
 			const status = input.status ?? POLICY_STATUS.enabled;
 			await db.insert(sysDataPolicy).values({
-				id: shape.id,
+				id,
 				status,
 				subject: input.subject,
 				resource: input.resource,
@@ -253,7 +237,7 @@ export const dataScopeRouter = createTRPCRouter({
 				update_time: now,
 			});
 			clearDataScopeCache();
-			return { id: shape.id };
+			return { id };
 		}),
 
 	/**
@@ -373,18 +357,6 @@ async function subjectNameOf(raw: string): Promise<string> {
 }
 
 /** 一批 id → 名字(空数组直接回空表,不白跑一次 SQL;已软删的主体不再解析出名字,回落到显示 id) */
-async function namesById(
-	table: typeof sysRole | typeof sysDept | typeof sysUser,
-	ids: string[],
-): Promise<Map<string, string>> {
-	if (ids.length === 0) return new Map();
-	const rows = await db
-		.select({ id: table.id, name: table.name })
-		.from(table)
-		.where(and(inArray(table.id, ids), alive(table)));
-	return new Map(rows.map((row) => [row.id, row.name]));
-}
-
 /**
  * 校验一条规则的形状并归一(创建 / 更新共用)。
  *
@@ -400,7 +372,7 @@ async function checkRule(input: {
 	column?: string | null;
 	valueKey?: string | null;
 	pluginKey?: string | null;
-}): Promise<{ id: string; column: string | null; valueKey: string | null; pluginKey: string | null }> {
+}): Promise<{ column: string | null; valueKey: string | null; pluginKey: string | null }> {
 	const subject = parseSubject(input.subject);
 	if (!subject) {
 		throw new TRPCError({
@@ -438,5 +410,5 @@ async function checkRule(input: {
 	const reason = validatePolicyCombo({ column, pluginKey });
 	if (reason) throw new TRPCError({ code: "BAD_REQUEST", message: reason });
 
-	return { id: newId(), column, valueKey, pluginKey };
+	return { column, valueKey, pluginKey };
 }

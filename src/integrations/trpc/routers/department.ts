@@ -24,6 +24,7 @@ import { sysDept, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { allUserRoles } from "#/lib/casbin";
 import { clearDeptCache } from "#/lib/data-scope-plugins";
 import { newId } from "#/lib/ids";
+import { reorderSiblings } from "#/lib/reorder";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -171,31 +172,14 @@ export const departmentRouter = createTRPCRouter({
 	reorder: protectedProcedure
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
-			const parentId = input.parentId ?? null;
-			// 排序清单只认活着的兄弟:软删部门已被踢出该级,不该再要求它出现在清单里
-			const siblings = await db
-				.select({ id: sysDept.id })
-				.from(sysDept)
-				.where(
-					and(parentId === null ? sql`${sysDept.parent_id} is null` : eq(sysDept.parent_id, parentId), alive(sysDept)),
-				);
-			const siblingIds = new Set(siblings.map((row) => row.id));
-			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
-			if (unknown.length > 0) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `只能在同一级内排序,以下部门不属于同一上级:${unknown.join("、")}`,
-				});
-			}
-			if (input.orderedIds.length !== siblingIds.size) {
-				throw new TRPCError({ code: "BAD_REQUEST", message: "排序清单必须包含该级下全部部门" });
-			}
-			await db.transaction(async (tx) => {
-				for (const [index, id] of input.orderedIds.entries()) {
-					await tx.update(sysDept).set({ sort: index, update_time: new Date() }).where(eq(sysDept.id, id));
-				}
+			const updated = await reorderSiblings({
+				table: sysDept,
+				parentId: input.parentId ?? null,
+				orderedIds: input.orderedIds,
+				noun: "部门",
+				parentNoun: "上级",
 			});
-			return { updated: input.orderedIds.length };
+			return { updated };
 		}),
 
 	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {

@@ -31,14 +31,15 @@
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "#/db";
-import { sysDataPolicy, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
+import { sysDataPolicy, sysDept, sysRole, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { roleIdsOf } from "#/lib/casbin";
-import { resourceMetaOf } from "#/lib/data-scope-meta";
+import { resourceMetaOf, selectRows } from "#/lib/data-scope-meta";
 import { type DeptNode, loadDeptNodes, resolvePluginValues } from "#/lib/data-scope-plugins";
 import {
 	ctxDeptIds,
 	ctxRoleIds,
 	ctxUserId,
+	isIdent,
 	POLICY_STATUS,
 	type PolicyCtx,
 	type PolicyDept,
@@ -49,21 +50,6 @@ import {
 import { logger } from "#/lib/logger";
 import { alive } from "#/lib/soft-delete";
 import { collectDescendantIds } from "#/lib/tree";
-
-async function selectRows(query: SQL): Promise<Record<string, unknown>[]> {
-	const [rows] = await db.execute(query);
-	return (rows as unknown as Record<string, unknown>[]) ?? [];
-}
-
-/**
- * 列名 / 表名的形状校验 —— 标识符要拼进 SQL(它当不了参数),这一道不能省。
- *
- * 与 `lib/data-scope-spec.ts` 的 `isIdent()` 是同一个正则;那份是给浏览器用的(不能 import 那边),
- * 这份是服务端用的 —— 两边都改。
- */
-function isSafeIdent(value: string): boolean {
-	return /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(value);
-}
 
 /**
  * **resolver 手里那个 `ctx.scope`** 的形状(由 `init.ts` 的 `dataScopeMiddleware` 挂上)。
@@ -311,7 +297,7 @@ async function compileRule(rule: LoadedRule, ctx: PolicyCtx): Promise<CompiledRu
 	// v1.3 (m18228):插件不再区分「给值 / 给行」 —— 一律是「给值」,接 `rule.column`
 	// (列名要拼进 SQL,先校验形状)。
 	const column = rule.column ?? "";
-	if (!isSafeIdent(column)) {
+	if (!isIdent(column)) {
 		logger.warn("data_scope.rule_broken", { ruleId: rule.id, reason: "列名不合法", column });
 		return { kind: "skip" };
 	}
@@ -529,6 +515,51 @@ function countQueryOf(resource: string, where?: SQL): SQL {
 		: sql`select count(*) as n from ${sql.identifier(resource)}`;
 }
 
+/**
+ * id → 名字(用户 / 角色 / 部门同款),**只认活着的行** —— 软删掉的人不该再被解出名字。
+ *
+ * 数据范围列表页、试算预览、插件试跑三处都要"把 ctx 里的 id 翻成人话",此前是各抄一份。
+ */
+export async function namesById(
+	table: typeof sysUser | typeof sysRole | typeof sysDept,
+	ids: string[],
+): Promise<Map<string, string>> {
+	if (ids.length === 0) return new Map();
+	const rows = await db
+		.select({ id: table.id, name: table.name })
+		.from(table)
+		.where(and(inArray(table.id, ids), alive(table)));
+	return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+/**
+ * 试算 / 预览弹窗共用的「上下文人话」:角色名 + 我的部门祖先链(`mine` 标出"哪一段是我")+
+ * 我的部门及以下(同样标 `mine`)。
+ *
+ * 后端 `buildPolicyCtx` 只给 id 数组,前端显示需要 name + mine —— 两个弹窗
+ * (插件试算 `dataPlugin.test`、规则预览 `dataScope.trial`)此前各抄一份,
+ * 每改一次部门语义就要改两处。出参形状就是预览弹窗的契约,别在这个函数里改字段名。
+ */
+export async function policyContextOut(ctx: PolicyCtx): Promise<{
+	roles: string[];
+	ancestors: Array<{ name: string; mine: boolean }>;
+	children: Array<{ name: string; mine: boolean }>;
+}> {
+	const mineIds = new Set(ctx.depts.filter((dept) => dept.mine).map((dept) => dept.id));
+	const descendantRows =
+		ctx.descendants.length === 0
+			? []
+			: await db
+					.select({ id: sysDept.id, name: sysDept.name })
+					.from(sysDept)
+					.where(and(inArray(sysDept.id, ctx.descendants), alive(sysDept)));
+	return {
+		roles: ctx.roles.map((role) => role.name),
+		ancestors: ctx.depts.map((dept) => ({ name: dept.name, mine: dept.mine })),
+		children: descendantRows.map((row) => ({ name: row.name, mine: mineIds.has(row.id) })),
+	};
+}
+
 async function countRows(query: SQL): Promise<number> {
 	return Number((await selectRows(query))[0]?.n ?? 0);
 }
@@ -607,7 +638,7 @@ export async function previewScope(args: {
 	trial?: TrialRule;
 }): Promise<ScopePreview> {
 	const { resource, ctx } = args;
-	if (!isSafeIdent(resource)) {
+	if (!isIdent(resource)) {
 		return { total: 0, visible: 0, condition: "(表名不合法)", sample: [], warning: "表名只能是字母 / 数字 / 下划线" };
 	}
 
@@ -659,7 +690,7 @@ export async function previewScope(args: {
 		sample.push(...(await selectRows(query)).map((row) => String(row.pk ?? "")));
 	}
 
-	// 预览弹窗要的是"长什么样",所以这里破例 `select *` —— 表名刚过了 `isSafeIdent`、条件走参数;
+	// 预览弹窗要的是"长什么样",所以这里破例 `select *` —— 表名刚过了 `isIdent`、条件走参数;
 	// 取不到就退化成"只有数、没有样张",不让它把整页拖成 500
 	let rows: ScopeRow[] | undefined;
 	let sqlInfo: { count: ScopeSql; rows: ScopeSql } | undefined;

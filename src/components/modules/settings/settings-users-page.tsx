@@ -238,7 +238,7 @@ export function SettingsUsersPage() {
 				}}
 			>
 				{detailFor ? (
-					<div className="grid gap-x-6 gap-y-1 sm:grid-cols-1">
+					<div className="flex flex-col gap-0">
 						<DetailRow label="ID">
 							<span className="font-mono text-xs">{detailFor.id}</span>
 						</DetailRow>
@@ -323,7 +323,6 @@ export function SettingsUsersPage() {
 				}}
 				title={`删除账号「${pendingDelete?.email ?? ""}」?`}
 				description="会同时清掉它的登录会话、密码记录、部门成员关系与角色分配(账号行保留为「已删除」,审计留痕)。同一个邮箱可以再建新账号,但旧的授权信息不会回来。"
-				confirmText="删除"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

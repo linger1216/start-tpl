@@ -37,7 +37,7 @@ import {
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { pagePermOf, withAncestorIds } from "../src/lib/rbac.ts";
-import { caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { caller, closeDb, purgeCasbinByMenuIds, purgeCasbinByUserIds, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const roleIds: string[] = [];
@@ -114,28 +114,8 @@ async function inherit(childRoleId: string, parentRoleId: string): Promise<void>
 
 after(async () => {
 	// 先清策略表里指向测试数据的行,再删业务表(策略行没有外键,顺序随便,但清缓存要在最后)
-	if (menuIds.length > 0) {
-		await db.delete(sysCasbinRule).where(
-			and(
-				eq(sysCasbinRule.ptype, "p"),
-				inArray(
-					sysCasbinRule.v1,
-					menuIds.map((id) => `menu:${id}`),
-				),
-			),
-		);
-	}
-	if (userIds.length > 0) {
-		await db.delete(sysCasbinRule).where(
-			and(
-				eq(sysCasbinRule.ptype, "g"),
-				inArray(
-					sysCasbinRule.v0,
-					userIds.map((id) => `user:${id}`),
-				),
-			),
-		);
-	}
+	await purgeCasbinByMenuIds(menuIds);
+	await purgeCasbinByUserIds(userIds);
 	if (roleIds.length > 0) {
 		const subjects = roleIds.map((id) => `role:${id}`);
 		// 主体侧:授权 p 行 + 继承 g 行;客体侧:谁继承了它

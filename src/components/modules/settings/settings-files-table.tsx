@@ -1,12 +1,11 @@
 import { FileText, ImageIcon } from "lucide-react";
 import { useState } from "react";
-import { actionsColumn, selectColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { filePreviewKind } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /** 与 `trpc.file.list` 的出参一一对应(`sys_file` 的列,一个不少) */
 export type FileRow = {
@@ -178,24 +177,8 @@ export function fileColumns({
 				</span>
 			),
 		}),
-		columnHelper.accessor("createTime", {
-			header: "创建时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="text-xs text-muted-foreground tabular-nums">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
-		columnHelper.accessor("updateTime", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="text-xs text-muted-foreground tabular-nums">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<FileRow>("createTime", { header: "创建时间", size: 140 }),
+		timeColumn<FileRow>("updateTime", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,

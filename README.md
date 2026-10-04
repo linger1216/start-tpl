@@ -608,13 +608,13 @@ pnpm check
 | **幽灵子系统** | `sys_para` 里 9 个「清理 / 定时同步 / 原始数据保留」键**没有任何读取方**(`getParaInt` 全仓只被画廊一句散文提到)→ 删这 9 键与配套的「立即清理」按钮页(`settings-parameters-cleanup.tsx` 整文件,它调的 job 路由根本不存在);参数表 17 → 8 行,种子重跑「新增 0 条」 |
 | **v2 死代码** | `probeFn` / `parseParams` / `PluginCtx` / `clearResourceMetaCache` / `PolicyDefinition`+`dataScopePolicy` / `multiValueFilterFn` / `SortIcon` 的多余 `export` / `appFeatures` / `casbin` 的两个前缀常量 / 3 层「兼容用」re-export —— 逐个 grep 到零调用方后删除,并把注释里与事实相反的措辞(「`fixed` 是兜底」「`descendantsOf()`」)改对 |
 | **单一真源** | 文件后缀白名单 + 20 MB 上限原先服务端与上传弹窗各写一份 → `lib/para-spec.ts` 两个常量,3 个消费方统一;**通知级别**原先 5 处各写一遍(且长短标签确实不同,不是简单重复)→ `lib/notice-levels.ts`;`ADMIN_ROLE_NAME` 两处定义 → 一处 |
-| **共用件** | 时间列 → `table-kit` 的 `timeColumn` / `TimeCell`(只换逐字相同的 3 处;另 12 处带灰度与空值 `—` 回退,保留原样);批量选择条 → `ledger-card` 的 `SelectionBar`(零选中返回 `null`,「已选 N 条(前三个名字 …)」只写一处,动作由页面以 `children` 传入);画廊的手搓工具条 / 卡壳 → `LedgerToolbar` / `LedgerCard`,并补上「搜索变化回第一页」 |
+| **共用件** | 时间列 → `table-kit` 的 `timeColumn` / `TimeCell`(只换逐字相同的 3 处;~~另 12 处带灰度与空值 `—` 回退,保留原样~~ —— **第八轮已推翻**:那 12 处也全部换成 `timeColumn`,`TimeCell` 自己回退 `—`);批量选择条 → `ledger-card` 的 `SelectionBar`(零选中返回 `null`,「已选 N 条(前三个名字 …)」只写一处,动作由页面以 `children` 传入);画廊的手搓工具条 / 卡壳 → `LedgerToolbar` / `LedgerCard`,并补上「搜索变化回第一页」 |
 | **修事实错误** | `scripts/create-system-tables.ts` 的 **104 处内联列注释**与 `sync-table-meta.ts` 的映射表重复且已串味(A/B 快照 md5 逐字节相同 ⇒ 确认是死数据,已剥);`workbench-page.tsx` 的「44 个原语」→ 41、「建五张系统表」→ 19 张、「测试共 29 条」→ 不写死数字、「由 `NAV_NODES` 派生」→ 其实只有一张卡是派生的、两处**永远走不到**的分支 |
 | **两个回归** | 上一轮抽 `Spinner` 时把「只有转圈、不带字」场景的可播报文本删没了 → 无 `label` 时渲染 `sr-only` 的「加载中」;`button-group` 丢了相邻按钮的 `border-l-0` → 相邻描边按钮会叠成 2px 缝 |
 | **文档** | 表数 17 / 18 → **19**(README / AGENTS / 4 份 doc)、种子 7 → 6、已删符号(`raw.retention.*` / `probeFn` / `parseParams` / `clearResourceMetaCache` / `descendantsOf`)从文档里清掉;`doc/文件管理.md` 的幽灵键 `file.allow_content_type`、`doc/界面约定.md` 的 `appFeatures` 一并修;`ui/sheet` 补登备选表 |
 | **测试脚手架** | `tests/helpers.ts` 的兜底清扫原先只认 `operator_id = "test-admin"`,漏掉 `test-nobody` / `test-other-*`(实测曾漏 863 行),且完全没覆盖 `sys_data_plugin` / `sys_data_policy` → 收敛成一个 `isTestOperator()`(`test-` 前缀 ∪ `__test__` 前缀)+ 两张表按 `plugin_key` 前缀清;顺手把库里 1775 行历史测试数据清掉(311 行 `__` 打头 + 1459 行 `test-*` 身份 + 4 个插件 + 1 条规则,清前先 `mysqldump` 到 `/tmp`) |
 | **伪信号** | `route-progress` 原是「pathname 一变就无条件转 720ms」的假进度条 → 改读路由自己的 `isLoading`,连带删掉 `useRef` / `useState` / `useEffect` / `setTimeout` 四个状态位(27 → 24 行);CSS 注释同步改成「一次**真实加载**」。已知取舍:单次扫光,加载比它久会提前淡出 —— 不为它引入 nprogress 那套状态机 |
-| **伪扩展点** | 导出面收敛到「真的有人 import」:**15 个**只有本文件用的类型 / 常量去掉 `export`(data-scope 的 `ScopeRow` / `ScopePreview` / `DraftRule` / `ResourceMeta` / `ResourceColumnMeta` / `PolicyUser`、`mock-table` 的 `MockTableStore`、`policy-context-block` 的 props、`use-para-prefs` 的 `PAGE_COLUMNS_KEY` / `PAGE_TREE_KEY` / `PAGE_SIZE_FALLBACK` / `parsePageColumns` 与 4 个偏好形状);**真死件** `parsePageTree` + `PageTreeMap` 直接删(`useParaRecord` 自己就会解析,这两个包装没人调);`rbac.ts` 里与 `layout/nav-menu.ts` **同名不同形**的 `MenuRow` → `SysMenuRow`。剩下的 22 个零引用导出**全部是有意留的**:6 个 UI 原语的类型、Excel 链 11 个、文档点名的 `RuleItem` / `ResolvedPlugin` / `PluginInfo` / `TimeCell`、靠约定路径加载的 `getRouter` |
+| **伪扩展点** | 导出面收敛到「真的有人 import」:**15 个**只有本文件用的类型 / 常量去掉 `export`(data-scope 的 `ScopeRow` / `ScopePreview` / `DraftRule` / `ResourceMeta` / `ResourceColumnMeta` / `PolicyUser`、`mock-table` 的 `MockTableStore`、`policy-context-block` 的 props、`use-para-prefs` 的 `PAGE_COLUMNS_KEY` / `PAGE_TREE_KEY` / `PAGE_SIZE_FALLBACK` / `parsePageColumns` 与 4 个偏好形状;其中 `parsePageColumns` / `PageColumnsMap` 已在第八轮**直接删掉** —— 它就是个 `parsePageRecord` 的薄封装);**真死件** `parsePageTree` + `PageTreeMap` 直接删(`useParaRecord` 自己就会解析,这两个包装没人调);`rbac.ts` 里与 `layout/nav-menu.ts` **同名不同形**的 `MenuRow` → `SysMenuRow`。剩下的 22 个零引用导出**全部是有意留的**:6 个 UI 原语的类型、Excel 链 11 个、文档点名的 `RuleItem` / `ResolvedPlugin` / `PluginInfo` / `TimeCell`、靠约定路径加载的 `getRouter` |
 | **刻意不做** | 维持第五轮结论**不并** sheet/dialog(只补登记);**不删** Excel 三件、`hooks/use-dict.ts`、`tests/helpers.ts` 里零调用方的 `testId` / `purgeTestAuditRows`(都是登记在册的「已实现、无调用方」,且不是本轮造的东西);**不接线** Excel 导入导出 —— 那是加功能不是收敛;不动 lucide 动态取值(动行为);`/demo/table` 自带的那个 `SortIcon` 不并入 `table-kit`(该页刻意手搓,属「table 封装例外」);`@tanstack/devtools-event-client` 那行 `devDependencies` 确认冗余,但本机 `pnpm` store 异常、无法验证删除,先留着 |
 
 基线:`pnpm typecheck` 0 · `npx biome check .` Checked 256 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm db:create` 幂等(全「已存在 / 不存在,跳过」,表注释 / 列注释 / 索引名「已是最新」)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **150 / 150**。
@@ -637,6 +637,31 @@ pnpm check
 | **#9 统一软删** | 10 张业务表补 `deleted_at`,读路径一律 `alive(表)`,11 处硬删改软删;带唯一业务键的表用 `tombstone()` **让位**(否则删掉「测试角色」后再也建不出同名角色),口径见 `doc/数据库与认证.md` 的同名小节。`sys_file` 不叠这一列(它已有 `status = 2` 的行级软删),关联表与运维表不加。测试收尾改成按 `__test__` 前缀**扫表收 id**:以前先软删再按业务键查,键已变墓碑 ⇒ 查不到就攒残留(本轮顺手清掉 12 行并修好 5 处收尾) |
 
 基线:`pnpm typecheck` 0 · `npx biome check .` Checked 281 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm db:create` 幂等 · `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191**(+5 是新增的 `tests/soft-delete.test.ts`)。行为验收:生产包 + 带 cookie 的 SSR 请求,16 个页面全 200(未登录 `/settings/users` 仍是 307、未知路径 404),跑完测试真库 `__test__` 残留 **0**、`sys_user` 38 / `sys_role` 13 / `sys_dept` 3700 与基线一致。
+
+---
+
+### 第八轮:总体代码审阅 —— 去重 / 死代码 / 谎报注释(2026-10)
+
+判据与第六轮相同(同一个东西是否存在第二个实现;删除优先于新增),区别是范围扩到**全仓** ——
+`src` + `scripts` + `tests` 共 278 个 `.ts` / `.tsx` / 44,763 行(本轮又添 2 个件,现 280 个),先派五片只读审计
+(settings / lib+db / 服务端 / layout+ui+shared+workbench / tests+scripts),再补一遍机器扫
+(函数体归一化哈希找逐字重复、零引用导出、死文件),最后逐条核对。审计里有几条被自己的实测**证伪**,
+按「像冗余但不该合并」如实退回,见下方「刻意不做」。
+
+| 改了什么 | 说明 |
+| --- | --- |
+| **服务端去重** | `namesById()`(id → 名字)单源到 `lib/data-scope.ts`,两个 router 各删一份;新增 `policyContextOut()` —— 插件试算与规则预览两个弹窗的「角色 / 祖先链 / 我的部门及以下」口径从此只有一处;新增 `lib/reorder.ts` 的 `reorderSiblings()`(菜单树 / 部门树的同级排序守卫,26 行 × 2 → 一次调用,文案按 `noun` / `parentNoun` 传入);`user.ts` 抽出 `assertIdsExist()`(两段 18 行 → 4 行);`demo-grid.ts` 抽出 `gridValues()`(create / update 的 7 字段映射,过去改一头忘一头);`data-plugin.ts` 删私有 `parseOutputValues` 改用 `parseItems`;`selectRows()` 与 `isIdent()` 单源(删掉 `lib/data-scope.ts` 里那份重复的 `isSafeIdent`);`withAncestorIds()` 复用 `lib/tree.ts` 的 `collectAncestorIds()`(环保护只写一处);`lib/excel.ts` 的多值单元格改用 `joinMultiValue()` |
+| **修一个真 bug** | `src/integrations/trpc/routers/file.ts` 的 `list` 用 `or(...conditions)` 拼 `where` ⇒ 同时给「状态筛选 + 关键字搜索」时两个条件是**或**,状态筛选形同失效、任意状态的行都会被关键字捞出来。全仓只此一处(`log.list` 同位置是正确的 `and(...)`)→ 改 `and(...conditions)`。现网没触发(文件页的关键字是客户端 `matchKeyword` 过滤,没把两者一起传给接口),但接口契约本来就是错的。**数据范围规则详情**(原用两态 `EnabledBadge`)把 `status=1` 的「上线」错标成「启用」、`status=2` 的「启用」错标成「停用」—— 三态不是两态,共用徽章会把「差一步就生效」的状态标得最危险;改用与表格列同一份 `policyStatusMeta()` 的内联 `StatusBadge` |
+| **谎报注释 / 权限漏洞** | ⌘K 命令面板原读**静态** `NAV_NODES`,绕过了菜单授权(`menu.mine` 已按角色过滤)⇒ 改读 `useNavNodes()`,与侧边栏同源;插件页 docblock 还写着「新增只对超管显示」「写接口额外要求超管」(权限早已放开,`requireAdminUser()` 是本轮删掉的死件);`workbench-page.tsx` 的「由 `NAV_NODES` 派生」改成事实;`multi-value.ts` 补上两条**有意**例外(标签输入不切顿号、批量开账号额外按空白切);数据范围预览弹窗里的 `isSafeIdent` 文案改 `isIdent`;`topbar` / `module-overview` / `command-palette` 里残留的「`NAV_NODES`」字样也一并改成事实(实际读的都是 `useNavNodes()`) |
+| **组件 / 界面收敛** | 12 处手写时间列 → `table-kit` 的 `timeColumn`,并把 `TimeCell` 的空值回退统一成 `—`(推翻第六轮「另 12 处保留原样」);9 处「启用 / 停用」徽章 → `EnabledBadge`;详情 / 表单的 9 处提交态补 `isPending`;5 处多余的 `confirmText` 删掉(确认框已有默认文案);字典页新建改 `setValues(emptyDictForm())`;菜单页抽出 `createMenu(parentId)`;角色导出的「状态」列原来带 `?? 1` 兜底(空值导成「启用」,可徽章那侧显示「停用」)⇒ 与 `EnabledBadge` 统一成同一判据;两条 settings 路由的 loader 补 `para.byKey({ key: PAGE_SIZE_KEY })` 预取(与同类页同形) |
+| **死代码** | `requireAdminUser()`(零调用方)、`use-file-upload` 的 `invalidate`、`use-para-prefs` 的 `parsePageColumns` + `PageColumnsMap`(薄封装)、`lib/format.ts` 的 `normalizeValue()`、`auth-lockout.ts` 的 `LOCKOUT_CONFIG` 与文件尾多余的 `export { sql }`、`lib/data-scope.ts` 的 `isSafeIdent` |
+| **文档数字** | `doc/数据库与认证.md` 系统表 20 → **21**、认证五张 → **六张**(补 `sys_account_lockout` / `sys_rate_limit`);`doc/达梦支持.md` 的 `db:dm:create-ba` 15 → **17** 张、`update_time` 出现处数 26 → **27**(多的一处是新的 `lib/reorder.ts`)、用例数改为实测值(`role` 13 / `icons` 5 / `user-crud` 15);同源漂移:**`AGENTS.md`** `pnpm db:dm:create-ba` 注释 15 → **17** 张;**`scripts/create-system-tables.ts`** docblock 19 张 → **21** 张 + 「认证四张」→「**认证六张**」;**`doc/达梦支持.md`** MySQL 一行「含认证四表」→「含认证**六**表」 |
+| **测试脚手架** | `tests/helpers.ts` 新增 `purgeCasbinByMenuIds()` / `purgeCasbinByUserIds()`(casbin / role 两个套件的收尾各 19 行 → 2 行);`tests/data-scope.test.ts` 的试用用例复用 `busiestTown()`(连 `params` 一起回,删掉重复的 6 行算法) |
+| **刻意不做** | **不抽**「同级 `max(sort) + 1`」为 `nextSort` —— 5 处里 4 处是一行 `reduce` 表达式、1 处是滚动计数器、1 处带 `input.sort ??`,抽出来是零收益的薄封装;`sortable-tree.tsx` 剩下两处手写 `<button>` **不换** `ActionIconButton`(一处在折叠箭头的 `size-4` 占位 span 内、一处在搜索框里绝对定位,套上会丢定位与尺寸上下文);`ledger-excel.ts` 的 `importLedger` 确实零调用方,但按「Excel 相关文件永不删除」**只报告不删**(待拍板);`hover:bg-hover` 与 `hover:bg-black/10` 不是像素等价,未动 |
+
+体量:**61 files, +380 / −758**(净减约 **378 行**),新增 2 个件(`lib/reorder.ts` 51 行、`settings-data-plugins-preview-dialog.tsx` 115 行)—— 抽出的共用件比删掉的重复体量更大,换的是「口径只有一处」。
+
+基线:`pnpm typecheck` 0 · `npx biome check .` Checked 283 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191**。
 
 ---
 

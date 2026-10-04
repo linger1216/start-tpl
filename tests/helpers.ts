@@ -132,6 +132,39 @@ export async function purgeTestAuditRows(operatorIds: readonly string[]): Promis
 	return rows.length;
 }
 
+/**
+ * 清掉指向**这批菜单**的授权策略行(测试收尾用)。
+ *
+ * 直接删表绕过了 `lib/casbin.ts` 的领域函数 ⇒ 调用方清完要自己 `clearCasbinCache()`
+ * (这两个助手只管删行,不碰缓存 —— 有的收尾还要顺手删角色继承的 `g` 行,顺序由调用方定)。
+ */
+export async function purgeCasbinByMenuIds(menuIds: readonly string[]): Promise<void> {
+	if (menuIds.length === 0) return;
+	await db.delete(sysCasbinRule).where(
+		and(
+			eq(sysCasbinRule.ptype, "p"),
+			inArray(
+				sysCasbinRule.v1,
+				menuIds.map((id) => `menu:${id}`),
+			),
+		),
+	);
+}
+
+/** 清掉指向**这批用户**的成员关系 `g` 行(测试收尾用)—— 缓存口径同上 */
+export async function purgeCasbinByUserIds(userIds: readonly string[]): Promise<void> {
+	if (userIds.length === 0) return;
+	await db.delete(sysCasbinRule).where(
+		and(
+			eq(sysCasbinRule.ptype, "g"),
+			inArray(
+				sysCasbinRule.v0,
+				userIds.map((id) => `user:${id}`),
+			),
+		),
+	);
+}
+
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;
 
 /** 断言一个主键是 nanoid(21 位 URL 安全随机串) */

@@ -4,7 +4,8 @@
  * 设计原则:
  *  1. **不依赖 `cmdk` 包**:pnpm store 在沙箱里读不到,绕开 —— 自己实现「按词模糊 + 命中权重」,
  *     模板里要的功能(关键词分组、上/下/回车)足够用。
- *  2. **数据源是 `NAV_NODES`**:菜单列表是模板里最权威的"可达页面"清单;新增页面改 `nav-config.ts` 即可。
+ *  2. **数据源与侧边栏同源**:`useNavNodes()`(`menu.mine`,已按当前用户角色过滤)——
+ *     授权不到的页面不会出现在这里(否则 ⌘K 会变成绕过菜单授权的后门)。
  *  3. **键盘约定**:Mac ⌘K,Win/Linux Ctrl+K 都能打开;ESC 关闭;↑↓ 选择;Enter 跳转;
  *     `onClose` 用 Radix `onOpenChange` 串起来,避免状态分裂。
  *  4. **不带记忆/搜索历史**:模板不需要;派生新项目再加(常见做法是 localStorage 缓存最近 10 条)。
@@ -16,12 +17,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { NAV_NODES, type NavNode } from "./nav-config";
+import type { NavNode } from "./nav-config";
+import { useNavNodes } from "./nav-data";
 
 type Item = { id: string; name: string; path: string; group: string; description?: string };
 type FlatRow = { item: Item; flatIndex: number }; // flatIndex = 在扁平列表里的序号(键盘跳第 N 条要用)
 
-/** 扁平化 `NAV_NODES` 为一条「可跳转」列表。父菜单(无 path 但有 children)只用作分组。 */
+/** 扁平化导航树为一条「可跳转」列表。父菜单(无 path 但有 children)只用作分组。 */
 function flattenNav(nodes: NavNode[]): Item[] {
 	const out: Item[] = [];
 	const walk = (list: NavNode[], group: string) => {
@@ -68,7 +70,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 	// 各行 DOM 引用表 —— 「跳到第 N 条」/「选中滚到可见」都用它。
 	const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
 
-	const items = useMemo(() => flattenNav(NAV_NODES), []);
+	const nodes = useNavNodes();
+	const items = useMemo(() => flattenNav(nodes), [nodes]);
 	const filtered = useMemo(() => {
 		const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 		return items
@@ -80,7 +83,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 	}, [items, query]);
 
 	// 按 group 顺序聚合 ——
-	// 排序后第一个 group 不一定就是 NAV_NODES 里出现顺序的第一个 group,所以先按 group 名稳定排序再列。
+	// 排序后第一个 group 不一定就是菜单里出现顺序的第一个 group,所以先按 group 名稳定排序再列。
 	const grouped = useMemo(() => {
 		const order: string[] = [];
 		const map = new Map<string, Item[]>();

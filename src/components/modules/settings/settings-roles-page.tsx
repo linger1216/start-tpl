@@ -329,7 +329,6 @@ export function SettingsRolesPage() {
 				}}
 				title={`删除角色「${pendingDelete?.name ?? ""}」?`}
 				description="还有用户在用它时会被拒绝 —— 请先在「用户管理」里给他们换成别的角色。"
-				confirmText="删除"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

@@ -1,8 +1,7 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { PARA_TYPE, PARA_TYPE_META, type ParaType } from "#/lib/para-spec";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 参数清单的一行 —— **与 `sys_para` 的十列一一对应**(+ 代码内置默认值的兜底):
@@ -106,11 +105,7 @@ export function parameterColumns({
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => (
-				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
-					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
-				</Badge>
-			),
+			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("editable", {
 			header: "可编辑",
@@ -130,24 +125,8 @@ export function parameterColumns({
 				</span>
 			),
 		}),
-		columnHelper.accessor("createdAt", {
-			header: "创建时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
-		columnHelper.accessor("updatedAt", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<ParameterRow>("createdAt", { header: "创建时间", size: 140 }),
+		timeColumn<ParameterRow>("updatedAt", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,

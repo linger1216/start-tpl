@@ -2,8 +2,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsDataScopePage } from "#/components/modules/settings/settings-data-scope-page";
+import { PAGE_SIZE_KEY } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/data-scope")({
-	loader: ({ context }) => context.queryClient.ensureQueryData(context.trpc.dataScope.list.queryOptions()),
+	/** 预取规则清单 + 表格每页条数参数(与其余列表页同一口径:SSR 首帧直出) */
+	loader: async ({ context }) => {
+		await Promise.all([
+			context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY })),
+			context.queryClient.ensureQueryData(context.trpc.dataScope.list.queryOptions()),
+		]);
+	},
 	component: SettingsDataScopePage,
 });

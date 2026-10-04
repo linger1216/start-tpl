@@ -25,6 +25,7 @@ import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbi
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
 import { alive } from "#/lib/soft-delete";
+import { collectAncestorIds } from "#/lib/tree";
 
 /**
  * 权限码的**形状与比较**住在 `lib/perm-code.ts` —— 功能权限的引擎(`lib/casbin.ts`)与本文件
@@ -89,19 +90,9 @@ type MenuAccess = EffectiveMenus & {
 export async function withAncestorIds(ids: readonly string[]): Promise<string[]> {
 	if (ids.length === 0) return [];
 	const rows = await db.select({ id: sysMenu.id, parentId: sysMenu.parent_id }).from(sysMenu).where(alive(sysMenu));
-	const parentOf = new Map(rows.map((row) => [row.id, row.parentId ?? null]));
-	const out = new Set<string>();
-	for (const id of ids) {
-		let cursor: string | null = id;
-		// `seen` 兼作环形数据的保险(脏数据下最多走一圈,不会死循环)
-		const seen = new Set<string>();
-		while (cursor && !seen.has(cursor)) {
-			seen.add(cursor);
-			out.add(cursor);
-			cursor = parentOf.get(cursor) ?? null;
-		}
-	}
-	return [...out];
+	// 「自己 + 祖先」:`collectAncestorIds()` 只回祖先(不含种子),这里把种子并回去。
+	// 环保护在 `lib/tree.ts` 里(脏数据 A→B→A 不会死循环、也不会把自己当祖先)。
+	return [...new Set([...ids, ...collectAncestorIds(rows, ids)])];
 }
 
 /** 该用户的可见菜单 + 权限标识(并集) */

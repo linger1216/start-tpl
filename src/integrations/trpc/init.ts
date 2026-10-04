@@ -3,7 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
 import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
-import { enforceAny, isAdminUser, isPermissionConfigured } from "#/lib/casbin";
+import { enforceAny, isPermissionConfigured } from "#/lib/casbin";
 import { getCurrentUser } from "#/lib/current-user";
 import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
@@ -125,9 +125,12 @@ const requireUser = t.middleware(async ({ ctx, next }) => {
 export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInput, next }) => {
 	const startedAt = Date.now();
 	const rawInput = await getRawInput();
-	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
 	const config = await readAuditConfig().catch(() => ({ enabled: true, skipPrefixes: ["page."] }));
 	const wanted = config.enabled && shouldAudit({ type, rawInput, skipPrefixes: config.skipPrefixes });
+	// 只读调用(query)永远不入审计 ⇒ 连 base 都不造,省掉一次 clientIp() / describeTarget()
+	if (!wanted) return next();
+
+	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
 	const base = {
 		traceId: String((ctx as { traceId?: string }).traceId ?? ""),
 		path,
@@ -144,23 +147,21 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
 	try {
 		const result = await next();
 		if (result.ok) {
-			if (wanted) void writeAudit({ ...base, status: 1, durationMs: Date.now() - startedAt });
+			void writeAudit({ ...base, status: 1, durationMs: Date.now() - startedAt });
 			return result;
 		}
 		failure = result.error;
 	} catch (error) {
 		failure = error;
 	}
-	if (wanted) {
-		const shaped = failure as { code?: string; message?: string } | undefined;
-		void writeAudit({
-			...base,
-			status: 0,
-			errorCode: shaped?.code ?? "INTERNAL_SERVER_ERROR",
-			errorMessage: shaped?.message ?? String(failure),
-			durationMs: Date.now() - startedAt,
-		});
-	}
+	const shaped = failure as { code?: string; message?: string } | undefined;
+	void writeAudit({
+		...base,
+		status: 0,
+		errorCode: shaped?.code ?? "INTERNAL_SERVER_ERROR",
+		errorMessage: shaped?.message ?? String(failure),
+		durationMs: Date.now() - startedAt,
+	});
 	throw failure;
 });
 
@@ -236,26 +237,6 @@ export function requireCurrentUser(ctx: unknown): InjectedUser {
 	const user = (ctx as { user?: InjectedUser | null }).user;
 	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
 	return user;
-}
-
-/**
- * **只有超管能用**的那几个接口的守卫(当前:值域插件 CRUD 与试跑)。
- *
- * 为什么插件要更严:自定义插件的 `code` 是**在服务端执行的任意 JS**(`new Function` 不是沙箱),
- * 权限点能授给别人,但"能写服务端代码"这件事不该跟着权限点走。所以两条都要:权限点管"进得来",
- * 这里管"这类操作只有超管做"。
- *
- * `isSuper` 是**直调 caller 注入**的标记(脚本 / 测试),与 `permMiddleware` 的判断同源 ——
- * HTTP 路径注入不进来(见 `requireUser` 的注释),所以这里不会成为绕过口子。
- */
-export async function requireAdminUser(ctx: unknown): Promise<string> {
-	const user = (ctx as { user?: InjectedUser | null }).user;
-	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
-	if (user.isSuper) return user.id;
-	if (!(await isAdminUser(user.id))) {
-		throw new TRPCError({ code: "FORBIDDEN", message: "只有系统管理员能操作数据权限插件" });
-	}
-	return user.id;
 }
 
 export const createTRPCRouter = t.router;

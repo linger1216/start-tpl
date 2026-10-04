@@ -51,6 +51,23 @@ const writeInput = z.object({
 	remark: z.string().max(255).nullable().default(null),
 });
 
+/**
+ * 表单 → 库列(新增 / 编辑共用的那一层)—— `name` 必填去空格,其余可空字段一律 `trim() || null`。
+ *
+ * 两处各写一遍时最容易出的错是"改了 create 忘了改 update",于是编辑之后某列突然变空。
+ */
+function gridValues(input: z.infer<typeof writeInput>) {
+	return {
+		name: input.name.trim(),
+		town_name: input.townName?.trim() || null,
+		town_id: input.townId || null,
+		owner_name: input.ownerName?.trim() || null,
+		owner_id: input.ownerId || null,
+		duty: input.duty?.trim() || null,
+		remark: input.remark?.trim() || null,
+	};
+}
+
 export const demoGridRouter = createTRPCRouter({
 	/** 列表 —— 行级数据权限的第一个(也是当前唯一一个)落点:资源 / 插件登记见 `lib/rbac.ts` */
 	list: protectedProcedure.query(async ({ ctx }) => {
@@ -74,18 +91,7 @@ export const demoGridRouter = createTRPCRouter({
 	/** 新建 —— 需要 `sys:grid:add`(见 `lib/rbac.ts` 的 `PERM_BY_PATH`) */
 	create: protectedProcedure.input(writeInput).mutation(async ({ input }) => {
 		const id = newId();
-		await db.insert(sysDemoGrid).values({
-			id,
-			name: input.name.trim(),
-			town_name: input.townName?.trim() || null,
-			town_id: input.townId || null,
-			owner_name: input.ownerName?.trim() || null,
-			owner_id: input.ownerId || null,
-			duty: input.duty?.trim() || null,
-			remark: input.remark?.trim() || null,
-			create_time: new Date(),
-			update_time: new Date(),
-		});
+		await db.insert(sysDemoGrid).values({ id, ...gridValues(input), create_time: new Date(), update_time: new Date() });
 		return { id };
 	}),
 
@@ -94,16 +100,7 @@ export const demoGridRouter = createTRPCRouter({
 		await getRow(input.id);
 		await db
 			.update(sysDemoGrid)
-			.set({
-				name: input.name.trim(),
-				town_name: input.townName?.trim() || null,
-				town_id: input.townId || null,
-				owner_name: input.ownerName?.trim() || null,
-				owner_id: input.ownerId || null,
-				duty: input.duty?.trim() || null,
-				remark: input.remark?.trim() || null,
-				update_time: new Date(),
-			})
+			.set({ ...gridValues(input), update_time: new Date() })
 			.where(eq(sysDemoGrid.id, input.id));
 		return { ok: true };
 	}),

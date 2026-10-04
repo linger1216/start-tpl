@@ -1,9 +1,8 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, timeColumn } from "#/components/modules/shared/table-kit";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
 import { BadgeList } from "#/components/ui/badge-list";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 用户台账的一行(tRPC `user.list` 出参)—— **与 `sys_user` 的列一一对应**,
@@ -105,24 +104,8 @@ export function userColumns({
 				);
 			},
 		}),
-		columnHelper.accessor("createdAt", {
-			header: "创建时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="text-xs text-muted-foreground tabular-nums">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
-		columnHelper.accessor("updatedAt", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="text-xs text-muted-foreground tabular-nums">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<UserRow>("createdAt", { header: "创建时间", size: 140 }),
+		timeColumn<UserRow>("updatedAt", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,

@@ -40,7 +40,8 @@ type ResourceColumnMeta = {
 	dataType: string;
 };
 
-async function selectRows(query: SQL): Promise<Record<string, unknown>[]> {
+/** 跑一条裸 SQL 并把结果按行数组还回来(元数据查询 / 引擎的 count 与样张都用它) */
+export async function selectRows(query: SQL): Promise<Record<string, unknown>[]> {
 	const [rows] = await db.execute(query);
 	return (rows as unknown as Record<string, unknown>[]) ?? [];
 }

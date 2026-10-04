@@ -122,6 +122,11 @@ export function SettingsMenusPage() {
 		}),
 	);
 
+	/** 新建菜单的默认 payload —— 树上「加子级」、工具条「加一级」、表单里「加子级 / 加兄弟」四个入口共用 */
+	function createMenu(parentId: string | null) {
+		createMutation.mutate({ parentId, name: "新菜单", path: draftPath(), icon: "file-text", visible: true });
+	}
+
 	/**
 	 * 同级重排:把 `draggedId` 落到 `targetId` 的前 / 后。
 	 *
@@ -169,19 +174,7 @@ export function SettingsMenusPage() {
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
 						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
-						<Button
-							size="sm"
-							disabled={createMutation.isPending}
-							onClick={() =>
-								createMutation.mutate({
-									parentId: null,
-									name: "新菜单",
-									path: draftPath(),
-									icon: "file-text",
-									visible: true,
-								})
-							}
-						>
+						<Button size="sm" disabled={createMutation.isPending} onClick={() => createMenu(null)}>
 							<Plus className="size-3.5" />
 							新增一级菜单
 						</Button>
@@ -209,15 +202,7 @@ export function SettingsMenusPage() {
 							dragDisabled={dirty || reorderMutation.isPending}
 							onSelect={selectNode}
 							onReorder={handleReorder}
-							onAddChild={(node) =>
-								createMutation.mutate({
-									parentId: node.id,
-									name: "新菜单",
-									path: draftPath(),
-									icon: "file-text",
-									visible: true,
-								})
-							}
+							onAddChild={(node) => createMenu(node.id)}
 							onDelete={(node) => {
 								selectNode(node);
 								setDeleteOpen(true);
@@ -252,25 +237,10 @@ export function SettingsMenusPage() {
 							}}
 							onReset={() => selected && setValues(menuFormValues(selected))}
 							onDelete={() => setDeleteOpen(true)}
-							onAddChild={() =>
-								selected &&
-								createMutation.mutate({
-									parentId: selected.id,
-									name: "新菜单",
-									path: draftPath(),
-									icon: "file-text",
-									visible: true,
-								})
-							}
-							onAddSibling={() =>
-								createMutation.mutate({
-									parentId: selected?.parentId ?? null,
-									name: "新菜单",
-									path: draftPath(),
-									icon: "file-text",
-									visible: true,
-								})
-							}
+							onAddChild={() => {
+								if (selected) createMenu(selected.id);
+							}}
+							onAddSibling={() => createMenu(selected?.parentId ?? null)}
 						/>
 					</CardContent>
 				</Card>
@@ -287,7 +257,6 @@ export function SettingsMenusPage() {
 				}}
 				title={`删除菜单「${selected?.name ?? ""}」?`}
 				description="删除后侧边栏立即不再显示它;如果它下面还有子菜单,会先被拒绝 —— 请先删子级。"
-				confirmText="删除"
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

@@ -1,7 +1,5 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /** 角色表的一行(tRPC `role.list` 出参)—— **与 `sys_role` 的列一一对应** + 一个派生计数 */
 export type RoleRow = {
@@ -51,11 +49,7 @@ export function roleColumns({
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => (
-				<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
-					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
-				</Badge>
-			),
+			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("sort", {
 			header: "排序",
@@ -73,24 +67,8 @@ export function roleColumns({
 				</span>
 			),
 		}),
-		columnHelper.accessor("createTime", {
-			header: "创建时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
-		columnHelper.accessor("updateTime", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<RoleRow>("createTime", { header: "创建时间", size: 140 }),
+		timeColumn<RoleRow>("updateTime", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,
@@ -99,7 +77,6 @@ export function roleColumns({
 		actionsColumn<RoleRow>({
 			size: 190,
 			// 权限点勾选是这个页面最主要的动作 —— 放在最前面
-			// extra: (row) => <ActionButton onClick={() => onPerms(row)}>菜单权限</ActionButton>,
 			onView,
 			onEdit,
 			onDelete,

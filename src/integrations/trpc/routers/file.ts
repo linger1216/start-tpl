@@ -97,16 +97,18 @@ export const fileRouter = createTRPCRouter({
 				.optional(),
 		)
 		.query(async ({ input }) => {
-			const where = [];
-			if (input?.status !== undefined) where.push(eq(sysFile.status, input.status));
+			// 「状态筛选 + 关键字搜索」是**与**关系(两个条件都要满足)—— 别用 `or(...conditions)` 拼,
+			// 那样 status 会让关键字失效(实测过:丢了筛选条件,把不该出现的行也捞出来)。
+			const conditions = [];
+			if (input?.status !== undefined) conditions.push(eq(sysFile.status, input.status));
 			if (input?.keyword) {
 				const kw = `%${input.keyword}%`;
-				where.push(or(like(sysFile.origin_name, kw), like(sysFile.object_key, kw)));
+				conditions.push(or(like(sysFile.origin_name, kw), like(sysFile.object_key, kw)));
 			}
 			const rows = await db
 				.select()
 				.from(sysFile)
-				.where(where.length > 0 ? (where.length === 1 ? where[0] : or(...where)) : undefined)
+				.where(conditions.length > 0 ? and(...conditions) : undefined)
 				.orderBy(desc(sysFile.create_time));
 			return await Promise.all(rows.map((row) => toFile(row)));
 		}),

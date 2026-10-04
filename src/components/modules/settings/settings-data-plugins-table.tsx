@@ -1,8 +1,7 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 插件清单的一行 —— 内置插件(代码里写死的四个)和库里的自定义插件在界面上**同一张表**,
@@ -85,9 +84,7 @@ export function pluginColumns({
 						随代码
 					</Badge>
 				) : (
-					<Badge variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
-						{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
-					</Badge>
+					<EnabledBadge status={ctx.getValue()} />
 				),
 		}),
 		columnHelper.accessor("remark", {
@@ -99,15 +96,7 @@ export function pluginColumns({
 				</span>
 			),
 		}),
-		columnHelper.accessor("updatedAt", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<PluginRow>("updatedAt", { header: "更新时间", size: 140 }),
 		actionsColumn<PluginRow>({
 			size: 200,
 			extra: (row) => (

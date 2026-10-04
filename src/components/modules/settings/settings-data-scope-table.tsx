@@ -1,9 +1,8 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 数据范围规则的一行 —— **与 `sys_data_policy` 的列一一对应**,外加把主体 / 资源 / 插件
@@ -160,15 +159,7 @@ export function dataScopeColumns({
 				</span>
 			),
 		}),
-		columnHelper.accessor("updatedAt", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<DataScopeRow>("updatedAt", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,

@@ -16,14 +16,22 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { sysCasbinRule, sysDept, sysMenu, sysRole, sysUser, sysUserDept } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
 import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
-import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import {
+	assertRejects,
+	caller,
+	closeDb,
+	purgeCasbinByMenuIds,
+	purgeCasbinByUserIds,
+	TEST_PREFIX,
+	uniqueSuffix,
+} from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const deptIds: string[] = [];
@@ -64,28 +72,8 @@ async function makeMenu(label: string, parentId: string | null, type: number, pe
 after(async () => {
 	// 先清策略表里指向测试数据的行 —— 授权是 `p` 行(客体是测试菜单),成员关系是 `g` 行(主体是测试用户)。
 	// 直接删表绕过了 `lib/casbin.ts` 的领域函数,所以末尾要手动刷判定缓存。
-	if (menuIds.length > 0) {
-		await db.delete(sysCasbinRule).where(
-			and(
-				eq(sysCasbinRule.ptype, "p"),
-				inArray(
-					sysCasbinRule.v1,
-					menuIds.map((id) => `menu:${id}`),
-				),
-			),
-		);
-	}
-	if (userIds.length > 0) {
-		await db.delete(sysCasbinRule).where(
-			and(
-				eq(sysCasbinRule.ptype, "g"),
-				inArray(
-					sysCasbinRule.v0,
-					userIds.map((id) => `user:${id}`),
-				),
-			),
-		);
-	}
+	await purgeCasbinByMenuIds(menuIds);
+	await purgeCasbinByUserIds(userIds);
 	clearCasbinCache();
 	if (deptIds.length > 0) await db.delete(sysUserDept).where(inArray(sysUserDept.department_id, deptIds));
 	if (roleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, roleIds));

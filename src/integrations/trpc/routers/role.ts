@@ -134,7 +134,6 @@ export const roleRouter = createTRPCRouter({
 				})
 				.where(eq(sysRole.id, input.id));
 
-			// 为了防止status被更改, 所以要刷新一次casbin状态
 			// id 是 nanoid 不可改,改 name/status 不会动到策略表;但 status 改了会改变装载结果,统一刷一次
 			clearCasbinCache();
 			return toRole(await getRoleRow(input.id));

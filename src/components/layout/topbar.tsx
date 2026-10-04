@@ -151,7 +151,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 
 			{/* ── 右:通知 + 主题 + 用户 ────────────────────────────────── */}
 			<div className="flex items-center gap-1.5">
-				{/* ⌘K / Ctrl+K 命令面板入口(也可鼠标点):扁平化 NAV_NODES,关键词模糊命中,Enter 跳转。 */}
+				{/* ⌘K / Ctrl+K 命令面板入口(也可鼠标点):扁平化菜单树(`useNavNodes()`),关键词模糊命中,Enter 跳转。 */}
 				<Button
 					variant="ghost"
 					size="sm"

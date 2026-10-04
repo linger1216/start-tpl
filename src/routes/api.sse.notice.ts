@@ -9,7 +9,7 @@
  * SSE 的开销、握手、自动重连、原生 `EventSource` 都更贴合这个场景。
  *
  * **鉴权**:继承 better-auth session cookie;未登录返回 401,前端 EventSource 会自动 close。
- * 模板里不重读 cookie 鉴权(中间件已经处理),直接用 `requireCurrentUser` 兜底。
+ * 这里是路由处理器(不是 tRPC ctx),所以用 `#/lib/current-user` 的 `getCurrentUser()` 自己判一次。
  */
 import { createFileRoute } from "@tanstack/react-router";
 

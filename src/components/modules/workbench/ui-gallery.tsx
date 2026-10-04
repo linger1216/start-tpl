@@ -108,7 +108,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { store as demoStore, selectFullName } from "#/lib/demo-store";
-import { formatJson, normalizeValue } from "#/lib/format";
+import { formatJson } from "#/lib/format";
 import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
 import { createMockTable } from "#/lib/mock-table";
 import { joinMultiValue, splitMultiValue } from "#/lib/multi-value";
@@ -867,11 +867,10 @@ function ModuleGallery() {
 					</div>
 				</Cell>
 
-				<Cell name="format" hint="空值兜底 / JSON 展示 / 值归一 —— 表格单元格常用">
+				<Cell name="format" hint="空值兜底 / JSON 展示 —— 表格单元格常用">
 					<div className="space-y-1 font-mono text-xs">
 						<div>MISSING_TEXT ?? PLACEHOLDER_EMPTY = "{MISSING_TEXT ?? PLACEHOLDER_EMPTY}"</div>
 						<div>EMPTY_TEXT ?? PLACEHOLDER_EMPTY = "{EMPTY_TEXT ?? PLACEHOLDER_EMPTY}"</div>
-						<div>normalizeValue("a、b;c") = {JSON.stringify(normalizeValue("a、b;c"))}</div>
 						<div>formatJson(JS 对象) =</div>
 						<pre className="ml-2 rounded bg-muted px-2 py-1 text-xs">{formatJson({ a: 1 })}</pre>
 					</div>

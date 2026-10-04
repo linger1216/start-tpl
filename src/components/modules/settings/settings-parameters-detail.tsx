@@ -1,4 +1,5 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { EnabledBadge } from "#/components/modules/shared/table-kit";
 import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
 import { PARA_TYPE_META } from "#/lib/para-spec";
@@ -35,9 +36,7 @@ export function SettingsParametersDetail({
 						<Badge variant="secondary" className="font-mono text-xs">
 							{PARA_TYPE_META[row.type].label}
 						</Badge>
-						<Badge variant={row.status === 1 ? "secondary" : "outline"} className="text-xs">
-							{row.status === 1 ? "启用" : "停用"}
-						</Badge>
+						<EnabledBadge status={row.status} />
 					</>
 				) : null
 			}

@@ -31,6 +31,7 @@ import { newId } from "#/lib/ids";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType } from "#/lib/menu-spec";
 import { effectiveMenusFor, PERM_FORMAT } from "#/lib/rbac";
+import { reorderSiblings } from "#/lib/reorder";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -173,33 +174,15 @@ export const menuRouter = createTRPCRouter({
 	reorder: protectedProcedure
 		.input(z.object({ parentId: z.string().nullable(), orderedIds: z.array(z.string().min(1)).min(1) }))
 		.mutation(async ({ input }) => {
-			const parentId = input.parentId ?? null;
-			// 同级集合只看活着的:已软删的兄弟不该出现在"必须包含全部同级"的清单里
-			const siblings = await db
-				.select({ id: sysMenu.id, parentId: sysMenu.parent_id })
-				.from(sysMenu)
-				.where(
-					and(parentId === null ? sql`${sysMenu.parent_id} is null` : eq(sysMenu.parent_id, parentId), alive(sysMenu)),
-				);
-			const siblingIds = new Set(siblings.map((row) => row.id));
-			const unknown = input.orderedIds.filter((id) => !siblingIds.has(id));
-			if (unknown.length > 0) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `只能在同一级内排序,以下菜单不属于同一父节点:${unknown.join("、")}`,
-				});
-			}
-			if (input.orderedIds.length !== siblingIds.size) {
-				throw new TRPCError({ code: "BAD_REQUEST", message: "排序清单必须包含该级下全部菜单" });
-			}
-			// 事务里逐行写 sort:要么全改、要么不改
-			await db.transaction(async (tx) => {
-				for (const [index, id] of input.orderedIds.entries()) {
-					await tx.update(sysMenu).set({ sort: index, update_time: new Date() }).where(eq(sysMenu.id, id));
-				}
+			const updated = await reorderSiblings({
+				table: sysMenu,
+				parentId: input.parentId ?? null,
+				orderedIds: input.orderedIds,
+				noun: "菜单",
+				parentNoun: "父节点",
 			});
 			const rows = await db.select().from(sysMenu).where(alive(sysMenu)).orderBy(asc(sysMenu.sort), asc(sysMenu.name));
-			return { updated: input.orderedIds.length, rows: rows.map(toMenu) };
+			return { updated, rows: rows.map(toMenu) };
 		}),
 
 	create: protectedProcedure

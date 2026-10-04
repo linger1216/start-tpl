@@ -293,6 +293,8 @@ export function SettingsTagsPage() {
 						? `确认删除「${pendingDelete.label}」?它会连带删掉其下全部子节点(共 ${countSubtree(pendingDelete)} 个)。`
 						: ""
 				}
+				isPending={deleteMutation.isPending}
+				pendingText="删除中…"
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ id: pendingDelete.id })}
 			/>
 		</PageFrame>

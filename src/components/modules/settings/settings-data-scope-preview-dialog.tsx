@@ -263,7 +263,7 @@ export function SettingsDataScopePreviewDialog({
 											{`-- 数出「能看到几行」\n${sql.count.text}\n-- 参数\n${sql.count.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)\n"}\n\n-- 贴出这些行\n${sql.rows.text}\n-- 参数\n${sql.rows.params.map((value, index) => `?${index + 1} = ${paramText(value)}`).join("\n") || "(无)"}`}
 										</pre>
 										<span className="text-[11px] text-muted-foreground">
-											表名与列名拼在语句里(过 isSafeIdent 白名单),值一律走 ? 参数。
+											表名与列名拼在语句里(过 isIdent 白名单),值一律走 ? 参数。
 										</span>
 									</>
 								) : (

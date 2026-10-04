@@ -1,8 +1,7 @@
-import { actionsColumn, TextCell } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
 import { createAppColumnHelper } from "#/lib/table";
-import { formatLocalMinute } from "#/lib/time";
 import type { SettingsDictRow } from "./settings-dictionary-types";
 
 export type SettingsDictCallbacks = {
@@ -75,11 +74,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => (
-				<Badge variant={ctx.getValue() === 1 ? "secondary" : "outline"} className="text-xs">
-					{ctx.getValue() === 1 ? "启用" : "停用"}
-				</Badge>
-			),
+			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("remark", {
 			header: "说明",
@@ -90,24 +85,8 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 				</span>
 			),
 		}),
-		columnHelper.accessor("createTime", {
-			header: "创建时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
-		columnHelper.accessor("updateTime", {
-			header: "更新时间",
-			size: 140,
-			cell: (ctx) => (
-				<span className="tabular-nums text-xs text-muted-foreground">
-					<TextCell value={formatLocalMinute(ctx.getValue())} />
-				</span>
-			),
-		}),
+		timeColumn<SettingsDictRow>("createTime", { header: "创建时间", size: 140 }),
+		timeColumn<SettingsDictRow>("updateTime", { header: "更新时间", size: 140 }),
 		columnHelper.accessor("id", {
 			header: "ID",
 			size: 200,

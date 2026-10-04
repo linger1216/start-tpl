@@ -263,6 +263,8 @@ export function SettingsFilesPage() {
 						? `确认删除选中的 ${pendingDelete.length} 个文件?对象会从桶里真删掉,记录保留为「已删除」。`
 						: `确认删除「${pendingDelete?.[0]?.originName ?? ""}」?对象会从桶里真删掉,记录保留为「已删除」。`
 				}
+				isPending={deleteMutation.isPending}
+				pendingText="删除中…"
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ ids: pendingDelete.map((row) => row.id) })}
 			/>
 		</PageFrame>
