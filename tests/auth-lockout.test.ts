@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { like } from "drizzle-orm";
+import { inArray, like } from "drizzle-orm";
 import { sysAccount, sysAccountLockout, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
@@ -50,15 +50,11 @@ after(async () => {
 	).filter((r) => r.email.startsWith(`${TEST_PREFIX}lockout_`));
 	const ids = mine.map((r) => r.id);
 	if (ids.length > 0) {
-		// 一次 inArray 搞定
-		const { inArray } = await import("drizzle-orm");
+		// 一次 inArray 搞定(`mine` 与 `ids` 一一对应,两个 if 是同一个条件)
 		await db.delete(sysSession).where(inArray(sysSession.userId, ids));
 		await db.delete(sysAccount).where(inArray(sysAccount.userId, ids));
 		await db.delete(sysUser).where(inArray(sysUser.id, ids));
-	}
-	// 风控表按**邮箱**记行,不随用户删:自己造的行自己清(留下的都是 `__test__lockout_*`)
-	if (mine.length > 0) {
-		const { inArray } = await import("drizzle-orm");
+		// 风控表按**邮箱**记行,不随用户级联删:自己造的行自己清(留下的都是 `__test__lockout_*`)
 		await db.delete(sysAccountLockout).where(
 			inArray(
 				sysAccountLockout.email,

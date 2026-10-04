@@ -66,9 +66,8 @@ async function waitForOwnLog(path: string, marker: string): Promise<typeof sysLo
 }
 
 after(async () => {
-	if (createdLogIds.length > 0) {
-		for (const id of createdLogIds) await db.delete(sysLog).where(eq(sysLog.id, id));
-	}
+	// 空数组时循环本来就不跑,不用再套一层 if
+	for (const id of createdLogIds) await db.delete(sysLog).where(eq(sysLog.id, id));
 	// 子表 → 父表:session / account 先删,不然 `sys_user` 那行会留下孤儿会话
 	for (const id of createdUserIds) {
 		await db.delete(sysSession).where(eq(sysSession.userId, id));

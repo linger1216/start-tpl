@@ -1,4 +1,5 @@
 import type { ExcelColumn, ImportField } from "#/lib/excel";
+import { joinMultiValue } from "#/lib/multi-value";
 
 import type { UserRow } from "./settings-users-table";
 
@@ -9,13 +10,11 @@ import type { UserRow } from "./settings-users-table";
  * 永远导不出来。所以导入的字段(`USER_IMPORT_FIELDS`)比导出的列多这一列,其余同表头 ——
  * 拿导出的文件当模板,补上密码列就能回导。
  *
- * 「角色」「部门」是**多值**:导出用 `、` 连接,导入侧 `、` `,` `;` 与空白都认
- * (服务端 `routers/user.ts` 的 `splitNames` 与这里的 `MULTI_SEP` 配套)。
+ * 「角色」「部门」是**多值**:导出用 `、` 连接(走 `lib/multi-value.ts` 的 `joinMultiValue`),
+ * 导入侧服务端 `routers/user.ts` 的 `splitNames` 认 `、` `,` `;` 与空白 —— 比导出侧宽,
+ * 因为它还要吃人手填的「张三 李四」这种写法。
  */
-export type UserExcelKey = "name" | "email" | "roles" | "departments" | "emailVerified";
-
-/** 多值单元格的分隔符 —— 导入侧允许的写法更宽,导出只用它 */
-export const MULTI_SEP = "、";
+type UserExcelKey = "name" | "email" | "roles" | "departments" | "emailVerified";
 
 export const USER_EXCEL_COLUMNS: readonly ExcelColumn<UserExcelKey>[] = [
 	{ key: "name", label: "姓名", width: 16, required: true },
@@ -39,8 +38,8 @@ export function userExcelRows(rows: readonly UserRow[]): Array<Record<UserExcelK
 	return rows.map((row) => ({
 		name: row.name,
 		email: row.email,
-		roles: row.roleNames.join(MULTI_SEP),
-		departments: row.departmentNames.join(MULTI_SEP),
+		roles: joinMultiValue(row.roleNames),
+		departments: joinMultiValue(row.departmentNames),
 		emailVerified: row.emailVerified ? "是" : "否",
 	}));
 }

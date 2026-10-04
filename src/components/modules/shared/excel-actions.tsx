@@ -3,15 +3,15 @@
  *
  * 为什么要有这一层:`xlsx` 有好几百 KB,只能**点了才下载**(静态 import 会把它拖进台账页主 chunk),
  * 而"动态 import + 没数据就禁用 + 进行中状态 + 失败提示"这几件事每个台账页都要重写一遍。
- * **列头与列宽不在这里** —— 各域自己的 `XXX_EXCEL_COLUMNS` / `XXX_IMPORT_FIELDS` 才是真源
- * (理由见 `lib/excel.ts` 的文件头)。
+ * **列头与列宽不在这里** —— 各域自己的 `XXX_EXCEL_COLUMNS` 才是真源(理由见 `lib/excel.ts` 的文件头);
+ * 导入字段与导出一致时直接复用同一份,只有多/少列时才另立一份(如 users 域多了「初始密码」)。
  *
  * 家族归属:「导出」是工具条里的操作按钮,走 `ActionButton`(纯文字、不带图标),与「列」`ColumnToggle`、
  * 「刷新」`RefreshButton` 并排;「导入」会开对话框,按约定用 `Button`(可带图标)—— 示例见
  * `workbench/ui-gallery-table.tsx` 的工具条与 `doc/界面约定.md` 的按钮分族。
  */
 import { Upload } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
 
 import { ActionButton } from "#/components/ui/action-button";
@@ -28,7 +28,6 @@ export function ExcelExportButton<Key extends string>({
 	columns,
 	rows,
 	fileName,
-	disabled = false,
 }: {
 	/** 列契约(表头的真源在各域,不在这里再写一份) */
 	columns: readonly ExcelColumn<Key>[];
@@ -36,14 +35,13 @@ export function ExcelExportButton<Key extends string>({
 	rows: readonly object[];
 	/** 文件名(不含日期后缀;`writeSheet` 会补 `-YYYY-MM-DD`) */
 	fileName: string;
-	disabled?: boolean;
 }) {
 	const [busy, setBusy] = useState(false);
 	const empty = rows.length === 0;
 
 	return (
 		<ActionButton
-			disabled={disabled || busy || empty}
+			disabled={busy || empty}
 			title={empty ? "没有可导出的行" : undefined}
 			onClick={async () => {
 				setBusy(true);
@@ -77,27 +75,22 @@ export function ExcelImportButton({
 	fields,
 	fileNamePrefix = "导入模板",
 	onImport,
-	options,
-	disabled = false,
 }: {
 	/** 对话框标题,如「导入字典」 */
 	title: string;
 	description?: string;
 	/** 字段契约(与导出表头同源,别各写一份) */
-	fields: ImportField[];
+	fields: readonly ImportField[];
 	fileNamePrefix?: string;
 	/** 解析好的行 → 落库;返回 `ImportResult`(逐行结果由对话框展示) */
 	onImport: (rows: ImportRow[]) => Promise<ImportResult>;
-	/** 文件选择区下方的补充控件(可选,如「覆盖已有项」开关) */
-	options?: ReactNode;
-	disabled?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const [pending, setPending] = useState(false);
 
 	return (
 		<>
-			<Button size="sm" variant="outline" disabled={disabled} onClick={() => setOpen(true)}>
+			<Button size="sm" variant="outline" onClick={() => setOpen(true)}>
 				<Upload className="size-3.5" />
 				导入
 			</Button>
@@ -112,7 +105,6 @@ export function ExcelImportButton({
 						description={description}
 						fields={fields}
 						fileNamePrefix={fileNamePrefix}
-						options={options}
 						isPending={pending}
 						onSubmit={async (rows) => {
 							setPending(true);

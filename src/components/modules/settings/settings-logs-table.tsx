@@ -62,9 +62,7 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 			header: "结果",
 			size: 90,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() === 1 ? "secondary" : "destructive"}>
-					{ctx.getValue() === 1 ? "成功" : "失败"}
-				</Badge>
+				<Badge variant={ctx.getValue() === 1 ? "secondary" : "destructive"}>{statusText(ctx.getValue())}</Badge>
 			),
 		}),
 		columnHelper.accessor("target", {
@@ -112,7 +110,7 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 }
 
 /** 导出列的业务字段名(与 `LOG_EXCEL_COLUMNS` 的 key 严格同集) */
-export type LogExcelKey =
+type LogExcelKey =
 	| "createTime"
 	| "label"
 	| "path"
@@ -149,6 +147,9 @@ export const LOG_EXCEL_COLUMNS: readonly ExcelColumn<LogExcelKey>[] = [
 	{ key: "input", label: "入参快照", width: 40 },
 ];
 
+/** 状态码 → 中文(列里的徽章与导出的单元格共用一份,免得两处各写一遍 1 ? 成功 : 失败) */
+const statusText = (status: number) => (status === 1 ? "成功" : "失败");
+
 /**
  * 行 → 导出值:**页面上看到什么就导出什么**。
  *
@@ -162,7 +163,7 @@ export function logExcelRows(rows: readonly LogRow[]): Array<Record<LogExcelKey,
 		path: row.path,
 		operatorName: row.operatorName ?? "",
 		type: row.type ?? "",
-		status: row.status === 1 ? "成功" : "失败",
+		status: statusText(row.status),
 		target: row.target ?? "",
 		errorCode: row.errorCode ?? "",
 		errorMessage: row.errorMessage ?? "",

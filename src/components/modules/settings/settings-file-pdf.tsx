@@ -31,7 +31,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 /** 最多渲染前这么多页:预览用不着全渲染,完整内容给「打开」 */
 const PAGE_MAX = 10;
 
-export default function SettingsFilePdf({ data }: { data: Uint8Array }) {
+export function SettingsFilePdf({ data }: { data: Uint8Array }) {
 	const [numPages, setNumPages] = useState(0);
 
 	return (

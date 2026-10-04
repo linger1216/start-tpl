@@ -3,6 +3,7 @@ import { useState } from "react";
 import { actionsColumn, selectColumn, TextCell } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Badge } from "#/components/ui/badge";
+import { filePreviewKind } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
 import { createAppColumnHelper } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
@@ -29,14 +30,15 @@ export type FileRow = {
 
 const columnHelper = createAppColumnHelper<FileRow>();
 
-/** 状态码 → 徽章文案与语气(与库里的 `status` 三态严格对应) */
-const STATUS_META: Record<number, { label: string; variant: "secondary" | "outline" | "destructive" }> = {
+/** 状态码 → 徽章文案与语气(与库里的 `status` 三态严格对应;详情页也用它,所以导出) */
+export const STATUS_META: Record<number, { label: string; variant: "secondary" | "outline" | "destructive" }> = {
 	0: { label: "待确认", variant: "outline" },
 	1: { label: "正常", variant: "secondary" },
 	2: { label: "已删除", variant: "destructive" },
 };
 
-const isImage = (row: FileRow) => (row.contentType ?? "").startsWith("image/");
+/** 判图片统一走 `lib/file-preview.ts`(它会 trim + 小写;这里的裸前缀判断曾认不出 " Image/JPEG ") */
+const isImage = (row: FileRow) => filePreviewKind(row) === "image";
 
 /**
  * 缩略图:图片给真图(服务端已经签好地址了),其余给类型图标。

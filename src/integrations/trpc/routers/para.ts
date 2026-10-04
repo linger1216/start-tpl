@@ -210,7 +210,7 @@ export const paraRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
-			const result: ImportOutcome = { created: 0, errors: [], duplicates: [] };
+			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
 
 			// ① 逐行校验 + 去重(不碰库):同一批里同一个 key 只认第一条,后面的报错,免得"谁覆盖谁"看不出来
 			const seen = new Set<string>();

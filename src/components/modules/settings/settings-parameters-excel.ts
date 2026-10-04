@@ -11,12 +11,12 @@
  * ⚠️ 这个文件只许 `import type` 引 `#/lib/excel`,**不能**引 `xlsx` / React:
  * 它要同时被页面(客户端)和测试用到,把重依赖拖进来就白费了懒加载。
  */
-import type { ExcelColumn, ImportField } from "#/lib/excel";
+import type { ExcelColumn } from "#/lib/excel";
 import { PARA_TYPE_META } from "#/lib/para-spec";
 
 import type { ParameterRow } from "./settings-parameters-table";
 
-export type ParaExcelKey = "key" | "value" | "type" | "group" | "remark";
+type ParaExcelKey = "key" | "value" | "type" | "group" | "remark";
 
 export const PARA_EXCEL_COLUMNS: readonly ExcelColumn<ParaExcelKey>[] = [
 	{ key: "key", label: "参数名", width: 26, required: true },
@@ -25,9 +25,6 @@ export const PARA_EXCEL_COLUMNS: readonly ExcelColumn<ParaExcelKey>[] = [
 	{ key: "group", label: "分组", width: 14 },
 	{ key: "remark", label: "说明", width: 34 },
 ];
-
-/** 导入对话框的字段 = 导出表头(同一份真源,免得两边走偏) */
-export const PARA_IMPORT_FIELDS: ImportField[] = PARA_EXCEL_COLUMNS.map((column) => ({ ...column }));
 
 /** 参数行 → Excel 行(类型码翻成中文名,人改起来才知道该填什么) */
 export function paraExcelRows(rows: readonly ParameterRow[]): Array<Record<ParaExcelKey, string>> {

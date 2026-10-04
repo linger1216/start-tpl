@@ -25,14 +25,14 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  * (原先那份内存 mock 已整体删除,不摆假数据)。
  */
 
-// ══ 二、RBAC 权限模型 —— 已下线(2026-09)═════════════════════
+// ══ 二、当年那套内存 RBAC 五表 —— 已下线(2026-09)════════════
 //
-// `role` / `permission` / `user_role` / `role_permission` / `user_permission` 五张表**已删除**:
-// 本轮不做 RBAC,后期再加。原有的种子脚本 `scripts/seed-permissions.ts` 一并删除。
+// 原先这里声明的 `role` / `permission` / `user_role` / `role_permission` / `user_permission`
+// 与种子脚本 `scripts/seed-permissions.ts` **都已删除**:真正的 RBAC 实装在
+// `data-base-schema.ts`(部门 / 角色 / 成员 / 角色→菜单 + casbin 策略),不再走这套内存模型。
 //
-// **前端页面状态**:系统设置七页全部接真实数据(用户 / 部门 / 角色三页在 `data-base-schema.ts` 的那批表上)——
-// 原先撑着它们的 `src/mocks/settings.ts`(纯内存 mock)已整体删除,页面不再摆假数据。
-// 后期真做 RBAC 时,把定义加回这里 + 重建种子脚本 + 把这三页接到真实接口即可。
+// **前端页面状态**:系统设置十二页全部接真实数据 —— 原先撑着它们的 `src/mocks/settings.ts`
+// (纯内存 mock)也一并删除,页面不摆假数据。
 
 // ══ 三、模板示例表(删 demo 时一并删)═════════════════════════
 

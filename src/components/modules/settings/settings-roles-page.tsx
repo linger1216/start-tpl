@@ -6,11 +6,7 @@ import type { MenuRow } from "#/components/layout/nav-menu";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsRolesDetail } from "#/components/modules/settings/settings-roles-detail";
-import {
-	ROLE_EXCEL_COLUMNS,
-	ROLE_IMPORT_FIELDS,
-	roleExcelRows,
-} from "#/components/modules/settings/settings-roles-excel";
+import { ROLE_EXCEL_COLUMNS, roleExcelRows } from "#/components/modules/settings/settings-roles-excel";
 import {
 	type RoleFormPayload,
 	type RoleFormTab,
@@ -264,7 +260,7 @@ export function SettingsRolesPage() {
 						<ExcelImportButton
 							title="导入角色"
 							description="一行 = 一个角色(角色名是业务键)。库里没有的建、已有的改排序 / 状态 / 备注;留空的单元格不动库里的值。"
-							fields={ROLE_IMPORT_FIELDS}
+							fields={ROLE_EXCEL_COLUMNS}
 							fileNamePrefix="角色导入模板"
 							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
 						/>

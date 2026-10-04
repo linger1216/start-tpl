@@ -8,11 +8,11 @@
  * `cellText` 只会把对象变成 `[object Object]`(见 `lib/excel.ts`),必须先在这里摊平。
  */
 import type { SettingsDictRow } from "#/components/modules/settings/settings-dictionary-types";
-import type { ExcelColumn, ImportField } from "#/lib/excel";
+import type { ExcelColumn } from "#/lib/excel";
 
-export type DictExcelKey = "code" | "name" | "label" | "value" | "remark";
+type DictExcelKey = "code" | "name" | "label" | "value" | "remark";
 
-/** 表头的唯一真源:导入字段由它映射而来,别在两处各写一遍 */
+/** 表头的唯一真源:导出与导入都用它,别在两处各写一遍 */
 export const DICT_EXCEL_COLUMNS: readonly ExcelColumn<DictExcelKey>[] = [
 	{ key: "code", label: "字典编码", width: 22, required: true },
 	{ key: "name", label: "字典名称", width: 20 },
@@ -20,9 +20,6 @@ export const DICT_EXCEL_COLUMNS: readonly ExcelColumn<DictExcelKey>[] = [
 	{ key: "value", label: "字典项取值", width: 22 },
 	{ key: "remark", label: "备注", width: 30 },
 ];
-
-/** 导入对话框的字段配置(与导出表头同序同名;`required` 只有导入用得上) */
-export const DICT_IMPORT_FIELDS: ImportField[] = DICT_EXCEL_COLUMNS.map((column) => ({ ...column }));
 
 /** 行 → 导出值:一个字典摊成多行(每个字典项一行;没有字典项的字典占一行) */
 export function dictExcelRows(rows: readonly SettingsDictRow[]): Array<Record<DictExcelKey, string>> {

@@ -20,7 +20,7 @@ type Parsed = {
 };
 
 /** 解析 xlsx -> 字段配置映射的行 */
-function parseWorkbook(buffer: ArrayBuffer, fields: ImportField[]): Parsed {
+function parseWorkbook(buffer: ArrayBuffer, fields: readonly ImportField[]): Parsed {
 	const warnings: string[] = [];
 	try {
 		const wb = XLSX.read(buffer, { type: "array" });
@@ -81,19 +81,16 @@ export function ExcelImportDialog({
 	onSubmit,
 	isPending,
 	fileNamePrefix = "导入模板",
-	options,
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
 	title: string;
 	description?: string;
-	fields: ImportField[];
-	/** 同步或异步都接受:mock 表写回是同步的,真后端导入会是异步的 */
-	onSubmit: (rows: ImportRow[]) => ImportResult | undefined | Promise<ImportResult | undefined>;
+	fields: readonly ImportField[];
+	/** 解析好的行 → 落库;整批抛错由本对话框兜住(逐行错误走返回值的 `errors`) */
+	onSubmit: (rows: ImportRow[]) => Promise<ImportResult>;
 	isPending: boolean;
 	fileNamePrefix?: string;
-	/** 调用方自定义的导入选项(如「清空后导入」「跳过重复」),渲染在文件选择区下方 */
-	options?: React.ReactNode;
 }) {
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const [parsed, setParsed] = useState<Parsed | null>(null);
@@ -125,8 +122,7 @@ export function ExcelImportDialog({
 	async function handleImport() {
 		if (!parsed || parsed.rows.length === 0) return;
 		try {
-			const r = await onSubmit(parsed.rows);
-			if (r) setResult(r);
+			setResult(await onSubmit(parsed.rows));
 		} catch (error) {
 			// 逐行错误由 ImportResult.errors 报;这里兜住"整批抛"(权限 / 网络),
 			// 别让它变成 unhandled rejection 而对话框毫无反馈
@@ -170,8 +166,6 @@ export function ExcelImportDialog({
 							下载模板
 						</Button>
 					</div>
-
-					{options}
 
 					{parsed && (
 						<div className="rounded-xl border border-border bg-secondary/40 p-3 text-xs">

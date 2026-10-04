@@ -2,7 +2,7 @@
 
 一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、41 个 UI 原语、16 个跨域展示件、台账页面骨架,以及 tRPC + Drizzle + Better Auth + RBAC(页面级拦截 + 菜单/按钮授权)的完整接线。
 
-模板里**只保留一个真实业务模块**(系统设置,九个页面),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
+模板里**只保留一个真实业务模块**(系统设置,十二个页面),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
 
 技术栈:React 19 · TanStack Start / Router / Query / Form / Table **v9** · tRPC **v11** · Drizzle ORM + MySQL / 达梦 · Better Auth · Tailwind CSS **v4** · Biome · Vite 8 · TypeScript 6
 
@@ -15,16 +15,16 @@
 ```bash
 pnpm install
 cp .env.example .env.local     # 然后按需填写 DATABASE_URL 等
-pnpm db:create                 # 建 19 张系统表(18 张 sys_* + demo 用的 demo_grid,幂等)
+pnpm db:create                 # 建 21 张系统表(20 张 sys_* + demo 用的 demo_grid,幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
-pnpm db:seed:demo              # 可选:26 个演示账号 + 71 条网格数据
+pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是本机手工准备的,种子不建)
 pnpm dev                       # http://localhost:3000
 ```
 
 `pnpm dev` 固定监听 **3000** 端口,并通过 `NODE_OPTIONS=--import ./instrument.server.mjs` 预加载服务端 Sentry 初始化。未配置 `VITE_SENTRY_DSN` 时会打印一条 `VITE_SENTRY_DSN is not defined. Sentry is not running.`,属于正常提示。
 
 > **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
-> `/settings` 十页全部读真库,没配 `DATABASE_URL` 会落到错误边界。演示账号见 `doc/测试数据/README.md`(密码统一 `Passw0rd123`,管理员 `admin@example.com`)。
+> `/settings` 十二页全部读真库,没配 `DATABASE_URL` 会落到错误边界。演示账号见 `doc/测试数据/README.md`(密码统一 `Passw0rd123`,管理员 `admin@example.com`)。
 > 不想在本机装 MySQL / MinIO:`docker compose` 一套起齐,见下文「Docker / 容器化」。
 
 ---
@@ -35,8 +35,8 @@ pnpm dev                       # http://localhost:3000
 | --- | --- |
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
 | **UI 组件示例** | ★ 就在工作台 `/` 页里:41 个原语的最小可用例子 + 台账表格实战示例 |
-| **框架能力** `/demo/*` | 6 个能力样例(数据请求 / 表单 / 表格 / 数据库 / 登录认证 / 全局状态)+ 1 个演示业务页「网格履职」 |
-| **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,**十个页面**,全部读写真库(见下文「系统设置模块」) |
+| **框架能力** `/demo/*` | 6 个能力样例(数据请求 / 表单 / 表格 / 数据库 / 登录认证 / 全局状态)+ 2 个演示业务页(「业务首页」+「网格履职」) |
+| **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,**十二个页面**,全部读写真库(见下文「系统设置模块」) |
 
 菜单树是**库 + 兜底**双源:`sys_menu` 表有数据时以表为准,为空则退回 `src/components/layout/nav-config.ts` 的 `NAV_NODES`。改 `NAV_NODES` 后侧边栏、面包屑、模块概览、工作台四处会一起变。
 
@@ -53,8 +53,8 @@ src/
 │   │   ├── route.tsx             # 后台外壳 + 页面级权限守卫(beforeLoad 读会话 / 判页面权限)
 │   │   ├── index.tsx             # 工作台(入口页 + UI 示例)
 │   │   ├── notices.tsx           # 通知中心
-│   │   ├── demo/                 # 框架能力样例(7 页)
-│   │   └── settings/             # 系统设置(11 个路由文件 = 索引 + 10 页)
+│   │   ├── demo/                 # 框架能力样例(8 个路由文件)
+│   │   └── settings/             # 系统设置(13 个路由文件 = 索引 + 12 页)
 │   ├── api.trpc.$.tsx            # tRPC 请求入口 /api/trpc/*
 │   └── api/auth/$.ts             # Better Auth 请求入口 /api/auth/*
 ├── components/
@@ -62,7 +62,7 @@ src/
 │   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 + nav-config / nav-menu / nav-data
 │   ├── modules/shared/           # 16 个领域无关展示件(表格套件 / 工具栏 / 详情 / 树 / 标签 / 权限树 / Excel…)
 │   ├── modules/workbench/        # 工作台 + UI 示例(ui-gallery)
-│   ├── modules/settings/         # 系统设置十页的页面 / 表格 / 表单 / 详情件(40 个文件)
+│   ├── modules/settings/         # 系统设置十二页的页面 / 表格 / 表单 / 详情件(49 个文件)
 │   ├── modules/demo/             # 框架能力样例的页面件
 │   └── modules/notice/           # 通知中心件
 ├── lib/
@@ -77,7 +77,7 @@ src/
 │   ├── storage.ts / storage-minio.ts / menu-detail-path.ts / mock-table.ts / demo-store.ts / utils.ts
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 19 张系统表(18 张 sys_* + demo_grid:设置 / 认证 / 权限 / 数据权限 / 日志…)
+│   ├── data-base-schema.ts       # 21 张系统表(20 张 sys_* + demo_grid:设置 / 认证 / 权限 / 数据权限 / 日志…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
@@ -190,7 +190,7 @@ src/
 | `pnpm typecheck` | `tsc --noEmit` | 类型检查,只报告不写文件 |
 | `pnpm check` | `biome check --write .` | 格式化 + lint + 整理 import,**会写回文件** |
 | `pnpm generate-routes` | `tsr generate` | 扫描 `src/routes/` 重新生成 `routeTree.gen.ts` |
-| `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 15 个测试文件,直连真库;跑完会清掉自己造的 `__test__*` 数据 |
+| `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 20 个测试文件,直连真库;跑完会清掉自己造的 `__test__*` 数据 |
 | `pnpm test:cov` | 同上 + `--experimental-test-coverage` | 覆盖率是 Node 自带的(**没有 c8 / vitest**)。口径见下文「覆盖率怎么读」 |
 | `pnpm check:legacy` | `node scripts/check-legacy.mjs` | 业务语汇残留扫描(清空业务后应当无输出) |
 
@@ -199,7 +199,7 @@ src/
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit;只管 `src/db/schema.ts`(当前是 `todos`) |
-| `pnpm db:create` | 建 **19 张**系统表(18 张 `sys_*` + `demo_grid`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:create` | 建 **21 张**系统表(20 张 `sys_*` + `demo_grid`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
 | `pnpm db:sync:meta` | 只对齐列注释与索引名(老库升级用,**幂等**;第二次必须打印「无需改动」) |
 | `pnpm db:migrate:ids` | 把自增 id 迁成 nanoid(一次性) |
 | `pnpm db:dm:smoke` / `db:dm:defaults` | 达梦专项:drizzle 冒烟 / 默认值对齐 |
@@ -214,7 +214,7 @@ src/
 | `pnpm db:seed:tags` | 标签种子(`scripts/tag-seed-data.ts`:17 维度 / 120 标签) |
 | `pnpm db:seed:rbac` | 角色 / 菜单权限点 / 按钮级权限点 |
 | `pnpm db:minio:init` | 建 MinIO 桶 |
-| `pnpm db:seed:demo` | 演示数据:26 个演示账号(13 街镇 × 队长/队员)、71 条网格 |
+| `pnpm db:seed:demo` | 演示数据:71 条网格(README 里提到的 26 个演示账号是**本机手工准备**的,种子脚本不建) |
 
 ---
 
@@ -233,7 +233,7 @@ docker compose up -d                                  # http://localhost:3000
 | `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
 | `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
-| `bootstrap` | — | profile `setup` 的一次性任务:建 19 张表 + 四个种子 + `db:minio:init` |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 21 张表 + 四个种子 + `db:minio:init` |
 
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
@@ -286,7 +286,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **19 张系统表**(18 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **21 张系统表**(20 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -432,7 +432,7 @@ function UsersPage() {
 
 ## 系统设置模块(唯一保留的真实业务)
 
-`/settings/*` **十个页面,全部读写真实数据库**,没有占位页、没有 mock:
+`/settings/*` **十二个页面,全部读写真实数据库**,没有占位页、没有 mock:
 
 | 页面 | 路由 | 数据来源 | 演示的骨架 |
 | --- | --- | --- | --- |
@@ -444,7 +444,10 @@ function UsersPage() {
 | 参数管理 | `/settings/parameters` | `sys_para` | 按类型码(整数 / 开关 / 文本 / JSON)校验的参数表单;详情 / 编辑 / 删除 |
 | 标签管理 | `/settings/tags` | `sys_tag` + `sys_tag_relation` | 主表 + 子表条目弹窗 + 拖拽树 |
 | 审计日志 | `/settings/logs` | `sys_log` | 只读台账 + 详情(带筛选与导出) |
-| 文件管理 | `/settings/files` | `sys_file` + MinIO | 上传 / 重命名 / 删除 / 预览(预签名地址) |
+| 文件管理 | `/settings/files` | `sys_file` + MinIO | 上传 / 重命名 / 删除 / 预览(预签名地址;图片内联、PDF / 文本走 `react-pdf` 懒加载) |
+| 数据范围 | `/settings/data-scope` | `sys_data_policy` + `sys_data_plugin` | 行级规则 CRUD + 三态状态流(启用 → 上线 → 停用)+ 行内「预览」试算 |
+| 值域插件 | `/settings/data-plugins` | `sys_data_plugin` | 插件 CRUD + 内联编辑输出值 + 试跑(看当前用户解析出什么) |
+| 个人资料 | `/settings/profile` | `sys_user` + `sys_user_dept` + `sys_role`(自限一行) | 只读自己 + 改姓名 / 改密码 / 邮箱验证与换邮箱(入口在顶栏) |
 
 权限点目录(角色授权要勾的那棵树)来自 `sys_menu` 的真实数据(`menu.list` 回 `{ rows, perms }`),**不再由前端 `NAV_NODES` 派生**;菜单表为空时权限体系整体不启用(空表 = 这项能力没开)。页面级权限(哪些 URL 可见)与接口级权限(哪些 procedure 可调)是两层,见 `doc/rbac-权限模型.md`。
 
@@ -524,7 +527,7 @@ pnpm check
 
 **删除**:12 个业务域目录(约 500 个文件)、80 条业务路由、29 个业务 lib、27 个业务 mocks、6 个业务 tRPC 路由、18 个业务脚本。`trpc/router.ts` 从 9 个命名空间收窄到 3 个(menu / dict / config)+ `todos` 示例。
 
-**保留**:系统设置模块(**十个页面全部接真实数据**)、框架能力样例(7 页)、组件层、Better Auth、Drizzle、tRPC、设计系统。
+**保留**:系统设置模块(**十二个页面全部接真实数据**)、框架能力样例(8 页)、组件层、Better Auth、Drizzle、tRPC、设计系统。
 
 ### 第二轮:遗留与封装审计
 
@@ -625,7 +628,7 @@ pnpm check
 | 改了什么 | 说明 |
 | --- | --- |
 | **#15 删占位页** | `/blank`(「功能开发中」)整文件删除 —— 它的"派生脚手架"作用已被 `LedgerCard` + `useLedgerTable` 的新页面版式取代;顺手清掉 `rbac.ts` 里 `/blank` 的两处登记与文档引用 |
-| **#2 服务端登录校验** | 复核后确认**本来就是齐的**(所有业务过程都是 `protectedProcedure`,中间件链 `logging → requireUser → audit → perm → dataScope`),只有 `file.ts` 的注释还写着「⚠️ 这里没有服务端登录校验」→ 改成事实描述,`doc/文件管理.md` 的「已知缺口」同步更正 |
+| **#2 服务端登录校验** | 复核后确认**本来就是齐的**(所有业务过程都是 `protectedProcedure`,中间件链 `logging → requireUser → audit → perm → dataScope`),只有 `file.ts` 的注释还写着「⚠️ 这里没有服务端登录校验」→ 改成事实描述,顺带修掉 `doc/文件管理.md` 里「另外 **11** 个路由」的旧计数(实际 13 个 router ⇒ 12) |
 | **#4 个人资料页** | 新增 `/settings/profile`:账号信息(姓名 / 邮箱 + 是否已验证 / 角色 / 部门 / 创建时间)、改姓名、改密码(`changePassword` 带 `revokeOtherSessions`)、发验证邮件、换邮箱。配套 `src/lib/mailer.ts`(默认 **console 驱动**:链接打到终端,不挑服务商、不要 API key,换驱动只加一个分支)与新接口 `user.profile`(只读自己那一行:不挂菜单授权,但必须登录) |
 | **#3 文件内联预览** | 文件详情里图片仍走 `<img>`;**PDF / 文本走社区包**(`react-pdf` 懒加载,不自己写渲染器 —— 用户明确要求)。注意 minio 桶要配 GET CORS:PDF/文本要 `fetch()` 预签名地址,`<img src>` 那条路不需要 |
 | **#5 日志导出** | 审计日志页接入 `ExcelExportButton`,导出当前筛选结果 |
@@ -650,6 +653,7 @@ pnpm check
 - `doc/审计日志.md` —— 日志覆盖率、事件字典、30 分钟清理
 - `doc/通知中心.md` · `doc/文件管理.md` —— 通知与 MinIO 文件的能力边界
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
+- `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)

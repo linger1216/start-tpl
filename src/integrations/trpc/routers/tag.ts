@@ -53,16 +53,6 @@ function toTag(row: typeof sysTag.$inferSelect) {
 	};
 }
 
-/**
- * 取一个标签行,**故意不过滤软删** —— `delete` 要操作的那一行正是它(重复删除 / 拿到已软删的节点都要能读到)。
- * 读路径请用下面的 `getAliveTagRow()`,别直接把已软删的节点当"存在"。
- */
-async function getTagRow(id: string) {
-	const [row] = await db.select().from(sysTag).where(eq(sysTag.id, id)).limit(1);
-	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个标签节点不存在(可能已被删除)" });
-	return row;
-}
-
 /** 读路径取行:已软删的节点**等同不存在**(报的还是同一句 NOT_FOUND,对外文案不变) */
 async function getAliveTagRow(id: string) {
 	const [row] = await db
@@ -147,7 +137,7 @@ export const tagRouter = createTRPCRouter({
 				desc: input.desc?.trim() || null,
 				sort,
 			});
-			return toTag(await getTagRow(id));
+			return toTag(await getAliveTagRow(id));
 		}),
 
 	update: protectedProcedure
@@ -171,12 +161,15 @@ export const tagRouter = createTRPCRouter({
 					update_time: new Date(),
 				})
 				.where(eq(sysTag.id, input.id));
-			return toTag(await getTagRow(input.id));
+			return toTag(await getAliveTagRow(input.id));
 		}),
 
 	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
-		// 删除目标那一行**故意不过滤软删**:`getTagRow` 拿到它,重复删除仍按原语义返回
-		await getTagRow(input.id);
+		// 这一行就是删除过程要操作的目标,**故意不带 `alive()`**(墓碑已经把 id 让出去了,
+		// 但 id 是主键、不参与让位;重复删除仍按原语义报 NOT_FOUND)——
+		// 读路径请用上面的 `getAliveTagRow()`,别把已软删的节点当"存在"
+		const [target] = await db.select().from(sysTag).where(eq(sysTag.id, input.id)).limit(1);
+		if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "这个标签节点不存在(可能已被删除)" });
 		const ids = await collectSubtreeIds(input.id);
 		// 关联关系先清:标签软删之后「谁贴过它」的行留着就是脏数据(表上没有外键,不会自动清)。
 		// `sys_tag_relation` 是纯 join 表(**没有 `deleted_at`**),所以这一处仍然是硬删。

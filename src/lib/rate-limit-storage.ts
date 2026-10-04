@@ -34,7 +34,13 @@ import { db } from "#/db";
 import { sysRateLimit } from "#/db/data-base-schema";
 import { logger } from "#/lib/logger";
 
-/** 当前时间;`addSeconds` 接受 BA 给的 ttl(秒)。 */
+/**
+ * 当前时间;`addSeconds` 接受 BA 给的 ttl(秒)。
+ *
+ * 看着像"一层转发",但**不能内联**:下面 increment 里是同一条 UPDATE 的两个 CASE,
+ * 两次调用必须取**同一个**时间点,内联成两次 `new Date()` 会在毫秒边界上让两个判断打架
+ * (一个说已过期、一个说没过期)。
+ */
 function now(): Date {
 	return new Date();
 }
@@ -62,7 +68,7 @@ async function incrementImpl(key: string, ttlSec: number): Promise<number> {
 	const after = await db.select({ count: sysRateLimit.count }).from(sysRateLimit).where(eq(sysRateLimit.key, key));
 	const v = after[0]?.count;
 	const n = typeof v === "string" ? Number.parseInt(v, 10) : (v ?? 0);
-	return Number.isFinite(n) ? (n as number) : 0;
+	return Number.isFinite(n) ? n : 0;
 }
 
 /**

@@ -64,7 +64,7 @@ function loadTrustedOrigins(): string[] {
  * DB 列名是 snake_case,drizzle 负责映射。
  *
  * 版本:实测 better-auth **1.7.4**(`package.json` 声明 `^1.5.3`)。1.7.x 的核心四表字段见
- * `doc/表结构设计.md` §11.1;升级版本后请重新核对,字段变了 better-auth 会在运行时报
+ * `doc/archive/表结构设计.md` §11.1;升级版本后请重新核对,字段变了 better-auth 会在运行时报
  * 「Model xxx not found」/「field not found」,typecheck 抓不到。
  *
  * 已经接好的部分:
@@ -78,7 +78,7 @@ function loadTrustedOrigins(): string[] {
  *
  * 未接的部分(**不开放自注册**,账号需要先在库里建 —— 见 AGENTS.md「认证」):
  *  - 业务字段(账号 / 手机号 / 所属部门 / 状态)与 RBAC 的绑定:TBD —— 走 better-auth 的
- *    `user.additionalFields` 或独立的用户资料表,**本轮未加**,见 doc/表结构设计.md §11.4;
+ *    `user.additionalFields` 或独立的用户资料表,**目前未加**,见 doc/archive/表结构设计.md §11.4;
  *  - 注册页 / 忘记密码:未做(不开放自注册,所以"注册"是管理员在用户台账里建账号;
  *    忘记密码同理走管理员重置 —— `user.ts` 的 `update` 能改邮箱,密码走 BA 的 `setPassword`);
  *  - 权限点下发给前端:已由 `menu.mine`(`lib/rbac.ts` 的 `effectiveMenusFor`)提供,

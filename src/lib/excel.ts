@@ -252,6 +252,9 @@ export function readSheetTable(
 	}
 }
 
+/** 导入回执里的逐行明细(错误或重复)—— 键名就是 Excel 的行号,对话框按它逐条列 */
+export type ImportFeedback = { index: number; message: string };
+
 /** 导入结果(created + 逐行错误/重复明细) */
 export type ImportResult = {
 	/** 本次解析的总行数 */
@@ -259,10 +262,16 @@ export type ImportResult = {
 	/** 成功导入行数 */
 	created: number;
 	/** 失败行(校验/写入异常) */
-	errors: Array<{ index: number; message: string }>;
+	errors: ImportFeedback[];
 	/** 重复被跳过的行 */
-	duplicates?: Array<{ index: number; message: string }>;
+	duplicates?: ImportFeedback[];
 };
+
+/**
+ * 各域 `*.import` 的回执形状:把可选的 `duplicates` 收窄成**一定回**(空数组也要有),
+ * 好让对话框稳定显示「重复 N 条」。四个域曾各自声明一遍这个交叉类型。
+ */
+export type ImportOutcome = ImportResult & { duplicates: ImportFeedback[] };
 
 /**
  * 单元格取值。

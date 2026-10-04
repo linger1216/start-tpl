@@ -11,7 +11,7 @@
  */
 import { logger } from "#/lib/logger";
 
-export type MailMessage = {
+type MailMessage = {
 	to: string;
 	subject: string;
 	text: string;

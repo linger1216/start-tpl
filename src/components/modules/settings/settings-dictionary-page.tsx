@@ -5,11 +5,7 @@ import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsDictionaryDetail } from "#/components/modules/settings/settings-dictionary-detail";
-import {
-	DICT_EXCEL_COLUMNS,
-	DICT_IMPORT_FIELDS,
-	dictExcelRows,
-} from "#/components/modules/settings/settings-dictionary-excel";
+import { DICT_EXCEL_COLUMNS, dictExcelRows } from "#/components/modules/settings/settings-dictionary-excel";
 import { SettingsDictionaryForm } from "#/components/modules/settings/settings-dictionary-form";
 import { dictionaryColumns, type SettingsDictCallbacks } from "#/components/modules/settings/settings-dictionary-table";
 import {
@@ -242,7 +238,7 @@ export function SettingsDictionaryPage() {
 						<ExcelImportButton
 							title="导入字典"
 							description="一行 = 一个字典项(编码相同的行会归到同一个字典);字典已存在就补进字典项,已有的取值跳过、不覆盖。"
-							fields={DICT_IMPORT_FIELDS}
+							fields={DICT_EXCEL_COLUMNS}
 							fileNamePrefix="字典导入模板"
 							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
 						/>

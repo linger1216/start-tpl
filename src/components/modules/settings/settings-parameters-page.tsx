@@ -5,11 +5,7 @@ import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
-import {
-	PARA_EXCEL_COLUMNS,
-	PARA_IMPORT_FIELDS,
-	paraExcelRows,
-} from "#/components/modules/settings/settings-parameters-excel";
+import { PARA_EXCEL_COLUMNS, paraExcelRows } from "#/components/modules/settings/settings-parameters-excel";
 import {
 	type ParameterFormPayload,
 	SettingsParametersForm,
@@ -52,10 +48,13 @@ export function SettingsParametersPage() {
 	const listQuery = useQuery({ ...trpc.para.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as ParameterRow[];
 
+	/** 写完数据后让列表重新拉一次(与角色 / 字典页同形) */
+	const invalidate = () => queryClient.invalidateQueries(trpc.para.pathFilter());
+
 	const updateMutation = useMutation(
 		trpc.para.update.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.para.pathFilter());
+				await invalidate();
 				setEditing(null);
 				toast.success(`已保存 ${outcome.key}`, { description: `新值:${outcome.value}` });
 			},
@@ -66,7 +65,7 @@ export function SettingsParametersPage() {
 	const createMutation = useMutation(
 		trpc.para.create.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.para.pathFilter());
+				await invalidate();
 				setCreating(false);
 				toast.success(`已新增参数 ${outcome.key}`);
 			},
@@ -77,7 +76,7 @@ export function SettingsParametersPage() {
 	const deleteMutation = useMutation(
 		trpc.para.delete.mutationOptions({
 			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.para.pathFilter());
+				await invalidate();
 				setPendingDelete(null);
 				toast.success(`已删除 ${outcome.key}`);
 			},
@@ -89,7 +88,7 @@ export function SettingsParametersPage() {
 	const importMutation = useMutation(
 		trpc.para.import.mutationOptions({
 			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.para.pathFilter());
+				await invalidate();
 			},
 		}),
 	);
@@ -210,7 +209,7 @@ export function SettingsParametersPage() {
 						<ExcelImportButton
 							title="导入参数"
 							description="一行 = 一条参数(参数名是业务键)。库里没有的建、已有的改值;代码内置的参数会跳过并报错,值会按类型校验。"
-							fields={PARA_IMPORT_FIELDS}
+							fields={PARA_EXCEL_COLUMNS}
 							fileNamePrefix="参数导入模板"
 							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
 						/>

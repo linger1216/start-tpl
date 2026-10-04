@@ -28,7 +28,7 @@ import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept } from "
 import { auth } from "#/lib/auth";
 import { allUserRoles, isAdminUser, removeAllRolesOfUser, roleIdsOf, setUserRoles } from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
-import type { ImportResult } from "#/lib/excel";
+import type { ImportOutcome } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
@@ -39,58 +39,6 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * 一次查完所有分配再按 user 归组,**别在循环里逐人查**(N+1)。
 	 */
-	// list: protectedProcedure.query(async () => {
-	// 	const users = await db.select().from(sysUser).orderBy(asc(sysUser.name), asc(sysUser.email));
-	// 	// 「属于哪些部门」和「有哪些角色」是两件事:前者是组织架构(sys_user_dept),
-	// 	// 后者是全局角色(sys_casbin_rule 的 `g` 行)。各查一次再按 user 归组,依旧不 N+1。
-	// 	const userDepartmentRelations = await db
-	// 		.select({
-	// 			userId: sysUserDept.user_id,
-	// 			departmentId: sysUserDept.department_id,
-	// 			departmentName: sysDept.name,
-	// 		})
-	// 		.from(sysUserDept)
-	// 		.innerJoin(sysDept, eq(sysDept.id, sysUserDept.department_id));
-	//
-	// 	// 策略表里存的就是**角色 id**(`role:<id>`),直接拿 id 回 `sys_role` 换名字(一次查全,按 id 索引)
-	// 	const userRoleRelations = await allUserRoles();
-	// 	const roles = await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole);
-	// 	const roleMapById = new Map(roles.map((row) => [row.id, row]));
-	// 	const groupBy = (rows: Array<{ userId: string; value: string }>) => {
-	// 		const map = new Map<string, string[]>();
-	// 		for (const row of rows) {
-	// 			const list = map.get(row.userId) ?? [];
-	// 			list.push(row.value);
-	// 			map.set(row.userId, list);
-	// 		}
-	// 		return map;
-	// 	};
-	// 	const departmentOf = groupBy(userDepartmentRelations.map((row) => ({ userId: row.userId, value: row.departmentName })));
-	// 	const departmentIdOf = groupBy(userDepartmentRelations.map((row) => ({ userId: row.userId, value: row.departmentId })));
-	// 	// 认不出的 id(角色刚被删、`g` 行还没清干净)直接跳过 —— 与装载时「跳过孤儿菜单」同一口径
-	// 	const known = userRoleRelations.flatMap((row) => {
-	// 		const role = roleMapById.get(row.roleId);
-	// 		return role ? [{ userId: row.userId, id: role.id, name: role.name }] : [];
-	// 	});
-	// 	const roleNameOf = groupBy(known.map((row) => ({ userId: row.userId, value: row.name })));
-	// 	const roleIdOf = groupBy(known.map((row) => ({ userId: row.userId, value: row.id })));
-	// 	return users.map((row) => ({
-	// 		// 与 sys_user 的列一一对应(账号字段归 Better Auth,这里是只读镜像)
-	// 		id: row.id,
-	// 		name: row.name ?? "",
-	// 		email: row.email,
-	// 		emailVerified: row.emailVerified,
-	// 		image: row.image ?? null,
-	// 		createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-	// 		updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
-	// 		departmentNames: departmentOf.get(row.id) ?? [],
-	// 		// 部门与角色的 **id**(编辑弹窗里的多选框要用 id 定位)与名字(列表 / 详情直接展示)
-	// 		departmentIds: departmentIdOf.get(row.id) ?? [],
-	// 		roleNames: roleNameOf.get(row.id) ?? [],
-	// 		roleIds: roleIdOf.get(row.id) ?? [],
-	// 	}));
-	// }),
-
 	list: protectedProcedure.query(async () => {
 		const [users, deptRows, roleRows, roles] = await Promise.all([
 			// 读路径一律过 `alive()`:软删的用户行留在库里只为审计留痕,不能出现在台账里
@@ -231,8 +179,8 @@ export const userRouter = createTRPCRouter({
 			// admin 守卫:被改的人是 admin 时,只有 admin 能改。
 			// 兜底顺序在邮箱查重之前 —— 与 `remove` 同一口径。
 			if (await isAdminUser(input.id)) {
-				const me = (ctx as { user?: { id: string; name: string; isSuper?: boolean } }).user;
-				if (!me || !(await isAdminUser(me.id, me.isSuper === true))) {
+				const me = requireCurrentUser(ctx);
+				if (!(await isAdminUser(me.id, me.isSuper === true))) {
 					throw new TRPCError({
 						code: "FORBIDDEN",
 						message: "只有系统管理员才能修改管理员账号",
@@ -349,8 +297,8 @@ export const userRouter = createTRPCRouter({
 	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input, ctx }) => {
 		// admin 守卫:被删的人是 admin 时拒。`ctx.user` 由 protectedProcedure 中间件保证存在。
 		if (await isAdminUser(input.id)) {
-			const me = (ctx as { user?: { id: string; name: string; isSuper?: boolean } }).user;
-			if (!me || !(await isAdminUser(me.id, me.isSuper === true))) {
+			const me = requireCurrentUser(ctx);
+			if (!(await isAdminUser(me.id, me.isSuper === true))) {
 				throw new TRPCError({
 					code: "FORBIDDEN",
 					message: "不能删除管理员账号",
@@ -411,8 +359,6 @@ export const userRouter = createTRPCRouter({
 				deptIds: string[];
 				index: number;
 			};
-			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
-			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
 			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
 
 			/** 多值列(角色 / 部门):导出用「、」连接,导入 `、` `,` `;` 与空白都认 */

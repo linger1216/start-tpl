@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { SettingsFilePreview } from "#/components/modules/settings/settings-file-preview";
-import type { FileRow } from "#/components/modules/settings/settings-files-table";
+import { type FileRow, STATUS_META } from "#/components/modules/settings/settings-files-table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -8,11 +8,6 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { useTRPC } from "#/integrations/trpc/react";
 import { formatBytes } from "#/lib/format";
 
-const STATUS_LABEL: Record<number, { label: string; variant: "secondary" | "outline" | "destructive" }> = {
-	0: { label: "待确认", variant: "outline" },
-	1: { label: "正常", variant: "secondary" },
-	2: { label: "已删除", variant: "destructive" },
-};
 /**
  * 文件详情(只读 + 预览 + 重命名入口)。
  *
@@ -41,7 +36,7 @@ export function SettingsFilesDetail({
 	const live = open && row !== null && row.status !== 2;
 	const urlQuery = useQuery({ ...trpc.file.url.queryOptions({ id: row?.id ?? "" }), enabled: live });
 	const url = urlQuery.data?.url ?? null;
-	const status = STATUS_LABEL[row?.status ?? 0] ?? STATUS_LABEL[0];
+	const status = STATUS_META[row?.status ?? 0] ?? STATUS_META[0];
 	return (
 		<DetailDialog
 			open={open}
@@ -72,7 +67,7 @@ export function SettingsFilesDetail({
 			{row ? (
 				<>
 					{/* 预览块:图片 / PDF / 文本直接看,其余给"打开"(私有桶的地址是现签的,不要缓存它) */}
-					<SettingsFilePreview row={row} url={url} live={live} />
+					<SettingsFilePreview row={row} url={url} />
 					{/* ⚠️ 创建 / 更新时间**不写在这里**:底部那行(`DetailDialog` 的 `meta`)已经渲染了,
 					    再写两个 DetailRow 就是同一件事两个形态(与另外四个详情页不一致 —— 这里踩过) */}
 					<div className="flex flex-col gap-0">

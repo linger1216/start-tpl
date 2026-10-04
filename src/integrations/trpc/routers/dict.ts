@@ -18,7 +18,7 @@ import { z } from "zod";
 
 import { db } from "#/db";
 import { sysDict } from "#/db/data-base-schema";
-import type { ImportResult } from "#/lib/excel";
+import type { ImportOutcome } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
 import { createTRPCRouter, protectedProcedure } from "../init";
@@ -59,16 +59,17 @@ function toDict(row: typeof sysDict.$inferSelect) {
 }
 
 /**
- * 按编码取一行字典。
+ * 按编码取一行**活着**的字典(byCode / create 查重 / update 取行 / delete 都用它)。
  *
- * `includeDeleted` 只有 `delete` 会传(软删要拿当前 `code` + `id` 写墓碑);
- * 其余调用点(byCode / create 查重 / update 取行)一律带 `alive()`,否则已删除的字典会重新露出来。
+ * 为什么一律带 `alive()`:软删会把编码改写成墓碑值 `tombstone(code, id)`,`eq(code, 原值)`
+ * 因此永远匹配不到已删除的行 —— 连删除过程自己也是这样(重复删除 = 查不到 = NOT_FOUND),
+ * 所以不需要「带不带已删除」这种开关。
  */
-async function getByCode(code: string, includeDeleted = false) {
+async function getByCode(code: string) {
 	const [row] = await db
 		.select()
 		.from(sysDict)
-		.where(includeDeleted ? eq(sysDict.code, code) : and(eq(sysDict.code, code), alive(sysDict)))
+		.where(and(eq(sysDict.code, code), alive(sysDict)))
 		.limit(1);
 	return row ?? null;
 }
@@ -152,8 +153,8 @@ export const dictRouter = createTRPCRouter({
 	 * 读路径(列表 / byCode / 查重 / 导入先查)必须处处带 `alive()`,漏一处就把已删除的字典又暴露出去。
 	 */
 	delete: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
-		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 要拿它当前的 `code` 写墓碑让位
-		const existing = await getByCode(input.code, true);
+		// 查不到就 NOT_FOUND:墓碑已经把 `code` 让出去了,重复删除走的也是这条路
+		const existing = await getByCode(input.code);
 		if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "这个字典不存在(可能已被删除)" });
 		await db
 			.update(sysDict)
@@ -183,8 +184,6 @@ export const dictRouter = createTRPCRouter({
 				/** 这个编码下通过校验的行号 —— 新建字典时它们都算「已导入」 */
 				rows: number[];
 			};
-			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
-			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
 			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
 			const groups = new Map<string, Group>();
 
@@ -279,6 +278,11 @@ export const dictRouter = createTRPCRouter({
 						.where(eq(sysDict.code, code));
 				}
 			}
+
+			// 回执按行号排一下 —— 上面是按「字典编码」分组处理的,与 Excel 的行序不一致,
+			// 而对话框是按「第 N 行」逐条列的
+			result.errors.sort((a, b) => a.index - b.index);
+			result.duplicates.sort((a, b) => a.index - b.index);
 			return result;
 		}),
 });

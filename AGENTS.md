@@ -40,7 +40,7 @@ pnpm check            # biome check --write —— 格式化 + lint + 整理 imp
 pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生成物,不要手改)
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
-pnpm db:create        # 建系统表 19 张(18 张 sys_* + demo_grid;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
+pnpm db:create        # 建系统表 21 张(20 张 sys_* + demo_grid;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
 pnpm db:dm:create-ba  # 达梦线:建 15 张表(逐张清单见 doc/达梦支持.md,幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
 pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo   # 六个种子都幂等「只补不覆盖」

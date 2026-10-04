@@ -25,11 +25,17 @@
  *   注意不是无损的:列不够宽时原值尾部在写入时就被截掉了)。
  *   **不要**改用「唯一索引 + deleted_at」那种写法:MySQL 的唯一索引把 NULL 当互不相等,
  *   活着的行为全是 `(key, NULL)` ⇒ 唯一性**直接失效**(实测过:同一个 code 能插进三行)。
+ *
+ * 删除过程"查不到"怎么报——两种都对,但**分界线要一致**(统一软删那一轮定下来的):
+ *  - 按**业务键**删(参数名 / 字典编码 / 插件 key):墓碑已经把键让出去了 ⇒ 查不到就报 NOT_FOUND
+ *    (`para.remove` / `dict.delete` / `dataPlugin.remove`),重复删除会明确说"不存在";
+ *  - 按**主键 id** 删(角色 / 部门 / 菜单 / 标签 / 数据范围 / 演示网格):id 不参与让位,
+ *    重复删除是**幂等**的(再写一次 `deleted_at`),所以 `get*Row` 那类取行函数故意不带 `alive()`。
  */
 import { type AnyColumn, isNull } from "drizzle-orm";
 
 /** 带软删列的表(drizzle 列属性固定叫 `deleted_at`)。 */
-export type SoftDeletable = { deleted_at: AnyColumn };
+type SoftDeletable = { deleted_at: AnyColumn };
 
 /** 「还活着」:所有 list / get / 按名查重 / 权限引擎的查询都要带上它。 */
 export function alive<T extends SoftDeletable>(table: T) {

@@ -1,5 +1,6 @@
-# 四个构建目标(默认 runtime):
+# 四个构建目标(默认 runtime),都长在 `base` 这个公共底座上:
 #
+#   base     —— 公共底座:pnpm 环境变量 + corepack(`deps` / `runtime` 都从它起)
 #   deps     —— 装依赖(含 devDependencies),给 build / dev 复用
 #   build    —— 编译出 `.output`(Nitro node-server)
 #   dev      —— 源码 + 全部依赖 + git,给 .devcontainer 与 compose 的初始化任务用
@@ -26,8 +27,9 @@
 # 运行:
 #   docker run --rm -p 3000:3000 --env-file .env.local start-tpl:local
 
-# ── 依赖 ───────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS deps
+# ── 公共底座 ───────────────────────────────────────────────────────
+# `deps` / `runtime` 都要的那套 pnpm 环境变量只写一遍,免得两个 stage 各养一份、改一处漏一处。
+FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV XDG_DATA_HOME=/pnpm/.data
 ENV PATH=$PNPM_HOME:$PATH
@@ -37,6 +39,9 @@ ENV npm_config_store_dir=/pnpm/.data/pnpm/store
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /app
+
+# ── 依赖 ───────────────────────────────────────────────────────────
+FROM base AS deps
 # 只拷清单:改源码不会导致重装依赖
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -57,16 +62,9 @@ EXPOSE 3000
 CMD ["pnpm", "dev"]
 
 # ── 生产镜像 ───────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS runtime
+FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV PNPM_HOME=/pnpm
-ENV XDG_DATA_HOME=/pnpm/.data
-ENV PATH=$PNPM_HOME:$PATH
-ENV npm_config_store_dir=/pnpm/.data/pnpm/store
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
-WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/.output ./.output

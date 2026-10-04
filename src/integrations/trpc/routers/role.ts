@@ -34,7 +34,7 @@ import {
 	setRoleMenus,
 	userIdsOfRole,
 } from "#/lib/casbin";
-import type { ImportResult } from "#/lib/excel";
+import type { ImportOutcome } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { withAncestorIds } from "#/lib/rbac";
 import { alive, softDeleted, tombstone } from "#/lib/soft-delete";
@@ -181,8 +181,6 @@ export const roleRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			type Parsed = { name: string; sort: number | null; status: number | null; remark: string | null; index: number };
-			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
-			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
 			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
 
 			/** 状态列认「启用 / 停用」「1 / 0」「true / false」「是 / 否」;空串 = 不动 */

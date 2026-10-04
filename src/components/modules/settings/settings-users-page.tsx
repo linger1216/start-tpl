@@ -77,10 +77,13 @@ export function SettingsUsersPage() {
 	})();
 
 	const queryClient = useQueryClient();
+	/** 写完数据后让列表重新拉一次(与角色 / 字典页同形) */
+	const invalidate = () => queryClient.invalidateQueries(trpc.user.pathFilter());
+
 	const updateMutation = useMutation(
 		trpc.user.update.mutationOptions({
 			onSuccess: async (updated) => {
-				await queryClient.invalidateQueries(trpc.user.pathFilter());
+				await invalidate();
 				setEditing(null);
 				toast.success(`已保存 ${updated.name}`);
 			},
@@ -91,7 +94,7 @@ export function SettingsUsersPage() {
 	const deleteMutation = useMutation(
 		trpc.user.remove.mutationOptions({
 			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.user.pathFilter());
+				await invalidate();
 				setPendingDelete(null);
 				toast.success("账号已删除");
 			},
@@ -102,7 +105,7 @@ export function SettingsUsersPage() {
 	const createMutation = useMutation(
 		trpc.user.create.mutationOptions({
 			onSuccess: async (created) => {
-				await queryClient.invalidateQueries(trpc.user.pathFilter());
+				await invalidate();
 				setCreateOpen(false);
 				toast.success(`已创建账号 ${created.email}`, { description: "还没有角色 —— 点「编辑」给他分配。" });
 			},
@@ -114,7 +117,7 @@ export function SettingsUsersPage() {
 	const importMutation = useMutation(
 		trpc.user.import.mutationOptions({
 			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.user.pathFilter());
+				await invalidate();
 			},
 		}),
 	);

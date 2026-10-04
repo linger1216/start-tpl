@@ -832,10 +832,11 @@ function ModuleGallery() {
 							<code className="font-mono">ExcelImportDialog</code> —— 受控 props:
 							<code className="font-mono">open / onOpenChange / title / fields / onSubmit / isPending</code>
 							<p className="text-muted-foreground">
-								它依赖 <code className="font-mono">xlsx</code>(体积大)+ 必须配{" "}
-								<code className="font-mono">lib/excel</code> 的<code className="font-mono"> readSheetTable</code>
-								。**业务页目前还没接** —— 这一组是库级能力(`lib/excel` + `shared/ledger-excel` +
-								`shared/excel-import`),接入方式就是上面那几个 props。
+								它依赖 <code className="font-mono">xlsx</code>(体积大,所以只在点按钮时动态{" "}
+								<code className="font-mono">import()</code>)+ 各域的
+								<code className="font-mono">XXX_EXCEL_COLUMNS</code> 列契约。**业务页已经接了**: 用户 / 角色 / 字典 /
+								参数四页的工具条上就是它(`ExcelExportButton` + <code className="font-mono">ExcelImportButton</code>
+								),审计日志页只接了导出。
 							</p>
 						</div>
 					</div>

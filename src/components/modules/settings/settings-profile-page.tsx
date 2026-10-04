@@ -14,6 +14,7 @@ import { Input } from "#/components/ui/input";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
+import { formatLocalMinute } from "#/lib/time";
 
 /**
  * 系统设置 ▸ 个人资料 —— **任何登录者都能进自己的这一页**。
@@ -50,12 +51,6 @@ export function SettingsProfilePage() {
 	const [newEmail, setNewEmail] = useState("");
 	const [mailing, setMailing] = useState(false);
 
-	const refresh = async () => {
-		await queryClient.invalidateQueries(trpc.user.pathFilter());
-		// 顶栏的姓名来自路由上下文(服务端 beforeLoad 读的会话),所以改名后要重跑一次
-		await router.invalidate();
-	};
-
 	/** 改姓名 —— BA 的 `updateUser`,只动 `sys_user.name` */
 	const handleSaveName = async () => {
 		const next = name.trim();
@@ -70,7 +65,9 @@ export function SettingsProfilePage() {
 				toast.error(error.message ?? "保存失败");
 				return;
 			}
-			await refresh();
+			await queryClient.invalidateQueries(trpc.user.pathFilter());
+			// 顶栏的姓名来自路由上下文(服务端 beforeLoad 读的会话),所以改名后要重跑一次
+			await router.invalidate();
 			setName("");
 			toast.success("姓名已更新");
 		} catch (error) {
@@ -203,9 +200,7 @@ export function SettingsProfilePage() {
 									<span>{profile.depts.map((dept) => dept.name).join("、")}</span>
 								)}
 							</DetailRow>
-							<DetailRow label="创建时间">
-								{profile.createTime ? new Date(profile.createTime).toLocaleString("zh-CN") : "—"}
-							</DetailRow>
+							<DetailRow label="创建时间">{formatLocalMinute(profile.createTime) || "—"}</DetailRow>
 						</>
 					)}
 				</CardContent>

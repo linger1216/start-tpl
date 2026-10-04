@@ -8,7 +8,7 @@
  * 只有**浏览器 ↔ MinIO** 那一段是外部服务(见 AGENTS「接口铁律」)。
  *
  * ✅ 服务端登录校验:本路由的过程全是 `protectedProcedure`(=`init.ts` 的 `requireUser` 中间件),
- * 无会话直发 tRPC ⇒ `UNAUTHORIZED「请先登录」`(与另外 11 个路由同口径,`tests/auth.test.ts`
+ * 无会话直发 tRPC ⇒ `UNAUTHORIZED「请先登录」`(与另外 12 个路由同口径,`tests/auth.test.ts`
  * 用匿名 caller 断言过)。直调 caller 的测试自己注入 `ctx.user` —— `requireUser` 优先取注入值,
  * 而 `getCurrentUserId()` 在没有请求上下文时恒为 null:别把校验写成"只认 `getCurrentUserId()`"。
  */

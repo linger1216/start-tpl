@@ -31,7 +31,7 @@ const EXPECTED_PROCEDURES = 82;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),
- * 但审计中间件排在它前面,而审计"只记 mutation"且不看身份 ⇒ 46 个 mutation 会真的往 `sys_log` 写 46 行失败记录。
+ * 但审计中间件排在它前面,而审计"只记 mutation"且不看身份 ⇒ 52 个 mutation 会真的往 `sys_log` 写 52 行失败记录。
  * 入参带上 `key: "page.*"` 让审计按 `log.skip_paths`(默认 `page.`)跳过 —— 这只是在省清理,
  * 下面仍然按 traceId 把可能写进去的行删掉并断言为 0。
  */
