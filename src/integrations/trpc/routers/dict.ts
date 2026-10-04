@@ -152,7 +152,7 @@ export const dictRouter = createTRPCRouter({
 	 * 用 `tombstone()` 把编码改成墓碑值让位 —— 否则删掉的编码被死行永久占住,再也建不回来。
 	 * 读路径(列表 / byCode / 查重 / 导入先查)必须处处带 `alive()`,漏一处就把已删除的字典又暴露出去。
 	 */
-	delete: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
 		// 查不到就 NOT_FOUND:墓碑已经把 `code` 让出去了,重复删除走的也是这条路
 		const existing = await getByCode(input.code);
 		if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "这个字典不存在(可能已被删除)" });

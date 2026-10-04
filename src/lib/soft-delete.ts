@@ -28,7 +28,7 @@
  *
  * 删除过程"查不到"怎么报——两种都对,但**分界线要一致**(统一软删那一轮定下来的):
  *  - 按**业务键**删(参数名 / 字典编码 / 插件 key):墓碑已经把键让出去了 ⇒ 查不到就报 NOT_FOUND
- *    (`para.remove` / `dict.delete` / `dataPlugin.remove`),重复删除会明确说"不存在";
+ *    (`para.remove` / `dict.remove` / `dataPlugin.remove`),重复删除会明确说"不存在";
  *  - 按**主键 id** 删(角色 / 部门 / 菜单 / 标签 / 数据范围 / 演示网格):id 不参与让位,
  *    重复删除是**幂等**的(再写一次 `deleted_at`),所以 `get*Row` 那类取行函数故意不带 `alive()`。
  */

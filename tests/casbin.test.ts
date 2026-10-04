@@ -278,7 +278,7 @@ test("⑦ 删菜单 → 它的 p 行跟着清零(外键 cascade 没了,靠写接
 	await caller.role.setMenus({ roleId, menuIds: [created.id] });
 	assert.ok((await grantedMenuIdsOf(roleId)).includes(created.id), "先确认授权真的落库了");
 
-	await caller.menu.delete({ id: created.id });
+	await caller.menu.remove({ id: created.id });
 
 	const left = await db
 		.select({ id: sysCasbinRule.id })

@@ -200,23 +200,23 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	// 菜单
 	"menu.create": "sys:menu:add",
 	"menu.update": "sys:menu:edit",
-	"menu.delete": "sys:menu:remove",
+	"menu.remove": "sys:menu:remove",
 	"menu.reorder": "sys:menu:sort",
 	// 字典
 	"dict.create": "sys:dict:add",
 	"dict.update": "sys:dict:edit",
-	"dict.delete": "sys:dict:remove",
+	"dict.remove": "sys:dict:remove",
 	// 导入 = 批量新增,复用「新增」权限点(不造新码:登记新码还得先在 sys_menu 建按钮,见本文件头)
 	"dict.import": "sys:dict:add",
 	// 参数
 	"para.create": "sys:para:add",
 	"para.update": "sys:para:edit",
-	"para.delete": "sys:para:remove",
+	"para.remove": "sys:para:remove",
 	"para.import": "sys:para:add",
 	// 标签
 	"tag.create": "sys:tag:add",
 	"tag.update": "sys:tag:edit",
-	"tag.delete": "sys:tag:remove",
+	"tag.remove": "sys:tag:remove",
 	"tag.move": "sys:tag:move",
 	"tag.link": "sys:tag:link",
 	"tag.unlink": "sys:tag:link",

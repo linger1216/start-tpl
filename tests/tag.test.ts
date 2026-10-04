@@ -28,7 +28,7 @@ const created: { dimId?: string; tagId?: string } = {};
 
 after(async () => {
 	// 整枝删除(会被删两次也没关系:delete 对不存在的行会抛 NOT_FOUND,所以包一层)
-	if (created.dimId) await caller.tag.delete({ id: created.dimId }).catch(() => undefined);
+	if (created.dimId) await caller.tag.remove({ id: created.dimId }).catch(() => undefined);
 	const leftovers = await db
 		.select({ id: sysTag.id })
 		.from(sysTag)
@@ -158,7 +158,7 @@ test("删维度:连子标签和它们身上的关联一起清掉", async () => {
 	// 先重新贴一条,验证级联清理
 	await caller.tag.link({ tagId: created.tagId, objId: OBJ_ID, objType: OBJ_TYPE });
 
-	const result = await caller.tag.delete({ id: created.dimId });
+	const result = await caller.tag.remove({ id: created.dimId });
 	assert.equal(result.deleted, 2, "维度 + 它下面的 1 个标签");
 	assert.equal(result.removedLinks, 1, "标签身上的关联也要清");
 

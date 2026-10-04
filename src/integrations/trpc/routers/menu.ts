@@ -232,7 +232,7 @@ export const menuRouter = createTRPCRouter({
 			return toMenu(await getMenuRow(id));
 		}),
 
-	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 要拿它当前的 `path` 写墓碑让位
 		const row = await getMenuRow(input.id, true);
 		// 子菜单护栏只数**活着**的子菜单:已软删的子菜单不该把父菜单永久锁死

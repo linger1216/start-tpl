@@ -107,7 +107,7 @@ export function SettingsMenusPage() {
 	);
 
 	const deleteMutation = useMutation(
-		trpc.menu.delete.mutationOptions({
+		trpc.menu.remove.mutationOptions({
 			onSuccess: async () => {
 				await invalidate();
 				setDeleteOpen(false);

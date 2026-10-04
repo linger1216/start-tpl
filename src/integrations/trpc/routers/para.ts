@@ -337,7 +337,7 @@ export const paraRouter = createTRPCRouter({
 	 * 否则新行插不进同一个 key,`create` / `import` 想重建这条参数会直接撞主键。
 	 * 读路径(list / byKey / 查重 / 导入先查)一律要带 `alive()`,漏一处就把删除的行又当成了覆盖值。
 	 */
-	delete: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
 		// 先按 key 查出这一行 —— 软删要拿它的 `para_key` 写墓碑(主键让位)。查询带 `alive()`:
 		// 已经软删过的行不该再删一次(list 里也看不见它),所以查不到就是 NOT_FOUND
 		const [row] = await db

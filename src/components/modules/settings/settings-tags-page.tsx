@@ -69,7 +69,7 @@ export function SettingsTagsPage() {
 	);
 
 	const deleteMutation = useMutation(
-		trpc.tag.delete.mutationOptions({
+		trpc.tag.remove.mutationOptions({
 			onSuccess: async (outcome) => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
 				setPendingDelete(null);

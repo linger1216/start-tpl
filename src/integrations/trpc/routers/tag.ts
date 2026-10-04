@@ -164,7 +164,7 @@ export const tagRouter = createTRPCRouter({
 			return toTag(await getAliveTagRow(input.id));
 		}),
 
-	delete: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
+	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
 		// 这一行就是删除过程要操作的目标,**故意不带 `alive()`**(墓碑已经把 id 让出去了,
 		// 但 id 是主键、不参与让位;重复删除仍按原语义报 NOT_FOUND)——
 		// 读路径请用上面的 `getAliveTagRow()`,别把已软删的节点当"存在"

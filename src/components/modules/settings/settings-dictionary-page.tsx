@@ -76,7 +76,7 @@ export function SettingsDictionaryPage() {
 		}),
 	);
 	const deleteMutation = useMutation(
-		trpc.dict.delete.mutationOptions({
+		trpc.dict.remove.mutationOptions({
 			onSuccess: async () => {
 				await invalidate();
 				setPendingDelete(null);

@@ -710,15 +710,33 @@ pnpm check
 | 变量名 | 6 个列表页的「待删行」叫 `pendingDelete`,**唯独** `dictionary-page` 用了 `deleteTarget` | sed 重命名为 `pendingDelete` + `setPendingDelete` |
 | 文档 | 新章节「命名 / 类型约定」(`doc/界面约定.md`) | 函数前缀语义表(get/load/list/find/read)、`Row` / `TreeNode` / `FormValues` / `FormPayload` 后缀边界、状态变量 `editing` / `viewing` / `pendingDelete` 固定叫法、`<域>-excel.ts` 真源化的"别再偷懒"提醒 |
 
-#### 决定不改的 3 处(写进 `doc/界面约定.md` 不再追)
+#### 决定不改的 2 处(写进 `doc/界面约定.md` 不再追)
 
 | 项 | 现状 | 为什么不动 |
 | --- | --- | --- |
-| `*.delete` vs `*.remove` | 4 个 router(`dict` / `menu` / `para` / `tag`)用 `delete`,7 个 router(`data-plugin` / `data-scope` / `department` / `demo-grid` / `role` / `file` / `user`)用 `remove` | **31 个文件**(测试 + 前端 mutation + 日志 + 文档)被引用,**改一个**要同步改全部,**对运行没有任何可观测的收益**;新加 router **统一用 `remove`** |
 | `FormValues`(4) vs `FormPayload`(7) | `FormValues` 是**树形编辑页**的可控状态形状(`useState<MenuFormValues>`);`FormPayload` 是**普通表单**的 `onSubmit(payload)` 入参 | 两类**确实不是同一种东西**,只是名字都叫 "form";**改名反会让"页面状态"和"接口入参"两套边界糊在一起**。文档里把 4 / 7 各列出 |
 | `tag.move` vs `menu/department.reorder` | `tag.move` = 改父节点(无 sort);`menu.reorder` / `department.reorder` = 同级内改 sort 序 | **根本不是同一操作**,只是都用动词命名 |
 
+#### 第十一轮补刀 —— `*.delete` 全部改成 `*.remove`
+
+第十轮决定"不改"—— 用户回看后点名了。`delete` 与底层 SQL `DELETE` 撞名,容易让人误以为是"硬删";
+`rename` 强调"业务上拿掉",软删 / 级联移出子表 / 自定义删除逻辑都装得下。
+
+**改名清单**(15 files / +23 / −23,只动了 procedure 名 / 调用点 / 文档,**没改权限码**,因为它们本来就是 `sys:X:remove`):
+
+| router 端 | 调用端 |
+| --- | --- |
+| `routers/dict.ts:155` `delete → remove` | `settings-dictionary-page.tsx:79`、`tests/dict.test.ts(×4)`、`tests/auth.test.ts:92` |
+| `routers/menu.ts:235` `delete → remove` | `settings-menus-page.tsx:110`、`tests/casbin.test.ts:281` |
+| `routers/para.ts:340` `delete → remove` | `settings-parameters-page.tsx:77`、`tests/parameters.test.ts(×3)` |
+| `routers/tag.ts:167` `delete → remove` | `settings-tags-page.tsx:72`、`tests/tag.test.ts(×3)` |
+
+`src/lib/rbac.ts:203-219` 的 4 条 procedure → perm 映射键名同步改为 `.remove`(值不变);`src/lib/soft-delete.ts:31` 的 docblock
+里把 "dict.delete" 一并改 "dict.remove"。
+
 体量:**4 files changed, +120 / −127**(净 −7 行);新增 `settings-logs-excel.ts`(58 行);`doc/界面约定.md` 加 1 个 `## 命名 / 类型约定` 章节(45 行)。
+
+第十一轮补刀:**15 files changed, +23 / −23**(无新增件,纯改名)。
 
 基线:`pnpm typecheck` 0 · `pnpm check` 284 files / **0 error / 4 warning / 1 info**(与第八轮逐项相同)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191 / 5 suites**。
 

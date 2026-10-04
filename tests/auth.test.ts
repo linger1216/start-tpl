@@ -89,7 +89,7 @@ describe("服务端鉴权", () => {
 	});
 
 	it("未登录:会话路径上的写接口同样被拦(不只是读)", async () => {
-		await assertRejects(() => anonymousCaller.dict.delete({ code: "whatever" }), "请先登录");
+		await assertRejects(() => anonymousCaller.dict.remove({ code: "whatever" }), "请先登录");
 		await assertRejects(() => anonymousCaller.user.remove({ id: "whatever" }), "请先登录");
 	});
 

@@ -74,7 +74,7 @@ export function SettingsParametersPage() {
 	);
 
 	const deleteMutation = useMutation(
-		trpc.para.delete.mutationOptions({
+		trpc.para.remove.mutationOptions({
 			onSuccess: async (outcome) => {
 				await invalidate();
 				setPendingDelete(null);
