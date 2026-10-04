@@ -657,7 +657,7 @@ pnpm check
 | **死代码** | `requireAdminUser()`(零调用方)、`use-file-upload` 的 `invalidate`、`use-para-prefs` 的 `parsePageColumns` + `PageColumnsMap`(薄封装)、`lib/format.ts` 的 `normalizeValue()`、`auth-lockout.ts` 的 `LOCKOUT_CONFIG` 与文件尾多余的 `export { sql }`、`lib/data-scope.ts` 的 `isSafeIdent` |
 | **文档数字** | `doc/数据库与认证.md` 系统表 20 → **21**、认证五张 → **六张**(补 `sys_account_lockout` / `sys_rate_limit`);`doc/达梦支持.md` 的 `db:dm:create-ba` 15 → **17** 张、`update_time` 出现处数 26 → **27**(多的一处是新的 `lib/reorder.ts`)、用例数改为实测值(`role` 13 / `icons` 5 / `user-crud` 15);同源漂移:**`AGENTS.md`** `pnpm db:dm:create-ba` 注释 15 → **17** 张;**`scripts/create-system-tables.ts`** docblock 19 张 → **21** 张 + 「认证四张」→「**认证六张**」;**`doc/达梦支持.md`** MySQL 一行「含认证四表」→「含认证**六**表」 |
 | **测试脚手架** | `tests/helpers.ts` 新增 `purgeCasbinByMenuIds()` / `purgeCasbinByUserIds()`(casbin / role 两个套件的收尾各 19 行 → 2 行);`tests/data-scope.test.ts` 的试用用例复用 `busiestTown()`(连 `params` 一起回,删掉重复的 6 行算法) |
-| **刻意不做** | **不抽**「同级 `max(sort) + 1`」为 `nextSort` —— 5 处里 4 处是一行 `reduce` 表达式、1 处是滚动计数器、1 处带 `input.sort ??`,抽出来是零收益的薄封装;`sortable-tree.tsx` 剩下两处手写 `<button>` **不换** `ActionIconButton`(一处在折叠箭头的 `size-4` 占位 span 内、一处在搜索框里绝对定位,套上会丢定位与尺寸上下文);`ledger-excel.ts` 的 `importLedger` 确实零调用方,但按「Excel 相关文件永不删除」**只报告不删**(待拍板);`hover:bg-hover` 与 `hover:bg-black/10` 不是像素等价,未动 |
+| **刻意不做** | **不抽**「同级 `max(sort) + 1`」为 `nextSort` —— 5 处里 4 处是一行 `reduce` 表达式、1 处是滚动计数器、1 处带 `input.sort ??`,抽出来是零收益的薄封装;`sortable-tree.tsx` 剩下两处手写 `<button>` **不换** `ActionIconButton`(一处在折叠箭头的 `size-4` 占位 span 内、一处在搜索框里绝对定位,套上会丢定位与尺寸上下文);`hover:bg-hover` 与 `hover:bg-black/10` 不是像素等价,未动 |
 
 体量:**65 files, +563 / −761**(净减约 **198 行**),新增 2 个件(`lib/reorder.ts` 51 行、`settings-data-plugins-preview-dialog.tsx` 115 行)—— 抽出的共用件比删掉的重复体量更大,换的是「口径只有一处」。
 
@@ -693,7 +693,7 @@ pnpm check
 | `src/lib/reorder.ts` `reorderSiblings` | 1 抽件 2 调用方(menu / department),`noun` / `parentNoun` 两个文案参数没膨胀到第三个轴 |
 | `src/lib/data-scope-meta.ts` | types + cached resource loader,实质 |
 | `data-scope.test.ts` `busiestTown` / `ctxWithDepts` | 第八轮已抽,用例复用,2 处 inline 的不同查询(town + owner 全集)不强求合并 |
-| 第八轮的 `nextSort` / `sortable-tree` 按钮 / `importLedger` / `hover:bg-hover` | 同第八轮结论 |
+| 第八轮的 `nextSort` / `sortable-tree` 按钮 / `hover:bg-hover` | 同第八轮结论(`importLedger` 已在第十五轮因零调用方删掉) |
 
 体量:**6 files, +86 / −79**(净增 7 行,但测试 cleanup 口径收紧了 5 处,职责更明确),新增 3 个 helper(28 行,集中在 `tests/helpers.ts`)。
 
