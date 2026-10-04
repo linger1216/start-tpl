@@ -22,8 +22,13 @@ import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix
  */
 const CODE = `t${TEST_PREFIX}dict_${uniqueSuffix()}`.toLowerCase();
 
+/** 导入用例另起一个编码(前面的用例会把 CODE 删掉);名称带 `__test__` 前缀,好被兜底清扫认出 */
+const IMPORT_CODE = `t${TEST_PREFIX}imp_${uniqueSuffix()}`.toLowerCase();
+const IMPORT_NAME = `${TEST_PREFIX}导入字典`;
+
 after(async () => {
 	await caller.dict.delete({ code: CODE }).catch(() => undefined);
+	await caller.dict.delete({ code: IMPORT_CODE }).catch(() => undefined);
 });
 
 test("新建字典:服务端生成 nanoid 主键,业务键是 code", async () => {
@@ -123,6 +128,63 @@ test("删除:按 code 删,删完 byCode 返回 null", async () => {
 
 test("删除不存在的编码 → NOT_FOUND", async () => {
 	await assertRejects(() => caller.dict.delete({ code: `t_missing_y_${uniqueSuffix()}` }), "不存在");
+});
+
+/**
+ * 导入 —— 字段契约是「一行 = 一个字典项」(`code / name / label / value / remark`),
+ * 这里只测接口语义:按编码聚合、并入(幂等)、逐行报错。列头与摊平在
+ * `src/components/modules/settings/settings-dictionary-excel.ts`(纯前端件,不为十几行映射把 React 链拖进 tests)。
+ */
+test("导入:新编码 —— 多行归成一个字典,名称取第一行有值的那个", async () => {
+	const result = await caller.dict.import({
+		rows: [
+			{ code: IMPORT_CODE, name: IMPORT_NAME, label: "甲", value: "a", remark: "导入" },
+			{ code: IMPORT_CODE, name: "", label: "乙", value: "b", remark: "" },
+		],
+	});
+	assert.equal(result.created, 2);
+	assert.equal(result.errors.length, 0);
+
+	const row = await caller.dict.byCode({ code: IMPORT_CODE });
+	assert.ok(row, "导入后应能按 code 读到");
+	assert.equal(row.name, IMPORT_NAME);
+	assert.equal(row.remark, "导入");
+	assert.equal(row.status, 1, "新建的字典是启用的");
+	assert.deepEqual(row.items, [
+		{ label: "甲", value: "a" },
+		{ label: "乙", value: "b" },
+	]);
+});
+
+test("导入:再导一次是幂等的 —— 已有的取值进 duplicates,不覆盖、不改小", async () => {
+	const result = await caller.dict.import({
+		rows: [
+			{ code: IMPORT_CODE, name: "", label: "甲", value: "a" },
+			{ code: IMPORT_CODE, name: "", label: "丙", value: "c" },
+		],
+	});
+	assert.equal(result.created, 1, "只有 c 是新增的");
+	assert.equal(result.duplicates.length, 1, "a 已存在");
+	assert.equal(result.errors.length, 0);
+
+	const row = await caller.dict.byCode({ code: IMPORT_CODE });
+	assert.equal(row?.items.length, 3, "a 还在,没被覆盖掉");
+	assert.equal(row?.name, IMPORT_NAME, "名称为空的行不改名");
+});
+
+test("导入:逐行校验 —— 编码格式 / label-value 配对 / 新建缺名称", async () => {
+	const result = await caller.dict.import({
+		rows: [
+			{ code: "BadCode", name: "大写", label: "甲", value: "a" },
+			{ code: IMPORT_CODE, name: "", label: "只有名称", value: "" },
+			{ code: `t${TEST_PREFIX}noname_${uniqueSuffix()}`.toLowerCase(), name: "", label: "", value: "" },
+		],
+	});
+	assert.equal(result.created, 0);
+	assert.equal(result.errors.length, 3);
+	assert.match(result.errors[0]?.message ?? "", /小写字母/);
+	assert.match(result.errors[1]?.message ?? "", /要么都填/);
+	assert.match(result.errors[2]?.message ?? "", /字典名称/);
 });
 
 after(async () => {

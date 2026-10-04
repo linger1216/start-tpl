@@ -124,8 +124,15 @@ export function ExcelImportDialog({
 
 	async function handleImport() {
 		if (!parsed || parsed.rows.length === 0) return;
-		const r = await onSubmit(parsed.rows);
-		if (r) setResult(r);
+		try {
+			const r = await onSubmit(parsed.rows);
+			if (r) setResult(r);
+		} catch (error) {
+			// 逐行错误由 ImportResult.errors 报;这里兜住"整批抛"(权限 / 网络),
+			// 别让它变成 unhandled rejection 而对话框毫无反馈
+			const message = toApiError(error).message;
+			setParsed((prev) => (prev ? { ...prev, warnings: [...prev.warnings, message] } : prev));
+		}
 	}
 
 	return (

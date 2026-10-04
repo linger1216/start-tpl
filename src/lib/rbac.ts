@@ -214,10 +214,13 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"dict.create": "sys:dict:add",
 	"dict.update": "sys:dict:edit",
 	"dict.delete": "sys:dict:remove",
+	// 导入 = 批量新增,复用「新增」权限点(不造新码:登记新码还得先在 sys_menu 建按钮,见本文件头)
+	"dict.import": "sys:dict:add",
 	// 参数
 	"para.create": "sys:para:add",
 	"para.update": "sys:para:edit",
 	"para.delete": "sys:para:remove",
+	"para.import": "sys:para:add",
 	// 标签
 	"tag.create": "sys:tag:add",
 	"tag.update": "sys:tag:edit",
@@ -236,6 +239,8 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"role.create": "sys:role:add",
 	"role.update": "sys:role:edit",
 	"role.remove": "sys:role:remove",
+	// 导入 = 批量新增,复用「新增」权限点(不造新码:登记新码还得先在 sys_menu 建按钮,见本文件头)
+	"role.import": "sys:role:add",
 	"role.addUser": "sys:role:user",
 	"role.removeUser": "sys:role:user",
 	"role.setMenus": "sys:role:perm",
@@ -243,6 +248,8 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"user.create": "sys:user:add",
 	"user.update": "sys:user:edit",
 	"user.remove": "sys:user:remove",
+	// 导入 = 批量新增,复用「新增」权限点(不造新码:登记新码还得先在 sys_menu 建按钮,见本文件头)
+	"user.import": "sys:user:add",
 	/**
 	 * ===== 读接口 =====
 	 *

@@ -6,11 +6,17 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
 import {
+	PARA_EXCEL_COLUMNS,
+	PARA_IMPORT_FIELDS,
+	paraExcelRows,
+} from "#/components/modules/settings/settings-parameters-excel";
+import {
 	type ParameterFormPayload,
 	SettingsParametersForm,
 } from "#/components/modules/settings/settings-parameters-form";
 import { type ParameterRow, parameterColumns } from "#/components/modules/settings/settings-parameters-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -78,6 +84,15 @@ export function SettingsParametersPage() {
 		}),
 	);
 
+	// 导入的成败提示归对话框(整批错进警告区、逐行错进明细),这里只管把清单刷成最新的
+	const importMutation = useMutation(
+		trpc.para.import.mutationOptions({
+			onSuccess: async () => {
+				await queryClient.invalidateQueries(trpc.para.pathFilter());
+			},
+		}),
+	);
+
 	function handleSubmit(payload: ParameterFormPayload) {
 		if (creating) {
 			if (!payload.type) return;
@@ -120,6 +135,9 @@ export function SettingsParametersPage() {
 			}),
 		[],
 	);
+
+	// 导出的是**当前筛选结果**(与卡头「匹配 N 条」同源)
+	const excelRows = useMemo(() => paraExcelRows(filtered), [filtered]);
 
 	const { table, persistColumns } = useLedgerTable({
 		columns,
@@ -184,7 +202,19 @@ export function SettingsParametersPage() {
 					table.setPageIndex(0);
 				}}
 				searchPlaceholder="搜索参数名 / 分组 / 说明…"
-				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+				actions={
+					<>
+						<ColumnToggle table={table} onPersist={persistColumns} />
+						<ExcelExportButton columns={PARA_EXCEL_COLUMNS} rows={excelRows} fileName="参数" />
+						<ExcelImportButton
+							title="导入参数"
+							description="一行 = 一条参数(参数名是业务键)。库里没有的建、已有的改值;代码内置的参数会跳过并报错,值会按类型校验。"
+							fields={PARA_IMPORT_FIELDS}
+							fileNamePrefix="参数导入模板"
+							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
+						/>
+					</>
+				}
 			/>
 
 			<LedgerCard

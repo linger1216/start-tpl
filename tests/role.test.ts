@@ -342,6 +342,73 @@ test("角色的用户:加人幂等 / 列表带出部门 / 能移出", async () =
 	assert.equal((await caller.role.users({ roleId: role.id })).length, 0, "移出之后列表空了");
 });
 
+test("导入:按角色名 upsert —— 新建 + 改状态 / 备注,再导一次只报 duplicates", async () => {
+	const roleA = `${TEST_PREFIX}导入角色甲_${SUFFIX}`;
+	const roleB = `${TEST_PREFIX}导入角色乙_${SUFFIX}`;
+	// 先建一个,验证「已有角色」那一支;备注故意留着,检查「空单元格不动库里的值」
+	const before = await caller.role.create({ name: roleB, remark: "原来的备注" });
+	roleIds.push(before.id);
+
+	const first = await caller.role.import({
+		rows: [
+			{ name: roleA, sort: "7", status: "停用", remark: "新建的" },
+			{ name: roleB, sort: "9" },
+		],
+	});
+	assert.equal(first.created, 2, "两行都写了");
+	assert.equal(first.errors.length, 0);
+	assert.equal(first.duplicates.length, 0);
+
+	let rows = await caller.role.list();
+	const a = rows.find((row) => row.name === roleA);
+	assert.ok(a, "新角色建出来了");
+	roleIds.push(a.id);
+	assert.equal(a.sort, 7, "排序列照填");
+	assert.equal(a.status, 0, "状态列认「停用」");
+	assert.equal(a.remark, "新建的");
+	assert.equal(rows.find((row) => row.name === roleB)?.remark, "原来的备注", "留空的备注不动库里的值");
+
+	// 再导一次:和库里一模一样 → duplicates,不假装写了一遍
+	const second = await caller.role.import({
+		rows: [{ name: roleA, sort: "7", status: "停用", remark: "新建的" }],
+	});
+	assert.equal(second.created, 0);
+	assert.equal(second.errors.length, 0);
+	assert.equal(second.duplicates.length, 1);
+	assert.match(second.duplicates[0]?.message ?? "", /没有改动/);
+
+	// 只填状态 → 真改(改 status 会让 casbin 装载结果变,服务端那边要 clearCasbinCache)
+	const third = await caller.role.import({ rows: [{ name: roleA, status: "启用" }] });
+	assert.equal(third.created, 1);
+	rows = await caller.role.list();
+	assert.equal(rows.find((row) => row.name === roleA)?.status, 1, "状态改回启用");
+});
+
+test("导入:逐行校验 —— 缺角色名 / 排序不是非负整数 / 状态写法不认 / 同批重名", async () => {
+	const roleName = `${TEST_PREFIX}导入校验_${SUFFIX}`;
+	const result = await caller.role.import({
+		rows: [
+			{ name: "", sort: "1", status: "启用" },
+			{ name: roleName, sort: "x" },
+			{ name: roleName, status: "算了" },
+			{ name: roleName, sort: "3", status: "启用" },
+			{ name: roleName, sort: "4" },
+		],
+	});
+	assert.equal(result.created, 1, "只有第 4 行是合法的");
+	assert.equal(result.errors.length, 4);
+	assert.match(result.errors[0]?.message ?? "", /缺少「角色名」/);
+	assert.match(result.errors[1]?.message ?? "", /「排序」/);
+	assert.match(result.errors[2]?.message ?? "", /「状态」/);
+	assert.match(result.errors[3]?.message ?? "", /出现了多次/);
+
+	const created = (await caller.role.list()).find((row) => row.name === roleName);
+	assert.ok(created, "合法那行真的落库了");
+	roleIds.push(created.id);
+	assert.equal(created.sort, 3);
+	assert.equal(created.status, 1, "状态列认「启用」");
+});
+
 after(async () => {
 	await closeDb();
 });

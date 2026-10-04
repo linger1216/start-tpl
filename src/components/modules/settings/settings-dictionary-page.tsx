@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsDictionaryDetail } from "#/components/modules/settings/settings-dictionary-detail";
+import {
+	DICT_EXCEL_COLUMNS,
+	DICT_IMPORT_FIELDS,
+	dictExcelRows,
+} from "#/components/modules/settings/settings-dictionary-excel";
 import { SettingsDictionaryForm } from "#/components/modules/settings/settings-dictionary-form";
 import { dictionaryColumns, type SettingsDictCallbacks } from "#/components/modules/settings/settings-dictionary-table";
 import {
@@ -14,6 +19,7 @@ import {
 	type SettingsDictRow,
 } from "#/components/modules/settings/settings-dictionary-types";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -86,6 +92,14 @@ export function SettingsDictionaryPage() {
 			},
 		}),
 	);
+	// 导入的失败提示由对话框负责(整批错进警告区、逐行错进明细),这里只负责刷列表
+	const importMutation = useMutation(
+		trpc.dict.import.mutationOptions({
+			onSuccess: async () => {
+				await invalidate();
+			},
+		}),
+	);
 
 	/** 关键词过滤:名称 / 编码 / 说明 / 字典项(label 与 value) */
 	const filtered = useMemo(
@@ -100,6 +114,8 @@ export function SettingsDictionaryPage() {
 	);
 
 	const total = filtered.length;
+	/** 导出走摊平后的行(一行一个字典项),与导入共用同一组表头 —— 导出的文件能直接回导 */
+	const excelRows = useMemo(() => dictExcelRows(filtered), [filtered]);
 
 	const stats: StatItem[] = useMemo(() => {
 		const itemCount = rows.reduce((sum, row) => sum + row.items.length, 0);
@@ -219,7 +235,19 @@ export function SettingsDictionaryPage() {
 					table.setPageIndex(0);
 				}}
 				searchPlaceholder="搜索字典名 / 编码 / 字典项…"
-				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+				actions={
+					<>
+						<ColumnToggle table={table} onPersist={persistColumns} />
+						<ExcelExportButton columns={DICT_EXCEL_COLUMNS} rows={excelRows} fileName="字典" />
+						<ExcelImportButton
+							title="导入字典"
+							description="一行 = 一个字典项(编码相同的行会归到同一个字典);字典已存在就补进字典项,已有的取值跳过、不覆盖。"
+							fields={DICT_IMPORT_FIELDS}
+							fileNamePrefix="字典导入模板"
+							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
+						/>
+					</>
+				}
 			/>
 
 			<LedgerCard

@@ -23,7 +23,11 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
  */
 // 65 → 77:新增数据权限两个 router(dataScope 7 个 + dataPlugin 5 个),全部走 protectedProcedure
 // 77 → 78:新增 `user.profile`(个人资料页,protectedProcedure)
-const EXPECTED_PROCEDURES = 78;
+// 78 → 79:新增 `dict.import`(字典 Excel 导入,protectedProcedure)
+// 79 → 80:新增 `para.import`(参数 Excel 导入,protectedProcedure)
+// 80 → 81:新增 `role.import`(角色 Excel 导入,protectedProcedure)
+// 81 → 82:新增 `user.import`(用户 Excel 导入,protectedProcedure)
+const EXPECTED_PROCEDURES = 82;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

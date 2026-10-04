@@ -6,23 +6,29 @@
  *  - `byCode` / `update` / `delete` 都收 `code`;
  *  - `create` 由调用方给 `code`,主键在服务端生成(`newId()`)。
  * 前端统一用 `#/hooks/use-dict` 读;字典没有对应编码就回空数组(不编造候选)。
+ *
+ * Excel 的列契约(导出表头 / 导入字段 / 摊平)在
+ * `src/components/modules/settings/settings-dictionary-excel.ts` —— **一行 = 一个字典项**,
+ * 导出与导入共用同一组表头,所以导出的文件能直接回导;`import` 的语义见那个过程的注释(并入、幂等)。
  */
 
 import { TRPCError } from "@trpc/server";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import { sysDict } from "#/db/data-base-schema";
+import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
 /** 字典编码规则:小写字母/数字/下划线,字母开头 —— 与建表的唯一键口径一致 */
+const DICT_CODE_RE = /^[a-z][a-z0-9_]*$/;
 const dictCode = z
 	.string()
 	.min(1, "请填写字典编码")
 	.max(64)
-	.regex(/^[a-z][a-z0-9_]*$/, "字典编码用小写字母/数字/下划线,且以字母开头");
+	.regex(DICT_CODE_RE, "字典编码用小写字母/数字/下划线,且以字母开头");
 
 /** 字典项:[{label, value}];label 与 value 都必填,value 在同字典内唯一 */
 const dictItems = z
@@ -133,4 +139,124 @@ export const dictRouter = createTRPCRouter({
 		await db.delete(sysDict).where(eq(sysDict.code, input.code));
 		return { id: existing.id, code: input.code };
 	}),
+
+	/**
+	 * **Excel 导入** —— 一行 = 一个字典项(`code / name / label / value / remark`),按字典编码聚合后落库。
+	 *
+	 * 语义是**并入**(幂等):字典已存在就补字典项、顺带更新名称与备注,**不删**任何已有的项 ——
+	 * 同一份文件导两次不会把字典改小,本来就有的取值进 `duplicates` 而不是报错。
+	 * 逐行错误一律回 `{ index, message }`,`index` 是**文件里的行序**(与对话框「第 N 行」对齐)。
+	 */
+	import: protectedProcedure
+		.input(
+			z.object({
+				rows: z.array(z.record(z.string(), z.string())).min(1, "没有可导入的行").max(2000, "一次最多导入 2000 行"),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			type Group = {
+				name: string;
+				remark: string;
+				items: Array<{ label: string; value: string; index: number }>;
+				/** 这个编码下通过校验的行号 —— 新建字典时它们都算「已导入」 */
+				rows: number[];
+			};
+			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
+			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
+			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
+			const groups = new Map<string, Group>();
+
+			// 1) 先按行校验 + 按编码聚合(不碰数据库,一次把错误报全)
+			input.rows.forEach((row, index) => {
+				const code = (row.code ?? "").trim();
+				const name = (row.name ?? "").trim();
+				const label = (row.label ?? "").trim();
+				const value = (row.value ?? "").trim();
+				const remark = (row.remark ?? "").trim();
+				if (!code) {
+					result.errors.push({ index, message: "缺少「字典编码」" });
+					return;
+				}
+				if (!DICT_CODE_RE.test(code)) {
+					result.errors.push({ index, message: "「字典编码」只能用小写字母/数字/下划线,且以字母开头" });
+					return;
+				}
+				if (!label !== !value) {
+					result.errors.push({ index, message: "「字典项名称」与「字典项取值」要么都填,要么都空" });
+					return;
+				}
+				const group = groups.get(code) ?? { name: "", remark: "", items: [], rows: [] };
+				if (!group.name && name) group.name = name;
+				if (!group.remark && remark) group.remark = remark;
+				group.rows.push(index);
+				if (label && value) {
+					if (group.items.some((item) => item.value === value)) {
+						// 同一个字典里取值重复:留第一行、后面的报错(与表单那侧 refine 的口径一致)
+						result.errors.push({ index, message: `同一个字典里「${value}」重复` });
+					} else {
+						group.items.push({ label, value, index });
+					}
+				}
+				groups.set(code, group);
+			});
+			if (groups.size === 0) return result;
+
+			// 2) 一次读出涉及的字典,避免每个编码一次查询
+			const existing = await db
+				.select()
+				.from(sysDict)
+				.where(inArray(sysDict.code, [...groups.keys()]));
+			const byCode = new Map(existing.map((row) => [row.code, row]));
+
+			// 3) 逐个落库
+			for (const [code, group] of groups) {
+				const current = byCode.get(code);
+				if (!current) {
+					if (!group.name) {
+						for (const index of group.rows) {
+							result.errors.push({ index, message: "新建字典必须填「字典名称」" });
+						}
+						continue;
+					}
+					await db.insert(sysDict).values({
+						id: newId(),
+						code,
+						name: group.name,
+						remark: group.remark || null,
+						items: group.items.map(({ label, value }) => ({ label, value })),
+						status: 1,
+					});
+					result.created += group.rows.length;
+					continue;
+				}
+
+				const items = [...(current.items ?? [])];
+				for (const item of group.items) {
+					if (items.some((existingItem) => existingItem.value === item.value)) {
+						result.duplicates.push({ index: item.index, message: `「${item.value}」这个取值已经有了,已跳过` });
+						continue;
+					}
+					items.push({ label: item.label, value: item.value });
+					result.created += 1;
+				}
+				for (const index of group.rows) {
+					if (!group.items.some((item) => item.index === index)) {
+						result.duplicates.push({ index, message: "字典已存在,该行没有新增字典项" });
+					}
+				}
+				const nextName = group.name || current.name;
+				const nextRemark = group.remark || current.remark;
+				if (
+					nextName !== current.name ||
+					nextRemark !== current.remark ||
+					items.length !== (current.items ?? []).length
+				) {
+					await db
+						.update(sysDict)
+						.set({ name: nextName, remark: nextRemark, items, update_time: new Date() })
+						.where(eq(sysDict.code, code));
+				}
+			}
+			return result;
+		}),
 });

@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import {
 	sysAccount,
 	sysCasbinRule,
@@ -473,4 +473,102 @@ test("user.remove:被删的人是 admin 时拒", async () => {
 	// 库里的用户还在(被拒后不该删)
 	const [row] = await db.select().from(sysUser).where(eq(sysUser.id, target.id));
 	assert.ok(row, "被拒后用户应该还在库");
+});
+
+test("user.import:批量开账号 —— 新邮箱真能登录,角色 / 部门挂上,不留会话", async () => {
+	const emailA = `${TEST_PREFIX}import-a_${SUFFIX}@example.com`;
+	const emailB = `${TEST_PREFIX}import-b_${SUFFIX}@example.com`;
+	// 角色 / 部门都按**名字**解析 —— 用库里现成的一行
+	const roleRow = (await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole)).find(
+		(row) => row.name === "系统管理员",
+	);
+	assert.ok(roleRow, "库里应该有「系统管理员」角色");
+	const [deptRow] = await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).limit(1);
+	assert.ok(deptRow, "库里应该有部门");
+
+	const result = await caller.user.import({
+		rows: [
+			{ name: "导入甲", email: emailA, password: PASSWORD, roles: roleRow.name, departments: deptRow.name },
+			// 邮箱大小写混写 → 库里应统一成小写
+			{ name: "导入乙", email: emailB.toUpperCase(), password: PASSWORD },
+		],
+	});
+	assert.equal(result.created, 2, "两行都建了");
+	assert.equal(result.errors.length, 0);
+	assert.equal(result.duplicates.length, 0);
+
+	const createdRows = await db
+		.select({ id: sysUser.id, email: sysUser.email })
+		.from(sysUser)
+		.where(inArray(sysUser.email, [emailA, emailB]));
+	assert.equal(createdRows.length, 2, "库里应该有这两个账号");
+	for (const row of createdRows) createdIds.push(row.id);
+	const idA = createdRows.find((row) => row.email === emailA)?.id;
+	assert.ok(idA, "导入的邮箱落库时是小写");
+
+	// ① 不留会话 —— 导入完不该有人「顺手登录」
+	assert.equal((await db.select().from(sysSession).where(eq(sysSession.userId, idA))).length, 0);
+	// ② 角色挂上(策略表的 g 行)、部门挂上(成员表)
+	const gRows = await db
+		.select()
+		.from(sysCasbinRule)
+		.where(and(eq(sysCasbinRule.ptype, "g"), eq(sysCasbinRule.v0, `user:${idA}`)));
+	assert.deepEqual(
+		gRows.map((row) => row.v1),
+		[`role:${roleRow.id}`],
+	);
+	const members = await db.select().from(sysUserDept).where(eq(sysUserDept.user_id, idA));
+	assert.deepEqual(
+		members.map((row) => row.department_id),
+		[deptRow.id],
+	);
+	// ③ 真能登录:密码确实被 BA 哈希进 sys_account 了
+	const signIn = await auth.api.signInEmail({ body: { email: emailA, password: PASSWORD }, returnHeaders: true });
+	assert.ok(signIn?.response?.user, "导入出来的账号应该能登录");
+	assert.equal(signIn.response.user.id, idA);
+});
+
+test("user.import:只建不改 + 逐行校验 —— 坏行进 errors,已有邮箱进 duplicates,好行照样建", async () => {
+	const existing = await caller.user.create({
+		name: "导入占位",
+		email: `${TEST_PREFIX}import-exist_${SUFFIX}@example.com`,
+		password: PASSWORD,
+	});
+	createdIds.push(existing.id);
+	const emailNew = `${TEST_PREFIX}import-new_${SUFFIX}@example.com`;
+
+	const result = await caller.user.import({
+		rows: [
+			{ name: "", email: `${TEST_PREFIX}import-noname_${SUFFIX}@example.com`, password: PASSWORD },
+			{ name: "坏邮箱", email: "not-an-email", password: PASSWORD },
+			{ name: "短密码", email: `${TEST_PREFIX}import-short_${SUFFIX}@example.com`, password: "123" },
+			{
+				name: "角色不存在",
+				email: `${TEST_PREFIX}import-role_${SUFFIX}@example.com`,
+				password: PASSWORD,
+				roles: "根本不存在的角色",
+			},
+			{ name: "重复占位", email: existing.email, password: PASSWORD },
+			{ name: "导入新", email: emailNew, password: PASSWORD },
+			// 同一批里与上一行邮箱重复 → 只认第一条
+			{ name: "同批重复", email: emailNew, password: PASSWORD },
+		],
+	});
+	assert.equal(result.created, 1, "只有「导入新」那一行该建");
+	assert.equal(result.duplicates.length, 1);
+	assert.match(result.duplicates[0]?.message ?? "", /已经存在,已跳过/);
+	assert.equal(result.errors.length, 5);
+	assert.match(result.errors[0]?.message ?? "", /缺少「姓名」/);
+	assert.match(result.errors[1]?.message ?? "", /格式不对/);
+	assert.match(result.errors[2]?.message ?? "", /至少 8 位/);
+	assert.match(result.errors[3]?.message ?? "", /不存在/);
+	assert.match(result.errors[4]?.message ?? "", /出现了多次/);
+
+	// 已有的账号**没被动过**(导入只建不改)
+	const [kept] = await db.select().from(sysUser).where(eq(sysUser.id, existing.id));
+	assert.equal(kept?.name, "导入占位");
+	// 好行真落库了
+	const [fresh] = await db.select().from(sysUser).where(eq(sysUser.email, emailNew));
+	assert.ok(fresh, "合法那行应该建出来");
+	createdIds.push(fresh.id);
 });

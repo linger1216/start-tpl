@@ -13,8 +13,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { eq } from "drizzle-orm";
-import { sysAccount, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { like } from "drizzle-orm";
+import { sysAccount, sysAccountLockout, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
 import {
@@ -39,19 +39,32 @@ before(() => {
 after(async () => {
 	resetLockoutConfig();
 	// 按外键顺序清:session → account → user(避免 1451)
-	const ids = (
+	// ⚠️ 这里原来写的是 `eq(email, "__test__lockout_%")` —— `eq` 是**等值**匹配,`%` 不当通配符用,
+	// 于是一行都没删掉(库里攒了 5 个 `__test__lockout_*` 账号)。改成 `like` 粗筛 + JS `startsWith` 精筛:
+	// `TEST_PREFIX` 里的 `_` 在 LIKE 里是单字符通配,不能直接把前缀塞进 LIKE。
+	const mine = (
 		await db
-			.select({ id: sysUser.id })
+			.select({ id: sysUser.id, email: sysUser.email })
 			.from(sysUser)
-			.where(eq(sysUser.email, `${TEST_PREFIX}lockout_%`))
-	).map((r) => r.id);
+			.where(like(sysUser.email, `${TEST_PREFIX}lockout_%`))
+	).filter((r) => r.email.startsWith(`${TEST_PREFIX}lockout_`));
+	const ids = mine.map((r) => r.id);
 	if (ids.length > 0) {
-		await db.delete(sysSession).where(eq(sysSession.userId, ids[0] as string));
 		// 一次 inArray 搞定
 		const { inArray } = await import("drizzle-orm");
 		await db.delete(sysSession).where(inArray(sysSession.userId, ids));
 		await db.delete(sysAccount).where(inArray(sysAccount.userId, ids));
 		await db.delete(sysUser).where(inArray(sysUser.id, ids));
+	}
+	// 风控表按**邮箱**记行,不随用户删:自己造的行自己清(留下的都是 `__test__lockout_*`)
+	if (mine.length > 0) {
+		const { inArray } = await import("drizzle-orm");
+		await db.delete(sysAccountLockout).where(
+			inArray(
+				sysAccountLockout.email,
+				mine.map((r) => r.email),
+			),
+		);
 	}
 	await closeDb();
 });

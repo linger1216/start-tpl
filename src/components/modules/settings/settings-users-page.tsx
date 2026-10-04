@@ -5,10 +5,16 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
+import {
+	USER_EXCEL_COLUMNS,
+	USER_IMPORT_FIELDS,
+	userExcelRows,
+} from "#/components/modules/settings/settings-users-excel";
 import { SettingsUsersForm, type UserFormPayload } from "#/components/modules/settings/settings-users-form";
 import { type UserRow, userColumns } from "#/components/modules/settings/settings-users-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import type { MultiSelectOption } from "#/components/modules/shared/multi-select";
@@ -104,7 +110,18 @@ export function SettingsUsersPage() {
 		}),
 	);
 
+	// 导入不写 onError:整批失败 / 逐行错误都由对话框自己显示(红字警告区 + 明细)
+	const importMutation = useMutation(
+		trpc.user.import.mutationOptions({
+			onSuccess: async () => {
+				await queryClient.invalidateQueries(trpc.user.pathFilter());
+			},
+		}),
+	);
+
 	const filtered = useMemo(() => users.filter((row) => matchKeyword([row.name, row.email], keyword)), [users, keyword]);
+	// 导出的是**当前筛选结果**,不是全表 —— 所见即所得
+	const excelRows = useMemo(() => userExcelRows(filtered), [filtered]);
 
 	const columns = useMemo(
 		() => userColumns({ onView: setDetailFor, onEdit: setEditing, onDelete: setPendingDelete }),
@@ -174,7 +191,19 @@ export function SettingsUsersPage() {
 					table.setPageIndex(0);
 				}}
 				searchPlaceholder="搜索姓名 / 邮箱…"
-				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+				actions={
+					<>
+						<ColumnToggle table={table} onPersist={persistColumns} />
+						<ExcelExportButton columns={USER_EXCEL_COLUMNS} rows={excelRows} fileName="用户" />
+						<ExcelImportButton
+							title="导入用户"
+							description="一行 = 一个账号(邮箱是业务键),**只建不改**:邮箱已存在的行会跳过并报出来。导出的文件回导时要手补「初始密码」列(密码是散列的,导不出来)。"
+							fields={USER_IMPORT_FIELDS}
+							fileNamePrefix="用户导入模板"
+							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
+						/>
+					</>
+				}
 			/>
 
 			<LedgerCard

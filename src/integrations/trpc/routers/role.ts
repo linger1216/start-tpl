@@ -5,6 +5,7 @@
  * | --- | --- | --- |
  * | `list` | query | 全部角色 + **成员数**(删除前能看出"还有人用着") |
  * | `create` | mutation | 新增 |
+ * | `import` | mutation | 从 Excel 批量导入 —— **按角色名 upsert**(复用「新增」权限点) |
  * | `update` | mutation | 改名 / 启停 / 说明 |
  * | `remove` | mutation | 删除;**还有人挂在这个角色上时拒绝** |
  * | `menuIds` | query | 这个角色勾了哪些菜单 / 按钮(授权树的选中态) |
@@ -33,6 +34,7 @@ import {
 	setRoleMenus,
 	userIdsOfRole,
 } from "#/lib/casbin";
+import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { withAncestorIds } from "#/lib/rbac";
 import { createTRPCRouter, protectedProcedure } from "../init";
@@ -150,6 +152,135 @@ export const roleRouter = createTRPCRouter({
 		await db.delete(sysRole).where(eq(sysRole.id, input.id));
 		return { success: true };
 	}),
+
+	/**
+	 * 角色 Excel 导入 —— **按角色名 upsert**(角色名是业务键,`sys_role` 上只有 `id` 是主键)。
+	 *
+	 * | 情况 | 行为 |
+	 * | --- | --- |
+	 * | 库里没有这个角色名 | 建;排序列留空就排到最后,状态列留空默认「启用」 |
+	 * | 库里已有 | 改排序 / 状态 / 备注(**留空的单元格不动库里的值**);和库里完全一样 → `duplicates` |
+	 * | 同一批里名字重复 | 第 2 条起报错(只导入第一条) |
+	 *
+	 * 列契约与表头在 `#/components/modules/settings/settings-roles-excel.ts`;导出的文件能直接回导。
+	 * 权限点复用「新增角色」(`sys:role:add`):导入本质就是批量新增,不另造新码(见 `lib/rbac.ts` 文件头)。
+	 */
+	import: protectedProcedure
+		.input(
+			z.object({
+				rows: z.array(z.record(z.string(), z.string())).min(1, "没有可导入的行").max(2000, "一次最多导入 2000 行"),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			type Parsed = { name: string; sort: number | null; status: number | null; remark: string | null; index: number };
+			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
+			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
+			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
+
+			/** 状态列认「启用 / 停用」「1 / 0」「true / false」「是 / 否」;空串 = 不动 */
+			const parseStatus = (raw: string): number | null | "bad" => {
+				const text = raw.trim().toLowerCase();
+				if (!text) return null;
+				if (["启用", "1", "true", "是", "yes"].includes(text)) return 1;
+				if (["停用", "0", "false", "否", "no"].includes(text)) return 0;
+				return "bad";
+			};
+
+			// ① 逐行校验(不碰数据库,一次把错误报全)
+			const parsed: Parsed[] = [];
+			const seen = new Set<string>();
+			input.rows.forEach((row, index) => {
+				const name = (row.name ?? "").trim();
+				const rawSort = (row.sort ?? "").trim();
+				const rawStatus = (row.status ?? "").trim();
+				const remark = (row.remark ?? "").trim();
+
+				if (!name) {
+					result.errors.push({ index, message: "缺少「角色名」" });
+					return;
+				}
+				if (name.length > 32) {
+					result.errors.push({ index, message: "「角色名」最长 32 字符" });
+					return;
+				}
+				if (seen.has(name)) {
+					result.errors.push({ index, message: `同一批里「${name}」出现了多次,只导入第一条` });
+					return;
+				}
+				let sort: number | null = null;
+				if (rawSort) {
+					const value = Number(rawSort);
+					if (!Number.isInteger(value) || value < 0) {
+						result.errors.push({ index, message: "「排序」要填非负整数" });
+						return;
+					}
+					sort = value;
+				}
+				const status = parseStatus(rawStatus);
+				if (status === "bad") {
+					result.errors.push({ index, message: "「状态」只能填 启用 / 停用(或 1 / 0)" });
+					return;
+				}
+				if (remark.length > 255) {
+					result.errors.push({ index, message: "「备注」最长 255 字符" });
+					return;
+				}
+				seen.add(name);
+				parsed.push({ name, sort, status, remark: remark || null, index });
+			});
+			if (parsed.length === 0) return result;
+
+			// ② 一次读出全部角色(角色是配置表,量小),按角色名索引
+			const existing = await db.select().from(sysRole);
+			const byName = new Map(existing.map((row) => [row.name, row]));
+			let maxSort = existing.reduce((max, row) => Math.max(max, Number(row.sort ?? 0)), -1);
+
+			// ③ 逐行落库
+			let changed = false;
+			for (const row of parsed) {
+				const current = byName.get(row.name);
+				if (!current) {
+					maxSort += 1;
+					await db.insert(sysRole).values({
+						id: newId(),
+						name: row.name,
+						sort: row.sort ?? maxSort,
+						status: row.status ?? 1,
+						remark: row.remark,
+						create_time: new Date(),
+						update_time: new Date(),
+					});
+					changed = true;
+					result.created += 1;
+					continue;
+				}
+				const nextSort = row.sort ?? Number(current.sort ?? 0);
+				const nextStatus = row.status ?? Number(current.status ?? 1);
+				const nextRemark = row.remark ?? current.remark ?? null;
+				if (
+					nextSort === Number(current.sort ?? 0) &&
+					nextStatus === Number(current.status ?? 1) &&
+					nextRemark === (current.remark ?? null)
+				) {
+					result.duplicates.push({ index: row.index, message: "和库里一样,没有改动" });
+					continue;
+				}
+				await db
+					.update(sysRole)
+					.set({ sort: nextSort, status: nextStatus, remark: nextRemark, update_time: new Date() })
+					.where(eq(sysRole.id, current.id));
+				changed = true;
+				result.created += 1;
+			}
+
+			// 状态改了会影响装载结果(停用的角色不贡献权限),统一刷一次 —— 与 `update` 同一个理由
+			if (changed) clearCasbinCache();
+
+			// 校验分两趟跑,回执按行号排一下 —— 对话框是按「第 N 行」逐条列的
+			result.errors.sort((a, b) => a.index - b.index);
+			result.duplicates.sort((a, b) => a.index - b.index);
+			return result;
+		}),
 
 	/**
 	 * 这个角色下的人 —— 和部门那边的「成员」是同一件事的两面:部门看"谁在这个部门",这里看"谁有这个角色"。

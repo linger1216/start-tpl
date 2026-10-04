@@ -7,6 +7,7 @@
  * | `create` | mutation | **建账号** —— 转调 Better Auth 的 `signUpEmail`(密码哈希由它做) |
  * | `update` | mutation | 改姓名 / 邮箱(账号本身仍是 BA 的表,这里只动这两列) |
  * | `remove` | mutation | 删账号:先清会话 / account / 部门成员,再删 `sys_user`(拒绝删自己) |
+ * | `import` | mutation | 从 Excel 批量开账号 —— **只建不改**,复用的还是 `signUpEmail` |
  * | `roles` | query | 这个人的全局角色(用户详情里的角色指派) |
  * | `profile` | query | **当前登录者**自己的资料(个人资料页:姓名 / 邮箱 / 验证状态 / 角色 / 部门) |
  *
@@ -27,6 +28,7 @@ import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept } from "
 import { auth } from "#/lib/auth";
 import { allUserRoles, isAdminUser, removeAllRolesOfUser, roleIdsOf, setUserRoles } from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
+import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
@@ -345,6 +347,168 @@ export const userRouter = createTRPCRouter({
 		await db.delete(sysUser).where(eq(sysUser.id, input.id));
 		return { id: input.id, success: true };
 	}),
+
+	/**
+	 * 用户 Excel 导入 —— **批量开账号,只建不改**。
+	 *
+	 * | 情况 | 行为 |
+	 * | --- | --- |
+	 * | 邮箱不在库里 | 走 `auth.api.signUpEmail` 开账号(密码哈希 / account 记录都是 BA 的事),再挂角色与部门 |
+	 * | 邮箱已在库里 | 进 `duplicates` 跳过 —— **绝不改已有账号**(批量改密码 / 改角色太危险,那是「编辑」弹窗的事) |
+	 * | 角色 / 部门名字对不上(或有同名) | 逐行报错,这一行不建 |
+	 *
+	 * 列契约与表头在 `#/components/modules/settings/settings-users-excel.ts`;它的「初始密码」列
+	 * 是导出时没有的(密码是散列,导不出来)—— 拿导出的文件当模板要手补这一列。
+	 * 权限点复用「新增用户」(`sys:user:add`):导入本质就是批量新增,不另造新码(见 `lib/rbac.ts` 文件头)。
+	 */
+	import: protectedProcedure
+		.input(
+			z.object({
+				rows: z.array(z.record(z.string(), z.string())).min(1, "没有可导入的行").max(500, "一次最多导入 500 行"),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			type Parsed = {
+				name: string;
+				email: string;
+				password: string;
+				roleIds: string[];
+				deptIds: string[];
+				index: number;
+			};
+			/** `ImportResult.duplicates` 是可选的,本接口一定回(空数组也要有),好让对话框显示「重复 N 条」 */
+			type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
+			const result: ImportOutcome = { total: input.rows.length, created: 0, errors: [], duplicates: [] };
+
+			/** 多值列(角色 / 部门):导出用「、」连接,导入 `、` `,` `;` 与空白都认 */
+			const splitNames = (raw: string) =>
+				raw
+					.split(/[、,;，；\s]+/)
+					.map((value) => value.trim())
+					.filter(Boolean);
+
+			/** 名字 → id。同名的部门 / 角色不猜:直接让这一行报错(否则容易挂错人) */
+			const idByName = (rows: Array<{ id: string; name: string }>) => {
+				const map = new Map<string, string>();
+				const duplicated = new Set<string>();
+				for (const row of rows) {
+					if (map.has(row.name)) duplicated.add(row.name);
+					else map.set(row.name, row.id);
+				}
+				return { map, duplicated };
+			};
+			// 角色与部门都是配置表,量小 —— 一次查全,别逐行查库
+			const roles = idByName(await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole));
+			const depts = idByName(await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept));
+			const existingEmails = new Set((await db.select({ email: sysUser.email }).from(sysUser)).map((row) => row.email));
+
+			// ① 逐行校验(不碰数据库,一次把错误报全)
+			const parsed: Parsed[] = [];
+			const seen = new Set<string>();
+			input.rows.forEach((row, index) => {
+				const name = (row.name ?? "").trim();
+				const email = (row.email ?? "").trim().toLowerCase();
+				const password = (row.password ?? "").trim();
+				const roleNames = splitNames(row.roles ?? "");
+				const deptNames = splitNames(row.departments ?? "");
+
+				if (!name) {
+					result.errors.push({ index, message: "缺少「姓名」" });
+					return;
+				}
+				if (name.length > 128) {
+					result.errors.push({ index, message: "「姓名」最长 128 字符" });
+					return;
+				}
+				if (!email) {
+					result.errors.push({ index, message: "缺少「邮箱」" });
+					return;
+				}
+				if (!email.includes("@") || email.length > 255) {
+					result.errors.push({ index, message: "「邮箱」格式不对" });
+					return;
+				}
+				if (seen.has(email)) {
+					result.errors.push({ index, message: `同一批里「${email}」出现了多次,只导入第一条` });
+					return;
+				}
+				// 已在库里 = 跳过(不是错误):导入只建不改
+				if (existingEmails.has(email)) {
+					seen.add(email);
+					result.duplicates.push({ index, message: `邮箱 ${email} 已经存在,已跳过(导入只建不改)` });
+					return;
+				}
+				if (!password) {
+					result.errors.push({ index, message: "缺少「初始密码」" });
+					return;
+				}
+				if (password.length < 8) {
+					result.errors.push({ index, message: "「初始密码」至少 8 位" });
+					return;
+				}
+				const roleIds: string[] = [];
+				for (const roleName of roleNames) {
+					if (roles.duplicated.has(roleName)) {
+						result.errors.push({ index, message: `角色「${roleName}」有多个同名角色,请先改名` });
+						return;
+					}
+					const roleId = roles.map.get(roleName);
+					if (!roleId) {
+						result.errors.push({ index, message: `角色「${roleName}」不存在` });
+						return;
+					}
+					roleIds.push(roleId);
+				}
+				const deptIds: string[] = [];
+				for (const deptName of deptNames) {
+					if (depts.duplicated.has(deptName)) {
+						result.errors.push({ index, message: `部门「${deptName}」有多个同名部门,请先改名` });
+						return;
+					}
+					const deptId = depts.map.get(deptName);
+					if (!deptId) {
+						result.errors.push({ index, message: `部门「${deptName}」不存在` });
+						return;
+					}
+					deptIds.push(deptId);
+				}
+				seen.add(email);
+				parsed.push({ name, email, password, roleIds, deptIds, index });
+			});
+
+			// ② 逐行开账号 —— 与 `create` 同一条路:哈希 / account 记录交给 BA
+			for (const row of parsed) {
+				let created: Awaited<ReturnType<typeof auth.api.signUpEmail>>;
+				try {
+					created = await auth.api.signUpEmail({
+						body: { email: row.email, password: row.password, name: row.name },
+					});
+				} catch {
+					// 单个账号失败不打断整批:这一行报错,后面的继续
+					result.errors.push({ index: row.index, message: "账号创建失败(请联系管理员)" });
+					continue;
+				}
+				if (!created?.user) {
+					result.errors.push({ index: row.index, message: "账号创建失败(Better Auth 没有返回用户)" });
+					continue;
+				}
+				const userId = created.user.id;
+				// BA 建账号时会顺手签发一个会话(否则等于把导入人顶掉、换成最后导入的那个账号)
+				await db.delete(sysSession).where(eq(sysSession.userId, userId));
+				if (row.roleIds.length > 0) await setUserRoles(userId, row.roleIds);
+				if (row.deptIds.length > 0) {
+					await db
+						.insert(sysUserDept)
+						.values(row.deptIds.map((deptId) => ({ id: newId(), department_id: deptId, user_id: userId })));
+				}
+				result.created += 1;
+			}
+
+			// 校验分两趟跑,回执按行号排一下 —— 对话框是按「第 N 行」逐条列的
+			result.errors.sort((a, b) => a.index - b.index);
+			result.duplicates.sort((a, b) => a.index - b.index);
+			return result;
+		}),
 
 	/** 这个人的所有角色(全局 —— 与部门无关,成员关系在 `sys_casbin_rule` 的 `g` 行) */
 	roles: protectedProcedure.input(z.object({ userId: z.string().min(1) })).query(async ({ input }) => {

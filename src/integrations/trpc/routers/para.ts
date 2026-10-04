@@ -4,15 +4,28 @@
  * 表是 **`sys_para`**(旧名 `sys_config`),主键是 `para_key`,`id` 只是普通列(nanoid,由本路由填)。
  * 四件事:列出参数(库里值 + 代码默认值合并)、读单个参数、改一个值、删一条覆盖值。
  * 类型是 **tinyint 码**(1 int / 2 bool / 3 string / 4 json),码 ↔ 名称 ↔ 校验都在 `lib/para-spec.ts`。
+ *
+ * 另有 `import`:Excel 批量导入(upsert),列契约与摊平在
+ * `src/components/modules/settings/settings-parameters-excel.ts` —— 导出与导入共用同一组表头,导出的文件能直接回导。
  */
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import { sysPara } from "#/db/data-base-schema";
+import type { ImportResult } from "#/lib/excel";
 import { newId } from "#/lib/ids";
-import { isParaType, PARA_TYPES, PARA_VALUE_MAX, type ParaType, validateParaValue } from "#/lib/para-spec";
+import {
+	asParaType,
+	isParaType,
+	PARA_TYPE,
+	PARA_TYPE_META,
+	PARA_TYPES,
+	PARA_VALUE_MAX,
+	type ParaType,
+	validateParaValue,
+} from "#/lib/para-spec";
 import { clearParaCache, PARA_DEFAULTS } from "#/lib/sys-para";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -21,6 +34,18 @@ const paraTypeSchema = z
 	.int()
 	.refine(isParaType, { message: `参数类型只能是 ${PARA_TYPES.join(" / ")}` })
 	.transform((value) => value as ParaType);
+
+/** 「类型」列的文本 → 类型码:导出写的是中文名(`PARA_TYPE_META.label`),这里两种写法都认;空串回 null = 沿用 */
+function parseParaType(raw: string): ParaType | null {
+	const text = raw.trim();
+	if (text === "") return null;
+	const byLabel = PARA_TYPES.find((type) => PARA_TYPE_META[type].label === text);
+	if (byLabel) return byLabel;
+	const code = Number(text);
+	return isParaType(code) ? code : null;
+}
+
+const PARA_TYPE_HINT = PARA_TYPES.map((type) => PARA_TYPE_META[type].label).join(" / ");
 
 /** 库行 → 接口出参(**只回表里真有的列** + 代码默认值的兜底) */
 function toPara(key: string, row: typeof sysPara.$inferSelect | undefined) {
@@ -40,6 +65,12 @@ function toPara(key: string, row: typeof sysPara.$inferSelect | undefined) {
 		updatedAt: row?.update_time ? row.update_time.toISOString() : null,
 	};
 }
+
+/**
+ * 导入的回执 —— `ImportResult.duplicates` 是可选的,这里收窄成必填再往上赋值
+ * (否则 `result.duplicates.push(...)` 报 `TS18048: 'result.duplicates' is possibly 'undefined'`)。
+ */
+type ImportOutcome = ImportResult & { duplicates: Array<{ index: number; message: string }> };
 
 export const paraRouter = createTRPCRouter({
 	/** 参数清单:代码默认值 + 库里的覆盖值(库里没有的参数也列出来,否则人不知道能调什么) */
@@ -149,6 +180,135 @@ export const paraRouter = createTRPCRouter({
 			});
 			clearParaCache();
 			return { key: input.key, value: input.value.trim() };
+		}),
+
+	/**
+	 * Excel 导入(一行 = 一条参数,列契约见 `settings-parameters-excel.ts`)。
+	 *
+	 * 语义是 **upsert**:库里没有的键按「新增」建(类型取「类型」列,空则按 `PARA_DEFAULTS` 兜底);
+	 * 已有的键改值 / 分组 / 说明 / 类型(**只覆盖表里填了的字段**,空单元格不把库里的值清掉)。三条规矩:
+	 *  - 代码内置(`editable = 0`)的参数一律跳过报错 —— 与「修改」同一口径,否则界面改不了、导入却能改;
+	 *  - 值一律过 `validateParaValue`,类型对不上就逐行报错;
+	 *  - 和库里完全一样的行进 `duplicates`(重复导入不会假装"改了一堆")。
+	 */
+	import: protectedProcedure
+		.input(
+			z.object({
+				rows: z.array(z.record(z.string(), z.string())).min(1, "没有可导入的行").max(2000, "一次最多导入 2000 行"),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const result: ImportOutcome = { created: 0, errors: [], duplicates: [] };
+
+			// ① 逐行校验 + 去重(不碰库):同一批里同一个 key 只认第一条,后面的报错,免得"谁覆盖谁"看不出来
+			const seen = new Set<string>();
+			const parsed: Array<{
+				key: string;
+				value: string;
+				type: ParaType | null;
+				group: string;
+				remark: string;
+				index: number;
+			}> = [];
+			input.rows.forEach((row, index) => {
+				const key = (row.key ?? "").trim();
+				if (!key) {
+					result.errors.push({ index, message: "缺少「参数名」" });
+					return;
+				}
+				if (key.length > 64) {
+					result.errors.push({ index, message: "「参数名」最长 64 字符" });
+					return;
+				}
+				if (seen.has(key)) {
+					result.errors.push({ index, message: `同一批里「${key}」出现了多次,只导入第一条` });
+					return;
+				}
+				seen.add(key);
+				const type = parseParaType(row.type ?? "");
+				if ((row.type ?? "").trim() !== "" && type === null) {
+					result.errors.push({ index, message: `「类型」只能是 ${PARA_TYPE_HINT}` });
+					return;
+				}
+				parsed.push({
+					key,
+					value: row.value ?? "",
+					type,
+					group: (row.group ?? "").trim(),
+					remark: (row.remark ?? "").trim(),
+					index,
+				});
+			});
+
+			// ② 一次读全已存在的行(不逐行查库)
+			const stored = new Map<string, typeof sysPara.$inferSelect>();
+			if (parsed.length > 0) {
+				const found = await db
+					.select()
+					.from(sysPara)
+					.where(
+						inArray(
+							sysPara.para_key,
+							parsed.map((row) => row.key),
+						),
+					);
+				for (const row of found) stored.set(row.para_key, row);
+			}
+
+			// ③ 逐行落库
+			let written = false;
+			for (const row of parsed) {
+				const existing = stored.get(row.key);
+				const fallback = PARA_DEFAULTS[row.key];
+				if (existing && Number(existing.editable ?? 1) === 0) {
+					result.errors.push({ index: row.index, message: `参数 ${row.key} 是代码内置的,不允许在界面上修改` });
+					continue;
+				}
+				const type = row.type ?? (existing ? asParaType(existing.para_type) : (fallback?.type ?? PARA_TYPE.STRING));
+				const problem = validateParaValue(type, row.value);
+				if (problem) {
+					result.errors.push({ index: row.index, message: `${row.key}:${problem}` });
+					continue;
+				}
+				const value = row.value.trim();
+				if (existing) {
+					const group = row.group || existing.para_group || "";
+					const remark = row.remark || existing.remark || "";
+					if (
+						existing.para_value === value &&
+						(existing.para_group ?? "") === group &&
+						(existing.remark ?? "") === remark &&
+						asParaType(existing.para_type) === type
+					) {
+						result.duplicates.push({ index: row.index, message: "和库里一样,没有改动" });
+						continue;
+					}
+					await db
+						.update(sysPara)
+						.set({ para_value: value, para_type: type, para_group: group, remark, update_time: new Date() })
+						.where(eq(sysPara.para_key, row.key));
+				} else {
+					await db.insert(sysPara).values({
+						// 主键是 para_key;id 是 not null 的普通列,没有默认值 —— 必须自己生成
+						id: newId(),
+						para_key: row.key,
+						para_value: value,
+						para_type: type,
+						para_group: row.group || fallback?.group || "其它",
+						remark: row.remark || fallback?.remark || "",
+						editable: 1,
+					});
+				}
+				written = true;
+				result.created += 1;
+			}
+
+			// 校验分两趟跑(先整批校验、再逐行落库),回执按行号排一下 —— 对话框是按「第 N 行」逐条列的
+			result.errors.sort((a, b) => a.index - b.index);
+			result.duplicates.sort((a, b) => a.index - b.index);
+
+			if (written) clearParaCache();
+			return result;
 		}),
 
 	/** 删除一个参数的库里覆盖值:代码内置的默认参数删完回到默认值,界面新建的参数删完即消失。 */

@@ -7,12 +7,18 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsRolesDetail } from "#/components/modules/settings/settings-roles-detail";
 import {
+	ROLE_EXCEL_COLUMNS,
+	ROLE_IMPORT_FIELDS,
+	roleExcelRows,
+} from "#/components/modules/settings/settings-roles-excel";
+import {
 	type RoleFormPayload,
 	type RoleFormTab,
 	SettingsRolesForm,
 } from "#/components/modules/settings/settings-roles-form";
 import { type RoleRow, roleColumns } from "#/components/modules/settings/settings-roles-table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import type { PermissionNode } from "#/components/modules/shared/permission-tree";
@@ -103,6 +109,17 @@ export function SettingsRolesPage() {
 		data: filtered,
 		prefKey: "settings.roles",
 	});
+
+	const excelRows = useMemo(() => roleExcelRows(filtered), [filtered]);
+
+	// 失败提示归导入对话框(整批错进警告区、逐行错进明细),这里只负责刷新列表 —— 与字典 / 参数导入同一个口径
+	const importMutation = useMutation(
+		trpc.role.import.mutationOptions({
+			onSuccess: async () => {
+				await invalidate();
+			},
+		}),
+	);
 
 	const stats: StatItem[] = useMemo(() => {
 		const assigned = roles.reduce((sum, row) => sum + row.memberCount, 0);
@@ -240,7 +257,19 @@ export function SettingsRolesPage() {
 					table.setPageIndex(0);
 				}}
 				searchPlaceholder="搜索角色名 / 备注…"
-				actions={<ColumnToggle table={table} onPersist={persistColumns} />}
+				actions={
+					<>
+						<ColumnToggle table={table} onPersist={persistColumns} />
+						<ExcelExportButton columns={ROLE_EXCEL_COLUMNS} rows={excelRows} fileName="角色" />
+						<ExcelImportButton
+							title="导入角色"
+							description="一行 = 一个角色(角色名是业务键)。库里没有的建、已有的改排序 / 状态 / 备注;留空的单元格不动库里的值。"
+							fields={ROLE_IMPORT_FIELDS}
+							fileNamePrefix="角色导入模板"
+							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}
+						/>
+					</>
+				}
 			/>
 
 			<LedgerCard

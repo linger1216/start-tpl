@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import { and, eq } from "drizzle-orm";
-import { sysLog, sysMenu } from "../src/db/data-base-schema.ts";
+import { sysAccount, sysLog, sysMenu, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -33,6 +33,8 @@ import {
  */
 const SUFFIX = uniqueSuffix();
 const createdLogIds: string[] = [];
+/** 「个人资料」用例造的真账号(`user.profile` 读的是 `sys_user` 真实行)—— 收尾连会话 / account 一起清 */
+const createdUserIds: string[] = [];
 
 const def = (trpcRouter as unknown as { _def: { procedures: Record<string, { _def?: { type?: string } }> } })._def;
 const PROCEDURES = Object.keys(def.procedures ?? {});
@@ -64,6 +66,12 @@ async function waitForOwnLog(path: string, marker: string): Promise<typeof sysLo
 after(async () => {
 	if (createdLogIds.length > 0) {
 		for (const id of createdLogIds) await db.delete(sysLog).where(eq(sysLog.id, id));
+	}
+	// 子表 → 父表:session / account 先删,不然 `sys_user` 那行会留下孤儿会话
+	for (const id of createdUserIds) {
+		await db.delete(sysSession).where(eq(sysSession.userId, id));
+		await db.delete(sysAccount).where(eq(sysAccount.userId, id));
+		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
 	await closeDb();
 });
@@ -105,12 +113,13 @@ describe("服务端鉴权", () => {
 
 	it("个人资料:只读自己那一行,roles / depts 永远给数组(个人资料页的数据源)", async () => {
 		// 注入的 `test-admin` **不是库里的账号**(见 helpers.ts),而 `user.profile` 读的是 `sys_user` 真实行,
-		// 所以这里先造一个真账号(邮箱带 `__test__` 前缀,收尾的清扫会连会话/account 一起删掉)。
+		// 所以这里先造一个真账号(邮箱带 `__test__` 前缀;收尾在 `after` 里连会话 / account 一起删)。
 		const created = await caller.user.create({
 			name: `${TEST_PREFIX}资料页`,
 			email: `${TEST_PREFIX}profile-${SUFFIX}@example.com`,
 			password: "Passw0rd123",
 		});
+		createdUserIds.push(created.id);
 		const asSelf = callerAs({ id: created.id, name: created.name });
 		const me = await asSelf.user.profile();
 		assert.equal(me.id, created.id);

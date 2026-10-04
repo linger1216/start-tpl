@@ -26,9 +26,13 @@ const KEY = `${TEST_PREFIX}parameters.${SUFFIX}`;
 const INT_KEY = `${TEST_PREFIX}parameters.int.${SUFFIX}`;
 const BOOL_KEY = `${TEST_PREFIX}parameters.bool.${SUFFIX}`;
 const UPSERT_KEY = `${TEST_PREFIX}parameters.upsert.${SUFFIX}`;
+/** 导入用例自己的键(用例里自己建,不依赖别的用例的执行顺序) */
+const IMPORT_KEY = `${TEST_PREFIX}parameters.import.${SUFFIX}`;
+const IMPORT_INT_KEY = `${TEST_PREFIX}parameters.importInt.${SUFFIX}`;
+const LOCKED_KEY = `${TEST_PREFIX}parameters.locked.${SUFFIX}`;
 
 after(async () => {
-	for (const key of [KEY, INT_KEY, BOOL_KEY, UPSERT_KEY]) {
+	for (const key of [KEY, INT_KEY, BOOL_KEY, UPSERT_KEY, IMPORT_KEY, IMPORT_INT_KEY, LOCKED_KEY]) {
 		await caller.para.delete({ key });
 	}
 });
@@ -136,6 +140,85 @@ test("界面偏好 `page.size`:代码内置默认 20,解析只认分页器那几
 	const parsed = parsePageSize(value);
 	assert.ok((PAGE_SIZES as readonly number[]).includes(parsed), `${PAGE_SIZE_KEY} = ${value} 必须落在 PAGE_SIZES 里`);
 	assert.deepEqual(PAGE_SIZES, [10, 20, 50, 100]);
+});
+
+/**
+ * 导入 —— 一行 = 一条参数(列契约 `PARA_EXCEL_COLUMNS`,表头与导出同一组)。
+ * 只测接口语义:upsert / duplicates / 逐行校验 + 内置参数跳过;列头与摊平在
+ * `settings-parameters-excel.ts`(纯前端件,不为十几行映射把 React 链拖进 tests)。
+ */
+test("导入:新键按「类型」列建,已有键改值(空单元格不动库里的分组 / 说明)", async () => {
+	await caller.para.create({
+		key: IMPORT_KEY,
+		value: "old",
+		type: PARA_TYPE.STRING,
+		group: "旧分组",
+		remark: "旧说明",
+	});
+	const result = await caller.para.import({
+		rows: [
+			{ key: IMPORT_INT_KEY, value: "7", type: "整数", group: `${TEST_PREFIX}分组`, remark: "导入进来的" },
+			{ key: IMPORT_KEY, value: "new", type: "", group: "", remark: "" },
+		],
+	});
+	assert.equal(result.created, 2);
+	assert.equal(result.errors.length, 0);
+
+	const rows = await caller.para.list();
+	const created = rows.find((row) => row.key === IMPORT_INT_KEY);
+	assert.ok(created, "新键应被建出来");
+	assert.equal(created.value, "7");
+	assert.equal(created.type, PARA_TYPE.INT, "「整数」这个中文名要认");
+	assert.equal(created.group, `${TEST_PREFIX}分组`);
+	assert.equal(created.remark, "导入进来的");
+	assert.equal(created.editable, true);
+
+	const updated = rows.find((row) => row.key === IMPORT_KEY);
+	assert.equal(updated?.value, "new", "已有键改值");
+	assert.equal(updated?.group, "旧分组", "空单元格不清库里的分组");
+	assert.equal(updated?.remark, "旧说明", "空单元格不清库里的说明");
+});
+
+test("导入:和库里一样算 duplicates —— 重复导入不假装改了一堆", async () => {
+	const rows = [
+		{ key: IMPORT_INT_KEY, value: "7", type: "整数", group: `${TEST_PREFIX}分组`, remark: "导入进来的" },
+		{ key: IMPORT_KEY, value: "new", type: "文本", group: "旧分组", remark: "旧说明" },
+	];
+	const again = await caller.para.import({ rows });
+	assert.equal(again.created, 0);
+	assert.equal(again.errors.length, 0);
+	assert.equal(again.duplicates.length, 2);
+});
+
+test("导入:逐行校验 —— 缺参数名 / 类型非法 / 值类型不符 / 内置参数跳过", async () => {
+	// 造一条 editable=0 的行(界面上不允许改:与 para.update 的口径一致)
+	await db.insert(sysPara).values({
+		id: `locked-${SUFFIX}`,
+		para_key: LOCKED_KEY,
+		para_value: "locked",
+		para_type: PARA_TYPE.STRING,
+		para_group: "测试",
+		remark: "",
+		editable: 0,
+	});
+
+	const result = await caller.para.import({
+		rows: [
+			{ key: "", value: "x" },
+			{ key: IMPORT_INT_KEY, value: "abc" },
+			{ key: LOCKED_KEY, value: "想改" },
+			{ key: IMPORT_KEY, value: "x", type: "奇怪的类型" },
+		],
+	});
+	assert.equal(result.created, 0);
+	assert.equal(result.errors.length, 4);
+	assert.match(result.errors[0]?.message ?? "", /缺少/);
+	assert.match(result.errors[1]?.message ?? "", /整数/);
+	assert.match(result.errors[2]?.message ?? "", /代码内置/);
+	assert.match(result.errors[3]?.message ?? "", /类型/);
+	// 被拦下的行一个字都没落库
+	const stored = await db.select().from(sysPara).where(eq(sysPara.para_key, LOCKED_KEY));
+	assert.equal(stored[0]?.para_value, "locked");
 });
 
 after(async () => {
