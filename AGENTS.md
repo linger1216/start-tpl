@@ -20,7 +20,7 @@ Before editing files for a substantial task:
 
 | 要做的事 | 先读 |
 | --- | --- |
-| **通读后端 / 摸目录结构 / 找公共路由** | **`doc/后端代码导读.md`**(目录结构 → 设计理念 → 公共路由与两个 HTTP 端点 → tRPC 中间件链 → lib 模块地图 + 阅读路线) |
+| **通读后端 / 摸目录结构 / 找公共路由** | **`doc/后端代码导读.md`**(目录结构 → 设计理念 → 公共路由与四个 HTTP 端点 → tRPC 中间件链 → lib 模块地图 + 阅读路线) |
 | 改界面 / 加组件 / 调版式 / 高度 | **`doc/界面约定.md`**(版式骨架、组件取舍、实测高度) |
 | 加页面 / 加路由 / 排目录职责 | **`doc/界面约定.md`**(版式 + 目录职责,两篇已合并) |
 | 碰数据库、认证、权限、达梦 | **`doc/数据库与认证.md`** + `doc/达梦支持.md` + `doc/rbac-权限模型.md` |
@@ -56,7 +56,8 @@ pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期
 
 ## 硬规矩(每一条都不能越过)
 
-- **接口只有 tRPC**:后端不要再开 REST 路由(唯一例外是 BA 的 `/api/auth/*`)。
+- **接口只有 tRPC**:后端不要再开 REST 路由。**例外只有三个**,理由都写在 `doc/后端代码导读.md` §3.1 ——
+  BA 的 `/api/auth/*`、SSE 的 `/api/sse/notice`、CaptchaKit 的 `/api/captcha`。
   客户端一律 `useQuery(trpc.X.queryOptions(...))` / `useMutation(trpc.X.mutationOptions(...))` —— **严禁 `fetch` / axios / 自写 `queryFn`**;
   服务端 SSR loader 与 server function **不要绕过 HTTP 直调 procedure caller**(`createCallerFactory` 只归测试用)。
 - **每新增一个 procedure 都要在 `lib/rbac.ts` 里分类**:写接口登记 `sys:*` 权限点;**读接口(query)三选一** ——

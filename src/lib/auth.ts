@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { verifyCaptcha } from "captchakit/server";
 
 import { db } from "#/db";
 import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base-schema";
@@ -185,6 +186,36 @@ export const auth = betterAuth({
 		before: createAuthMiddleware(async (ctx) => {
 			// 只拦 /sign-in/email —— 注册 / 找回密码的失败不计(被 rateLimit 兜着)。
 			if (ctx.path !== "/sign-in/email") return;
+			/**
+			 * CaptchaKit 人机验证(自托管,不对接 Turnstile / reCAPTCHA 任何第三方)。
+			 *
+			 * **只在配了 `CAPTCHAKIT_SECRET` 时才要求验证码** —— 留空 = 模板没启用,登录流程原样。
+			 * 取「有没有配」而不是「有没有配满 32 位」:长度不够时 captchakit 自己会报
+			 * `CAPTCHA_MISSING_SECRET`,由 `/api/captcha` 端点回 500,配置错误当场暴露,
+			 * 不在这里静默放过。
+			 *
+			 * 这一层是**兜底**:`/api/captcha` 端点(见 `routes/api.captcha.ts`)已经在前端答题时
+			 * verify 过一次;这里再过一次是为了「绕过前端直 POST /api/auth/sign-in/email」这条路也走不通。
+			 *
+			 * token 走 `x-captcha-token` 请求头而不是 body:better-auth 客户端给 `signIn.email`
+			 * 的 body 写了严格 schema,多一个字段就得 cast;走头两边都干净。
+			 */
+			if (process.env.CAPTCHAKIT_SECRET?.trim()) {
+				const captchaToken = String(ctx.request?.headers.get("x-captcha-token") ?? "").trim();
+				if (!captchaToken) {
+					throw new APIError("BAD_REQUEST", {
+						message: "请先完成人机验证",
+					});
+				}
+				// 一次性消费:proof token 验过就作废,所以前端每次提交失败都必须换一道新题
+				const captcha = await verifyCaptcha({ token: captchaToken });
+				if (!captcha.success) {
+					logger.warn("auth.sign-in.captcha_invalid", { error: captcha.error });
+					throw new APIError("BAD_REQUEST", {
+						message: captcha.error === "CAPTCHA_EXPIRED" ? "人机验证已过期,请重试" : "人机验证失败,请重试",
+					});
+				}
+			}
 			const email = String(ctx.body?.email ?? "")
 				.trim()
 				.toLowerCase();

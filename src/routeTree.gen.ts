@@ -13,6 +13,7 @@ import { Route as mainRouteRouteImport } from './routes/(main)/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
+import { Route as ApiCaptchaRouteImport } from './routes/api.captcha'
 import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
 import { Route as mainDemoBusinessHomeRouteImport } from './routes/(main)/demo/business-home'
 import { Route as mainDemoDrizzleRouteImport } from './routes/(main)/demo/drizzle'
@@ -56,6 +57,11 @@ const mainNoticesRoute = mainNoticesRouteImport.update({
   id: '/notices',
   path: '/notices',
   getParentRoute: () => mainRouteRoute,
+} as any)
+const ApiCaptchaRoute = ApiCaptchaRouteImport.update({
+  id: '/api/captcha',
+  path: '/api/captcha',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const mainDemoBetterAuthRoute = mainDemoBetterAuthRouteImport.update({
   id: '/demo/better-auth',
@@ -181,6 +187,7 @@ const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
 export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/notices': typeof mainNoticesRoute
+  '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/business-home': typeof mainDemoBusinessHomeRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/notices': typeof mainNoticesRoute
+  '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
   '/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/demo/business-home': typeof mainDemoBusinessHomeRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/(main)': typeof mainRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/(main)/notices': typeof mainNoticesRoute
+  '/api/captcha': typeof ApiCaptchaRoute
   '/(main)/': typeof mainIndexRoute
   '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
   '/(main)/demo/business-home': typeof mainDemoBusinessHomeRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/login'
     | '/notices'
+    | '/api/captcha'
     | '/'
     | '/demo/better-auth'
     | '/demo/business-home'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/notices'
+    | '/api/captcha'
     | '/'
     | '/demo/better-auth'
     | '/demo/business-home'
@@ -331,6 +342,7 @@ export interface FileRouteTypes {
     | '/(main)'
     | '/login'
     | '/(main)/notices'
+    | '/api/captcha'
     | '/(main)/'
     | '/(main)/demo/better-auth'
     | '/(main)/demo/business-home'
@@ -361,6 +373,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   mainRouteRoute: typeof mainRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiCaptchaRoute: typeof ApiCaptchaRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiSseNoticeRoute: typeof ApiSseNoticeRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
@@ -395,6 +408,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/notices'
       preLoaderRoute: typeof mainNoticesRouteImport
       parentRoute: typeof mainRouteRoute
+    }
+    '/api/captcha': {
+      id: '/api/captcha'
+      path: '/api/captcha'
+      fullPath: '/api/captcha'
+      preLoaderRoute: typeof ApiCaptchaRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/(main)/demo/better-auth': {
       id: '/(main)/demo/better-auth'
@@ -626,6 +646,7 @@ const mainRouteRouteWithChildren = mainRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   mainRouteRoute: mainRouteRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiCaptchaRoute: ApiCaptchaRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiSseNoticeRoute: ApiSseNoticeRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
