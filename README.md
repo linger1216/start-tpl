@@ -259,6 +259,8 @@ cp .env.example .env.local
 | `BETTER_AUTH_SECRET` | 否 | 用 `pnpm dlx @better-auth/cli secret` 生成 |
 | `VITE_TRPC_STREAM` | 否 | 设 `1` 换成流式(`httpBatchStreamLink`);留空用非流式,响应是完整 JSON,DevTools 里能直接读 |
 | `CAPTCHAKIT_SECRET` | 否 | **留空 = 不启用人机验证**;填了(≥32 字符,`openssl rand -hex 32` 生成)登录页才出现验证码栏,提交登录必须带 proof token。CaptchaKit 自托管,不对接任何第三方验证码服务。口径见 `doc/后端代码导读.md` §3.1.1 |
+| `MAIL_DRIVER` | 否 | **留空 = 开发态驱动**:邮箱验证链接只打到 `pnpm dev` 的终端窗口,不真发。**生产必须换成 `smtp`** |
+| `SMTP_*` / `MAIL_FROM` | 否 | `smtp` 驱动才读:`SMTP_HOST` / `PORT` / `SECURE` / `USER` / `PASS` / `ALLOW_SELF_SIGNED` + `MAIL_FROM`。企业邮、Exchange、自建 Postfix 都走这条路。实现见 `src/lib/mailer.ts` |
 | `MINIO_*` | 否 | 文件管理用:`MINIO_ENDPOINT` / `PORT` / `USE_SSL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_PUBLIC` / `BUCKET_PRIVATE` / `PUBLIC_URL`,见 `doc/文件管理.md` |
 | `LOG_LEVEL` / `LOG_SILENT` / `LOG_SLOW_MS` | 否 | 默认 `info`;`LOG_SILENT=1` 全关(测试用);单个 procedure 超过 `LOG_SLOW_MS`(默认 1500)会打慢日志 |
 
