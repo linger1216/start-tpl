@@ -302,6 +302,26 @@ test("通配授权:一条 `test:thing:*` = 该资源下全部权限,而且**以�
 	assert.ok(!after.perms?.includes("test:other:read"), "仍然不越界");
 });
 
+test("setRoleMenus 的通配保留:整批替换时,**含通配段的 perm 行不会被一起删掉**(否则 *:*:* 一类角色一夜归零)", async () => {
+	// 「系统管理员」就靠一条 `*:*:*` 通配顶全部;之前 setRoleMenus 是全量删除 + 全量插入,
+	// UI 上改个菜单就会把 `*:*:*` 砍掉 —— admin 一夜回到 0 授权。修法:setRoleMenus 在落库之前
+	// 先把通配行识别出来,删的时候只删非通配,最后把通配重新插回去。这里用一个非 admin 角色跑同样的修法。
+	const role = await caller.role.create({ name: `${TEST_PREFIX}通配保留_${SUFFIX}` });
+	roleIds.push(role.id);
+	const wildcard = await makeMenu("通配行", null, MENU_TYPE.BUTTON, "test:keep:*");
+	const plain = await makeMenu("普通行", null, MENU_TYPE.BUTTON, "test:keep:single");
+	// 起始授权 = 两条都有
+	await caller.role.setMenus({ roleId: role.id, menuIds: [wildcard, plain] });
+	let stored = await caller.role.menuIds({ roleId: role.id });
+	assert.ok(stored.includes(wildcard) && stored.includes(plain), "起始两条都在");
+
+	// 改成**只传普通行** —— 通配行应当被保留下来(否则就回到 bug)
+	await caller.role.setMenus({ roleId: role.id, menuIds: [plain] });
+	stored = await caller.role.menuIds({ roleId: role.id });
+	assert.ok(stored.includes(plain), "新传进来的普通行在");
+	assert.ok(stored.includes(wildcard), "通配行被保留下来 —— 整批替换不再误伤 *:*:* 一类的角色");
+});
+
 test("角色的用户:加人幂等 / 列表带出部门 / 能移出", async () => {
 	const role = await caller.role.create({ name: `${TEST_PREFIX}角色用户_${SUFFIX}` });
 	roleIds.push(role.id);

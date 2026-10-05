@@ -3,7 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 
 import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
-import { enforceAny, isPermissionConfigured } from "#/lib/casbin";
+import { enforceAny, isAdminUser, isPermissionConfigured } from "#/lib/casbin";
 import { getCurrentUser } from "#/lib/current-user";
 import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
@@ -163,8 +163,14 @@ const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	const mapped = PERM_BY_PATH[path];
 	if (!mapped) return next();
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
-	// 超级管理员短路 —— 测试与脚本注入的用户走这条(HTTP 路径拿不到注入,见上面 `requireUser` 的注释)
+	// 超级管理员短路:**两条**都给放行。
+	//   - `user.isSuper` 是测试通道:`callerAs({ isSuper: true })` 不造库里的 g 行,靠这一行免去
+	//     "测试里也要造角色授权"的样板 —— 但生产里 ctx.user 永远没有 isSuper(getCurrentUser()
+	//     只返 id/name,BA 也不写),所以这条**对 HTTP 路径是死码**;
+	//   - `isAdminUser(user.id)` 是生产通道:真按 user.id 查「系统管理员」角色,与 ctx 旁路无关。
+	//     老版本只走了第一条,导致 HTTP 路径上 admin 也得手动勾菜单 —— 这是用户报的 bug。
 	if (user?.isSuper) return next();
+	if (user && (await isAdminUser(user.id))) return next();
 	// `p` 行一条都没有 = 权限体系未启用 ⇒ 一律放行,与前端 `useHasPerm` 同口径
 	if (!(await isPermissionConfigured())) return next();
 	const codes = typeof mapped === "string" ? [mapped] : mapped;
@@ -192,8 +198,14 @@ const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
 const dataScopeMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	const mapped = DATA_SCOPE_BY_PATH[path];
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	// 管理员的数据范围一律放行 —— 不走 buildPolicyCtx,scope() 直接返 undefined(见过 buildPolicyCtx 注释)。
+	// 这一步抢在 buildPolicyCtx 之前,免得给 admin 拼一遍「我+我的角色+我的部门+子孙」浪费一次 IO,
+	// 同时保证 admin 看数据范围预览面板也是「全部」,不是他本人的部门子集。
+	// `user.isSuper` 与 `permMiddleware` 同口径:测试通道的短路,生产里 ctx.user 没这字段。
+	const adminBypass = user ? user.isSuper === true || (await isAdminUser(user.id)) : false;
 	let policyCtx: PolicyCtx | null = null;
 	const scope: DataScopeFn = async (resource) => {
+		if (adminBypass) return undefined;
 		const target = resource ?? mapped?.resource;
 		if (!target) {
 			throw new TRPCError({

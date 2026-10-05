@@ -338,11 +338,12 @@ export async function roleIdsOf(userId: string): Promise<string[]> {
  * 业务用途:`user.update` / `user.remove` 的「admin 守卫」—— 改 admin / 删 admin
  * 都要 admin 自己来。
  *
- * **第二个参数 `isSuper` 是 ctx 旁路**:服务端拿到的「当前用户」是 BA 给出的对象,
- * 上面有 `isSuper: boolean` —— 生产里它跟「持系统管理员角色」是同一件事(种子脚本
- * 把 isSuper=true 的用户也挂上 admin),但**测试里** `TEST_USER = { id: "test-admin",
- * isSuper: true }` 是凭空捏造的(库没有它的 g 行)。让 `isSuper=true` 也算 admin,
- * 让 admin 守卫能在 caller-level 测试里稳定跑通,又不破坏生产语义。
+ * **第二个参数 `isSuper` 是测试 ctx 旁路**:`getCurrentUser()` 只返 `{ id, name }`,生产里
+ * 拿不到 `isSuper`(库里没列;BA 不写;HTTP 路径上的 `ctx.user` 也不带这字段)。`isSuper=true`
+ * 只在 `callerAs({ ..., isSuper: true })` 这条测试通道上有值 —— 让 admin 守卫能在 caller-level
+ * 测试里稳定跑通,与生产语义不冲突。**真正的生产旁路是第一个参数**:
+ * `permMiddleware` / `dataScopeMiddleware` 现在都直接 `await isAdminUser(user.id)` 查角色,
+ * 不再靠 ctx.isSuper(它对 HTTP 路径是死码)。
  */
 export async function isAdminUser(userId: string, isSuper = false): Promise<boolean> {
 	if (isSuper) return true;
@@ -438,13 +439,50 @@ async function insertIfAbsent(row: { ptype: string; v0: string; v1: string; v2?:
 /** 重设一个角色的菜单勾选(**全量替换**)。`menuIds` 应由调用方先过 `withAncestorIds` 补全祖先 */
 export async function setRoleMenus(roleId: string, menuIds: readonly string[]): Promise<void> {
 	const sub = `${ROLE_PREFIX}${roleId}`;
-	const ids = [...new Set(menuIds)];
+	const incomingIds = [...new Set(menuIds)];
+	// **通配行** 单独保留 —— 这些是 perm 里含 `*` 的按钮(如 `*:*:*`、`sys:*:*`),
+	// 装载时被 casbin 解释为「匹配所有 N 个权限点」,所以一条通配顶一千条普通授权。
+	// 整批替换若不挑出来,角色身上"靠一条 `*:*:*` 就什么都能干"的那份**整批被砍**——
+	// 「系统管理员」就是踩在这个坑里:UI 编辑菜单后 admin 一夜回到 0 授权。
+	// 修法:**删 p 行前先盘点角色当前持有的通配行,把它们单独摘出来,删完重新插回去**。
+	// 识别口径:看菜单的 `perm` 字段(这是**这个菜单本身**的权限模式,不是角色当前持有的)。
+	// 哪怕 UI 上把这条菜单取消勾选、新的 menuIds 里没有它,也必须保住角色既有的通配授权。
+	const wildcardMenuIds = new Set<string>(
+		incomingIds.length === 0
+			? []
+			: (
+					await db
+						.select({ id: sysMenu.id })
+						.from(sysMenu)
+						.where(and(inArray(sysMenu.id, incomingIds), like(sysMenu.perm, "%*%")))
+				).map((row) => row.id),
+	);
+	const nonWildcardIncoming = incomingIds.filter((id) => !wildcardMenuIds.has(id));
 	await db.transaction(async (tx) => {
+		// 把"角色当前持有哪些 p 行"先记下来,再用 perm 是否含 `*` 标出通配行
+		const currentPRows = await tx
+			.select({ v1: sysCasbinRule.v1 })
+			.from(sysCasbinRule)
+			.where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
+		// 持有菜单 id(MENU_PREFIX 去掉)
+		const currentMenuIds = new Set(currentPRows.map((r) => r.v1.slice(MENU_PREFIX.length)));
+		const currentWildcards = new Set<string>();
+		if (currentMenuIds.size > 0) {
+			const wildcardMenuRows = await tx
+				.select({ id: sysMenu.id })
+				.from(sysMenu)
+				.where(and(inArray(sysMenu.id, [...currentMenuIds]), like(sysMenu.perm, "%*%")));
+			for (const r of wildcardMenuRows) currentWildcards.add(r.id);
+		}
+		// 角色最终要持有的 p 行 = 新 menuIds + 当前仍在的通配菜单 id
+		// (新 menuIds 里若已含同一条通配菜单,会被 Set 自然去重)
+		const finalMenuIds = new Set<string>([...nonWildcardIncoming, ...wildcardMenuIds]);
+		for (const id of currentWildcards) finalMenuIds.add(id);
 		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
-		if (ids.length === 0) return;
+		if (finalMenuIds.size === 0) return;
 		const now = new Date();
 		await tx.insert(sysCasbinRule).values(
-			ids.map((menuId) => ({
+			[...finalMenuIds].map((menuId) => ({
 				id: newId(),
 				ptype: POLICY_TYPE,
 				v0: sub,

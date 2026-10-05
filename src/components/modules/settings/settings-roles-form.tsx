@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Save, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { RoleRow } from "#/components/modules/settings/settings-roles-table";
@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { ADMIN_ROLE_NAME } from "#/lib/casbin";
 
 export type RoleFormPayload = {
 	name: string;
@@ -256,10 +257,24 @@ export function SettingsRolesForm({
 					{editing ? (
 						<TabsContent value="menus" className="flex min-h-0 flex-1 flex-col">
 							<div className="flex min-h-0 flex-1 flex-col gap-3">
-								<p className="text-xs text-muted-foreground">
-									勾中的菜单会出现在侧边栏;勾中的**按钮**决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
-									保存时服务端会自动补全上级菜单。
-								</p>
+								{/** 超级管理员角色的权限由系统授予,不在这里配 —— 这一关是给前端看的,
+								 * 真正的拦截在 `permMiddleware` / `dataScopeMiddleware`(admin 身份级 bypass)
+								 * + `setRoleMenus` 的「通配行保留」(见 `lib/casbin.ts`)。三者一起才稳:
+								 * UI 挡住误操作 + 后端兜底绕过任何服务端调用 + 落库时保住 *:*:* 一类行。 */}
+								{role?.name === ADMIN_ROLE_NAME ? (
+									<div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+										<ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
+										<span>
+											此为「{ADMIN_ROLE_NAME}」角色 —— 持该角色的用户在功能权限与数据权限上**全部放行**(身份级 bypass)。
+											权限由系统按角色名识别,**无需在此勾选菜单**,改动保存也不会生效。
+										</span>
+									</div>
+								) : (
+									<p className="text-xs text-muted-foreground">
+										勾中的菜单会出现在侧边栏;勾中的**按钮**决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
+										保存时服务端会自动补全上级菜单。
+									</p>
+								)}
 								<div className="min-h-0 flex-1 overflow-y-auto">
 									<PermissionPicker
 										nodes={permTree}
@@ -279,7 +294,7 @@ export function SettingsRolesForm({
 							</div>
 							{actions(
 								<Button
-									disabled={saveMenusMutation.isPending}
+									disabled={saveMenusMutation.isPending || role?.name === ADMIN_ROLE_NAME}
 									onClick={() => role && saveMenusMutation.mutate({ roleId: role.id, menuIds: effectiveMenuIds })}
 								>
 									{saveMenusMutation.isPending ? "保存中…" : "保存权限"}

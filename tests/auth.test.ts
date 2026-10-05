@@ -6,6 +6,7 @@ import { sysAccount, sysLog, sysMenu, sysRole, sysSession, sysUser } from "../sr
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
+import { ADMIN_ROLE_NAME } from "../src/lib/casbin.ts";
 import {
 	DATA_SCOPE_BY_PATH,
 	PERM_BY_PATH,
@@ -111,6 +112,76 @@ describe("服务端鉴权", () => {
 		// 外壳级读接口不受影响:顶栏铃铛、侧栏与每页的偏好参数 —— 拦它们会让整站打不开
 		await nobody.notice.list({ limit: 1 });
 		await nobody.para.byKey({ key: "page.size" });
+	});
+
+	it("管理员旁路(permMiddleware):持「系统管理员」角色的真账号 + 不授任何菜单 + ctx.isSuper=false → 受保护接口照样放行", async () => {
+		// 「老 `ctx.isSuper` 旁路只在测试注入里有效,HTTP 路径上是死码」这一段历史的回归用例:
+		// ctx.isSuper 在生产里没人设(库里没列;BA 不写;getCurrentUser 只返 id/name),所以"靠 ctx.isSuper 短路"
+		// 在真账号上根本没机会跑。修法是 `permMiddleware` 直接按 user.id 查「系统管理员」角色。
+		// 这里用一个真账号 + 真角色分配来验,**故意**不勾任何菜单 + ctx 不带 isSuper —— 模拟真 HTTP 请求。
+		const menus = await db.select().from(sysMenu);
+		if (menus.length === 0) return; // 未初始化时这条不适用
+
+		const role = await caller.role.create({
+			name: `${TEST_PREFIX}超管测试_${SUFFIX}`,
+			remark: "admin bypass test",
+		});
+		createdRoleIds.push(role.id);
+		// ⚠️ 不授任何菜单 —— 关键点:就算 `sys_casbin_rule` 里这个角色一条 `p` 行都没有,
+		// admin 也得能调受保护的接口(否则就是"还得手动勾菜单",违背 admin 的本意)。
+		const user = await caller.user.create({
+			name: `${TEST_PREFIX}超管测试用户${SUFFIX}`,
+			email: `${TEST_PREFIX}adminbypass-${SUFFIX}@example.com`,
+			password: "Passw0rd123",
+		});
+		createdUserIds.push(user.id);
+		// 复用 prod seed 的「系统管理员」角色 —— 直接把这个 user 挂上去即可,免去与 seed
+		// 同名冲突(库对 name 有唯一索引 `uk_sys_role_name`)。这条用例不是测"造一个 admin 角色"——
+		// 是测"真账号持 admin 角色,缺授权,permMiddleware 仍放行"这条用 admin bypass 的语义。
+		const adminRoleRow = (await caller.role.list()).find((r) => r.name === ADMIN_ROLE_NAME);
+		if (!adminRoleRow) {
+			// 没 seed 时本用例前提不成立 —— 跳过,别让测试挂掉基础设施
+			console.warn("[auth] 未找到 prod seed 的「系统管理员」角色,跳过 admin bypass 测试");
+			return;
+		}
+		const realAdminRoleId = adminRoleRow.id;
+		// 把 user 分配到这个角色 —— 走 caller.user.update,与产品路径一致
+		const me = (await caller.user.list()).find((row) => row.id === user.id);
+		assert.ok(me, "用户应该被查到");
+		await caller.user.update({
+			id: user.id,
+			name: me.name,
+			email: me.email,
+			image: me.image ?? "",
+			emailVerified: me.emailVerified ?? false,
+			roleIds: [realAdminRoleId],
+			departmentIds: me.departmentIds ?? [],
+		});
+
+		// 走 callerAs 注入 ctx.user,**故意不带 isSuper** —— 这是"模拟 HTTP 路径"的关键。
+		// 老 `if (user?.isSuper) return next()` 在此不会命中,只能走新的 `isAdminUser(user.id)` 真查路径。
+		const realAdmin = callerAs({ id: user.id, name: user.name, isSuper: false });
+		await realAdmin.role.list();
+		await realAdmin.department.tree();
+		await realAdmin.log.list();
+		// 对照:同样注入 id 但**不是 admin** 的真账号,这条接口照旧被拒
+		const other = await caller.user.create({
+			name: `${TEST_PREFIX}非超管对照${SUFFIX}`,
+			email: `${TEST_PREFIX}notadmin-${SUFFIX}@example.com`,
+			password: "Passw0rd123",
+		});
+		createdUserIds.push(other.id);
+		const otherCaller = callerAs({ id: other.id, name: other.name, isSuper: false });
+		await assertRejects(() => otherCaller.role.list(), "没有权限");
+	});
+
+	it("管理员旁路(dataScopeMiddleware):scope() 给 admin 直接返 undefined,不再走行级过滤", async () => {
+		// 数据权限(行级)与功能权限(菜单级)是**两层**,admin 两层都得放行。
+		// 走 TEST_USER(它有 isSuper=true,isAdminUser(userId, isSuper=true) 也走 admin 旁路);
+		// `demoGrid.list` 是当前**唯一一个**登记在 `DATA_SCOPE_BY_PATH` 的接口,验的就是它。
+		await caller.demoGrid.list();
+		// 对照:`anonymous` 没 ctx.user,scope 仍按未授权处理
+		await assertRejects(() => anonymousCaller.demoGrid.list(), "请先登录");
 	});
 
 	it("个人资料:只读自己那一行,roles / depts 永远给数组(个人资料页的数据源)", async () => {
