@@ -188,7 +188,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_account_lockout", column: "failed_attempts", comment: "5 分钟滑动窗口内的连续失败次数(超过阈值即锁)" },
 	{ table: "sys_account_lockout", column: "locked_until", comment: "锁定到期时间;null 或过去 = 当前未锁" },
 	{ table: "sys_account_lockout", column: "last_failed_at", comment: "最后一次失败时间(用于 5 分钟滑动窗口)" },
-	{ table: "sys_account_lockout", column: "last_failed_ip", comment: "最后一次失败的来源 IP(运维参考,不上送 Sentry)" },
+	{ table: "sys_account_lockout", column: "last_failed_ip", comment: "最后一次失败的来源 IP(运维参考)" },
 	// sys_rate_limit(better-auth secondaryStorage;A1)
 	{ table: "sys_rate_limit", column: "key", comment: "限流键(BA 给的格式;主键)" },
 	{ table: "sys_rate_limit", column: "count", comment: "当前窗口累计请求数(increment 走这列)" },

@@ -21,7 +21,7 @@ pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是
 pnpm dev                       # http://localhost:3000
 ```
 
-`pnpm dev` 固定监听 **3000** 端口,并通过 `NODE_OPTIONS=--import ./instrument.server.mjs` 预加载服务端 Sentry 初始化。未配置 `VITE_SENTRY_DSN` 时会打印一条 `VITE_SENTRY_DSN is not defined. Sentry is not running.`,属于正常提示。
+`pnpm dev` 固定监听 **3000** 端口。
 
 > **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
 > `/settings` 十二页全部读真库,没配 `DATABASE_URL` 会落到错误边界。演示账号见 `doc/测试数据/README.md`(密码统一 `Passw0rd123`,管理员 `admin@example.com`)。
@@ -183,9 +183,9 @@ src/
 
 | 命令 | 实际执行 | 说明 |
 | --- | --- | --- |
-| `pnpm dev` | `dotenv -e .env.local -- sh -c "NODE_OPTIONS='--import ./instrument.server.mjs' vite dev --port 3000"` | 开发服务器,固定 3000 端口 |
-| `pnpm build` | `vite build && cp instrument.server.mjs .output/server` | 产出 Nitro Node 服务到 `.output/` |
-| `pnpm start` | `node --import ./.output/server/instrument.server.mjs .output/server/index.mjs` | 运行生产产物,需先 `pnpm build`,**不读 env 文件**(见下文) |
+| `pnpm dev` | `dotenv -e .env.local -- vite dev --port 3000` | 开发服务器,固定 3000 端口 |
+| `pnpm build` | `vite build` | 产出 Nitro Node 服务到 `.output/` |
+| `pnpm start` | `node .output/server/index.mjs` | 运行生产产物,需先 `pnpm build`,**不读 env 文件**(见下文) |
 | `pnpm preview` | `vite preview` | Vite 自带预览。产物是 Nitro 服务,验证生产请用 `build && start` |
 | `pnpm typecheck` | `tsc --noEmit` | 类型检查,只报告不写文件 |
 | `pnpm check` | `biome check --write .` | 格式化 + lint + 整理 import,**会写回文件** |
@@ -238,8 +238,8 @@ docker compose up -d                                  # http://localhost:3000
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
 
-> 一个反直觉但必须知道的事实:**Nitro 的 `.output` 不是自包含的** —— `instrument.server.mjs` 是按包名
-> import 的,所以运行镜像里必须 `pnpm install --prod`。完整口径、可覆盖变量表与踩过的坑见
+> 一个反直觉但必须知道的事实:**Nitro 的 `.output` 不是自包含的** —— `.output` 里的
+> bundle 是按包名 import 的,所以运行镜像里必须 `pnpm install --prod`。完整口径、可覆盖变量表与踩过的坑见
 > [`doc/容器化.md`](doc/容器化.md)。
 
 ---
@@ -257,7 +257,6 @@ cp .env.example .env.local
 | `DATABASE_URL` | **是** | `mysql://user:pass@host:3306/db` 或 `dm://user:pass@host:5236?schema=eg`(协议决定用哪个驱动)。`src/db/index.ts` 与 `drizzle.config.ts` 在缺失时**直接抛错** |
 | `BETTER_AUTH_TRUSTED_ORIGINS` | 否 | **额外**放行的 origin,逗号分隔。代码内置 `http://localhost:3000`、`http://localhost:4811`;portless 用 `https://*.localhost`,自建域名写全量 origin。通配符只匹配单段主机名(见 `src/lib/auth.ts` 的注释) |
 | `BETTER_AUTH_SECRET` | 否 | 用 `pnpm dlx @better-auth/cli secret` 生成 |
-| `VITE_SENTRY_DSN` | 否 | 留空则不启用 Sentry(`instrument.server.mjs` 打印一条提示)。只有这一个键:**没有** source map 上传 |
 | `VITE_TRPC_STREAM` | 否 | 设 `1` 换成流式(`httpBatchStreamLink`);留空用非流式,响应是完整 JSON,DevTools 里能直接读 |
 | `MINIO_*` | 否 | 文件管理用:`MINIO_ENDPOINT` / `PORT` / `USE_SSL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_PUBLIC` / `BUCKET_PRIVATE` / `PUBLIC_URL`,见 `doc/文件管理.md` |
 | `LOG_LEVEL` / `LOG_SILENT` / `LOG_SLOW_MS` | 否 | 默认 `info`;`LOG_SILENT=1` 全关(测试用);单个 procedure 超过 `LOG_SLOW_MS`(默认 1500)会打慢日志 |
@@ -633,7 +632,7 @@ pnpm check
 | **#3 文件内联预览** | 文件详情里图片仍走 `<img>`;**PDF / 文本走社区包**(`react-pdf` 懒加载,不自己写渲染器 —— 用户明确要求)。注意 minio 桶要配 GET CORS:PDF/文本要 `fetch()` 预签名地址,`<img src>` 那条路不需要 |
 | **#5 日志导出** | 审计日志页接入 `ExcelExportButton`,导出当前筛选结果 |
 | **#1 Excel 四页** | 用户 / 角色 / 字典 / 参数四页接入导出 + 导入。`settings-*-excel.ts` 是各域表头**唯一真源**(导出列与导入列**可以不同**,如用户的「初始密码」只能手补 —— 密码是散列);导入语义按域定义(user **只建不改**、role / para 按名 upsert、dict 合并字典项);权限点复用各域的 `*:add`;`xlsx` 只在点按钮时动态 `import()`,不进首屏包 |
-| **#6 容器化** | `Dockerfile` 四个目标 + `docker-compose.yml`(mysql + minio + app + `bootstrap` 初始化服务)+ `.devcontainer/`。关键坑:`.output` **不自包含**(`instrument.server.mjs` 是原样拷进产物的,靠 `dependencies` 里的 `@sentry/tanstackstart-react`)⇒ 运行镜像必须 `pnpm install --prod`;`.npmrc` 里是宿主机绝对 store 路径,不能进构建上下文 |
+| **#6 容器化** | `Dockerfile` 四个目标 + `docker-compose.yml`(mysql + minio + app + `bootstrap` 初始化服务)+ `.devcontainer/`。关键坑:`.output` **不自包含**(bundle 按包名 import)⇒ 运行镜像必须 `pnpm install --prod`;`.npmrc` 里是宿主机绝对 store 路径,不能进构建上下文 |
 | **#9 统一软删** | 10 张业务表补 `deleted_at`,读路径一律 `alive(表)`,11 处硬删改软删;带唯一业务键的表用 `tombstone()` **让位**(否则删掉「测试角色」后再也建不出同名角色),口径见 `doc/数据库与认证.md` 的同名小节。`sys_file` 不叠这一列(它已有 `status = 2` 的行级软删),关联表与运维表不加。测试收尾改成按 `__test__` 前缀**扫表收 id**:以前先软删再按业务键查,键已变墓碑 ⇒ 查不到就攒残留(本轮顺手清掉 12 行并修好 5 处收尾) |
 
 基线:`pnpm typecheck` 0 · `npx biome check .` Checked 281 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm db:create` 幂等 · `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **191 / 191**(+5 是新增的 `tests/soft-delete.test.ts`)。行为验收:生产包 + 带 cookie 的 SSR 请求,16 个页面全 200(未登录 `/settings/users` 仍是 307、未知路径 404),跑完测试真库 `__test__` 残留 **0**、`sys_user` 38 / `sys_role` 13 / `sys_dept` 3700 与基线一致。

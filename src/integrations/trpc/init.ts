@@ -9,7 +9,6 @@ import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
 import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
-import { captureException } from "#/lib/sentry";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -55,11 +54,6 @@ export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawI
 			message: error instanceof Error ? error.message : String(error),
 		});
 		if (error instanceof Error) (error as Error & { traceId?: string }).traceId = traceId;
-		// 只有 5xx 才上送 Sentry —— `TRPCError` 是业务层的 4xx 信号(权限、找不到、参数错),
-		// 这些是预期内的错误,送过去只会刷屏(实测会把 Sentry 的 issue 数撑成「真崩」)。
-		if (!(error instanceof TRPCError)) {
-			captureException(error, { traceId, path, type, ms });
-		}
 		throw error;
 	}
 });

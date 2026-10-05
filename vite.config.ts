@@ -30,13 +30,7 @@ const config = defineConfig({
 		tsconfigPaths: true,
 		alias: [{ find: /^pdfjs-worker/, replacement: pdfWorkerPath }],
 	},
-	plugins: [
-		devtools(),
-		nitro({ rollupConfig: { external: [/^@sentry\//] } }),
-		tailwindcss(),
-		tanstackStart(),
-		viteReact(),
-	],
+	plugins: [devtools(), nitro(), tailwindcss(), tanstackStart(), viteReact()],
 });
 
 export default config;

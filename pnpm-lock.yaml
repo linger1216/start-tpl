@@ -11,9 +11,6 @@ importers:
       '@base-ui/react':
         specifier: ^1.8.0
         version: 1.8.0(@date-fns/tz@1.5.0)(@types/react@19.2.18)(date-fns@4.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@sentry/tanstackstart-react':
-        specifier: ^10.67.0
-        version: 10.73.0(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(react@19.2.8)
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.3.3(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))
@@ -62,6 +59,9 @@ importers:
       better-auth:
         specifier: ^1.5.3
         version: 1.7.4(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.168.50(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.7)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(mysql2@3.24.3(@types/node@22.20.1)))(mysql2@3.24.3(@types/node@22.20.1))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(solid-js@1.9.15)
+      captchakit:
+        specifier: ^0.2.5
+        version: 0.2.5(react@19.2.8)
       casbin:
         specifier: ^5.51.1
         version: 5.51.1
@@ -2072,6 +2072,12 @@ packages:
 
   caniuse-lite@1.0.30001810:
     resolution: {integrity: sha512-TITQPUkaz+aVk5GL6NhOdwk1aEaNTSDPsGFWrTuhKGtjTF70jL/Oht2W4c6rXUe5fu7Ie19VIahAXHIIiWWNeg==}
+
+  captchakit@0.2.5:
+    resolution: {integrity: sha512-L5KlO0FJip0++Y8qAuD1AOyB14zAQqBfa5PdOgf1M1taPrJwbboTIIhbladeWFVV0J+I8IHQkxFJmQWXFXrRnQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
 
   casbin@5.51.1:
     resolution: {integrity: sha512-90AzVZ39sCAeytW/mc5UyKnr3nfhTT2uf8Qu1YiRwGoEdtoMa4CL+fqDHHdsPrvbG6JWz7njvJCFb/NIrCMwWA==}
@@ -5056,6 +5062,10 @@ snapshots:
       ieee754: 1.2.1
 
   caniuse-lite@1.0.30001810: {}
+
+  captchakit@0.2.5(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   casbin@5.51.1:
     dependencies:

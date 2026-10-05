@@ -122,7 +122,7 @@ function NotFound({ data }: NotFoundRouteProps) {
  *    给用户看的是 `toApiError()` 归一后的 message —— 业务抛的 `TRPCError` 是「请先登录」、
  *    「没有权限」、「系统异常,请稍后再试」之类的**可操作**文案;真崩时给的就是一段中文兜底 + 「复制给开发者」。
  *  - **开发环境**额外开一个折叠区,把 componentStack 露出来 —— dev 模式下能看到,prod 下没有。
- *  - **不接 Sentry 在前端**:见 `instrument.server.mjs`,DSN 缺失时整段 Sentry 不启动;统一在 server side 上送。
+ *  - 异常监控不在本模板内置 —— 模板不挑服务,自行接异常监控服务 / 自建告警 / 不接都行,留口子给使用者。
  *
  * 为什么不用 `errorComponent` 区分 4xx / 5xx:TanStack 框架对**任何错误边界**都写死 `status: 500`
  * (`applyFailure` 的 ERROR 终态),`error.status` / `setResponseStatus` 都不参与判定 —— 想给 4xx 走

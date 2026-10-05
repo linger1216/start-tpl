@@ -368,7 +368,7 @@ export const sysVerification = mysqlTable(
  *  - `failed_attempts` 累计连续失败次数(成功登录清零);
  *  - `locked_until` 超过阈值(默认 5)时被置 15 分钟后的未来时刻;
  *    期间内任何 /sign-in/email 走 `hooks.before` 拦截,直接抛 429(实测比 401 更准确);
- *  - `last_failed_at` / `last_ip` 仅作审计,不上送 Sentry(告警阈值由业务另设)。
+ *  - `last_failed_at` / `last_ip` 仅作审计,告警阈值由业务另设(本模板不内置异常监控)。
  *
  * 为什么放在 better-auth 模型之外:better-auth 没有 `failedAttempts` 这个内置字段,
  * 自己加列会污染 `user` 模型(违反 §11.1「BA 写死四表」的原则),放一张独立表更轻。
