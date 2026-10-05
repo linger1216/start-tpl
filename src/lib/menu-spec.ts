@@ -42,3 +42,14 @@ export function asMenuType(value: unknown): MenuType {
  * (同 AGENTS「认证」那两条硬约束的坑)。所以权限码这种"两边都要用的字符串"放这里。
  */
 export const IMPERSONATE_PERM = "sys:user:impersonate";
+
+/**
+ * 「系统管理员」角色名 —— **客户端与服务端共用一份**(`#/lib/casbin.ts` 也是从这里 re-import)。
+ *
+ * 同上口径:这只是一条字面量字符串,但 server 与 client 都按它识别 admin 角色 —— 角色编辑表单
+ * 要按名命中 + 显示 banner,permMiddleware / dataScopeMiddleware 要按名查「系统管理员」。
+ * 真源在本模块。`lib/casbin.ts` 看上去"理所当然"但**不能**直接被 client import:
+ * 它链上 `#/db`(mysql2 + node:buffer)、`casbin`、`drizzle-orm` 等服务端依赖,
+ * client 一拉过来浏览器里没 `Buffer.prototype`,运行时直接炸。
+ */
+export const ADMIN_ROLE_NAME = "系统管理员";

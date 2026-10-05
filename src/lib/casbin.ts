@@ -27,6 +27,9 @@ import { db } from "#/db";
 import { sysCasbinRule, sysMenu, sysRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { logger } from "#/lib/logger";
+// `ADMIN_ROLE_NAME` 真源在 `lib/menu-spec.ts`(客户端也要用,见该模块的注释);
+// 本文件是 server-only,不能被 client 直接 import,故 re-import 这条字面量字符串而不是另起一份。
+import { ADMIN_ROLE_NAME } from "#/lib/menu-spec";
 import { isPermPattern, pagePermOf, permMatches } from "#/lib/perm-code";
 import { alive } from "#/lib/soft-delete";
 import { collectAncestorIds } from "#/lib/tree";
@@ -70,11 +73,10 @@ const USER_PREFIX = "user:";
 const ROLE_PREFIX = "role:";
 export const MENU_PREFIX = "menu:";
 
-/**
- * 「系统管理员」角色名 —— 唯一能跨 admin 改 admin / 删除 admin 的角色。
- * `scripts/seed-rbac.ts` 也从这里导入同名常量。
- */
-export const ADMIN_ROLE_NAME = "系统管理员";
+/** 唯一能跨 admin 改 admin / 删除 admin 的角色 —— re-export 给 server 调用方,
+ * `scripts/seed-rbac.ts` / `routers/user.ts` / `routers/role.ts` 都从这里 import。
+ * 真源是 `lib/menu-spec.ts`(客户端也要用);本文件不再 export 一份。*/
+export { ADMIN_ROLE_NAME };
 
 /**
  * 客体(obj)怎么比 —— matcher 调的就是它。**纯函数,不查库**。

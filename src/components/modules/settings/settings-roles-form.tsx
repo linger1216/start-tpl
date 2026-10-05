@@ -22,7 +22,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-import { ADMIN_ROLE_NAME } from "#/lib/casbin";
+// 真源在 `lib/menu-spec.ts`(client-safe) —— 本来从 `#/lib/casbin` 拉,但 casbin 是
+// server-only(client 一拉就炸 "Buffer is not defined"),见 menu-spec.ts 那条注释。
+import { ADMIN_ROLE_NAME } from "#/lib/menu-spec";
 
 export type RoleFormPayload = {
 	name: string;
