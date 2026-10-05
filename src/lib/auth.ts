@@ -8,6 +8,7 @@ import { db } from "#/db";
 import { sysAccount, sysSession, sysUser, sysVerification } from "#/db/data-base-schema";
 import { userSwitchPlugin } from "#/lib/auth-debug";
 import { clearSignInFailures, isAccountLocked, recordSignInFailure } from "#/lib/auth-lockout";
+import { ensureCaptchaSecret } from "#/lib/captcha-secret";
 import { logger } from "#/lib/logger";
 import { sendMail } from "#/lib/mailer";
 import { purgeExpiredRateLimitsThrottled, rateLimitStorage } from "#/lib/rate-limit-storage";
@@ -33,6 +34,23 @@ import { purgeExpiredRateLimitsThrottled, rateLimitStorage } from "#/lib/rate-li
  * - 没有 `://` 的纯主机 glob(`*.localhost`)只比 host 不比 scheme,**不建议**用。
  */
 const DEFAULT_TRUSTED_ORIGINS = ["http://localhost:3000", "https://*.localhost"];
+
+/**
+ * 从请求头里取人机验证的 proof token。
+ *
+ * 两条路都得试,因为 better-auth 有**两种进到钩子的方式**,两条路的上下文形状不一样(实测):
+ *  - `auth.handler(new Request(...))` —— 生产真链路(`routes/api/auth/$.ts` 走这条),
+ *    钩子里 `ctx.request` 有值,但 `ctx.getHeader` 不一定能拿到;
+ *  - `auth.api.signInEmail({ body, headers })` —— 服务端内部直调 / 测试用,
+ *    **`ctx.request` 是 `undefined`**,只有 `ctx.getHeader()` 读得到传入的 headers。
+ *
+ * 只写其中一条的后果很具体:测试用 `auth.api.*` 走时永远读不到 token,于是每条登录用例都被
+ * 「请先完成人机验证」挡下来,查起来像是验证逻辑坏了,其实是读错了地方。
+ */
+function readCaptchaToken(ctx: { getHeader?: (name: string) => string | null; request?: Request }): string {
+	const fromGetter = typeof ctx.getHeader === "function" ? ctx.getHeader("x-captcha-token") : null;
+	return String(fromGetter ?? ctx.request?.headers.get("x-captcha-token") ?? "").trim();
+}
 
 function loadTrustedOrigins(): string[] {
 	const extra = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
@@ -189,10 +207,9 @@ export const auth = betterAuth({
 			/**
 			 * CaptchaKit 人机验证(自托管,不对接 Turnstile / reCAPTCHA 任何第三方)。
 			 *
-			 * **只在配了 `CAPTCHAKIT_SECRET` 时才要求验证码** —— 留空 = 模板没启用,登录流程原样。
-			 * 取「有没有配」而不是「有没有配满 32 位」:长度不够时 captchakit 自己会报
-			 * `CAPTCHA_MISSING_SECRET`,由 `/api/captcha` 端点回 500,配置错误当场暴露,
-			 * 不在这里静默放过。
+			 * **无条件要求** —— 没有「关掉验证码」这个开关。`ensureCaptchaSecret()` 会在
+			 * `CAPTCHAKIT_SECRET` 没配时现场生成一把(开发态写回 `.env.local`,见 `lib/captcha-secret.ts`),
+			 * 所以「忘了配密钥」不等于「登录接口裸奔」。想换密钥改环境变量即可,不必改代码。
 			 *
 			 * 这一层是**兜底**:`/api/captcha` 端点(见 `routes/api.captcha.ts`)已经在前端答题时
 			 * verify 过一次;这里再过一次是为了「绕过前端直 POST /api/auth/sign-in/email」这条路也走不通。
@@ -200,21 +217,20 @@ export const auth = betterAuth({
 			 * token 走 `x-captcha-token` 请求头而不是 body:better-auth 客户端给 `signIn.email`
 			 * 的 body 写了严格 schema,多一个字段就得 cast;走头两边都干净。
 			 */
-			if (process.env.CAPTCHAKIT_SECRET?.trim()) {
-				const captchaToken = String(ctx.request?.headers.get("x-captcha-token") ?? "").trim();
-				if (!captchaToken) {
-					throw new APIError("BAD_REQUEST", {
-						message: "请先完成人机验证",
-					});
-				}
-				// 一次性消费:proof token 验过就作废,所以前端每次提交失败都必须换一道新题
-				const captcha = await verifyCaptcha({ token: captchaToken });
-				if (!captcha.success) {
-					logger.warn("auth.sign-in.captcha_invalid", { error: captcha.error });
-					throw new APIError("BAD_REQUEST", {
-						message: captcha.error === "CAPTCHA_EXPIRED" ? "人机验证已过期,请重试" : "人机验证失败,请重试",
-					});
-				}
+			ensureCaptchaSecret();
+			const captchaToken = readCaptchaToken(ctx);
+			if (!captchaToken) {
+				throw new APIError("BAD_REQUEST", {
+					message: "请先完成人机验证",
+				});
+			}
+			// 一次性消费:proof token 验过就作废,所以前端每次提交失败都必须换一道新题
+			const captcha = await verifyCaptcha({ token: captchaToken });
+			if (!captcha.success) {
+				logger.warn("auth.sign-in.captcha_invalid", { error: captcha.error });
+				throw new APIError("BAD_REQUEST", {
+					message: captcha.error === "CAPTCHA_EXPIRED" ? "人机验证已过期,请重试" : "人机验证失败,请重试",
+				});
 			}
 			const email = String(ctx.body?.email ?? "")
 				.trim()

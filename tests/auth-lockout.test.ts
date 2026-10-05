@@ -26,7 +26,7 @@ import {
 	resetLockoutConfig,
 	setLockoutConfig,
 } from "../src/lib/auth-lockout.ts";
-import { closeDb, TEST_PREFIX } from "./helpers.ts";
+import { captchaHeaders, closeDb, TEST_PREFIX } from "./helpers.ts";
 
 const PASSWORD = "Passw0rd!123";
 const NAME = "风控测试";
@@ -119,7 +119,10 @@ test("hooks.after 接通:错密码登录 → 失败计数 +1", async () => {
 	await clearSignInFailures(email);
 
 	await assert.rejects(async () => {
-		await auth.api.signInEmail({ body: { email, password: "wrong-password-xxx" } });
+		await auth.api.signInEmail({
+			body: { email, password: "wrong-password-xxx" },
+			headers: await captchaHeaders(),
+		});
 	}, "错密码应抛错");
 
 	// 等 hooks.after 的 fire-and-forget 落库(实测 100ms 内)
@@ -138,7 +141,7 @@ test("hooks.before 接通:账号被锁后,正确密码也被拦", async () => {
 	// 即便密码正确,也被拦截
 	let caught: unknown = null;
 	try {
-		await auth.api.signInEmail({ body: { email, password: PASSWORD } });
+		await auth.api.signInEmail({ body: { email, password: PASSWORD }, headers: await captchaHeaders() });
 	} catch (err) {
 		caught = err;
 	}

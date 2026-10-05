@@ -16,18 +16,27 @@
  *   - 这里先验证明能力是否有效,返回 400 + 错误码 → 用户立刻看到反馈;
  *   - BA hooks.before 也验一遍 → 即使前端绕过这一层直接 POST /sign-in/email,服务端仍会拦截。
  *
+ * ⚠️ `/api/captcha` 与 `/api/auth/sign-in/email` 都**无条件要求**人机验证(没有开关);
+ * 密钥没配时由 `lib/captcha-secret.ts` 现场生成 —— 详见 `doc/认证与安全.md`。
+ *
  * 详见 `src/lib/auth.ts` 的 `hooks.before` 段。
  */
 import { createFileRoute } from "@tanstack/react-router";
 
 import { createCaptchaHandlers } from "captchakit/server";
 
-// `secret` 走 CAPTCHAKIT_SECRET(最少 32 字节;captchakit 内部校验),dev 没设时返回 500。
-// `.env.example` 与 `lib/auth.ts` 的 hooks.before 读同一份。
-const { GET, POST } = createCaptchaHandlers();
+import { ensureCaptchaSecret } from "#/lib/captcha-secret";
+
+// 密钥兜底放在**建 handler 之前**:`createCaptchaHandlers()` 会在构造时就把 secret 读进去
+// (captchakit 的 `getSecret()` 在无参时读 `process.env.CAPTCHAKIT_SECRET`,拿到空串就固化了「无密钥」状态)。
+// 所以顺序不能反 —— 先确保有密钥,再建 handler。
+// `lib/auth.ts` 的 `hooks.before` 里也调同一个函数(幂等),两边共用一把。
+ensureCaptchaSecret();
 
 // captchakit 的 handler 收裸 `Request`,TanStack 的 `server.handlers` 收 `{ request }` ctx ——
 // 这里只做签名对齐,不包一层逻辑(同 `api.sse.notice.ts` 的 handler 写法)。
+const { GET, POST } = createCaptchaHandlers();
+
 export const Route = createFileRoute("/api/captcha")({
 	server: {
 		handlers: {

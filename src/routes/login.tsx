@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
 import { Captcha } from "captchakit";
 import { LayoutDashboard } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -14,28 +13,19 @@ import { Spinner } from "#/components/ui/spinner";
 import { authClient } from "#/lib/auth-client";
 
 /**
- * 「有没有启用人机验证」—— **必须在服务端答**。
- *
- * 判据就是 `CAPTCHAKIT_SECRET` 有没有配(`lib/auth.ts` 的 `hooks.before` 用的是同一条)。
- * 为什么不让浏览器自己判断:判定条件是一个环境变量,前端看不到;硬编一个常量又会让
- * 「服务端已开、页面没显示」的版本错配出现 —— 首屏 HTML 里直接给出结论才不会出现这种裂缝。
- * 走 `createServerFn` 而不是直接读 `process.env`:server fn 的 handler 会被打进服务端产物,
- * `process.env` 不会漏进浏览器包(同 `(main)/route.tsx` 的 `getSessionGate`)。
- */
-const getCaptchaEnabled = createServerFn({ method: "GET" }).handler((): boolean =>
-	Boolean(process.env.CAPTCHAKIT_SECRET?.trim()),
-);
-
-/**
  * 登录页 —— `/login`,**故意放在 `src/routes/` 根下**(不在 `(main)` 里),这样它没有后台外壳:
  * 未登录的人不应该先看到侧边栏/顶栏再被弹走。
  *
  * 认证走 better-auth 的客户端 SDK,但它自己不做会话判定 —— 判定在 `(main)/route.tsx` 的
- * `beforeLoad`(服务端)。这里只负责:收凭证 → 调 `signIn.email` → 回跳。
+ * `beforeLoad`(服务端)。这里只负责:收凭证 → 过人机验证 → 调 `signIn.email` → 回跳。
  *
  * 人机验证用 **CaptchaKit 自托管**(不对接 Turnstile / reCAPTCHA 等任何第三方):
  * 题面与答案全在本进程,只有 proof token 回服务端消费一次。
- * **配了 `CAPTCHAKIT_SECRET` 才要求过**,没配就不显示这一栏(见 `getCaptchaEnabled`)。
+ *
+ * ⚠️ 这一栏**无条件显示** —— 服务端 `/sign-in/email` 也无条件校验,两边对不齐就会出现
+ * 「页面让人填、服务端说没填」的空转。密钥没配时由 `lib/captcha-secret.ts` 现场生成,
+ * 所以也不需要在这里问「服务端开了没」(上一版为此专门开过一个 `createServerFn` 问句:
+ * 判据是环境变量、浏览器看不见,现在既然不再有开关,那个问句就没有存在理由了)。
  */
 export const Route = createFileRoute("/login")({
 	/**
@@ -47,14 +37,12 @@ export const Route = createFileRoute("/login")({
 		const ok = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//");
 		return { redirect: ok ? (raw as string) : undefined };
 	},
-	loader: async () => ({ captchaEnabled: await getCaptchaEnabled() }),
 	component: LoginPage,
 });
 
 function LoginPage() {
 	const router = useRouter();
 	const { redirect: to } = Route.useSearch();
-	const { captchaEnabled } = Route.useLoaderData();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const [email, setEmail] = useState("admin@example.com");
 	const [password, setPassword] = useState("Passw0rd123");
@@ -82,7 +70,7 @@ function LoginPage() {
 		event.preventDefault();
 		setError(null);
 		// 没解完人机验证就不打服务端 —— 少一次无谓的失败计数,也少刷一条锁账号告警。
-		if (captchaEnabled && !captchaToken) {
+		if (!captchaToken) {
 			setError("请先完成人机验证");
 			return;
 		}
@@ -94,7 +82,7 @@ function LoginPage() {
 				// 的 body 写了严格 schema(多一个字段就报错);第二个位置参数直接就是 fetch 选项,
 				// 不用再包一层 `fetchOptions`。服务端读同一个头 ——
 				// 与 better-auth 自带 captcha 插件的 `x-captcha-response` 同套路。
-				captchaToken ? { headers: { "x-captcha-token": captchaToken } } : undefined,
+				{ headers: { "x-captcha-token": captchaToken } },
 			);
 			if (signInError) {
 				// better-auth 对「用户不存在」和「密码错」返回同一条信息 —— 这是对的,别在界面泄露哪个邮箱存在
@@ -157,22 +145,20 @@ function LoginPage() {
 								/>
 							</div>
 
-							{captchaEnabled ? (
-								<div className="space-y-1.5">
-									<Label>人机验证</Label>
-									{/* `locale` 只有 en / fa 两种(题面文案是包内置的),中文登录页用 en。
-									    `math` + `easy`:登录是唯一入口,别把门槛设太高。 */}
-									<Captcha
-										key={captchaNonce}
-										type="math"
-										difficulty="easy"
-										locale="en"
-										onVerify={setCaptchaToken}
-										onError={() => setCaptchaToken(null)}
-										disabled={submitting}
-									/>
-								</div>
-							) : null}
+							<div className="space-y-1.5">
+								<Label>人机验证</Label>
+								{/* `locale` 只有 en / fa 两种(题面文案是包内置的),中文登录页用 en。
+							    `math` + `easy`:登录是唯一入口,别把门槛设太高。 */}
+								<Captcha
+									key={captchaNonce}
+									type="math"
+									difficulty="easy"
+									locale="en"
+									onVerify={setCaptchaToken}
+									onError={() => setCaptchaToken(null)}
+									disabled={submitting}
+								/>
+							</div>
 
 							{error ? (
 								<p role="alert" className="text-xs text-danger">

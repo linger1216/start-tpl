@@ -21,7 +21,7 @@ import { auth } from "../src/lib/auth.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
-import { closeDb, purgeCasbinByUserIds, purgeRoles, TEST_PREFIX } from "./helpers.ts";
+import { captchaHeaders, closeDb, purgeCasbinByUserIds, purgeRoles, TEST_PREFIX } from "./helpers.ts";
 
 const SUFFIX = `${Date.now().toString(36)}`;
 const PASSWORD = "Passw0rd!123";
@@ -54,7 +54,11 @@ async function makeUser(label: string): Promise<{ id: string; email: string }> {
 
 /** 拿到某个账号的会话 cookie(走真实登录接口) */
 async function signInCookie(email: string): Promise<string> {
-	const res = await auth.api.signInEmail({ body: { email, password: PASSWORD }, asResponse: true });
+	const res = await auth.api.signInEmail({
+		body: { email, password: PASSWORD },
+		headers: await captchaHeaders(),
+		asResponse: true,
+	});
 	return cookieOf(res);
 }
 

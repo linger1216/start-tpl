@@ -12,9 +12,8 @@
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-
+import { createChallenge, verifyCaptcha } from "captchakit/server";
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
-
 import {
 	sysAccount,
 	sysAccountLockout,
@@ -37,6 +36,7 @@ import { db, dmPool } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
 import { flushAuditWrites } from "../src/lib/audit.ts";
+import { ensureCaptchaSecret } from "../src/lib/captcha-secret.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 
 /** 测试数据统一前缀:方便一眼认出、也方便误留时清理 */
@@ -199,6 +199,50 @@ export async function getSystemAdminRoleRow(): Promise<{ id: string }> {
 	);
 	if (!row) throw new Error("库里没有「系统管理员」角色 —— 需要先跑 pnpm db:seed:rbac");
 	return row;
+}
+
+/**
+ * 答一道人机验证题,换一张 proof token —— 走的就是浏览器那条路(`/api/captcha` 的 GET + POST)。
+ *
+ * **登录是无条件要求验证码的**(见 `src/lib/auth.ts` 的 `hooks.before`),所以任何走登录的用例
+ * 都得先换到 token,否则会被「请先完成人机验证」挡下来 —— 那不是用例想验的东西,是在验验证码。
+ * 于是这一段样板集中在这里。
+ *
+ * `type: "number"` + `locale: "en"` 是**唯一能自动作答**的组合:`locale !== "fa"` 时 captchakit 的
+ * `formatDigits` 原样返回数字串,题面即答案(`createChallenge` 本身永远不返回答案字段)。
+ * `identifier` 每次都换 —— captchakit 按它限流 20 次/分钟,共用一个 key 会让并行跑的测试互相踩。
+ *
+ * 先调 `ensureCaptchaSecret()`:captchakit 的 `getSecret()` 调用时读 `process.env`,而密钥没配时
+ * 登录钩子已经现场生成过一把了(见 `src/lib/captcha-secret.ts`)。这里再调一次是幂等的,
+ * 只是保证「直接调本函数」也不会撞 `CAPTCHA_MISSING_SECRET`。
+ */
+export async function solveCaptcha(): Promise<string> {
+	ensureCaptchaSecret();
+	const challenge = await createChallenge({
+		type: "number",
+		difficulty: "easy",
+		locale: "en",
+		identifier: uniqueSuffix(),
+	});
+	const answer = challenge.challenge.display;
+	assert.ok(answer, "number 题必须带 display(题面)");
+	const verified = await verifyCaptcha({ token: challenge.token, answer });
+	assert.equal(verified.success, true, "答案正确应该换到 proof token");
+	assert.ok(verified.token, "proof token 不能为空");
+	return verified.token;
+}
+
+/**
+ * 直调 `auth.api.signInEmail` 时要带的人机验证请求头。
+ *
+ * ⚠️ 只能用在**直调**上。走 `auth.handler(new Request(...))` 的用例(见 `tests/captcha.test.ts`)
+ * 是自己构造 headers 的,不走这里 —— 那条路上 `ctx.request` 有值,取 header 的方式不一样。
+ *
+ * 为什么直调也能带上:`auth.api.*` 的钩子上下文里 `ctx.request` 是 `undefined`,
+ * 只有 `ctx.getHeader()` 读得到传入的 headers(`src/lib/auth.ts` 的 `readCaptchaToken` 两条路都试)。
+ */
+export async function captchaHeaders(): Promise<Record<string, string>> {
+	return { "x-captcha-token": await solveCaptcha() };
 }
 
 const NANOID_RE = /^[A-Za-z0-9_-]{21}$/;

@@ -33,6 +33,7 @@ import {
 	assertRejects,
 	caller,
 	callerAs,
+	captchaHeaders,
 	closeDb,
 	getSystemAdminRoleRow,
 	purgeCasbinByUserIds,
@@ -102,7 +103,11 @@ test("user.create:建出的账号能在库里查到,并且真的能登录", asyn
 
 	// password hash 由 BA 写在 account 表上 —— 这里能登录就证明它落对了
 	// `returnHeaders: true` 时结果包一层 `{ headers, response }`,用户对象在 `response.user` 上
-	const signIn = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true });
+	const signIn = await auth.api.signInEmail({
+		body: { email: EMAIL, password: PASSWORD },
+		headers: await captchaHeaders(),
+		returnHeaders: true,
+	});
 	assert.ok(signIn?.response?.user, "新账号应该能直接登录");
 	assert.equal(signIn.response.user.id, created.id);
 
@@ -224,7 +229,7 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 		departmentIds: [dept.id],
 	});
 	// 造一个会话(signInEmail 会落一行),证明删除时确实被清掉
-	await auth.api.signInEmail({ body: { email: created.email, password: PASSWORD } });
+	await auth.api.signInEmail({ body: { email: created.email, password: PASSWORD }, headers: await captchaHeaders() });
 	const before = await db.select().from(sysSession).where(eq(sysSession.userId, created.id));
 	assert.ok(before.length > 0, "前置条件:登录后应该有会话");
 
@@ -519,7 +524,11 @@ test("user.import:批量开账号 —— 新邮箱真能登录,角色 / 部门�
 		[deptRow.id],
 	);
 	// ③ 真能登录:密码确实被 BA 哈希进 sys_account 了
-	const signIn = await auth.api.signInEmail({ body: { email: emailA, password: PASSWORD }, returnHeaders: true });
+	const signIn = await auth.api.signInEmail({
+		body: { email: emailA, password: PASSWORD },
+		headers: await captchaHeaders(),
+		returnHeaders: true,
+	});
 	assert.ok(signIn?.response?.user, "导入出来的账号应该能登录");
 	assert.equal(signIn.response.user.id, idA);
 });

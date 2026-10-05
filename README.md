@@ -258,7 +258,7 @@ cp .env.example .env.local
 | `BETTER_AUTH_TRUSTED_ORIGINS` | 否 | **额外**放行的 origin,逗号分隔。代码内置 `http://localhost:3000`、`http://localhost:4811`;portless 用 `https://*.localhost`,自建域名写全量 origin。通配符只匹配单段主机名(见 `src/lib/auth.ts` 的注释) |
 | `BETTER_AUTH_SECRET` | 否 | 用 `pnpm dlx @better-auth/cli secret` 生成 |
 | `VITE_TRPC_STREAM` | 否 | 设 `1` 换成流式(`httpBatchStreamLink`);留空用非流式,响应是完整 JSON,DevTools 里能直接读 |
-| `CAPTCHAKIT_SECRET` | 否 | **留空 = 不启用人机验证**;填了(≥32 字符,`openssl rand -hex 32` 生成)登录页才出现验证码栏,提交登录必须带 proof token。CaptchaKit 自托管,不对接任何第三方验证码服务。口径见 `doc/后端代码导读.md` §3.1.1 |
+| `CAPTCHAKIT_SECRET` | 否 | **人机验证无条件开启,这是密钥不是开关**:填了(≥32 字符,`openssl rand -hex 32` 生成)就用你这把;留空则首次访问 `/api/captcha` 时自动生成 32 字节随机值并写回 `.env.local`(见 `src/lib/captcha-secret.ts`)。登录页永远显示验证码栏,提交必须带 proof token。CaptchaKit 自托管,不对接任何第三方验证码服务。口径见 `doc/后端代码导读.md` §3.1.1 |
 | `MAIL_DRIVER` | 否 | **留空 = 开发态驱动**:邮箱验证链接只打到 `pnpm dev` 的终端窗口,不真发。**生产必须换成 `smtp`** |
 | `SMTP_*` / `MAIL_FROM` | 否 | `smtp` 驱动才读:`SMTP_HOST` / `PORT` / `SECURE` / `USER` / `PASS` / `ALLOW_SELF_SIGNED` + `MAIL_FROM`。企业邮、Exchange、自建 Postfix 都走这条路。实现见 `src/lib/mailer.ts` |
 | `MINIO_*` | 否 | 文件管理用:`MINIO_ENDPOINT` / `PORT` / `USE_SSL` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET_PUBLIC` / `BUCKET_PRIVATE` / `PUBLIC_URL`,见 `doc/文件管理.md` |
@@ -358,7 +358,7 @@ plugins: [tanstackStartCookies(), userSwitchPlugin()], // 后者是运维用的�
 
 没接的部分(**不开放自注册**,账号要先在库里建 —— 见 `AGENTS.md` 的「认证」):注册页 / 忘记密码、第三方登录(加 `socialProviders` 即可,表结构不用改)。
 
-登录安全另有两道**默认关闭**的开关,配好环境变量即生效:人机验证(CaptchaKit 自托管,`CAPTCHAKIT_SECRET`)与邮件真发(`MAIL_DRIVER=smtp`,见 `src/lib/mailer.ts` 与 `.env.example`)。异常监控不在模板内置 —— 想接 Sentry 或自建告警,自己在 `lib/` 里加。
+登录安全:人机验证**默认就是开的**(CaptchaKit 自托管,密钥没配会自动生成,见 `src/lib/captcha-secret.ts`);邮件则默认只打到终端,要真发配 `MAIL_DRIVER=smtp`(见 `src/lib/mailer.ts` 与 `.env.example`)。异常监控不在模板内置 —— 想接 Sentry 或自建告警,自己在 `lib/` 里加。
 
 改动 adapter 时注意:better-auth 升级后字段若变了,会在**运行时**报「Model xxx not found」/「field not found」,`typecheck` 抓不到 —— 升级后请重新核对四张表的字段。具体选项以 [Better Auth 文档](https://www.better-auth.com)为准。
 

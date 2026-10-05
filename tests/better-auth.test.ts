@@ -18,7 +18,7 @@ import { eq } from "drizzle-orm";
 import { sysAccount, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
-import { closeDb, TEST_PREFIX } from "./helpers.ts";
+import { captchaHeaders, closeDb, TEST_PREFIX } from "./helpers.ts";
 
 const EMAIL = `${TEST_PREFIX}ba_${Date.now()}@example.com`;
 const PASSWORD = "Passw0rd!123";
@@ -70,7 +70,11 @@ test("登录:生成 session 行,token 与 cookie 一致", async () => {
 	// 注意:`signUpEmail` 会自动签一次(顺手建了会话),所以这里断言"增量 +1"而不是"恰好 1 条"
 	const beforeCount = (await db.select().from(sysSession).where(eq(sysSession.userId, stored.id))).length;
 
-	const res = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true });
+	const res = await auth.api.signInEmail({
+		body: { email: EMAIL, password: PASSWORD },
+		headers: await captchaHeaders(),
+		returnHeaders: true,
+	});
 	const cookie = cookieOf(res.headers as Headers);
 	assert.ok(cookie, "登录应下发 session cookie");
 
@@ -89,7 +93,11 @@ test("登录:生成 session 行,token 与 cookie 一致", async () => {
 });
 
 test("取会话:带 cookie 能拿到当前用户", async () => {
-	const signIn = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true });
+	const signIn = await auth.api.signInEmail({
+		body: { email: EMAIL, password: PASSWORD },
+		headers: await captchaHeaders(),
+		returnHeaders: true,
+	});
 	const session = await auth.api.getSession({ headers: new Headers({ cookie: cookieOf(signIn.headers as Headers) }) });
 	assert.ok(session, "应拿到会话");
 	assert.equal(session.user.email, EMAIL);
@@ -102,7 +110,11 @@ test("密码错误:被拒且不新增会话", async () => {
 	const beforeSessions = await db.select().from(sysSession).where(eq(sysSession.userId, before.id));
 
 	await assert.rejects(
-		() => auth.api.signInEmail({ body: { email: EMAIL, password: "wrong-password-xxx" } }),
+		async () =>
+			auth.api.signInEmail({
+				body: { email: EMAIL, password: "wrong-password-xxx" },
+				headers: await captchaHeaders(),
+			}),
 		"错密码应抛错",
 	);
 
@@ -111,7 +123,11 @@ test("密码错误:被拒且不新增会话", async () => {
 });
 
 test("登出:会话从库里消失", async () => {
-	const signIn = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true });
+	const signIn = await auth.api.signInEmail({
+		body: { email: EMAIL, password: PASSWORD },
+		headers: await captchaHeaders(),
+		returnHeaders: true,
+	});
 	const headers = new Headers({ cookie: cookieOf(signIn.headers as Headers) });
 
 	const stored = await findUser();
