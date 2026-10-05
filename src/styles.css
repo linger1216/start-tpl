@@ -430,6 +430,193 @@ body,
   min-height: 100%;
 }
 
+/* ============================================================================
+ * CaptchaKit 外观适配
+ *
+ * `/login` 用的是第三方组件 CaptchaKit(`captchakit/styles.css`)。那份 CSS 是**未分层**的
+ * (它自己 `@import` 时没进任何 `@layer`),而「未分层压过任何分层」—— 所以这里也得写成
+ * 未分层,进 `@layer base/components` 反而会被它盖掉(同款坑,见上面 `@layer base` 那段注释)。
+ *
+ * 选择器写成 `.captchakit.captchakit`(重复一次类名,特异度 0,2,0)而不是 `.captchakit`(0,1,0):
+ * 两份 CSS 谁先加载取决于 Vite 的模块执行顺序(`styles.css` 挂在 `__root.tsx`、
+ * `captchakit/styles.css` 挂在 `routes/login.tsx`),靠顺序赌输赢迟早出事。抬一级特异度就与顺序无关。
+ *
+ * 不包一层组件去改样式(AGENTS 禁薄封装),也不 fork 它的样式表 —— 能靠它自带的
+ * `--captchakit-*` 变量和 class 对齐的就用,对不上的(布局、外框)才在这里点名覆盖。
+ * ========================================================================== */
+
+/* --- 1. 令牌映射:整套灰阶换成项目的 shadcn 令牌 ---------------------------- */
+.captchakit.captchakit {
+  --captchakit-primary: var(--primary);
+  --captchakit-background: var(--card);
+  --captchakit-text: var(--foreground);
+  --captchakit-muted: var(--muted-foreground);
+  --captchakit-border: var(--border);
+  --captchakit-error: var(--danger);
+  --captchakit-focus: var(--brand-ring);
+  /* Tailwind `rounded-lg` 的实数值 —— 跟 Input / Button 对齐(组件本身用的是 6px) */
+  --captchakit-radius: 0.5rem;
+
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+
+  /* --- 2. 拆掉自带的外框 ---
+     它自己带 border + background + max-width: 16rem,套在 shadcn 的 Card 里就变成
+     「框里又一个小框」,而且比上面的 Input 窄一截,左右都对不齐。 */
+  display: grid;
+  /* 左列按内容走(题面是定长数字,自然宽),右列吃剩余 —— input 跟着表单 Input 走 */
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  column-gap: 0.5rem;
+  row-gap: 0.375rem;
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* --- 3. 版面:题面(左)和答案输入(右)同一行;包自带的「Verify」按钮整块
+   藏掉 —— 用户的需求是「点登录自动验证」,verify 由 `routes/login.tsx` 在
+   输入完成后 dispatch Enter 触发包内 onSubmit 流程,详情见该文件注释。
+   错误信息在下独占一行;刷新按钮依然浮在题面右上角。 */
+.captchakit.captchakit > .captchakit-challenge {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+}
+
+.captchakit.captchakit > .captchakit-field {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.captchakit.captchakit > .captchakit-actions {
+  display: none;
+}
+
+.captchakit.captchakit > .captchakit-error {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.75rem;
+}
+
+/* --- 4. 题面:比正文大一档 + 等宽数字,一眼扫到要算的那行 ------------------- */
+.captchakit.captchakit .captchakit-challenge {
+  padding: 0.375rem 2.5rem 0.375rem 0.75rem;
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+  border-color: transparent;
+  border-radius: var(--captchakit-radius);
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+
+.captchakit.captchakit .captchakit-challenge:hover {
+  border-color: var(--border);
+}
+
+.captchakit.captchakit .captchakit-display {
+  color: var(--foreground);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+}
+
+/* 刷新按钮:原版是 22px 的小方块贴在角上,改成图标按钮的观感 */
+.captchakit.captchakit .captchakit-refresh {
+  top: 50%;
+  right: 0.625rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: calc(var(--captchakit-radius) - 0.125rem);
+  transform: translateY(-50%);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.captchakit.captchakit .captchakit-refresh:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.captchakit.captchakit .captchakit-refresh:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+.captchakit.captchakit .captchakit-refresh-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* --- 5. 输入框那一栏的 label:视觉隐藏,留给读屏 --------------------------
+     外层已经有一个可见的「人机验证」标签了;包内这个是英文且写死(locale 只有 en/fa),
+     留着就是一行夹在中文表单里的英文。`htmlFor` 仍指向 input,无障碍不受影响。 */
+.captchakit.captchakit .captchakit-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --- 6. 答案输入框:高度 / 圆角 / 交互全照 `components/ui/input.tsx` 抄 ----- */
+.captchakit.captchakit .captchakit-input {
+  min-height: 2.25rem; /* = h-9 */
+  padding: 0.375rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  background: var(--card);
+  border-color: var(--input);
+  border-radius: var(--captchakit-radius);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.captchakit.captchakit .captchakit-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.captchakit.captchakit .captchakit-input:hover {
+  border-color: var(--primary);
+}
+
+.captchakit.captchakit .captchakit-input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+.captchakit.captchakit .captchakit-input[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+/* --- 7. 「验证」按钮已删(整个 .captchakit-actions 由上面的 `display: none` 摘掉) ---
+     触发 verify 改为 `routes/login.tsx` 在用户输入完毕后 dispatch Enter,
+     走包内的 CaptchaInput.onSubmit 流程拿 proof token —— 见该文件注释。 */
+
+/* loading / verifying 期间题面淡一点,提示它在忙;verify 通过后题面变绿 */
+.captchakit.captchakit[data-status="loading"] .captchakit-challenge,
+.captchakit.captchakit[data-status="verifying"] .captchakit-challenge {
+  opacity: 0.6;
+}
+
+.captchakit.captchakit[data-status="verified"] .captchakit-challenge {
+  background: color-mix(in srgb, var(--success-soft) 60%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .captchakit.captchakit *,
+  .captchakit.captchakit *::before,
+  .captchakit.captchakit *::after {
+    transition: none;
+  }
+}
+
 /**
  * 元素级默认值 —— **必须放在 `@layer base` 里**。
  *

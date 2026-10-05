@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { Captcha } from "captchakit";
 import { LayoutDashboard } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import "captchakit/styles.css";
 
@@ -17,9 +17,9 @@ import { authClient } from "#/lib/auth-client";
  * 未登录的人不应该先看到侧边栏/顶栏再被弹走。
  *
  * 认证走 better-auth 的客户端 SDK,但它自己不做会话判定 —— 判定在 `(main)/route.tsx` 的
- * `beforeLoad`(服务端)。这里只负责:收凭证 → 过人机验证 → 调 `signIn.email` → 回跳。
+ * `beforeLoad`(服务端)。这里只负责:收凭证 → 过验证码 → 调 `signIn.email` → 回跳。
  *
- * 人机验证用 **CaptchaKit 自托管**(不对接 Turnstile / reCAPTCHA 等任何第三方):
+ * 验证码用 **CaptchaKit 自托管**(不对接 Turnstile / reCAPTCHA 等任何第三方):
  * 题面与答案全在本进程,只有 proof token 回服务端消费一次。
  *
  * ⚠️ 这一栏**无条件显示** —— 服务端 `/sign-in/email` 也无条件校验,两边对不齐就会出现
@@ -53,6 +53,12 @@ function LoginPage() {
 	// 服务端会把 proof token 消费掉(一次性),所以**每次提交失败都必须换一道新题**。
 	// `<Captcha />` 没有对外的 reset 接口,只能靠换 `key` 整块重挂 —— 见 resetCaptcha。
 	const [captchaNonce, setCaptchaNonce] = useState(0);
+	// 包外层的 div ref 拿不到 —— Captcha 没 forwardRef —— 自己包一层拿 DOM 用。
+	const captchaRootRef = useRef<HTMLDivElement>(null);
+	// 「正在等待一次 verify 结果」的句柄。点击登录时如果 token 还没拿到,
+	// 会主动派发一次 Enter 触发包内 verify,等结果回来再继续走登录 —— 避免
+	// 「debounce 600ms 自动 verify 还没飞回来就被登录按钮抢跑」的尴尬。
+	const pendingVerifyRef = useRef<{ resolve: (token: string | null) => void; timer: number } | null>(null);
 
 	const target = to ?? "/";
 
@@ -61,19 +67,118 @@ function LoginPage() {
 		setCaptchaNonce((n) => n + 1);
 	}
 
+	function onCaptchaVerify(token: string) {
+		setCaptchaToken(token);
+		const pending = pendingVerifyRef.current;
+		if (pending) {
+			window.clearTimeout(pending.timer);
+			pendingVerifyRef.current = null;
+			pending.resolve(token);
+		}
+	}
+
+	function onCaptchaError() {
+		setCaptchaToken(null);
+		const pending = pendingVerifyRef.current;
+		if (pending) {
+			window.clearTimeout(pending.timer);
+			pendingVerifyRef.current = null;
+			pending.resolve(null);
+		}
+	}
+
 	// 已经登录了就别停在登录页(比如登录后又点回退)
 	useEffect(() => {
 		if (session) void router.navigate({ to: target, replace: true });
 	}, [session, target, router]);
 
+	/**
+	 * 「点登录自动验证」的自动 verify —— 让验证码栏**没有 verify 按钮**也能拿到 proof token。
+	 *
+	 * 做法(为什么这样而不是另起一个 tRPC / 自写 verify 流程):
+	 *  - CaptchaKit 自带的 verify 流程是 `CaptchaInput.onSubmit` → `captcha.submit()` →
+	 *    `verifyCaptcha()` → `onVerify(proofToken)`。**前端只验一次**是包的设计:不让前端
+	 *    偷答案,但 proofToken 验证答案对不对必须在 server 侧发起 —— 服务端的 store 是模块
+	 *    级 `getDefaultStore()` 单例,前端只持有 token,没法也不该自己 POST `/api/captcha`。
+	 *  - 包内的 `<CaptchaInput>` 自己绑了 Enter 触发 `onSubmit` —— 我们在这里监听 input 的
+	 *    `input` 事件,**debounce 600ms 后派发一个 Enter keydown** 给同一个 input,包内
+	 *    handler 自然走 verify 流程,失败就走 `onError`、成功就走 `onVerify`,与点 verify
+	 *    按钮的路径完全一致。
+	 *  - 失败时 input.value 不被包清空 —— 用户输错位会自动看到红字错误(包渲染在下方),删掉
+	 *    再输就行,不需要我们插手;真要清空也可以,但「保留用户输入 + 报错」更尊重用户。
+	 *
+	 * 数学解析 `solve(q)`:题面是 captchakit 内部生成的等式,字符串只可能形如 `"<a> <op> <b> = ?"`,
+	 * 而且 `easy` 难度只出一位数 —— 我们写**严格的**正则去 match,绝不调 `eval`,绝不信任别的形态
+	 * (解不出来就静默不触发,用户多等也不会出错)。
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: captchaNonce 用来在 <Captcha key={captchaNonce}> 重挂时重新绑监听器,biome 看不见跨组件的依赖
+	useEffect(() => {
+		const root = captchaRootRef.current;
+		if (!root) return;
+		const display = root.querySelector(".captchakit-display");
+		const input = root.querySelector<HTMLInputElement>(".captchakit-input");
+		if (!display || !input) return;
+
+		const solve = (q: string): string | null => {
+			// 严格白名单:仅匹配 captchakit 内部生成的 `<a> <op> <b> = ?` 形态,其它一律不触发。
+			const m = q.match(/^(\d+)\s*([×*x+\-−])\s*(\d+)\s*=\s*\?$/);
+			if (!m) return null;
+			const a = Number(m[1]);
+			const b = Number(m[3]);
+			const op = m[2];
+			if (op === "+") return String(a + b);
+			if (op === "-" || op === "−") return String(a - b);
+			// × / * / x —— 同一类,代表乘法
+			return String(a * b);
+		};
+
+		let debounceId = 0;
+		let lastChallenge = display.textContent ?? "";
+		// 用户点刷新按钮 / 服务端重发新题 → 题面文字会更新
+		const onChallengeChange = () => {
+			const next = display.textContent ?? "";
+			if (next && next !== lastChallenge) lastChallenge = next;
+		};
+		// 题面文字更新是包内部 setState 引起的 DOM 同步替换 —— childList 监听最稳。
+		const displayObs = new MutationObserver(onChallengeChange);
+		displayObs.observe(display, { childList: true, characterData: true, subtree: true });
+
+		const trigger = () => {
+			input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+		};
+		const onInput = () => {
+			window.clearTimeout(debounceId);
+			// 用户停手 600ms 才触发 —— 边输边触发会把单字符中途态当答案去验证,
+			// 让网络上有浪费的 verify 请求、用户也得一直盯着错误提示。
+			debounceId = window.setTimeout(() => {
+				if (!solve(lastChallenge)) return; // 没解析出来(非预期形态)就静默等下一次
+				trigger();
+			}, 600);
+		};
+		input.addEventListener("input", onInput);
+		return () => {
+			displayObs.disconnect();
+			input.removeEventListener("input", onInput);
+			window.clearTimeout(debounceId);
+		};
+	}, [captchaNonce]);
+
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		setError(null);
-		// 没解完人机验证就不打服务端 —— 少一次无谓的失败计数,也少刷一条锁账号告警。
-		if (!captchaToken) {
-			setError("请先完成人机验证");
+
+		/**
+		 * 「登录过程中要增加验证码的验证」—— 用户场景:
+		 *  - 用户输完答案就点登录,debounce 自动 verify 还在路上;
+		 *  - 或者用户根本没输,直接点登录。
+		 * 两种都拦成「请先完成验证码」太蠢 —— 点登录本身就是验证的入口,主动触发一次并等结果。
+		 */
+		const token = captchaToken ?? (await ensureCaptchaVerified());
+		if (!token) {
+			setError("请先完成验证码");
 			return;
 		}
+
 		setSubmitting(true);
 		try {
 			const { error: signInError } = await authClient.signIn.email(
@@ -82,7 +187,7 @@ function LoginPage() {
 				// 的 body 写了严格 schema(多一个字段就报错);第二个位置参数直接就是 fetch 选项,
 				// 不用再包一层 `fetchOptions`。服务端读同一个头 ——
 				// 与 better-auth 自带 captcha 插件的 `x-captcha-response` 同套路。
-				{ headers: { "x-captcha-token": captchaToken } },
+				{ headers: { "x-captcha-token": token } },
 			);
 			if (signInError) {
 				// better-auth 对「用户不存在」和「密码错」返回同一条信息 —— 这是对的,别在界面泄露哪个邮箱存在
@@ -102,6 +207,33 @@ function LoginPage() {
 		} finally {
 			setSubmitting(false);
 		}
+	}
+
+	/**
+	 * 主动触发包内 verify 一次,等结果返回。
+	 *
+	 * **已经有人挂起的就共享同一个 promise** —— 比如 debounce 那次刚派发出去还没回,
+	 * 用户又点登录,我们不再发第二次 verify(题目不变、答案不变,白白让服务端消费两次),
+	 * 改成挂到同一个 `pendingVerifyRef` 上一起等。
+	 *
+	 * 超时 5s 是网络往返的宽裕上限,正常情况下几百毫秒。timeout 触发时
+	 * resolve(null) → 调用方当作「未拿到 token」处理,提示「请先完成验证码」。
+	 */
+	function ensureCaptchaVerified(): Promise<string | null> {
+		if (captchaToken) return Promise.resolve(captchaToken);
+		const root = captchaRootRef.current;
+		const input = root?.querySelector<HTMLInputElement>(".captchakit-input");
+		if (!input) return Promise.resolve(null);
+		return new Promise<string | null>((resolve) => {
+			const pending = { resolve, timer: 0 };
+			pending.timer = window.setTimeout(() => {
+				// 超时还没被 consume 的话主动 resolve(null),免得登录按钮永远转圈
+				if (pendingVerifyRef.current === pending) pendingVerifyRef.current = null;
+				resolve(null);
+			}, 5000);
+			pendingVerifyRef.current = pending;
+			input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+		});
 	}
 
 	return (
@@ -146,18 +278,25 @@ function LoginPage() {
 							</div>
 
 							<div className="space-y-1.5">
-								<Label>人机验证</Label>
+								<Label>验证码</Label>
 								{/* `locale` 只有 en / fa 两种(题面文案是包内置的),中文登录页用 en。
-							    `math` + `easy`:登录是唯一入口,别把门槛设太高。 */}
-								<Captcha
-									key={captchaNonce}
-									type="math"
-									difficulty="easy"
-									locale="en"
-									onVerify={setCaptchaToken}
-									onError={() => setCaptchaToken(null)}
-									disabled={submitting}
-								/>
+							    `math` + `easy`:登录是唯一入口,别把门槛设太高。
+							    组件自带一套灰阶外观,已由 `src/styles.css` 的「CaptchaKit 外观适配」段
+							    接到本项目的令牌上 —— 这里不用传 `classNames`,外观不归本文件管。
+							    自带的「Verify」按钮由样式表整块藏掉,改由 `captchaRootRef` 那个 useEffect
+							    监听输入、debounce 后派发 Enter 走包内 verify 流程 —— 拿到的 proof token
+							    落在 `captchaToken`,登录按钮直接发请求。 */}
+								<div ref={captchaRootRef}>
+									<Captcha
+										key={captchaNonce}
+										type="math"
+										difficulty="easy"
+										locale="en"
+										onVerify={onCaptchaVerify}
+										onError={onCaptchaError}
+										disabled={submitting}
+									/>
+								</div>
 							</div>
 
 							{error ? (
