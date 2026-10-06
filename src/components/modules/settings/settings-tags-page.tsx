@@ -4,15 +4,16 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsTagsForm, type TagFormValues } from "#/components/modules/settings/settings-tags-form";
+import {
+	SettingsTagsCreateDialog,
+	type TagCreateValues,
+} from "#/components/modules/settings/settings-tags-create-dialog";
+import { SettingsTagsForm, type TagFormValues, tagFormValues } from "#/components/modules/settings/settings-tags-form";
 import { SettingsTagsTree, type TagNode, type TagRow } from "#/components/modules/settings/settings-tags-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -23,34 +24,36 @@ import { buildTree, bySortThenLabel } from "#/lib/tree";
  *
  * 版式:指标卡(替换原来的柱状图)+ 左树右详情。
  *  - 左:标签树,支持**同级拖拽排序**、**新增子节点**、**删除**;
- *  - 右:选中节点的详情(label / value / desc / 父级 / 子节点数),并提供 新增子节点 / 编辑 / 删除。
+ *  - 右:选中节点的详情(label / value / desc)—— **常驻表单直接编辑**(参表菜单管理),
+ *    提供「保存 / 还原 / 新增子节点 / 删除」;新建维度 / 新建子节点走单独 dialog。
  *
- * 数据走 `trpc.tag.*`(读写 `sys_tag`);树由 `buildTagTree` 在前端拼。
+ * 数据走 `trpc.tag.*`(读写 `sys_tag`);树由 `buildTree` 在前端拼。
  */
 export function SettingsTagsPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
 	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const [formOpen, setFormOpen] = useState(false);
-	const [formMode, setFormMode] = useState<"create" | "edit">("create");
-	const [formParentId, setFormParentId] = useState<string | null>(null);
-	const [formParentLabel, setFormParentLabel] = useState<string | null>(null);
-	const [formInitial, setFormInitial] = useState<TagFormValues | null>(null);
+	const [values, setValues] = useState<TagFormValues | null>(null);
+	const [createOpen, setCreateOpen] = useState(false);
+	const [createParent, setCreateParent] = useState<TagNode | null>(null);
 	const [pendingDelete, setPendingDelete] = useState<TagNode | null>(null);
 
 	const listQuery = useQuery({ ...trpc.tag.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as TagRow[];
 	const { tree, byId } = useMemo(() => buildTree(rows, { compare: bySortThenLabel }), [rows]);
 
-	// 按 id 找节点直接用 `buildTree` 顺手带回来的 `byId`(以前这里手写了一遍递归)
 	const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+	const dirty = Boolean(selected && values && JSON.stringify(values) !== JSON.stringify(tagFormValues(selected)));
 
 	const createMutation = useMutation(
 		trpc.tag.create.mutationOptions({
-			onSuccess: async () => {
+			onSuccess: async (row) => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
-				setFormOpen(false);
+				setCreateOpen(false);
+				setCreateParent(null);
+				setSelectedId(row.id);
+				setValues(tagFormValues(row));
 				toast.success("已新增标签节点");
 			},
 			onError: (error) => toast.error(toApiError(error).message),
@@ -59,9 +62,9 @@ export function SettingsTagsPage() {
 
 	const updateMutation = useMutation(
 		trpc.tag.update.mutationOptions({
-			onSuccess: async () => {
+			onSuccess: async (row) => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
-				setFormOpen(false);
+				setValues(tagFormValues(row));
 				toast.success("已保存");
 			},
 			onError: (error) => toast.error(toApiError(error).message),
@@ -73,7 +76,10 @@ export function SettingsTagsPage() {
 			onSuccess: async (outcome) => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
 				setPendingDelete(null);
-				if (selectedId && pendingDelete && pendingDelete.id === selectedId) setSelectedId(null);
+				if (selectedId && pendingDelete && pendingDelete.id === selectedId) {
+					setSelectedId(null);
+					setValues(null);
+				}
 				toast.success(`已删除 ${outcome.deleted} 个节点`);
 			},
 			onError: (error) => toast.error(toApiError(error).message),
@@ -126,26 +132,22 @@ export function SettingsTagsPage() {
 		[rows.length, dims, leaves],
 	);
 
+	/** 选中一个节点:有未保存改动时先提示(避免静默丢弃) */
+	function selectNode(node: TagNode) {
+		if (node.id === selectedId) return;
+		if (dirty) toast.warning("上一个标签的修改未保存,已放弃");
+		setSelectedId(node.id);
+		setValues(tagFormValues(node));
+	}
+
+	/** 打开新建 dialog:工具条(parent = null)或行尾 + (parent = 当前节点) */
 	function openCreate(parent: TagNode | null) {
-		setFormMode("create");
-		setFormParentId(parent ? parent.id : null);
-		setFormParentLabel(parent ? parent.label : null);
-		setFormInitial(null);
-		setFormOpen(true);
+		setCreateParent(parent);
+		setCreateOpen(true);
 	}
 
-	function openEdit(node: TagNode) {
-		setFormMode("edit");
-		setFormInitial({ label: node.label, value: node.value, desc: node.desc });
-		setFormOpen(true);
-	}
-
-	function handleFormSubmit(values: TagFormValues) {
-		if (formMode === "create") {
-			createMutation.mutate({ parentId: formParentId, ...values });
-		} else if (selected) {
-			updateMutation.mutate({ id: selected.id, ...values });
-		}
+	function handleCreateSubmit(input: TagCreateValues) {
+		createMutation.mutate({ parentId: createParent ? createParent.id : null, ...input });
 	}
 
 	function handleMove(draggedId: string, targetId: string, position: "before" | "after") {
@@ -207,7 +209,7 @@ export function SettingsTagsPage() {
 								tree={tree}
 								selectedId={selectedId}
 								dragDisabled={moveMutation.isPending}
-								onSelect={(node) => setSelectedId(node.id)}
+								onSelect={selectNode}
 								onAddChild={(node) => openCreate(node)}
 								onDelete={(node) => setPendingDelete(node)}
 								onMove={handleMove}
@@ -216,70 +218,49 @@ export function SettingsTagsPage() {
 					</CardContent>
 				</Card>
 
-				{/* 右:选中节点详情(宽屏吸顶:与「菜单详情」同一口径,页面需要滚动时详情也不会跑出视野) */}
+				{/* 右:选中节点详情 —— 常驻表单(参表「菜单详情」),点节点即编辑 */}
 				<Card className="flex min-h-0 flex-col gap-3">
-					<CardHeader className="flex-row items-center justify-between gap-3 pb-0">
-						<CardTitle className="flex items-center gap-2">
+					<CardHeader className="pb-0">
+						<CardTitle className="flex items-center gap-2 text-sm">
 							<TagsIcon className="size-4 text-muted-foreground" />
 							节点详情
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="min-h-0 flex-1 overflow-y-auto">
-						{!selected ? (
-							<div className="flex h-48 flex-col items-center justify-center gap-1 text-center text-muted-foreground">
-								<TagsIcon className="size-8 opacity-40" />
-								<p className="text-sm">从左侧树点选一个节点查看详情。</p>
-							</div>
-						) : (
-							<div className="space-y-4">
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<div className="flex items-center gap-2">
-											<h3 className="truncate text-lg font-semibold text-foreground">{selected.label}</h3>
-											<Badge variant={selected.parentId === null ? "default" : "secondary"}>
-												{selected.parentId === null ? "维度" : "标签"}
-											</Badge>
-										</div>
-										{selected.value ? (
-											<p className="mt-1 font-mono text-xs text-muted-foreground">{selected.value}</p>
-										) : null}
-									</div>
-									<div className="flex shrink-0 items-center gap-1">
-										<ActionButton onClick={() => openCreate(selected)}>新增子节点</ActionButton>
-										<ActionButton onClick={() => openEdit(selected)}>编辑</ActionButton>
-										<ActionButton tone="danger" onClick={() => setPendingDelete(selected)}>
-											删除
-										</ActionButton>
-									</div>
-								</div>
-
-								<div className="flex flex-col gap-0">
-									<DetailRow label="含义">{selected.desc || "—"}</DetailRow>
-									<DetailRow label="父级">
-										{selected.parentId ? ((byId.get(selected.parentId) ?? null)?.label ?? "(已删除)") : "— 顶层维度"}
-									</DetailRow>
-									<DetailRow label="直接子节点">{selected.children.length} 个</DetailRow>
-									<DetailRow label="节点 id">
-										<span className="font-mono text-xs text-muted-foreground">{selected.id}</span>
-									</DetailRow>
-								</div>
-							</div>
-						)}
+						<SettingsTagsForm
+							node={selected}
+							values={values ?? { label: "", value: "", desc: "" }}
+							dirty={dirty}
+							pending={updateMutation.isPending}
+							onChange={setValues}
+							onSave={() => {
+								if (!selected || !values) return;
+								updateMutation.mutate({
+									id: selected.id,
+									label: values.label.trim(),
+									value: values.value?.trim() || null,
+									desc: values.desc?.trim() || null,
+								});
+							}}
+							onReset={() => selected && setValues(tagFormValues(selected))}
+							onDelete={() => selected && setPendingDelete(selected)}
+							onAddChild={() => selected && openCreate(selected)}
+						/>
 					</CardContent>
 				</Card>
 			</div>
 
-			<SettingsTagsForm
-				open={formOpen}
-				mode={formMode}
-				parentLabel={formParentLabel}
-				initial={formInitial}
-				meta={
-					formMode === "edit" && selected ? { createdAt: selected.createTime, updatedAt: selected.updateTime } : null
-				}
-				pending={createMutation.isPending || updateMutation.isPending}
-				onOpenChange={setFormOpen}
-				onSubmit={handleFormSubmit}
+			<SettingsTagsCreateDialog
+				open={createOpen}
+				parentLabel={createParent?.label ?? null}
+				pending={createMutation.isPending}
+				onOpenChange={(next) => {
+					if (!next) {
+						setCreateOpen(false);
+						setCreateParent(null);
+					}
+				}}
+				onSubmit={handleCreateSubmit}
 			/>
 
 			<ConfirmDialog
