@@ -1,25 +1,17 @@
 import type { CellData, RowData, TableFeatures } from "@tanstack/react-table";
 import {
-	cellSelectionFeature,
-	columnFacetingFeature,
 	columnFilteringFeature,
-	columnGroupingFeature,
 	columnOrderingFeature,
-	columnPinningFeature,
 	columnResizingFeature,
 	columnSizingFeature,
 	columnVisibilityFeature,
-	createExpandedRowModel,
 	createFilteredRowModel,
-	createGroupedRowModel,
 	createPaginatedRowModel,
 	createSortedRowModel,
 	createTableHook,
 	filterFn_includesString,
 	globalFilteringFeature,
-	rowExpandingFeature,
 	rowPaginationFeature,
-	rowPinningFeature,
 	rowSelectionFeature,
 	rowSortingFeature,
 	sortFn_alphanumeric,
@@ -43,19 +35,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export const { useAppTable, createAppColumnHelper } = createTableHook({
 	features: tableFeatures({
 		// ── 启用的特性 ────────────────────────────────────────────
-		cellSelectionFeature,
-		columnFacetingFeature,
 		columnFilteringFeature,
-		columnGroupingFeature,
 		columnOrderingFeature,
-		columnPinningFeature,
 		columnResizingFeature,
 		columnSizingFeature,
 		columnVisibilityFeature,
 		globalFilteringFeature,
-		rowExpandingFeature,
 		rowPaginationFeature,
-		rowPinningFeature,
 		rowSelectionFeature,
 		rowSortingFeature,
 
@@ -63,8 +49,6 @@ export const { useAppTable, createAppColumnHelper } = createTableHook({
 		filteredRowModel: createFilteredRowModel(),
 		sortedRowModel: createSortedRowModel(),
 		paginatedRowModel: createPaginatedRowModel(),
-		expandedRowModel: createExpandedRowModel(),
-		groupedRowModel: createGroupedRowModel(),
 
 		// ── 具名函数注册表(登记后列定义里可直接写字符串名) ────────
 		sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
