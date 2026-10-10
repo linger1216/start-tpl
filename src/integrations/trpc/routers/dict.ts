@@ -53,8 +53,8 @@ function toDict(row: typeof sysDict.$inferSelect) {
 		items: row.items ?? [],
 		remark: row.remark ?? null,
 		status: Number(row.status ?? 1),
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -137,8 +137,8 @@ export const dictRouter = createTRPCRouter({
 					remark: input.remark || null,
 					items: input.items,
 					status: input.status ? 1 : 0,
-					// 显式写 update_time:达梦没有 DDL 的 ON UPDATE CURRENT_TIMESTAMP
-					update_time: new Date(),
+					// 显式写 updated_at:达梦没有 DDL 的 ON UPDATE CURRENT_TIMESTAMP
+					updated_at: new Date(),
 				})
 				.where(eq(sysDict.code, input.code));
 			return { id: existing.id, code: input.code };
@@ -274,7 +274,7 @@ export const dictRouter = createTRPCRouter({
 				) {
 					await db
 						.update(sysDict)
-						.set({ name: nextName, remark: nextRemark, items, update_time: new Date() })
+						.set({ name: nextName, remark: nextRemark, items, updated_at: new Date() })
 						.where(eq(sysDict.code, code));
 				}
 			}

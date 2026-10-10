@@ -58,7 +58,7 @@ export async function notify(userId: string, payload: NoticePayload): Promise<vo
 			path: normalizePath(payload.path),
 			level: payload.level ?? "info",
 			read_at: null,
-			create_time: new Date(),
+			created_at: new Date(),
 		});
 		// 写库成功 ⇒ 推一条 SSE,前端铃铛 / 列表无需等下一次轮询就能立刻刷新。
 		// 接收人就是写入对象,精确到 user_id。

@@ -5,6 +5,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -131,8 +132,8 @@ export function SettingsDataPluginsForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新增值域插件" : "修改值域插件"}</DialogTitle>
 					<DialogDescription>
 						插件回答的是「对**这个人**,哪些值算他的」—— 输出一串「{"{key, value}"}」,规则再按 `column` 取 `row[column]`
@@ -140,7 +141,7 @@ export function SettingsDataPluginsForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="flex flex-col gap-3">
+				<DialogBody className="flex flex-col gap-3">
 					<DetailRow label="标识" htmlFor="plugin-key">
 						<div className="flex flex-col gap-1">
 							<Input
@@ -256,10 +257,10 @@ export function SettingsDataPluginsForm({
 							</span>
 						</div>
 					</DetailRow>
+				</DialogBody>
 
-					{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
-					{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
-				</div>
+				{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
+				{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
 
 				<DialogFooter>
 					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

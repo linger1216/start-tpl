@@ -1,6 +1,6 @@
 /**
  * **系统表的建表脚本**(设置五张 + 认证六张 + 权限四张 + 数据权限两张 + `sys_file` / `sys_log` /
- * `sys_notice` + `demo_grid` = 21 张)—— 幂等,可重复执行。
+ * `sys_notice` + `demo_grid` = 21 张,外加任务闭环 `tc_*` 6 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -42,8 +42,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0,
 			\`visible\` tinyint(1) not null default 1,
 			\`status\` tinyint not null default 1,
-			\`create_time\` datetime(3) not null default current_timestamp(3),
-			\`update_time\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
+			\`created_at\` datetime(3) not null default current_timestamp(3),
+			\`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_menu_path\` (\`path\`),
@@ -59,8 +59,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`items\` json default null,
 			\`remark\` varchar(255) character set utf8mb4 collate utf8mb4_unicode_ci default null,
 			\`status\` tinyint not null default 1,
-			\`create_time\` datetime default current_timestamp,
-			\`update_time\` datetime default current_timestamp on update current_timestamp,
+			\`created_at\` datetime default current_timestamp,
+			\`updated_at\` datetime default current_timestamp on update current_timestamp,
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_dict_code\` (\`code\`)
@@ -77,8 +77,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`status\` tinyint not null default 1,
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
 			\`editable\` tinyint not null default 1,
-			\`create_time\` datetime default current_timestamp,
-			\`update_time\` datetime default current_timestamp on update current_timestamp,
+			\`created_at\` datetime default current_timestamp,
+			\`updated_at\` datetime default current_timestamp on update current_timestamp,
 			\`deleted_at\` datetime default null,
 			primary key (\`para_key\`),
 			key \`idx_para_group\` (\`para_group\`)
@@ -93,8 +93,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`value\` varchar(32) collate utf8mb4_unicode_ci default null,
 			\`desc\` text collate utf8mb4_unicode_ci default null,
 			\`sort\` int not null default 0,
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			key \`idx_sys_tag_parent_sort\` (\`parent_id\`, \`sort\`)
@@ -107,8 +107,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`tag_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`obj_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`obj_type\` tinyint not null,
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_tag_rel_unique\` (\`tag_id\`, \`obj_type\`, \`obj_id\`),
 			key \`idx_tag_rel_tag\` (\`tag_id\`),
@@ -224,8 +224,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0,
 			\`status\` tinyint not null default 1,
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			key \`idx_sys_department_parent_sort\` (\`parent_id\`, \`sort\`)
@@ -239,8 +239,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`sort\` int not null default 0,
 			\`status\` tinyint not null default 1,
 			\`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_role_name\` (\`name\`)
@@ -252,8 +252,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null,
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_dm_unique\` (\`department_id\`, \`user_id\`),
 			key \`idx_sys_dm_user\` (\`user_id\`),
@@ -269,8 +269,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`v0\` varchar(80) collate utf8mb4_unicode_ci not null,
 			\`v1\` varchar(128) collate utf8mb4_unicode_ci not null,
 			\`v2\` varchar(16) collate utf8mb4_unicode_ci not null default '',
-			\`create_time\` datetime not null default current_timestamp,
-			\`update_time\` datetime not null default current_timestamp on update current_timestamp,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_casbin_rule\` (\`ptype\`, \`v0\`, \`v1\`, \`v2\`),
 			key \`idx_sys_casbin_rule_v0\` (\`ptype\`, \`v0\`),
@@ -290,11 +290,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
       \`size\` bigint not null default 0,
       \`hash\` char(64) collate utf8mb4_unicode_ci default null,
       \`status\` tinyint not null default 0,
-      \`create_time\` datetime not null default current_timestamp,
-      \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+      \`created_at\` datetime not null default current_timestamp,
+      \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
       primary key (\`id\`),
       unique key \`uk_sys_file_object\` (\`bucket\`, \`object_key\`),
-      key \`idx_sys_file_status\` (\`status\`, \`create_time\`),
+      key \`idx_sys_file_status\` (\`status\`, \`created_at\`),
       key \`idx_sys_file_hash\` (\`hash\`)
     ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '文件元数据(字节存 MinIO,见 doc/文件管理.md)'`,
 	},
@@ -316,11 +316,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`error_message\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`input\` text,
     \`duration_ms\` int default null,
-    \`create_time\` datetime not null default current_timestamp,
+    \`created_at\` datetime not null default current_timestamp,
     primary key (\`id\`),
-    key \`idx_sys_log_time\` (\`create_time\`),
-    key \`idx_sys_log_operator\` (\`operator_id\`, \`create_time\`),
-    key \`idx_sys_log_path\` (\`path\`, \`create_time\`)
+    key \`idx_sys_log_time\` (\`created_at\`),
+    key \`idx_sys_log_operator\` (\`operator_id\`, \`created_at\`),
+    key \`idx_sys_log_path\` (\`path\`, \`created_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '审计日志(只增不改;见 doc/审计日志.md)'`,
 	},
 	/** 站内通知(一条通知一个收件人;已读 = read_at,见 doc/通知中心.md) */
@@ -334,9 +334,9 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`path\` varchar(255) collate utf8mb4_unicode_ci default null,
     \`level\` varchar(16) collate utf8mb4_unicode_ci not null default 'info',
     \`read_at\` datetime default null,
-    \`create_time\` datetime not null default current_timestamp,
+    \`created_at\` datetime not null default current_timestamp,
     primary key (\`id\`),
-    key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`create_time\`)
+    key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`created_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '站内通知(一条一个收件人,见 doc/通知中心.md)'`,
 	},
 	/** Demo:综合网格履职(见 doc/测试数据/README.md) */
@@ -351,8 +351,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`owner_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`duty\` varchar(64) collate utf8mb4_unicode_ci default null,
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
-    \`create_time\` datetime not null default current_timestamp,
-    \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     \`deleted_at\` datetime default null,
     primary key (\`id\`),
     key \`idx_demo_grid_town\` (\`town_id\`),
@@ -381,8 +381,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`value_key\` varchar(64) collate utf8mb4_unicode_ci default null,
     \`plugin_key\` varchar(64) collate utf8mb4_unicode_ci default null,
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
-    \`create_time\` datetime not null default current_timestamp,
-    \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     \`deleted_at\` datetime default null,
     primary key (\`id\`),
     key \`idx_sys_data_policy_resource\` (\`resource\`, \`status\`)
@@ -407,12 +407,122 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`output_values\` json default null,
     \`status\` tinyint not null default 1,
     \`remark\` varchar(255) collate utf8mb4_unicode_ci default null,
-    \`create_time\` datetime not null default current_timestamp,
-    \`update_time\` datetime not null default current_timestamp on update current_timestamp,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     \`deleted_at\` datetime default null,
     primary key (\`id\`),
     unique key \`uk_sys_data_plugin_key\` (\`plugin_key\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)'`,
+	},
+	// ── 任务闭环(task-close):状态图 / 任务本体 / 外挂动作(三张不走 drizzle 迁移;理由见 data-base-schema.ts 的头注释)
+	// ── 任务闭环(tc_close):状态图 / 任务本体 / 外挂动作(三张不进 drizzle 迁移;理由见 data-base-schema.ts 头注释)
+	{
+		name: "tc_workflow",
+		ddl: `create table if not exists \`tc_workflow\` (
+    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`payload\` json not null,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
+    \`deleted_at\` datetime default null,
+    primary key (\`id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义)'`,
+	},
+	{
+		name: "tc_task",
+		ddl: `create table if not exists \`tc_task\` (
+    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`name\` varchar(255) collate utf8mb4_unicode_ci not null,
+    \`description\` text collate utf8mb4_unicode_ci default null,
+    \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`due_at\` datetime default null,
+    \`payload\` json default null,
+    \`workflow\` json not null,
+    \`deleted_at\` datetime default null,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
+    primary key (\`id\`),
+    key \`idx_task_status_created\` (\`status\`),
+    key \`idx_task_creator_status\` (\`creator_id\`, \`status\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)'`,
+	},
+	{
+		name: "tc_action",
+		ddl: `create table if not exists \`tc_action\` (
+    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`serial_no\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`parent_action_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`is_locking\` tinyint(1) not null,
+    \`from_status\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`to_status\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`sequence\` int not null,
+    \`created_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`handle_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`status\` varchar(16) collate utf8mb4_unicode_ci not null,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    key \`idx_action_task_serial\` (\`task_id\`, \`serial_no\`, \`sequence\`),
+    key \`idx_action_handle_status\` (\`handle_id\`, \`status\`),
+    key \`idx_action_parent\` (\`parent_action_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外挂动作(tc_close 模块:审批/征询/监督同一种模式;用法见 doc/task-close.md)'`,
+	},
+	// ── tc_close:任务-成员关系(who 协议扩展:participant / executor)
+	{
+		name: "tc_member",
+		ddl: `create table if not exists \`tc_member\` (
+    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`user_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`role\` varchar(16) collate utf8mb4_unicode_ci not null,
+    \`is_primary\` tinyint(1) not null default 0,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_member_unique\` (\`task_id\`, \`user_id\`, \`role\`),
+    key \`idx_member_user_role\` (\`user_id\`, \`role\`),
+    key \`idx_member_task_role\` (\`task_id\`, \`role\`),
+    key \`idx_member_task_primary\` (\`task_id\`, \`is_primary\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务-成员关系(tc_close 模块:participant/executor 与 tc_task 的多对多;creator 是 tc_task.creator_id 固有属性不入此表;用法见 doc/task-close.md)'`,
+	},
+	// ── tc_close:任务评论(文字 + 附件;附件复用 sys_file)
+	{
+		name: "tc_comment",
+		ddl: `create table if not exists \`tc_comment\` (
+    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`author_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`content\` text collate utf8mb4_unicode_ci not null,
+    \`attachments\` json default null,
+    \`deleted_at\` datetime default null,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    key \`idx_comment_task_created\` (\`task_id\`, \`created_at\`),
+    key \`idx_comment_author\` (\`author_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务评论(tc_close 模块:content 文字 + attachments JSON 存 sys_file.id 数组;谁可发起谁可写在 doc/task-close.md)'`,
+	},
+	// ── tc_close:活动日志(只增不改;在**业务同一个事务**里写,见 doc/task-close.md)
+	{
+		name: "tc_log",
+		ddl: `create table if not exists \`tc_log\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`event\` varchar(48) collate utf8mb4_unicode_ci not null,
+    \`from_status\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`to_status\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`target_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`actor_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`actor_name\` varchar(64) collate utf8mb4_unicode_ci default null,
+    \`detail\` json default null,
+    \`created_at\` datetime(3) not null default current_timestamp(3),
+    primary key (\`id\`),
+    key \`idx_log_task_created\` (\`task_id\`, \`created_at\`),
+    key \`idx_log_task_event\` (\`task_id\`, \`event\`, \`created_at\`),
+    key \`idx_log_actor\` (\`actor_id\`, \`created_at\`),
+    key \`idx_log_target\` (\`target_id\`, \`created_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务闭环活动日志(tc_close 模块:只增不改;from/to_status 是事件前后的任务状态,没动就是 NULL;由 resolver 在同一事务里写)'`,
 	},
 ];
 

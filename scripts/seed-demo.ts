@@ -111,8 +111,8 @@ async function seedDemoGrid(): Promise<void> {
 			owner_name: text(row[3]),
 			owner_id: null, // 由界面指派(Excel 的网格长是真实姓名,与系统账号不是一回事)
 			duty: text(row[4]),
-			create_time: new Date(),
-			update_time: new Date(),
+			created_at: new Date(),
+			updated_at: new Date(),
 		});
 		seen.add(`${name}|${townName}`);
 		created += 1;

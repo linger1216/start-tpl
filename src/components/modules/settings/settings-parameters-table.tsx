@@ -6,7 +6,7 @@ import { createAppColumnHelper } from "#/lib/table";
 /**
  * 参数清单的一行 —— **与 `sys_para` 的十列一一对应**(+ 代码内置默认值的兜底):
  * `id`、`key`→`para_key`、`value`→`para_value`、`type`→`para_type`、`group`→`para_group`、
- * `status`、`remark`、`editable`、`createdAt`→`create_time`、`updatedAt`→`update_time`。
+ * `status`、`remark`、`editable`、`createdAt`→`created_at`、`updatedAt`→`updated_at`。
  *
  * `id` 在"纯代码内置、还没写进库"的参数上是空串(`sys_para.id` 是库里的无意义短串,
  * 业务永远按 `para_key` 找参数)—— 表格里显示成 `—`;行标识用 `key`(见页面里的 `getRowId`)。

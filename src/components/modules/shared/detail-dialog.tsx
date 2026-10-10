@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -80,15 +81,15 @@ export function DetailDialog({
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-2xl">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+				<DialogHeader className="shrink-0">
 					<DialogTitle className="flex flex-wrap items-center gap-2">
 						{title}
 						{badge}
 					</DialogTitle>
 					{description ? <DialogDescription>{description}</DialogDescription> : null}
 				</DialogHeader>
-				<div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">{children}</div>
+				<DialogBody className="space-y-4 pr-1">{children}</DialogBody>
 				{meta ? <DetailMeta meta={meta} /> : null}
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" onClick={() => onOpenChange(false)}>

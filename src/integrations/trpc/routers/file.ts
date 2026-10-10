@@ -80,8 +80,8 @@ const toFile = async (row: typeof sysFile.$inferSelect) => {
 		hash: row.hash,
 		status: Number(row.status ?? 0),
 		thumbUrl,
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 };
 
@@ -109,7 +109,7 @@ export const fileRouter = createTRPCRouter({
 				.select()
 				.from(sysFile)
 				.where(conditions.length > 0 ? and(...conditions) : undefined)
-				.orderBy(desc(sysFile.create_time));
+				.orderBy(desc(sysFile.created_at));
 			return await Promise.all(rows.map((row) => toFile(row)));
 		}),
 
@@ -214,7 +214,7 @@ export const fileRouter = createTRPCRouter({
 				reported.startsWith("application/xhtml")
 			) {
 				await storage.remove(input.bucket, input.objectKey);
-				await db.update(sysFile).set({ status: 2, update_time: new Date() }).where(eq(sysFile.id, row.id));
+				await db.update(sysFile).set({ status: 2, updated_at: new Date() }).where(eq(sysFile.id, row.id));
 				throw new TRPCError({ code: "BAD_REQUEST", message: "这个类型会把桶变成脚本页,已拒绝" });
 			}
 
@@ -222,7 +222,7 @@ export const fileRouter = createTRPCRouter({
 			// 两头都校验:presign 时的 size 是客户端自己报的,可以造假
 			if (info.size > policy.maxBytes) {
 				await storage.remove(input.bucket, input.objectKey);
-				await db.update(sysFile).set({ status: 2, update_time: new Date() }).where(eq(sysFile.id, row.id));
+				await db.update(sysFile).set({ status: 2, updated_at: new Date() }).where(eq(sysFile.id, row.id));
 				throw new TRPCError({ code: "BAD_REQUEST", message: "实际大小超过上限,已丢弃" });
 			}
 
@@ -233,7 +233,7 @@ export const fileRouter = createTRPCRouter({
 					content_type: info.contentType,
 					hash: input.hash ?? row.hash,
 					status: 1,
-					update_time: new Date(),
+					updated_at: new Date(),
 				})
 				.where(eq(sysFile.id, row.id));
 
@@ -270,7 +270,7 @@ export const fileRouter = createTRPCRouter({
 		.mutation(async ({ input }) => {
 			const [row] = await db.select().from(sysFile).where(eq(sysFile.id, input.id)).limit(1);
 			if (!row || Number(row.status) === 2) throw new TRPCError({ code: "NOT_FOUND", message: "文件不存在或已删除" });
-			await db.update(sysFile).set({ origin_name: input.name, update_time: new Date() }).where(eq(sysFile.id, row.id));
+			await db.update(sysFile).set({ origin_name: input.name, updated_at: new Date() }).where(eq(sysFile.id, row.id));
 			const [fresh] = await db.select().from(sysFile).where(eq(sysFile.id, row.id)).limit(1);
 			return await toFile(fresh ?? row);
 		}),
@@ -289,7 +289,7 @@ export const fileRouter = createTRPCRouter({
 			if (rows.length > 0) {
 				await db
 					.update(sysFile)
-					.set({ status: 2, update_time: new Date() })
+					.set({ status: 2, updated_at: new Date() })
 					.where(
 						inArray(
 							sysFile.id,

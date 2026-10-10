@@ -4,6 +4,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -77,15 +78,15 @@ export function GridForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[70vh] flex-col sm:max-w-2xl">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+				<DialogHeader className="shrink-0">
 					<DialogTitle>{editing ? "编辑网格" : "新增网格"}</DialogTitle>
 					<DialogDescription>
 						「所属街镇」决定**队长**看得到哪些(**本部门及以下**);「负责人」决定**队员**看得到哪些(只看自己负责的)。
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="min-h-0 flex-1 space-y-1 overflow-y-auto py-1">
+				<DialogBody className="space-y-1 py-1">
 					<DetailRow label="所属街镇">
 						<Select
 							items={townOptions}
@@ -157,7 +158,7 @@ export function GridForm({
 							onChange={(e) => setRemark(e.target.value)}
 						/>
 					</DetailRow>
-				</div>
+				</DialogBody>
 
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>

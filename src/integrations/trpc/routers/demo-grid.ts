@@ -26,8 +26,8 @@ const toGrid = (row: typeof sysDemoGrid.$inferSelect) => ({
 	ownerId: row.owner_id,
 	duty: row.duty,
 	remark: row.remark,
-	createTime: row.create_time ? row.create_time.toISOString() : null,
-	updateTime: row.update_time ? row.update_time.toISOString() : null,
+	createTime: row.created_at ? row.created_at.toISOString() : null,
+	updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
 /** 取一条网格;不存在(含已软删)就报 `NOT_FOUND` —— 详情不是删除目标,读路径要过 `alive()` */
@@ -91,7 +91,7 @@ export const demoGridRouter = createTRPCRouter({
 	/** 新建 —— 需要 `sys:grid:add`(见 `lib/rbac.ts` 的 `PERM_BY_PATH`) */
 	create: protectedProcedure.input(writeInput).mutation(async ({ input }) => {
 		const id = newId();
-		await db.insert(sysDemoGrid).values({ id, ...gridValues(input), create_time: new Date(), update_time: new Date() });
+		await db.insert(sysDemoGrid).values({ id, ...gridValues(input), created_at: new Date(), updated_at: new Date() });
 		return { id };
 	}),
 
@@ -100,7 +100,7 @@ export const demoGridRouter = createTRPCRouter({
 		await getRow(input.id);
 		await db
 			.update(sysDemoGrid)
-			.set({ ...gridValues(input), update_time: new Date() })
+			.set({ ...gridValues(input), updated_at: new Date() })
 			.where(eq(sysDemoGrid.id, input.id));
 		return { ok: true };
 	}),
@@ -128,7 +128,7 @@ export const demoGridRouter = createTRPCRouter({
 		.mutation(async ({ input }) => {
 			await db
 				.update(sysDemoGrid)
-				.set({ owner_id: input.ownerId, update_time: new Date() })
+				.set({ owner_id: input.ownerId, updated_at: new Date() })
 				.where(and(inArray(sysDemoGrid.id, input.ids), alive(sysDemoGrid)));
 			return { assigned: input.ids.length };
 		}),

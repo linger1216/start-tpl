@@ -45,6 +45,15 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 	// 当前路径命中的分组链 —— 决定初始展开哪些分支
 	const trail = useNavTrail(pathname);
 	const trailIds = useMemo(() => trail.map((n) => n.path ?? n.name), [trail]);
+	/**
+	 * **唯一被选中的菜单路径** —— 命中链末端那一条(`findNavTrailIn` 已按 `path` 最长挑过)。
+	 *
+	 * 叶子高亮必须拿它做 `===` 比较,不能各自 `startsWith(path + "/")`:
+	 * `/task-close` 是 `/task-close/workflows` 的前缀,那样会让父级菜单跟着一起亮
+	 * (实测:停在「流程模板」时「我的任务」也高亮)。不在菜单里的路径(如任务详情)会命中最近的
+	 * 祖先菜单,所以仍然只亮一项。
+	 */
+	const activePath = trail.at(-1)?.path ?? null;
 
 	// 默认折叠:只展开当前路径所在分支。
 	const [collapsedIds, setCollapsedIds] = useState<Set<string>>(
@@ -92,12 +101,13 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 				)}
 			>
 				{rail
-					? nodes.map((node) => <RailItem key={node.name} node={node} pathname={pathname} />)
+					? nodes.map((node) => <RailItem key={node.name} node={node} pathname={pathname} activePath={activePath} />)
 					: nodes.map((node) => (
 							<NavItem
 								key={node.name}
 								node={node}
 								pathname={pathname}
+								activePath={activePath}
 								collapsedIds={collapsedIds}
 								onToggle={toggleCollapsedId}
 							/>
@@ -136,11 +146,14 @@ function useSidebarCollapseMode(): SidebarCollapseMode {
 function NavItem({
 	node,
 	pathname,
+	activePath,
 	collapsedIds,
 	onToggle,
 }: {
 	node: NavNode;
 	pathname: string;
+	/** 本页唯一被选中的菜单路径(见 `Sidebar` 顶部说明) */
+	activePath: string | null;
 	collapsedIds: ReadonlySet<string>;
 	onToggle: (id: string) => void;
 }) {
@@ -202,12 +215,20 @@ function NavItem({
 					/>
 				</button>
 
-				<NavPanel node={node} pathname={pathname} open={open} collapsedIds={collapsedIds} onToggle={onToggle} />
+				<NavPanel
+					node={node}
+					pathname={pathname}
+					activePath={activePath}
+					open={open}
+					collapsedIds={collapsedIds}
+					onToggle={onToggle}
+				/>
 			</div>
 		);
 	}
 
-	const active = !!node.path && (pathname === node.path || pathname.startsWith(`${node.path}/`));
+	// 叶子:只认「本页唯一被选中的路径」,不各自做前缀匹配(否则父级 `/task-close` 会跟 `/task-close/workflows` 一起亮)
+	const active = !!node.path && node.path === activePath;
 	return (
 		<Link
 			to={node.path ?? "#"}
@@ -239,12 +260,14 @@ function NavItem({
 function NavPanel({
 	node,
 	pathname,
+	activePath,
 	open,
 	collapsedIds,
 	onToggle,
 }: {
 	node: NavNode;
 	pathname: string;
+	activePath: string | null;
 	open: boolean;
 	collapsedIds: ReadonlySet<string>;
 	onToggle: (id: string) => void;
@@ -260,6 +283,7 @@ function NavPanel({
 							key={child.name}
 							node={child}
 							pathname={pathname}
+							activePath={activePath}
 							collapsedIds={collapsedIds}
 							onToggle={onToggle}
 						/>
@@ -275,9 +299,9 @@ function NavPanel({
    名字用**原生 title**:自绘浮层会被侧边栏的 overflow-hidden 裁掉,而 CSS 无法同时
    "纵向 auto + 横向可见"(一个轴为 auto,另一个轴必然也是 auto)。 */
 
-function RailItem({ node, pathname }: { node: NavNode; pathname: string }) {
+function RailItem({ node, pathname, activePath }: { node: NavNode; pathname: string; activePath: string | null }) {
 	const Icon = NAV_ICON_MAP[node.icon] ?? Layers;
-	const own = !!node.path && (pathname === node.path || pathname.startsWith(`${node.path}/`));
+	const own = !!node.path && node.path === activePath;
 	/** 含当前页的分组也要高亮 —— 否则停在子页(/settings/users)时整条栏没有一个亮点 */
 	const active = own || navNodeContains(node, pathname);
 	// 分组自身没有 path:点它就去第一个有 path 的子项(纯分组菜单才有这一档)

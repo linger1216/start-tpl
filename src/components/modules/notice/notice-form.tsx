@@ -7,6 +7,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -71,15 +72,15 @@ export function NoticeForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[70vh] flex-col sm:max-w-2xl">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+				<DialogHeader className="shrink-0">
 					<DialogTitle>发通知</DialogTitle>
 					<DialogDescription>
 						选人 → 写标题 → 可选填一条**站内路径**,对方点开就能跳到那个页面(必须以 / 开头)。
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="min-h-0 flex-1 space-y-1 overflow-y-auto py-1">
+				<DialogBody className="space-y-1 py-1">
 					<DetailRow label="收件人(可多选)">
 						<div className="flex min-h-36 flex-col">
 							<MultiSelect
@@ -132,7 +133,7 @@ export function NoticeForm({
 							</SelectContent>
 						</Select>
 					</DetailRow>
-				</div>
+				</DialogBody>
 
 				<DialogFooter>
 					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>

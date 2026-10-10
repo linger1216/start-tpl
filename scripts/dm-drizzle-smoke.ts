@@ -73,8 +73,8 @@ async function main() {
 			label: "__dm_smoke__",
 			value: null,
 			sort: 0,
-			create_time: NOW,
-			update_time: NOW,
+			created_at: NOW,
+			updated_at: NOW,
 		});
 		const back = await db.select().from(sysTag).where(eq(sysTag.id, TEST_ID));
 		const del = await db.delete(sysTag).where(eq(sysTag.id, TEST_ID));
@@ -93,8 +93,8 @@ async function main() {
 				label: "__dm_tx__",
 				value: null,
 				sort: 0,
-				create_time: NOW,
-				update_time: NOW,
+				created_at: NOW,
+				updated_at: NOW,
 			});
 			await tx.insert(sysTag).values({
 				id: id2,
@@ -102,8 +102,8 @@ async function main() {
 				label: "__dm_tx__",
 				value: null,
 				sort: 0,
-				create_time: NOW,
-				update_time: NOW,
+				created_at: NOW,
+				updated_at: NOW,
 			});
 			const inner = await tx
 				.select()
@@ -127,8 +127,8 @@ async function main() {
 					label: "__dm_rb__",
 					value: null,
 					sort: 0,
-					create_time: NOW,
-					update_time: NOW,
+					created_at: NOW,
+					updated_at: NOW,
 				});
 				throw new Error("故意失败,验证回滚");
 			});

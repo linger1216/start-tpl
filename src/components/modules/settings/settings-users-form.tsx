@@ -10,6 +10,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -37,10 +38,9 @@ export type UserFormPayload = {
 /**
  * 用户表单(新建 / 编辑)—— **三个 tab**:基本信息 / 部门 / 角色。
  *
- * 版式规矩(三个编辑界面统一,见 AGENTS「三个编辑界面:tab 化」):
- *  - **宽度固定 `sm:max-w-3xl`** —— 三个界面同一个宽度,不宽窄不一;
- *  - **高度固定 `h-[52vh]`**:tab 之间内容多寡不同,不锁高度切 tab 会**抖**;
- *    锁住之后由**内容区自己滚**(滚动条在 tab 内部,动作行钉在底部);
+ * 版式规矩(编辑弹窗统一,见 `doc/界面约定.md`):
+ *  - **宽度不动**(`sm:max-w-2xl`)—— 新建 / 编辑同一个宽度;
+ *  - **高度随内容长、封顶 `max-h-[85vh]`**:弹窗本体不出滚动条,内容区(`DialogBody`)自己滚,header / footer 钉住;
  *  - **每个 tab 自己带 `[取消] [保存]`**;对话框页脚只放**创建·更新时间**;
  *  - **切 tab 不丢已填内容** —— 字段状态都在本组件里,与 tab 挂载无关(Base UI 只挂载当前面板,
  *    所以千万别把字段的 state 放进 tab 里)。
@@ -149,7 +149,7 @@ export function SettingsUsersForm({
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
-			<DialogContent className="flex h-[52vh] flex-col sm:max-w-2xl">
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新建用户" : `编辑用户 · ${user?.name ?? ""}`}</DialogTitle>
 					<DialogDescription>
@@ -174,8 +174,8 @@ export function SettingsUsersForm({
 
 					{/* ── 基本信息 ─────────────────────────────────────────── */}
 					<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
-						{/* 两列紧凑排:字段区要在 ~214px 里装下,否则它会自己出滚动条(与角色编辑同形) */}
-						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+						{/* 字段区自己滚(DialogBody):弹窗本体不出滚动条,高度随内容长、封顶 85vh */}
+						<DialogBody className="flex flex-col pr-1">
 							<DetailRow label="姓名" htmlFor="user-form-name">
 								<Input
 									id="user-form-name"
@@ -242,7 +242,7 @@ export function SettingsUsersForm({
 									</DetailRow>
 								</>
 							)}
-						</div>
+						</DialogBody>
 						{actions}
 					</TabsContent>
 

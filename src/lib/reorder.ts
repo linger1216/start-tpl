@@ -44,7 +44,7 @@ export async function reorderSiblings(args: {
 	// 事务里逐行写 sort:要么全改、要么不改
 	await db.transaction(async (tx) => {
 		for (const [index, id] of orderedIds.entries()) {
-			await tx.update(table).set({ sort: index, update_time: new Date() }).where(eq(table.id, id));
+			await tx.update(table).set({ sort: index, updated_at: new Date() }).where(eq(table.id, id));
 		}
 	});
 	return orderedIds.length;

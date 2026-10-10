@@ -17,8 +17,9 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *  - **Better Auth 四表的模型名 / 字段名不可改**(传给 adapter 的键必须是 `user` / `session` / `account` /
  *    `verification`,列名是 `email_verified` / `expires_at` / `provider_id` …)。改了 better-auth 会在运行时报
  *    「找不到字段」,`pnpm typecheck` 抓不到 —— 映射点见 `src/lib/auth.ts`。
- *  - **时间列口径**:认证四表沿用 better-auth 的 `created_at` / `updated_at`;系统设置五表用
- *    `create_time` / `update_time`;两批表不互相引用。
+ *  - **时间列口径**:全库统一 `created_at` / `updated_at` / `deleted_at`(`_at` 后缀,不用 `_time`)——
+ *    认证四表本来就是 better-auth 那一套,其余表已对齐(见 `doc/task-close.md` 的「时间列约定」);
+ *    两批表不互相引用。
  *
  * ⚠️ **RBAC 五表(`role` / `permission` / `user_role` / `role_permission` / `user_permission`)已下线**:
  * RBAC 已实装,表在 `data-base-schema.ts`(部门 / 角色 / 成员 / 角色→菜单),不在这个文件里

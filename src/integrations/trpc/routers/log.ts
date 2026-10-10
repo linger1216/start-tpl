@@ -31,7 +31,7 @@ const toLog = (row: typeof sysLog.$inferSelect) => ({
 	errorMessage: row.error_message,
 	input: row.input,
 	durationMs: row.duration_ms === null ? null : Number(row.duration_ms),
-	createTime: row.create_time ? row.create_time.toISOString() : null,
+	createTime: row.created_at ? row.created_at.toISOString() : null,
 });
 
 export const logRouter = createTRPCRouter({
@@ -61,12 +61,12 @@ export const logRouter = createTRPCRouter({
 			if (input?.from) {
 				const from = new Date(input.from);
 				if (Number.isNaN(from.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "起始时间格式不对" });
-				conditions.push(gte(sysLog.create_time, from));
+				conditions.push(gte(sysLog.created_at, from));
 			}
 			if (input?.to) {
 				const to = new Date(input.to);
 				if (Number.isNaN(to.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "结束时间格式不对" });
-				conditions.push(lte(sysLog.create_time, to));
+				conditions.push(lte(sysLog.created_at, to));
 			}
 			const keyword = input?.keyword?.trim();
 			if (keyword) {
@@ -85,7 +85,7 @@ export const logRouter = createTRPCRouter({
 				.select()
 				.from(sysLog)
 				.where(conditions.length > 0 ? and(...conditions) : undefined)
-				.orderBy(desc(sysLog.create_time))
+				.orderBy(desc(sysLog.created_at))
 				.limit(input?.limit ?? 200);
 			return rows.map(toLog);
 		}),

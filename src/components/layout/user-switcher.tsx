@@ -28,7 +28,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
@@ -36,7 +35,7 @@ import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
-import { IMPERSONATE_PERM } from "#/lib/menu-spec";
+import { ADMIN_ROLE_NAME, IMPERSONATE_PERM } from "#/lib/menu-spec";
 
 /** 记录"从哪个身份切过来的"(只存当前标签页,关掉就没了) */
 const FROM_KEY = "__impersonate_from";
@@ -61,20 +60,44 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 	const [open, setOpen] = useState(false);
 	const [keyword, setKeyword] = useState("");
 	const [pending, setPending] = useState(false);
-	// 挂载后再读:SSR 阶段没有 sessionStorage,直接读会造成水合不一致
+	/** "从谁来的"(原身);SSR 阶段没有 sessionStorage,挂载后才读 */
 	const [from, setFrom] = useState<SwitchedFrom | null>(null);
-	useEffect(() => setFrom(readFrom()), []);
+	// 挂载后判断"当前是不是在别人的身份里":
+	//  ① sessionStorage 有记录(同标签页里切的,最快);
+	//  ② 没有就**问服务端**(新标签页 / 存储被清时靠它 —— 否则入口会消失,人被卡在没权限的身份里)。
+	useEffect(() => {
+		const local = readFrom();
+		if (local) {
+			setFrom(local);
+			return;
+		}
+		void (async () => {
+			try {
+				const result = (await authClient.$fetch("/debug/impersonator", { method: "GET" })) as {
+					impersonator: { id: string; name: string } | null;
+				};
+				if (result?.impersonator) setFrom(result.impersonator);
+			} catch {
+				// 没登录 / 认不到原身 —— 都按"没有"处理,不影响正常切换
+			}
+		})();
+	}, []);
 
 	// 只要「当前身份有权限」**或**「正在以别人的身份浏览」就能取列表 ——
 	// 后者由服务端按**原身份的签名 cookie**放行(它本来就有权限才能切过来,不是提权)。
 	const usersQuery = useQuery({ ...trpc.user.list.queryOptions(), enabled: canSwitch || !!from });
 
-	/** 按部门分组 —— 调试"某部门的人能看到什么"时,按部门找最顺手 */
+	/** 按部门分组(按人的顺序,**不重排部门**)—— 管理员排最前,所以它那一组自然在最上面 */
 	const groups = useMemo(() => {
 		const kw = keyword.trim().toLowerCase();
-		const rows = (usersQuery.data ?? []).filter(
-			(user) => !kw || `${user.name} ${user.email}`.toLowerCase().includes(kw),
-		);
+		const rows = (usersQuery.data ?? [])
+			.filter((user) => !kw || `${user.name} ${user.email}`.toLowerCase().includes(kw))
+			.slice()
+			.sort((left, right) => {
+				const adminDiff =
+					Number(!left.roleNames.includes(ADMIN_ROLE_NAME)) - Number(!right.roleNames.includes(ADMIN_ROLE_NAME));
+				return adminDiff || (left.name || left.email).localeCompare(right.name || right.email, "zh-Hans-CN");
+			});
 		const map = new Map<string, typeof rows>();
 		for (const user of rows) {
 			const key = user.departmentNames[0] ?? "未加入部门";
@@ -82,7 +105,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 			if (bucket) bucket.push(user);
 			else map.set(key, [user]);
 		}
-		return [...map.entries()].sort((left, right) => left[0].localeCompare(right[0], "zh-Hans-CN"));
+		return [...map.entries()];
 	}, [usersQuery.data, keyword]);
 
 	// ⚠️ `from` 存在时**即使没有切换权限也要显示** —— 一旦切到一个没有权限的人,
@@ -155,14 +178,14 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 												key={user.id}
 												disabled={pending || isSelf}
 												onClick={() => void switchTo(user.id)}
-												className="flex w-full flex-col gap-1 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
+												className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
 											>
-												<span className="flex items-center gap-2">
-													<span className="truncate text-sm">{user.name || user.email}</span>
-													{isSelf ? <Badge variant="outline">当前</Badge> : null}
+												<span className="min-w-0 flex-1 truncate text-sm">{user.name || user.email}</span>
+												{isSelf ? <Badge variant="outline">当前</Badge> : null}
+												{/* 姓名 + 角色,同一行;不要邮箱 */}
+												<span className="shrink-0 truncate text-xs text-muted-foreground">
+													{user.roleNames.join(" / ") || "未分配角色"}
 												</span>
-												<span className="truncate text-xs text-muted-foreground">{user.email}</span>
-												<BadgeList values={user.roleNames} layout="wrap" color="stable" emptyPlaceholder="未分配角色" />
 											</button>
 										);
 									})}

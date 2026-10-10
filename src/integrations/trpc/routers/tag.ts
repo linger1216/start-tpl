@@ -48,8 +48,8 @@ function toTag(row: typeof sysTag.$inferSelect) {
 		value: row.value ?? null,
 		desc: row.desc ?? null,
 		sort: Number(row.sort ?? 0),
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -158,7 +158,7 @@ export const tagRouter = createTRPCRouter({
 					label: input.label.trim(),
 					value: input.value?.trim() || null,
 					desc: input.desc?.trim() || null,
-					update_time: new Date(),
+					updated_at: new Date(),
 				})
 				.where(eq(sysTag.id, input.id));
 			return toTag(await getAliveTagRow(input.id));
@@ -221,9 +221,9 @@ export const tagRouter = createTRPCRouter({
 			}
 			await db.transaction(async (tx) => {
 				// 先改父(若跨父),再按序写 sort
-				await tx.update(sysTag).set({ parent_id: newParentId, update_time: new Date() }).where(eq(sysTag.id, input.id));
+				await tx.update(sysTag).set({ parent_id: newParentId, updated_at: new Date() }).where(eq(sysTag.id, input.id));
 				for (const [index, sibId] of input.orderedSiblingIds.entries()) {
-					await tx.update(sysTag).set({ sort: index, update_time: new Date() }).where(eq(sysTag.id, sibId));
+					await tx.update(sysTag).set({ sort: index, updated_at: new Date() }).where(eq(sysTag.id, sibId));
 				}
 			});
 			const rows = await db.select().from(sysTag).where(alive(sysTag)).orderBy(asc(sysTag.sort), asc(sysTag.label));
@@ -364,12 +364,12 @@ export const tagRouter = createTRPCRouter({
 					tag_id: sysTagRelation.tag_id,
 					obj_id: sysTagRelation.obj_id,
 					obj_type: sysTagRelation.obj_type,
-					create_time: sysTagRelation.create_time,
+					created_at: sysTagRelation.created_at,
 				})
 				.from(sysTagRelation)
 				.innerJoin(sysTag, eq(sysTag.id, sysTagRelation.tag_id))
 				.where(and(where, alive(sysTag)))
-				.orderBy(asc(sysTagRelation.create_time), asc(sysTagRelation.obj_id))
+				.orderBy(asc(sysTagRelation.created_at), asc(sysTagRelation.obj_id))
 				.limit(input.limit)
 				.offset(input.offset);
 			// 总数必须与上面同一条件(同 join 同 `alive`),否则"共 N 条"和列表对不上
@@ -384,7 +384,7 @@ export const tagRouter = createTRPCRouter({
 					tagId: row.tag_id,
 					objId: row.obj_id,
 					objType: row.obj_type,
-					createdAt: row.create_time ? row.create_time.toISOString() : null,
+					createdAt: row.created_at ? row.created_at.toISOString() : null,
 				})),
 			};
 		}),
@@ -417,7 +417,7 @@ export const tagRouter = createTRPCRouter({
 							label: tag?.label ?? link.tag_id,
 							value: tag?.value ?? null,
 							parentId: tag?.parent_id ?? null,
-							createdAt: link.create_time ? link.create_time.toISOString() : null,
+							createdAt: link.created_at ? link.created_at.toISOString() : null,
 						};
 					})
 					.sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN")),

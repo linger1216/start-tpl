@@ -63,7 +63,8 @@ export function userSwitchPlugin() {
 					const { user } = ctx.context.session;
 
 					// 「切回原身」例外:不需要权限(否则切到一个没有权限的人就再也回不来了)
-					const impersonator = await ctx.getSignedCookie(IMPERSONATOR_COOKIE, ctx.context.secret);
+					const rawImpersonator = await ctx.getSignedCookie(IMPERSONATOR_COOKIE, ctx.context.secret);
+					const impersonator = typeof rawImpersonator === "string" && rawImpersonator ? rawImpersonator : null;
 					const isUndo = Boolean(impersonator) && ctx.body.userId === impersonator;
 					if (!isUndo) {
 						const { perms } = await effectiveMenusFor(user.id);
@@ -97,13 +98,38 @@ export function userSwitchPlugin() {
 					// `dontRememberMe = true`:会话 cookie(关掉浏览器就没了),不长期留在别人身份里
 					await setSessionCookie(ctx, { session: created, user: target }, true);
 
-					// 记下原身;切回原身时把它清掉(不再需要这个例外了)
-					await ctx.setSignedCookie(IMPERSONATOR_COOKIE, isUndo ? "" : user.id, ctx.context.secret, {
+					// 记下**最初的原身**:连续切换身份时保持第一个发起人不变 ——
+					// 否则中间那个身份会被记成"原身",原身份的授权就丢了,「队员→队长→队员→队长」
+					// 最后一步会因查不到有权限的原身而 403(卡在队员上,实测踩过)。
+					// 切回原身时清掉(不再需要这个例外了)。
+					await ctx.setSignedCookie(IMPERSONATOR_COOKIE, isUndo ? "" : (impersonator ?? user.id), ctx.context.secret, {
 						httpOnly: true,
 						sameSite: "lax",
 						path: "/",
 					});
 					return ctx.json({ user: { id: target.id, name: target.name, email: target.email } });
+				},
+			),
+
+			/**
+			 * GET /api/auth/debug/impersonator —— 当前「原身」是谁(没在切换身份就是 null)。
+			 *
+			 * 为什么要有它:**原身只写在 httpOnly 的签名 cookie 里,前端读不到**。而顶栏入口的显隐条件是
+			 * 「有切换权限 **或** 正在以别人的身份浏览」—— 若只靠 sessionStorage 记原身,新开一个标签页
+			 * (或存储被清)就会变成"切到了没权限的人、入口又不见了",人被卡在别人身份里(实测踩到)。
+			 * 所以显隐判据以**服务端**为准:前端挂载时问一次这里。
+			 */
+			impersonator: createAuthEndpoint(
+				"/debug/impersonator",
+				{ method: "GET", use: [sessionMiddleware] },
+				async (ctx) => {
+					const raw = await ctx.getSignedCookie(IMPERSONATOR_COOKIE, ctx.context.secret);
+					const id = typeof raw === "string" && raw ? raw : null;
+					if (!id) return ctx.json({ impersonator: null });
+					const original = await ctx.context.internalAdapter.findUserById(id);
+					return ctx.json({
+						impersonator: original ? { id: original.id, name: original.name ?? original.email } : null,
+					});
 				},
 			),
 		},

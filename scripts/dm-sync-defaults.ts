@@ -2,7 +2,7 @@
  * 给达梦的表补上**默认值**(幂等,可重复跑)。
  *
  * 为什么需要:项目的表在 MySQL 上是靠 DDL 的 `DEFAULT` 兜底的 ——
- * `sort default 0` / `visible default 1` / `status default 1` / `create_time default current_timestamp` …
+ * `sort default 0` / `visible default 1` / `status default 1` / `created_at default current_timestamp` …
  * drizzle 的 `.default(...)` 表示"我不写这个列,交给数据库默认值填"。而达梦这边建表时**没带默认值**,
  * 于是任何"省略这些列"的 INSERT 都会撞 `违反列[X]非空约束`。
  *
@@ -28,28 +28,28 @@ const DEFAULTS: Record<string, Record<string, string>> = {
 		sort: "0",
 		visible: "1",
 		status: "1",
-		create_time: "CURRENT_TIMESTAMP",
-		update_time: "CURRENT_TIMESTAMP",
+		created_at: "CURRENT_TIMESTAMP",
+		updated_at: "CURRENT_TIMESTAMP",
 	},
 	sys_dict: {
 		status: "1",
-		create_time: "CURRENT_TIMESTAMP",
-		update_time: "CURRENT_TIMESTAMP",
+		created_at: "CURRENT_TIMESTAMP",
+		updated_at: "CURRENT_TIMESTAMP",
 	},
 	sys_para: {
 		status: "1",
 		editable: "1",
-		create_time: "CURRENT_TIMESTAMP",
-		update_time: "CURRENT_TIMESTAMP",
+		created_at: "CURRENT_TIMESTAMP",
+		updated_at: "CURRENT_TIMESTAMP",
 	},
 	sys_tag: {
 		sort: "0",
-		create_time: "CURRENT_TIMESTAMP",
-		update_time: "CURRENT_TIMESTAMP",
+		created_at: "CURRENT_TIMESTAMP",
+		updated_at: "CURRENT_TIMESTAMP",
 	},
 	sys_tag_relation: {
-		create_time: "CURRENT_TIMESTAMP",
-		update_time: "CURRENT_TIMESTAMP",
+		created_at: "CURRENT_TIMESTAMP",
+		updated_at: "CURRENT_TIMESTAMP",
 	},
 };
 

@@ -37,8 +37,8 @@ function toDepartment(row: typeof sysDept.$inferSelect) {
 		sort: Number(row.sort ?? 0),
 		status: Number(row.status ?? 1),
 		remark: row.remark ?? null,
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -122,8 +122,8 @@ export const departmentRouter = createTRPCRouter({
 				sort: await nextSort(parentId),
 				status: 1,
 				remark: input.remark?.trim() || null,
-				create_time: new Date(),
-				update_time: new Date(),
+				created_at: new Date(),
+				updated_at: new Date(),
 			});
 			// 部门树变了 ⇒ 数据权限的部门链缓存立刻作废(否则 30 秒内算出来的可见范围还是旧的)
 			clearDeptCache();
@@ -156,8 +156,8 @@ export const departmentRouter = createTRPCRouter({
 					parent_id: parentId,
 					status: input.status ? 1 : 0,
 					remark: input.remark?.trim() || null,
-					// 显式写 update_time:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP
-					update_time: new Date(),
+					// 显式写 updated_at:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP
+					updated_at: new Date(),
 				})
 				.where(eq(sysDept.id, input.id));
 			// 改名 / 换父级都会变数据权限的部门链 ⇒ 缓存作废
@@ -285,8 +285,8 @@ export const departmentRouter = createTRPCRouter({
 				id: newId(),
 				department_id: input.departmentId,
 				user_id: input.userId,
-				create_time: new Date(),
-				update_time: new Date(),
+				created_at: new Date(),
+				updated_at: new Date(),
 			});
 			return { success: true };
 		}),

@@ -55,6 +55,15 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_data_plugin:
 		"数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
+	// 任务闭环(tc_close):见 doc/task-close.md
+	tc_workflow:
+		"状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义;建任务时会快照一份到 tc_task.workflow 列)",
+	tc_task: "任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)",
+	tc_action: "外挂动作,审批/征询/监督同一种模式(列结构+锁语义统一;用法见 doc/task-close.md)",
+	tc_member: "任务-成员关系(participant/executor 与 tc_task 的多对多;creator 是 tc_task.creator_id 固有属性不入此表)",
+	tc_comment: "任务评论(全员可评论;content 文字 + attachments JSON 存 sys_file.id 数组,字节走 sys_file/MinIO)",
+	tc_log:
+		"任务闭环活动日志(只增不改;from/to_status 是事件前后的任务状态,没动就是 NULL;由 resolver 在同一事务里写,业务回滚则日志一起没)",
 };
 
 /**
@@ -74,8 +83,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_menu", column: "status", comment: "1 启用 / 0 停用(当前代码没读它)" },
 	{ table: "sys_menu", column: "type", comment: "1 目录 / 2 菜单 / 3 按钮(按钮只是权限点,不进侧边栏)" },
 	{ table: "sys_menu", column: "perm", comment: "权限标识,如 sys:role:write;前端 useHasPerm() 认它" },
-	{ table: "sys_menu", column: "create_time", comment: "创建时间" },
-	{ table: "sys_menu", column: "update_time", comment: "更新时间" },
+	{ table: "sys_menu", column: "created_at", comment: "创建时间" },
+	{ table: "sys_menu", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_menu",
 		column: "deleted_at",
@@ -88,8 +97,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dict", column: "items", comment: "字典项:[{label,value}]" },
 	{ table: "sys_dict", column: "remark", comment: "说明" },
 	{ table: "sys_dict", column: "status", comment: "1 启用 / 0 停用" },
-	{ table: "sys_dict", column: "create_time", comment: "创建时间" },
-	{ table: "sys_dict", column: "update_time", comment: "更新时间" },
+	{ table: "sys_dict", column: "created_at", comment: "创建时间" },
+	{ table: "sys_dict", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_dict",
 		column: "deleted_at",
@@ -104,8 +113,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_para", column: "status", comment: "1 启用 / 0 停用(当前代码没读它)" },
 	{ table: "sys_para", column: "remark", comment: "给人看的说明(界面直接展示)" },
 	{ table: "sys_para", column: "editable", comment: "0 = 代码内置不允许改" },
-	{ table: "sys_para", column: "create_time", comment: "创建时间" },
-	{ table: "sys_para", column: "update_time", comment: "更新时间" },
+	{ table: "sys_para", column: "created_at", comment: "创建时间" },
+	{ table: "sys_para", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_para",
 		column: "deleted_at",
@@ -118,8 +127,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_tag", column: "value", comment: "取值(可空)" },
 	{ table: "sys_tag", column: "desc", comment: "含义说明" },
 	{ table: "sys_tag", column: "sort", comment: "同级排序,越小越靠前" },
-	{ table: "sys_tag", column: "create_time", comment: "创建时间" },
-	{ table: "sys_tag", column: "update_time", comment: "更新时间" },
+	{ table: "sys_tag", column: "created_at", comment: "创建时间" },
+	{ table: "sys_tag", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_tag",
 		column: "deleted_at",
@@ -134,8 +143,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		column: "obj_type",
 		comment: "业务对象类型(tinyint 码,各业务自己约定;如 1 档案 / 2 数据源)",
 	},
-	{ table: "sys_tag_relation", column: "create_time", comment: "创建时间" },
-	{ table: "sys_tag_relation", column: "update_time", comment: "更新时间" },
+	{ table: "sys_tag_relation", column: "created_at", comment: "创建时间" },
+	{ table: "sys_tag_relation", column: "updated_at", comment: "更新时间" },
 	// sys_user(Better Auth 内核)
 	{ table: "sys_user", column: "id", comment: "主键(better-auth 生成的字符串)" },
 	{ table: "sys_user", column: "name", comment: "显示名(顶栏用户菜单展示的就是它)" },
@@ -201,8 +210,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_dept", column: "sort", comment: "同级排序,越小越靠前" },
 	{ table: "sys_dept", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_dept", column: "remark", comment: "备注" },
-	{ table: "sys_dept", column: "create_time", comment: "创建时间" },
-	{ table: "sys_dept", column: "update_time", comment: "更新时间" },
+	{ table: "sys_dept", column: "created_at", comment: "创建时间" },
+	{ table: "sys_dept", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_dept",
 		column: "deleted_at",
@@ -214,8 +223,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_role", column: "sort", comment: "排序,越小越靠前" },
 	{ table: "sys_role", column: "status", comment: "1 启用 / 0 停用" },
 	{ table: "sys_role", column: "remark", comment: "说明" },
-	{ table: "sys_role", column: "create_time", comment: "创建时间" },
-	{ table: "sys_role", column: "update_time", comment: "更新时间" },
+	{ table: "sys_role", column: "created_at", comment: "创建时间" },
+	{ table: "sys_role", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_role",
 		column: "deleted_at",
@@ -225,8 +234,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_user_dept", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_user_dept", column: "department_id", comment: "部门 id → sys_dept.id(级联删除)" },
 	{ table: "sys_user_dept", column: "user_id", comment: "用户 id → sys_user.id(级联删除)" },
-	{ table: "sys_user_dept", column: "create_time", comment: "创建时间" },
-	{ table: "sys_user_dept", column: "update_time", comment: "更新时间" },
+	{ table: "sys_user_dept", column: "created_at", comment: "创建时间" },
+	{ table: "sys_user_dept", column: "updated_at", comment: "更新时间" },
 
 	// sys_casbin_rule(功能权限策略;见 src/lib/casbin.ts)
 	{ table: "sys_casbin_rule", column: "id", comment: "主键(nanoid,由代码生成)" },
@@ -242,8 +251,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "sys_casbin_rule", column: "v1", comment: "p:menu:<菜单/按钮 id>;g:role:<角色 id>" },
 	{ table: "sys_casbin_rule", column: "v2", comment: "p:access;g:空串" },
-	{ table: "sys_casbin_rule", column: "create_time", comment: "创建时间" },
-	{ table: "sys_casbin_rule", column: "update_time", comment: "更新时间" },
+	{ table: "sys_casbin_rule", column: "created_at", comment: "创建时间" },
+	{ table: "sys_casbin_rule", column: "updated_at", comment: "更新时间" },
 	// todos(示例表)
 	{ table: "todos", column: "id", comment: "主键(自增;示例表)" },
 	{ table: "todos", column: "title", comment: "待办标题" },
@@ -257,8 +266,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_file", column: "size", comment: "字节数(confirm 时校准)" },
 	{ table: "sys_file", column: "hash", comment: "内容 sha256(仅元数据,不自动去重)" },
 	{ table: "sys_file", column: "status", comment: "0 待确认 / 1 正常 / 2 已删除" },
-	{ table: "sys_file", column: "create_time", comment: "创建时间" },
-	{ table: "sys_file", column: "update_time", comment: "更新时间" },
+	{ table: "sys_file", column: "created_at", comment: "创建时间" },
+	{ table: "sys_file", column: "updated_at", comment: "更新时间" },
 	{ table: "sys_log", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_log", column: "trace_id", comment: "与后端日志同值的追踪号" },
 	{ table: "sys_log", column: "path", comment: "tRPC 路径(如 role.create)" },
@@ -273,7 +282,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_log", column: "error_message", comment: "错误消息(已脱敏截断)" },
 	{ table: "sys_log", column: "input", comment: "入参快照(已脱敏、截断 2000 字符)" },
 	{ table: "sys_log", column: "duration_ms", comment: "耗时(毫秒)" },
-	{ table: "sys_log", column: "create_time", comment: "创建时间" },
+	{ table: "sys_log", column: "created_at", comment: "创建时间" },
 	{ table: "sys_notice", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_notice", column: "user_id", comment: "收件人 id" },
 	{ table: "sys_notice", column: "title", comment: "标题" },
@@ -281,7 +290,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_notice", column: "path", comment: "点击跳转的站内路径(必须 / 开头)" },
 	{ table: "sys_notice", column: "level", comment: "info / success / warn / danger" },
 	{ table: "sys_notice", column: "read_at", comment: "已读时间;null = 未读" },
-	{ table: "sys_notice", column: "create_time", comment: "创建时间" },
+	{ table: "sys_notice", column: "created_at", comment: "创建时间" },
 	{ table: "demo_grid", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "demo_grid", column: "name", comment: "网格名称(片区名)" },
 	{ table: "demo_grid", column: "town_name", comment: "所属街镇(文本)" },
@@ -290,8 +299,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "demo_grid", column: "owner_id", comment: "负责人 → sys_user.id(数据权限:「我本人」按它筛)" },
 	{ table: "demo_grid", column: "duty", comment: "工作职务" },
 	{ table: "demo_grid", column: "remark", comment: "备注" },
-	{ table: "demo_grid", column: "create_time", comment: "创建时间" },
-	{ table: "demo_grid", column: "update_time", comment: "更新时间" },
+	{ table: "demo_grid", column: "created_at", comment: "创建时间" },
+	{ table: "demo_grid", column: "updated_at", comment: "更新时间" },
 	{
 		table: "demo_grid",
 		column: "deleted_at",
@@ -315,8 +324,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		comment: "值域插件 → sys_data_plugin.plugin_key(内置的见 lib/data-scope-plugins.ts)",
 	},
 	{ table: "sys_data_policy", column: "remark", comment: "备注" },
-	{ table: "sys_data_policy", column: "create_time", comment: "创建时间" },
-	{ table: "sys_data_policy", column: "update_time", comment: "更新时间" },
+	{ table: "sys_data_policy", column: "created_at", comment: "创建时间" },
+	{ table: "sys_data_policy", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_data_policy",
 		column: "deleted_at",
@@ -337,12 +346,135 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "sys_data_plugin", column: "status", comment: '1 启用 / 0 停用(停用 = 规则按"插件不可用"处理)' },
 	{ table: "sys_data_plugin", column: "remark", comment: "备注" },
-	{ table: "sys_data_plugin", column: "create_time", comment: "创建时间" },
-	{ table: "sys_data_plugin", column: "update_time", comment: "更新时间" },
+	{ table: "sys_data_plugin", column: "created_at", comment: "创建时间" },
+	{ table: "sys_data_plugin", column: "updated_at", comment: "更新时间" },
 	{
 		table: "sys_data_plugin",
 		column: "deleted_at",
 		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
+	},
+	// ── 任务闭环(tc_close)─────
+	// tc_workflow
+	{ table: "tc_workflow", column: "id", comment: "主键 UUID(nanoid)" },
+	{ table: "tc_workflow", column: "payload", comment: "状态图定义(name / statuses / initial / edges)" },
+	{ table: "tc_workflow", column: "created_at", comment: "创建时间" },
+	{ table: "tc_workflow", column: "updated_at", comment: "更新时间" },
+	{ table: "tc_workflow", column: "deleted_at", comment: "软删除时间(null = 未删除);口径见 lib/soft-delete.ts" },
+	// tc_task
+	{ table: "tc_task", column: "id", comment: "主键 UUID(nanoid)" },
+	{ table: "tc_task", column: "name", comment: "标题" },
+	{ table: "tc_task", column: "description", comment: "任务说明" },
+	{ table: "tc_task", column: "status", comment: "当前状态,取值来自 tc_task.workflow.statuses" },
+	{ table: "tc_task", column: "creator_id", comment: "创建人;任务的固有属性,唯一恒定" },
+	{ table: "tc_task", column: "due_at", comment: "任务期限" },
+	{ table: "tc_task", column: "payload", comment: "任务业务数据(用户自定义)" },
+	{ table: "tc_task", column: "workflow", comment: "状态图快照(创建时从 tc_workflow.payload 复制)" },
+	{ table: "tc_task", column: "deleted_at", comment: "软删除时间(null = 未删除);口径见 lib/soft-delete.ts" },
+	{ table: "tc_task", column: "created_at", comment: "创建时间" },
+	{ table: "tc_task", column: "updated_at", comment: "更新时间" },
+	// tc_action
+	{ table: "tc_action", column: "id", comment: "主键 (nanoid)" },
+	{ table: "tc_action", column: "task_id", comment: "所属任务" },
+	{
+		table: "tc_action",
+		column: "serial_no",
+		comment: "流水号;同一条链共用,等于链首 action 的 id",
+	},
+	{
+		table: "tc_action",
+		column: "parent_action_id",
+		comment: "上级 action;根级为 NULL(只有根级能推进 tc_task.status,子 action 的 from/to 必须 NULL)",
+	},
+	{
+		table: "tc_action",
+		column: "is_locking",
+		comment: "是否锁任务状态(挂载期间任何人都不能直接 transit)",
+	},
+	{
+		table: "tc_action",
+		column: "from_status",
+		comment: "声明的转移起点;子 action 必须 NULL",
+	},
+	{
+		table: "tc_action",
+		column: "to_status",
+		comment: "结算后推进到的状态;子 action 必须 NULL",
+	},
+	{ table: "tc_action", column: "sequence", comment: "同 serial_no 内顺序 1,2,3... 用于逐级审批" },
+	{ table: "tc_action", column: "created_id", comment: "发起人" },
+	{ table: "tc_action", column: "handle_id", comment: "响应人;每个 action 一个,多人响应用多行" },
+	{
+		table: "tc_action",
+		column: "status",
+		comment: "queued/active/approved/rejected/withdrawn/cancelled",
+	},
+	{ table: "tc_action", column: "created_at", comment: "创建时间" },
+	{ table: "tc_action", column: "updated_at", comment: "更新时间" },
+	// tc_member(任务-成员关系,见 doc/task-close.md)
+	{ table: "tc_member", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "tc_member", column: "task_id", comment: "→ tc_task.id(不建外键;审计保留已删任务)" },
+	{ table: "tc_member", column: "user_id", comment: "→ sys_user.id(不建外键;审计保留已删用户)" },
+	{
+		table: "tc_member",
+		column: "role",
+		comment: "角色:participant(参与者)/ executor(执行者);creator 是 tc_task.creator_id 固有属性不入此表",
+	},
+	{
+		table: "tc_member",
+		column: "is_primary",
+		comment: "是否主执行人(0/1);业务仅对 role='executor' 有意义,每个 task 至多 1 行;participant 强制 0",
+	},
+	{ table: "tc_member", column: "created_at", comment: "创建时间" },
+	{ table: "tc_member", column: "updated_at", comment: "更新时间" },
+	// tc_comment(任务评论,见 doc/task-close.md)
+	{ table: "tc_comment", column: "id", comment: "主键(nanoid)" },
+	{ table: "tc_comment", column: "task_id", comment: "→ tc_task.id(不建外键)" },
+	{ table: "tc_comment", column: "author_id", comment: "→ sys_user.id(评论作者,不建外键)" },
+	{ table: "tc_comment", column: "content", comment: "评论正文" },
+	{
+		table: "tc_comment",
+		column: "attachments",
+		comment: "JSON 数组,每项为 sys_file.id(varchar(32));字节在 MinIO,详见 sys_file 表",
+	},
+	{
+		table: "tc_comment",
+		column: "deleted_at",
+		comment: "软删除时间(null = 未删);服务层 list 过滤,author 或 creator 可删",
+	},
+	{ table: "tc_comment", column: "created_at", comment: "创建时间" },
+	{ table: "tc_comment", column: "updated_at", comment: "更新时间(评论允许编辑)" },
+	// tc_log(活动日志,见 doc/task-close.md)
+	{ table: "tc_log", column: "id", comment: "主键(nanoid;与 sys_log.id 同口径)" },
+	{ table: "tc_log", column: "task_id", comment: "→ tc_task.id(不建外键:审计要留住已删任务)" },
+	{
+		table: "tc_log",
+		column: "event",
+		comment:
+			"事件码(英文):task.create / task.update / task.remove / task.transit / action.create / action.respond / comment.create / comment.remove / member.add / member.remove",
+	},
+	{ table: "tc_log", column: "from_status", comment: "本次事件**之前**的任务状态(value);事件没动状态就是 NULL" },
+	{
+		table: "tc_log",
+		column: "to_status",
+		comment: "本次事件**之后**的任务状态(value);事件没动状态就是 NULL(「这次想去哪」在 detail.intendedTo)",
+	},
+	{
+		table: "tc_log",
+		column: "target_id",
+		comment:
+			"作用对象 id:tc_action.id / tc_comment.id / sys_user.id;task.* 事件为 NULL(类型由 event 决定,不存 target_type)",
+	},
+	{ table: "tc_log", column: "actor_id", comment: "操作人 → sys_user.id" },
+	{
+		table: "tc_log",
+		column: "actor_name",
+		comment: "操作人姓名**快照**(账号被删后历史仍读得懂;与 sys_log.operator_name 同口径)",
+	},
+	{ table: "tc_log", column: "detail", comment: "事件专属补充 JSON(结构由 event 判别,见 src/lib/task-close-log.ts)" },
+	{
+		table: "tc_log",
+		column: "created_at",
+		comment: "事件时刻(毫秒精度 datetime(3)——一个事务里可能写多行,秒精度会撞点)",
 	},
 ];
 
@@ -372,27 +504,27 @@ const INDEX_RENAMES: Array<{ table: string; from: string; to: string }> = [
 const COLUMN_REPAIRS: Array<{ table: string; column: string; ddl: string }> = [
 	{
 		table: "sys_menu",
-		column: "update_time",
+		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},
 	{
 		table: "sys_dict",
-		column: "update_time",
+		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},
 	{
 		table: "sys_para",
-		column: "update_time",
+		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},
 	{
 		table: "sys_tag",
-		column: "update_time",
+		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},
 	{
 		table: "sys_tag_relation",
-		column: "update_time",
+		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},
 ];

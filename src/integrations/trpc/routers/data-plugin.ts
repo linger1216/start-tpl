@@ -63,8 +63,8 @@ function toPluginRow(row: typeof sysDataPlugin.$inferSelect) {
 		outputValues: parseItems(row.output_values),
 		status: Number(row.status),
 		remark: row.remark ?? "",
-		createdAt: row.create_time ? row.create_time.toISOString() : null,
-		updatedAt: row.update_time ? row.update_time.toISOString() : null,
+		createdAt: row.created_at ? row.created_at.toISOString() : null,
+		updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -154,8 +154,8 @@ export const dataPluginRouter = createTRPCRouter({
 				output_values: input.outputValues as unknown,
 				status: 1,
 				remark: input.remark ?? null,
-				create_time: now,
-				update_time: now,
+				created_at: now,
+				updated_at: now,
 			});
 			clearPluginCache();
 			return { pluginKey: input.pluginKey };
@@ -197,7 +197,7 @@ export const dataPluginRouter = createTRPCRouter({
 					...(input.outputValues !== undefined ? { output_values: input.outputValues as unknown } : {}),
 					...(input.status !== undefined ? { status: input.status } : {}),
 					...(input.remark !== undefined ? { remark: input.remark } : {}),
-					update_time: new Date(),
+					updated_at: new Date(),
 				})
 				.where(eq(sysDataPlugin.plugin_key, input.pluginKey));
 			clearPluginCache();

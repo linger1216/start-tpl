@@ -22,7 +22,7 @@ const noticeOut = (row: typeof sysNotice.$inferSelect) => ({
 	path: row.path,
 	level: row.level,
 	read: row.read_at !== null,
-	createTime: row.create_time ? row.create_time.toISOString() : null,
+	createTime: row.created_at ? row.created_at.toISOString() : null,
 });
 
 export const noticeRouter = createTRPCRouter({
@@ -40,7 +40,7 @@ export const noticeRouter = createTRPCRouter({
 				.select()
 				.from(sysNotice)
 				.where(eq(sysNotice.user_id, me.id))
-				.orderBy(desc(sysNotice.create_time))
+				.orderBy(desc(sysNotice.created_at))
 				.limit(input?.limit ?? 10);
 			const unreadRows = await db
 				.select({ id: sysNotice.id })

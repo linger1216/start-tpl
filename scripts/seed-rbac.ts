@@ -8,7 +8,9 @@
  *
  *   角色      系统管理员(全局定义,不随部门复制)
  *   按钮      各页的操作权限点(sys:role:* / sys:file:* / sys:user:* / sys:grid:* …)与隐藏的运维权限点
- *   授权      系统管理员 = *:*:*(通配:全部菜单与按钮,含以后新增的)
+ *   授权      系统管理员 = 全部菜单 + `*:*:*`
+ *             ⚠️ 两者分工不同:通配管**按钮权限点**(且自动覆盖以后新增的),
+ *                菜单的**侧边栏可见性**必须逐条 `menu:<id>` 授权 —— 通配命中不到 perm 为空的页面菜单。
  *
  * ⚠️ **本脚本不建演示部门、也不建演示账号。**
  *   「上海公司 / 武汉公司 / 研发部 / 市场部」「部门主管 / 普通员工」「zhangsan@example.com」
@@ -60,7 +62,7 @@ async function upsertRoleByName(name: string, sort: number, remark: string): Pro
 	const id = newId();
 	await db
 		.insert(sysRole)
-		.values({ id, name, sort, status: 1, remark, create_time: new Date(), update_time: new Date() });
+		.values({ id, name, sort, status: 1, remark, created_at: new Date(), updated_at: new Date() });
 	created.role += 1;
 	return id;
 }
@@ -118,14 +120,29 @@ async function upsertHiddenGroup(name: string, path: string, sort: number): Prom
 	return id;
 }
 
-async function grantIfEmpty(roleId: string, menuIds: readonly string[]): Promise<void> {
-	// 判据是**这个角色在策略表里还一条授权都没有**(不是"这次要加的这几条在不在")
+/**
+ * 系统管理员 = **全部菜单**。两件事,缺一不可:
+ *
+ *  1. **那条通配授权**(`*:*:*`)—— 管**按钮权限点**。装载时它把"perm 被模式命中的菜单"当成已授权
+ *     (`lib/casbin.ts` 的装载段),所以以后新增的**按钮**自动在内。
+ *  2. **每条活菜单的 `menu:<id>` 授权** —— 管**侧边栏可见性**。通配**管不到这一层**:
+ *     它只命中"带 perm 的菜单",而纯页面菜单(`/settings/users` / `/task-close` 这类)`perm` 为空,
+ *     压根展开不到。所以"新加了个页面,系统管理员却看不见"就是这么来的(实测踩过:任务闭环)。
+ *
+ * ⚠️ 老写法的判据是"这个角色还一条授权都没有" —— 授权一旦在界面上配过,那条判据就永久跳过,
+ * 于是上面第 2 件事再也不会发生。改成每次都对账。
+ *
+ * 口径仍是**只补不覆盖**:已有的授权一条不删,只把缺的补上(界面上手工加的那些不受影响)。
+ */
+async function ensureAdminGrants(roleId: string, wildcardMenuId: string): Promise<void> {
 	const existing = await grantedMenuIdsOf(roleId);
-	if (existing.length > 0) return;
-	const ids = await withAncestorIds(menuIds);
-	if (ids.length === 0) return;
-	await setRoleMenus(roleId, ids);
-	created.grant += ids.length;
+	const allIds = (await db.select({ id: sysMenu.id }).from(sysMenu).where(alive(sysMenu))).map((row) => row.id);
+	const wanted = [...new Set([...existing, wildcardMenuId, ...allIds])];
+	const missing = wanted.filter((id) => !existing.includes(id));
+	if (missing.length === 0) return;
+	// 与 `role.setMenus` 同口径:写入前补祖先链,否则深层的子菜单在树上无处安放
+	await setRoleMenus(roleId, await withAncestorIds(wanted));
+	created.grant += missing.length;
 }
 
 /** 分配**全局角色**(userId × 角色 id)—— 已存在就不动 */
@@ -244,6 +261,12 @@ async function main() {
 		await upsertButton(用户管理MenuId, "修改用户", "sys:user:edit", 91);
 		await upsertButton(用户管理MenuId, "删除用户", "sys:user:remove", 92);
 	}
+	const 流程模板MenuId = byPath.get("/task-close/workflows")?.id;
+	if (流程模板MenuId) {
+		await upsertButton(流程模板MenuId, "新增模板", "sys:tcWorkflow:add", 90);
+		await upsertButton(流程模板MenuId, "修改模板", "sys:tcWorkflow:edit", 91);
+		await upsertButton(流程模板MenuId, "删除模板", "sys:tcWorkflow:remove", 92);
+	}
 	console.log(`  本次新增 ${created.menu} 个按钮权限点`);
 
 	console.log("── 运维权限点(隐藏分组,type = 3)──");
@@ -254,10 +277,9 @@ async function main() {
 	await upsertButton(opsGroupId, "切换用户(运维)", IMPERSONATE_PERM, 2);
 	console.log(`  *:*:* / ${IMPERSONATE_PERM};本次新增 ${created.menu} 个`);
 
-	console.log("── 授权(只在角色还没有任何授权时写入)→ 权限体系从此启用 ──");
-	// 系统管理员:**一条 `*:*:*` 就够** —— 通配模式在**装载时**展开(见 lib/casbin.ts),
-	// 所以"全部菜单 + 全部按钮 + **以后新增的**"都自动在内,不用每加一个菜单就回来补勾。
-	await grantIfEmpty(adminRoleId, [superPermId]);
+	console.log("── 授权(系统管理员对账成「全部菜单 + 通配」;其余角色只补不覆盖)──");
+	// 见 `ensureAdminGrants` 的说明:通配只管按钮,菜单可见性得逐条授权。
+	await ensureAdminGrants(adminRoleId, superPermId);
 
 	// 部门主管:**只给菜单、不给按钮** —— 这样切到演示账号能直接看到
 	// 「页面进得去,但页里的新增 / 删除按钮不可见」(按钮级可见性)

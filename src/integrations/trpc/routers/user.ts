@@ -229,7 +229,7 @@ export const userRouter = createTRPCRouter({
 
 			// 账号列 + 角色分配 + 部门归属**一起**改:要么都成,要么都不成
 			await db.transaction(async (tx) => {
-				// 达梦不支持 `on update current_timestamp`,所以 update_time 一律显式写
+				// 达梦不支持 `on update current_timestamp`,所以 updated_at 一律显式写
 				await tx
 					.update(sysUser)
 					.set({
@@ -256,8 +256,8 @@ export const userRouter = createTRPCRouter({
 						id: newId(),
 						user_id: input.id,
 						department_id: departmentId,
-						create_time: new Date(),
-						update_time: new Date(),
+						created_at: new Date(),
+						updated_at: new Date(),
 					});
 				}
 			});

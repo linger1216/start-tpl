@@ -136,6 +136,26 @@ export const NAV_NODES: NavNode[] = [
 		description: "站内通知:全部已读、点一条跳到对应页面;有「发通知」权限的人还能给指定的人发一条。",
 	},
 	{
+		name: "任务闭环",
+		icon: "list-checks",
+		description:
+			"甲发任务给乙 → 处置 → 审批 → 关闭归档。卡片页看「我的任务」,点进详情走完整闭环(改状态 / 征询 / 答复 / 评论)。",
+		children: [
+			{
+				name: "我的任务",
+				path: "/task-close",
+				icon: "clipboard-list",
+				description: "我发起、我参与的任务,卡片视图。",
+			},
+			{
+				name: "流程模板",
+				path: "/task-close/workflows",
+				icon: "workflow",
+				description: "任务闭环的状态图模板:状态集合、初始态、状态转移边。",
+			},
+		],
+	},
+	{
 		name: "框架能力",
 		icon: "workflow",
 		description:
@@ -190,25 +210,30 @@ function isPathMatch(pathname: string, path: string): boolean {
  * 在**给定菜单树**里找当前路径的命中链(面包屑 / 侧边栏展开分支)。
  * 未命中任何菜单项时返回空数组,由调用方回落到自己的兜底逻辑。
  *
+ * **取路径最长的那一条**:`/task-close` 是 `/task-close/workflows` 的前缀,两条菜单都会"命中",
+ * 若取先遇到的短路径,停在 `/task-close/workflows` 时链末端会是「我的任务」而不是「流程模板」
+ * (实测:侧边栏两个子项同时高亮、面包屑也指错)。所以命中后要比较 `path.length`,选最具体的一条。
+ *
  * 为什么收「树」而不是直接读 `NAV_NODES`:运行时菜单以 `sys_menu` 表为准,
  * 树可能有第二棵 —— 所以查找逻辑做成纯函数,渲染层把当前树传进来。
  */
 export function findNavTrailIn(nodes: readonly NavNode[], pathname: string): NavNode[] {
-	const walk = (list: readonly NavNode[], trail: NavNode[]): NavNode[] | null => {
+	type Hit = { trail: NavNode[]; score: number };
+	const walk = (list: readonly NavNode[], trail: NavNode[]): Hit | null => {
+		let best: Hit | null = null;
 		for (const node of list) {
 			const next = [...trail, node];
 			if (node.path && isPathMatch(pathname, node.path)) {
-				// 命中后继续往子树里找更精确的一级(模块首页 vs 子页面)
-				return (node.children ? walk(node.children, next) : null) ?? next;
+				const candidate: Hit = { trail: next, score: node.path.length };
+				if (!best || candidate.score > best.score) best = candidate;
 			}
-			if (node.children) {
-				const deeper = walk(node.children, next);
-				if (deeper) return deeper;
-			}
+			// 继续往子树里找更精确的一级(模块首页 vs 子页面)
+			const deeper = node.children?.length ? walk(node.children, next) : null;
+			if (deeper && (!best || deeper.score > best.score)) best = deeper;
 		}
-		return null;
+		return best;
 	};
-	return walk(nodes, []) ?? [];
+	return walk(nodes, [])?.trail ?? [];
 }
 
 /** 按路径精确取节点(模块概览页用来渲染自己的子树)。 */

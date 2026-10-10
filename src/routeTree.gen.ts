@@ -34,6 +34,9 @@ import { Route as mainSettingsProfileRouteImport } from './routes/(main)/setting
 import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/roles'
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
+import { Route as mainTaskCloseIndexRouteImport } from './routes/(main)/task-close/index'
+import { Route as mainTaskCloseTaskIdRouteImport } from './routes/(main)/task-close/$taskId'
+import { Route as mainTaskCloseWorkflowsRouteImport } from './routes/(main)/task-close/workflows'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
@@ -163,6 +166,21 @@ const mainSettingsUsersRoute = mainSettingsUsersRouteImport.update({
   path: '/settings/users',
   getParentRoute: () => mainRouteRoute,
 } as any)
+const mainTaskCloseIndexRoute = mainTaskCloseIndexRouteImport.update({
+  id: '/task-close/',
+  path: '/task-close/',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainTaskCloseTaskIdRoute = mainTaskCloseTaskIdRouteImport.update({
+  id: '/task-close/$taskId',
+  path: '/task-close/$taskId',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainTaskCloseWorkflowsRoute = mainTaskCloseWorkflowsRouteImport.update({
+  id: '/task-close/workflows',
+  path: '/task-close/workflows',
+  getParentRoute: () => mainRouteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -208,10 +226,13 @@ export interface FileRoutesByFullPath {
   '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
+  '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
+  '/task-close/': typeof mainTaskCloseIndexRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
 }
 export interface FileRoutesByTo {
@@ -238,10 +259,13 @@ export interface FileRoutesByTo {
   '/settings/roles': typeof mainSettingsRolesRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
+  '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
+  '/task-close': typeof mainTaskCloseIndexRoute
   '/demo/form/simple': typeof mainDemoFormSimpleRoute
 }
 export interface FileRoutesById {
@@ -270,10 +294,13 @@ export interface FileRoutesById {
   '/(main)/settings/roles': typeof mainSettingsRolesRoute
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
+  '/(main)/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/(main)/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
+  '/(main)/task-close/': typeof mainTaskCloseIndexRoute
   '/(main)/demo/form/simple': typeof mainDemoFormSimpleRoute
 }
 export interface FileRouteTypes {
@@ -302,10 +329,13 @@ export interface FileRouteTypes {
     | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
+    | '/task-close/$taskId'
+    | '/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings/'
+    | '/task-close/'
     | '/demo/form/simple'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -332,10 +362,13 @@ export interface FileRouteTypes {
     | '/settings/roles'
     | '/settings/tags'
     | '/settings/users'
+    | '/task-close/$taskId'
+    | '/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings'
+    | '/task-close'
     | '/demo/form/simple'
   id:
     | '__root__'
@@ -363,10 +396,13 @@ export interface FileRouteTypes {
     | '/(main)/settings/roles'
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
+    | '/(main)/task-close/$taskId'
+    | '/(main)/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/(main)/settings/'
+    | '/(main)/task-close/'
     | '/(main)/demo/form/simple'
   fileRoutesById: FileRoutesById
 }
@@ -556,6 +592,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsUsersRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/task-close/': {
+      id: '/(main)/task-close/'
+      path: '/task-close'
+      fullPath: '/task-close/'
+      preLoaderRoute: typeof mainTaskCloseIndexRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/task-close/$taskId': {
+      id: '/(main)/task-close/$taskId'
+      path: '/task-close/$taskId'
+      fullPath: '/task-close/$taskId'
+      preLoaderRoute: typeof mainTaskCloseTaskIdRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/task-close/workflows': {
+      id: '/(main)/task-close/workflows'
+      path: '/task-close/workflows'
+      fullPath: '/task-close/workflows'
+      preLoaderRoute: typeof mainTaskCloseWorkflowsRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -609,7 +666,10 @@ interface mainRouteRouteChildren {
   mainSettingsRolesRoute: typeof mainSettingsRolesRoute
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
+  mainTaskCloseTaskIdRoute: typeof mainTaskCloseTaskIdRoute
+  mainTaskCloseWorkflowsRoute: typeof mainTaskCloseWorkflowsRoute
   mainSettingsIndexRoute: typeof mainSettingsIndexRoute
+  mainTaskCloseIndexRoute: typeof mainTaskCloseIndexRoute
   mainDemoFormSimpleRoute: typeof mainDemoFormSimpleRoute
 }
 
@@ -635,7 +695,10 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainSettingsRolesRoute: mainSettingsRolesRoute,
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,
+  mainTaskCloseTaskIdRoute: mainTaskCloseTaskIdRoute,
+  mainTaskCloseWorkflowsRoute: mainTaskCloseWorkflowsRoute,
   mainSettingsIndexRoute: mainSettingsIndexRoute,
+  mainTaskCloseIndexRoute: mainTaskCloseIndexRoute,
   mainDemoFormSimpleRoute: mainDemoFormSimpleRoute,
 }
 

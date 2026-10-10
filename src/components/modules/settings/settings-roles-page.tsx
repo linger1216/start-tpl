@@ -289,11 +289,6 @@ export function SettingsRolesPage() {
 					setCreating(false);
 					setEditing(row);
 				}}
-				onPerms={(row) => {
-					setViewing(null);
-					setFormTab("menus");
-					setEditing(row);
-				}}
 			/>
 
 			<SettingsRolesForm

@@ -38,7 +38,8 @@
     "db:seed:rbac": "dotenv -e .env.local -- tsx scripts/seed-rbac.ts",
     "check:legacy": "node scripts/check-legacy.mjs",
     "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts",
-    "db:seed:demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts"
+    "db:seed:demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts",
+    "db:seed:task-close": "dotenv -e .env.local -- tsx scripts/seed-task-close.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

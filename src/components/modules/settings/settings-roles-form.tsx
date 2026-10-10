@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { RoleRow } from "#/components/modules/settings/settings-roles-table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
-import { MemberZone } from "#/components/modules/shared/member-zone";
 import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
+import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -22,8 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
-// 真源在 `lib/menu-spec.ts`(client-safe) —— 本来从 `#/lib/casbin` 拉,但 casbin 是
-// server-only(client 一拉就炸 "Buffer is not defined"),见 menu-spec.ts 那条注释。
+// 真源在 `lib/menu-spec.ts`(client-safe) —— 不能从 server-only 的 `#/lib/casbin` 拉(见 menu-spec.ts 注释)。
 import { ADMIN_ROLE_NAME } from "#/lib/menu-spec";
 
 export type RoleFormPayload = {
@@ -49,14 +49,15 @@ export type RoleFormTab = "basic" | "users" | "menus";
 /**
  * 角色表单(新增 / 编辑)—— **三个 tab**:基本信息 / 用户 / 菜单。
  *
- * 版式规矩(三个编辑界面统一,见 AGENTS「三个编辑界面:tab 化」):
- *  - **宽度固定 `sm:max-w-3xl`**(新建 / 编辑同一个宽度 —— 别随内容宽窄变化);
- *  - **高度固定 `h-[52vh]`**:三个 tab 内容多寡差很多(菜单树很高),不锁高度切 tab 会**抖**;
+ * 版式规矩(编辑弹窗统一,见 `doc/界面约定.md`):
+ *  - **宽度不动**(`sm:max-w-2xl`,新建 / 编辑同一个宽度);
+ *  - **高度随内容长、封顶 `max-h-[85vh]`**:弹窗本体不出滚动条,内容区(`DialogBody`)自己滚,header / footer 钉住;
  *  - **每个 tab 自己带 `[取消] [该 tab 的动作]`**;对话框页脚只放**创建·更新时间**;
  *  - **切 tab 不丢已填内容** —— 字段状态都在本组件里,与 tab 挂载无关。
  *
- * 两个 tab 的动作**不进基本信息的保存**:用户区是**点一下立刻落库**,菜单区有它自己的「保存权限」——
- * 它们动的是两张关联表。看每个 tab 右下角的按钮文案就知道这一下会保存什么。
+ * 「用户」区是**点一下立刻落库**,「菜单」区有它自己的「保存权限」—— 它们动的是两张关联表,
+ * 看 tab 右下角的按钮文案就知道这一下会保存什么。
+ * 「系统管理员」角色的权限由系统授予(身份级 bypass),**不给它显示「菜单」tab**。
  *
  * 新增时后两个 tab 里没有内容(角色还没有 id) → 直接不显示(与用户编辑同一口径)。
  */
@@ -122,6 +123,21 @@ export function SettingsRolesForm({
 		}),
 	);
 
+	/** 已持此角色的人 = 候选名单里要排除的那一拨 */
+	const addableOptions = useMemo(() => {
+		const taken = new Set(members.map((member) => member.userId));
+		return userOptions
+			.filter((user) => !taken.has(user.id))
+			.map((user) => ({ value: user.id, label: user.name || user.email, hint: user.email }));
+	}, [members, userOptions]);
+
+	/** 已选 chip 文案:「姓名 · 部门」;未入部门显示「未加入部门」,看一眼能消歧(角色是全局的) */
+	const memberChip = (member: RoleUserRow) => {
+		const name = member.userName || member.userEmail;
+		const dept = member.departmentNames[0] ?? "未加入部门";
+		return `${name} · ${dept}`;
+	};
+
 	// 打开时把当前值灌进来(关掉不清,免得关闭动画期间闪一下空值);tab 复位到调用方要求的那一个
 	useEffect(() => {
 		if (!open) return;
@@ -149,7 +165,7 @@ export function SettingsRolesForm({
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
-			<DialogContent className="flex h-[52vh] flex-col sm:max-w-2xl">
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新增角色" : `编辑角色 · ${role?.name ?? ""}`}</DialogTitle>
 					<DialogDescription>
@@ -165,13 +181,14 @@ export function SettingsRolesForm({
 				>
 					<TabsList className="shrink-0">
 						<TabsTrigger value="basic">基本信息</TabsTrigger>
-						{/* 新增时角色还没有 id,这两个 tab 里没有可操作的内容 —— 不显示(与用户编辑同一口径) */}
+						{/* 新增时角色还没有 id,「用户」tab 里没有可操作的内容 —— 不显示(与用户编辑同一口径) */}
 						{editing ? (
 							<TabsTrigger value="users" count={members.length}>
 								用户
 							</TabsTrigger>
 						) : null}
-						{editing ? (
+						{/* 「系统管理员」角色的权限由系统授予(身份级 bypass),不给它显示「菜单」tab */}
+						{editing && role?.name !== ADMIN_ROLE_NAME ? (
 							<TabsTrigger value="menus" count={effectiveMenuIds.length}>
 								菜单
 							</TabsTrigger>
@@ -180,8 +197,8 @@ export function SettingsRolesForm({
 
 					{/* ── 基本信息 ─────────────────────────────────────────── */}
 					<TabsContent value="basic" className="flex min-h-0 flex-1 flex-col">
-						{/* 字段区要在 214px 里装下,否则它会自己出滚动条(高度铁律:滚的只能是控件内部) */}
-						<div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+						{/* 字段区自己滚(DialogBody):弹窗本体不出滚动条,高度随内容长、封顶 85vh */}
+						<DialogBody className="flex flex-col pr-1">
 							<DetailRow label="角色名" htmlFor="role-name">
 								<Input
 									id="role-name"
@@ -214,7 +231,7 @@ export function SettingsRolesForm({
 							<DetailRow label="启用">
 								<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 							</DetailRow>
-						</div>
+						</DialogBody>
 						{actions(
 							<Button
 								disabled={pending || invalid}
@@ -236,67 +253,60 @@ export function SettingsRolesForm({
 					{/* ── 用户(点一下立刻落库,所以这里没有"保存")──────────────── */}
 					{editing ? (
 						<TabsContent value="users" className="flex min-h-0 flex-1 flex-col">
-							{/* overflow-hidden 是高度铁律的兜底:内容不可能顶穿到下面那行「取消」上 */}
-							<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-								<MemberZone
-									title="用户"
-									emptyText="还没有人拿到这个角色"
-									members={members}
-									userOptions={userOptions}
-									loading={membersLoading}
-									pending={membersPending}
-									badgeValues={(member) => member.departmentNames}
-									badgeEmpty="未加入部门"
-									onAddMembers={onAddMembers}
-									onRemoveMember={onRemoveMember}
-								/>
+							<div className="flex min-h-0 flex-1 flex-col gap-3">
+								<p className="text-xs text-muted-foreground">
+									已有 <span className="font-medium text-foreground">{members.length}</span> 人持此角色。
+									搜索点选加入,点胶囊的 × 移出 —— 即时生效,不用保存。
+								</p>
+								<RoleUserAdder options={addableOptions} pending={membersPending} onAdd={onAddMembers} />
+								{membersLoading ? (
+									<p className="text-xs text-muted-foreground">加载中…</p>
+								) : members.length === 0 ? (
+									<p className="text-xs text-muted-foreground">还没有人拿到这个角色</p>
+								) : (
+									/** 已选区:一行胶囊,「姓名 · 部门」作 chip,点 × 走 `onRemoveMember`。
+									 * 与 `MultiSelect` 内部已选 chip 同款(用户管理里部门 / 角色 tab 即此形)。 */
+									<BadgeList
+										values={members.map(memberChip)}
+										layout="wrap"
+										justify="start"
+										onRemove={(index) => {
+											const member = members[index];
+											if (member) onRemoveMember(member.userId);
+										}}
+									/>
+								)}
 							</div>
 							{actions(null)}
 						</TabsContent>
 					) : null}
 
-					{/* ── 菜单(它自己的「保存权限」)─────────────────────────── */}
-					{editing ? (
+					{/* ── 菜单(它自己的「保存权限」;系统管理员不显示此 tab)───────────── */}
+					{editing && role?.name !== ADMIN_ROLE_NAME ? (
 						<TabsContent value="menus" className="flex min-h-0 flex-1 flex-col">
 							<div className="flex min-h-0 flex-1 flex-col gap-3">
-								{/** 超级管理员角色的权限由系统授予,不在这里配 —— 这一关是给前端看的,
-								 * 真正的拦截在 `permMiddleware` / `dataScopeMiddleware`(admin 身份级 bypass)
-								 * + `setRoleMenus` 的「通配行保留」(见 `lib/casbin.ts`)。三者一起才稳:
-								 * UI 挡住误操作 + 后端兜底绕过任何服务端调用 + 落库时保住 *:*:* 一类行。 */}
-								{role?.name === ADMIN_ROLE_NAME ? (
-									<div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-										<ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
-										<span>
-											此为「{ADMIN_ROLE_NAME}」角色 —— 持该角色的用户在功能权限与数据权限上**全部放行**(身份级 bypass)。
-											权限由系统按角色名识别,**无需在此勾选菜单**,改动保存也不会生效。
-										</span>
-									</div>
-								) : (
-									<p className="text-xs text-muted-foreground">
-										勾中的菜单会出现在侧边栏;勾中的**按钮**决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
-										保存时服务端会自动补全上级菜单。
-									</p>
-								)}
-								<div className="min-h-0 flex-1 overflow-y-auto">
-									<PermissionPicker
-										nodes={permTree}
-										selected={effectiveMenuIds}
-										title="菜单与按钮"
-										placeholder="搜索菜单 / 按钮,如 角色 / 导出…"
-										onToggle={(ids, on) => {
-											const next = new Set(effectiveMenuIds);
-											for (const id of ids) {
-												if (on) next.add(id);
-												else next.delete(id);
-											}
-											setDraft([...next]);
-										}}
-									/>
-								</div>
+								<p className="text-xs text-muted-foreground">
+									勾中的菜单会出现在侧边栏;勾中的「按钮」决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
+									保存时服务端会自动补全上级菜单。
+								</p>
+								<PermissionPicker
+									nodes={permTree}
+									selected={effectiveMenuIds}
+									title="菜单与按钮"
+									placeholder="搜索菜单 / 按钮,如 角色 / 导出…"
+									onToggle={(ids, on) => {
+										const next = new Set(effectiveMenuIds);
+										for (const id of ids) {
+											if (on) next.add(id);
+											else next.delete(id);
+										}
+										setDraft([...next]);
+									}}
+								/>
 							</div>
 							{actions(
 								<Button
-									disabled={saveMenusMutation.isPending || role?.name === ADMIN_ROLE_NAME}
+									disabled={saveMenusMutation.isPending}
 									onClick={() => role && saveMenusMutation.mutate({ roleId: role.id, menuIds: effectiveMenuIds })}
 								>
 									{saveMenusMutation.isPending ? "保存中…" : "保存权限"}
@@ -314,5 +324,65 @@ export function SettingsRolesForm({
 				) : null}
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+/**
+ * 「加人」小控件 —— 搜索 + 候选列表,点一行就把那一行的人提交上去。
+ *
+ * 不复用 `MultiSelect`:`MultiSelect` 是「全量 value 双向绑」,而这里 value 应该是后端的真值
+ * (members),点一行只触发 onAdd([id]),不存本地 state。两套语义不混 —— 自己写一个十几行的即可。
+ */
+function RoleUserAdder({
+	options,
+	pending,
+	onAdd,
+}: {
+	options: Array<{ value: string; label: string; hint?: string }>;
+	pending: boolean;
+	onAdd: (ids: string[]) => void;
+}) {
+	const [keyword, setKeyword] = useState("");
+	const filtered = useMemo(() => {
+		const kw = keyword.trim().toLowerCase();
+		if (!kw) return options;
+		return options.filter(
+			(option) => option.label.toLowerCase().includes(kw) || (option.hint ?? "").toLowerCase().includes(kw),
+		);
+	}, [options, keyword]);
+
+	return (
+		<div className="flex min-h-40 flex-1 flex-col gap-2">
+			<Input
+				value={keyword}
+				onChange={(event) => setKeyword(event.target.value)}
+				placeholder="搜索姓名或邮箱,点中即加入…"
+				disabled={pending}
+				className="h-8 text-sm"
+			/>
+			<div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border">
+				{filtered.length === 0 ? (
+					<p className="px-3 py-2 text-xs text-muted-foreground">
+						{options.length === 0 ? "没有可加入的人了" : "没有匹配的用户"}
+					</p>
+				) : (
+					<ul className="divide-y divide-border">
+						{filtered.map((option) => (
+							<li key={option.value}>
+								<button
+									type="button"
+									disabled={pending}
+									onClick={() => onAdd([option.value])}
+									className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+								>
+									<span className="truncate">{option.label}</span>
+									{option.hint ? <span className="truncate text-xs text-muted-foreground">{option.hint}</span> : null}
+								</button>
+							</li>
+						))}
+					</ul>
+				)}
+			</div>
+		</div>
 	);
 }

@@ -25,7 +25,7 @@
  *  - `sys_para` 「系统设置 ▸ 参数管理」的数据源(`para_key` / `para_value` / `para_type`);
  *  - `sys_tag` / `sys_tag_relation` 标签体系与"对象打了哪些标签"。
  *
- * 时间列(`create_time` / `update_time`)由 DDL 的 `DEFAULT CURRENT_TIMESTAMP`
+ * 时间列(`created_at` / `updated_at`)由 DDL 的 `DEFAULT CURRENT_TIMESTAMP`
  * / `ON UPDATE CURRENT_TIMESTAMP` 提供 —— drizzle 的 mysql `datetime` 没有
  * `defaultNow` / `onUpdateNow`,所以这里不写,留给 MySQL 填。
  *
@@ -104,8 +104,8 @@ export const sysMenu = mysqlTable(
 		 * 这里顺手加过滤,否则运维把一行停用后菜单会静默消失。
 		 */
 		status: tinyint("status").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -140,8 +140,8 @@ export const sysDict = mysqlTable(
 		items: json("items").$type<Array<{ label: string; value: string }> | null>(),
 		remark: varchar("remark", { length: 255 }),
 		status: tinyint("status").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -182,8 +182,8 @@ export const sysPara = mysqlTable(
 		remark: varchar("remark", { length: 255 }),
 		/** 0 = 代码内置不允许改 */
 		editable: tinyint("editable").notNull().default(1),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -221,8 +221,8 @@ export const sysTag = mysqlTable(
 		desc: text("desc"),
 		/** 同级排序,越小越靠前 */
 		sort: int("sort").notNull().default(0),
-		create_time: datetime("create_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -256,8 +256,8 @@ export const sysTagRelation = mysqlTable(
 		tag_id: varchar("tag_id", { length: 32 }).notNull(),
 		obj_id: varchar("obj_id", { length: 32 }).notNull(),
 		obj_type: tinyint("obj_type").notNull(),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		index("idx_tag_rel_tag").on(table.tag_id),
@@ -433,8 +433,8 @@ export const sysDept = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -459,8 +459,8 @@ export const sysRole = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -485,8 +485,8 @@ export const sysUserDept = mysqlTable(
 		user_id: varchar("user_id", { length: 32 })
 			.notNull()
 			.references(() => sysUser.id, { onDelete: "cascade" }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
@@ -528,8 +528,8 @@ export const sysCasbinRule = mysqlTable(
 		v0: varchar("v0", { length: 80 }).notNull(),
 		v1: varchar("v1", { length: 128 }).notNull(),
 		v2: varchar("v2", { length: 16 }).notNull().default(""),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_casbin_rule").on(table.ptype, table.v0, table.v1, table.v2),
@@ -545,7 +545,7 @@ export const sysCasbinRule = mysqlTable(
  * 要 URL 的时候当场签(公开桶拼直链 / 私有桶签预签名 GET)。
  *
  * `status` 是三态而非软删时间列:上传是**两阶段**的,`0` 是"签发了但还没传上来"的正常中间态,
- * 清理任务就按 `(status, create_time)` 扫它。
+ * 清理任务就按 `(status, created_at)` 扫它。
  */
 /**
  * 站内通知 —— 一条通知**只属于一个收件人**,所以「已读」就是这一行的 `read_at`:
@@ -571,9 +571,9 @@ export const sysNotice = mysqlTable(
 		level: varchar("level", { length: 16 }).notNull().default("info"),
 		/** null = 未读 */
 		read_at: datetime("read_at", { mode: "date" }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
-	(table) => [index("idx_sys_notice_user").on(table.user_id, table.read_at, table.create_time)],
+	(table) => [index("idx_sys_notice_user").on(table.user_id, table.read_at, table.created_at)],
 );
 
 /**
@@ -611,13 +611,13 @@ export const sysLog = mysqlTable(
 		input: text("input"),
 		/** 这次调用耗时(毫秒) */
 		duration_ms: int("duration_ms"),
-		/** 审计行不可变 —— 没有 update_time */
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
+		/** 审计行不可变 —— 没有 updated_at */
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		index("idx_sys_log_time").on(table.create_time),
-		index("idx_sys_log_operator").on(table.operator_id, table.create_time),
-		index("idx_sys_log_path").on(table.path, table.create_time),
+		index("idx_sys_log_time").on(table.created_at),
+		index("idx_sys_log_operator").on(table.operator_id, table.created_at),
+		index("idx_sys_log_path").on(table.path, table.created_at),
 	],
 );
 
@@ -648,8 +648,8 @@ export const sysDemoGrid = mysqlTable(
 		/** 工作职务(Excel 原样) */
 		duty: varchar("duty", { length: 64 }),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -677,12 +677,12 @@ export const sysFile = mysqlTable(
 		hash: char("hash", { length: 64 }),
 		/** 0 待确认 / 1 正常 / 2 已删除 */
 		status: tinyint("status").notNull().default(0),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_file_object").on(table.bucket, table.object_key),
-		index("idx_sys_file_status").on(table.status, table.create_time),
+		index("idx_sys_file_status").on(table.status, table.created_at),
 		index("idx_sys_file_hash").on(table.hash),
 	],
 );
@@ -735,8 +735,8 @@ export const sysDataPolicy = mysqlTable(
 		/** 值域插件的 key(内置四个 + `sys_data_plugin` 里登记的);留空 = 整类可见 */
 		plugin_key: varchar("plugin_key", { length: 64 }),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
@@ -780,10 +780,202 @@ export const sysDataPlugin = mysqlTable(
 		/** 0 停用 / 1 启用 */
 		status: tinyint("status").notNull().default(1),
 		remark: varchar("remark", { length: 255 }),
-		create_time: datetime("create_time", { mode: "date" }).$defaultFn(() => new Date()),
-		update_time: datetime("update_time", { mode: "date" }).$defaultFn(() => new Date()),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 	},
 	(table) => [uniqueIndex("uk_sys_data_plugin_key").on(table.plugin_key)],
+);
+
+// ── 任务闭环(tc_close)─────────────────────────────────
+//
+// 三张表都是「不进 drizzle 迁移」,理由同本文件头注释;DDL 由
+// `scripts/create-system-tables.ts` 维护(走 `pnpm db:create`),列注释由
+// `scripts/sync-table-meta.ts` 维护 —— 别在下面 DDL 字面上塞 COLUMN COMMENT,
+// 两边都写必然漂移。
+// 详细设计:`doc/task-close.md`。
+
+/** 状态图模板(payload 装整套 statuses / initial / edges 定义)。 */
+export const taskCloseWorkflow = mysqlTable("tc_workflow", {
+	id: varchar("id", { length: 191 }).primaryKey(),
+	payload: json("payload").notNull(),
+	created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	deleted_at: datetime("deleted_at", { mode: "date" }),
+});
+
+/**
+ * 任务本体 —— `workflow` 列是创建时从 `tc_workflow.payload` 复制的状态图快照;
+ * 之后 `tc_workflow` 表怎么改都不影响已建任务。
+ * `payload` 是用户自定义业务数据(JSON,可空)。
+ * 软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
+ */
+export const taskCloseTask = mysqlTable(
+	"tc_task",
+	{
+		id: varchar("id", { length: 191 }).primaryKey(),
+		name: varchar("name", { length: 255 }).notNull(),
+		description: text("description"),
+		status: varchar("status", { length: 32 }).notNull(),
+		creator_id: varchar("creator_id", { length: 191 }).notNull(),
+		due_at: datetime("due_at", { mode: "date" }),
+		payload: json("payload"),
+		workflow: json("workflow").notNull(),
+		deleted_at: datetime("deleted_at", { mode: "date" }),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		// DB 现状:`idx_task_status_created` 只索引 status(单列);`idx_task_creator_status` 双列索引保留
+		index("idx_task_status_created").on(table.status),
+		index("idx_task_creator_status").on(table.creator_id, table.status),
+	],
+);
+
+/**
+ * 外挂动作(审批 / 征询 / 监督同一种模式)。
+ * - `serial_no`:同链共用,等于链首 action 的 id;
+ * - `parent_action_id`:根级为 NULL,只有根级能推进 tc_task.status(子 action 的 from/to 必须 NULL);
+ * - `is_locking`:挂载期间是否锁住任务状态。
+ */
+export const taskCloseAction = mysqlTable(
+	"tc_action",
+	{
+		id: varchar("id", { length: 191 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		serial_no: varchar("serial_no", { length: 191 }).notNull(),
+		parent_action_id: varchar("parent_action_id", { length: 191 }),
+		is_locking: boolean("is_locking").notNull(),
+		from_status: varchar("from_status", { length: 32 }),
+		to_status: varchar("to_status", { length: 32 }),
+		sequence: int("sequence").notNull(),
+		created_id: varchar("created_id", { length: 191 }).notNull(),
+		handle_id: varchar("handle_id", { length: 191 }).notNull(),
+		status: varchar("status", { length: 16 }).notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		index("idx_action_task_serial").on(table.task_id, table.serial_no, table.sequence),
+		index("idx_action_handle_status").on(table.handle_id, table.status),
+		index("idx_action_parent").on(table.parent_action_id),
+	],
+);
+
+/**
+ * 任务-成员关系表 —— 谁对这个任务有哪些角色。
+ *
+ * `creator` 是任务固有属性(`tc_task.creator_id`),不入此表。
+ * 角色 `participant` / `executor` 由此表维护。
+ * 同一用户可同时拥有多个角色 —— UK 是 `(task_id, user_id, role)`,不是 `(task_id, user_id)`。
+ * 不加 `deleted_at`(与 `sys_user_dept` 同档;纯关联表真删,审计走 `sys_log`)。
+ * 不建外键(惯例:审计保留已删用户 / 已删任务)。
+ * 「每个 task 至多 1 个主执行人」靠应用层事务保证;真出过脏数据再加 generated column + 单独 UK。
+ */
+export const taskCloseMember = mysqlTable(
+	"tc_member",
+	{
+		id: varchar("id", { length: 191 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		// user_id 长度跟 sys_user.id 对齐(36,nanoid 21 字符留余地)
+		user_id: varchar("user_id", { length: 36 }).notNull(),
+		// varchar(16) + TS 联合类型:与 who 协议同形态,编译期挡拼写错
+		role: varchar("role", { length: 16 }).notNull(),
+		is_primary: tinyint("is_primary").notNull().default(0),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		/** 同一 task + user + role 唯一(同人同角色不重复入) */
+		uniqueIndex("uk_member_unique").on(table.task_id, table.user_id, table.role),
+		/** 「我作为 X 角色参与了哪些 task」(用户视角入口) */
+		index("idx_member_user_role").on(table.user_id, table.role),
+		/** 「这个 task 上的 X 角色有哪些人」(任务详情) */
+		index("idx_member_task_role").on(table.task_id, table.role),
+		/** 「这个 task 的主执行人」(dashboard 快查) */
+		index("idx_member_task_primary").on(table.task_id, table.is_primary),
+	],
+);
+
+/**
+ * 任务评论 —— 所有可见该 task 的人都能评论(`tc_task.creator` / `tc_member` 任意 role /
+ * RBAC 允许访客;svc 层做权限判定)。
+ *
+ * - `content` 存文字
+ * - `attachments` 是 JSON 数组,每项为 `sys_file.id`(varchar 32);字节走 MinIO
+ *   复用 `sys_file` 表,**不另建附件表**
+ * - 软删:`deleted_at` 非 NULL 行,svc 层 list 过滤,author 或 task.creator 可标记删除
+ * - 支持编辑:`updated_at` 自动更新
+ */
+export const taskCloseComment = mysqlTable(
+	"tc_comment",
+	{
+		id: varchar("id", { length: 191 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		author_id: varchar("author_id", { length: 36 }).notNull(),
+		content: text("content").notNull(),
+		/** JSON array of sys_file.id(varchar 32 strings);svc 层 join sys_file 取详情 */
+		attachments: json("attachments"),
+		deleted_at: datetime("deleted_at", { mode: "date" }),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		/** 「这个 task 的评论列表」(按时间倒序) */
+		index("idx_comment_task_created").on(table.task_id, table.created_at),
+		/** 「我发过的评论」(作者视角) */
+		index("idx_comment_author").on(table.author_id),
+	],
+);
+
+/**
+ * 任务闭环**活动日志** —— 只增不改:谁、什么时候、把什么从 A 改成了 B。
+ *
+ * 与 `sys_log` 的分工(别混):
+ *  - `sys_log` 是**全站合规台账**:中间件写、fire-and-forget、粗粒度(path + 尽力而为的 target + 入参快照);
+ *  - 本表是**模块业务历史**:各 resolver 在**同一个事务里**写 —— 业务回滚则日志一起没,
+ *    业务成功就一定有日志(故意与 `lib/audit.ts` 的"绝不拖累业务"相反,见 `doc/task-close.md`)。
+ *
+ * 两条口径(改表前先读):
+ *  1. `from_status` / `to_status` = 任务状态在**这次事件前后**的值;事件没动状态就双双 NULL
+ *     (「这次想去哪」是 `detail.intendedTo`,不要塞进 `to_status`);
+ *  2. 一次用户操作 = 一行 —— `taskCreate` 带的初始成员折进 `detail.members`,不另写 `member.add`。
+ *
+ * 不加 `deleted_at`(流水表,见 `lib/soft-delete.ts`);不加 `updated_at`(不可变)。
+ */
+export const taskCloseLog = mysqlTable(
+	"tc_log",
+	{
+		/** 主键(nanoid 21 字符;与 `sys_log.id` 同口径 —— 不参与任何外键,不用 191) */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** → tc_task.id(不建外键:审计要留住已删任务) */
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		/** 事件码(英文,如 `task.transit` / `action.respond`);中文由前端注册表给,库里不存中文 */
+		event: varchar("event", { length: 48 }).notNull(),
+		/** 本次事件**之前**的任务状态(value);事件没动状态就是 null */
+		from_status: varchar("from_status", { length: 32 }),
+		/** 本次事件**之后**的任务状态(value);事件没动状态就是 null */
+		to_status: varchar("to_status", { length: 32 }),
+		/** 作用对象 id:tc_action.id / tc_comment.id / sys_user.id;`task.*` 事件为 null。类型由 event 决定 */
+		target_id: varchar("target_id", { length: 191 }),
+		/** 操作人 → sys_user.id */
+		actor_id: varchar("actor_id", { length: 36 }).notNull(),
+		/** 操作人姓名**快照** —— 账号将来被删,历史仍读得懂(与 sys_log.operator_name 同口径) */
+		actor_name: varchar("actor_name", { length: 64 }),
+		/** 事件专属补充(结构由 event 判别,见 lib/task-close-log.ts) */
+		detail: json("detail"),
+		/** 事件时刻 —— **毫秒**精度(一个事务里可能写多行,秒精度会大量撞点) */
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		/** 详情页主查询:「这个任务最近发生了什么」 */
+		index("idx_log_task_created").on(table.task_id, table.created_at),
+		/** 「只看状态变化」(流程条) */
+		index("idx_log_task_event").on(table.task_id, table.event, table.created_at),
+		/** 「我这一周干了什么」(跨任务) */
+		index("idx_log_actor").on(table.actor_id, table.created_at),
+		/** 「这个动作 / 评论的历史」 */
+		index("idx_log_target").on(table.target_id, table.created_at),
+	],
 );

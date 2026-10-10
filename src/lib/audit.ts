@@ -179,7 +179,7 @@ async function insertAuditRow(entry: AuditEntry): Promise<void> {
 			error_message: entry.errorMessage ? entry.errorMessage.slice(0, 255) : null,
 			input: snapshot.length > 2000 ? `${snapshot.slice(0, 2000)}…` : snapshot,
 			duration_ms: entry.durationMs,
-			create_time: new Date(),
+			created_at: new Date(),
 		});
 	} catch (error) {
 		logger.warn("audit.write_failed", { path: entry.path, message: (error as Error).message });

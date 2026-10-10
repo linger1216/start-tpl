@@ -96,7 +96,8 @@ export function SearchSelect<T extends string = string>({
 				disabled={disabled}
 				aria-disabled={disabled}
 				className={cn(
-					"flex h-8 items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
+					// `w-full`:表单里它和 `Select` / `Input` 并排,三者都得占满字段列,否则宽度不一(实测踩过)
+					"flex h-8 w-full items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
 					disabled ? "cursor-not-allowed opacity-50" : "hover:border-ring/60 hover:text-foreground",
 				)}
 			>

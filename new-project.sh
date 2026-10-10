@@ -53,6 +53,8 @@ usage() {
 
 说明:
   - 新项目不会包含 git 仓库,请自行在该目录执行 `git init`。
+  - 排除规则**取自模板的 .gitignore**(由 git 现算):想少带东西就改 .gitignore,
+    不用改本脚本。只有模板不是 git 仓库时才用脚本内置的兜底清单。
   - agent(Claude Code / Cursor / DSH 等)的文件沙箱以「会话工作区」为界:
     工作区之外的路径只能读、不能写。若新项目落在工作区之外,agent 改代码时
     会报 readonly / sandbox 错误。用 --into 指到工作区内的目录,或把 agent
@@ -231,51 +233,107 @@ echo "  to:   $TARGET_DIR"
 # --- 任何失败(含出错、显式中止、Ctrl-C)都清掉半成品 ---------------------------
 # TARGET_DIR 在上面已确认原本不存在,所以这里 rm -rf 是安全的。
 SCAFFOLD_OK=0
-cleanup_on_error() {
+cleanup_on_exit() {
   if [ "$SCAFFOLD_OK" -eq 0 ] && [ -n "${TARGET_DIR:-}" ] && [ -d "$TARGET_DIR" ]; then
     echo "Error: 派生失败,已清理半成品目录: $TARGET_DIR" >&2
     rm -rf "$TARGET_DIR"
   fi
+  if [ -n "${IGNORES_FROM_GIT:-}" ]; then rm -f "$IGNORES_FROM_GIT"; fi
+  return 0
 }
-trap cleanup_on_error EXIT
+trap cleanup_on_exit EXIT
 
-# --- copy, excluding build/git artifacts, caches, secrets and this script ---
-# Prefer rsync when available (fast, respects trailing-slash semantics).
-EXCLUDES=(
-  --exclude node_modules
-  --exclude .pnpm-store
-  --exclude .git
-  --exclude .output
-  --exclude dist
-  --exclude .vite
-  --exclude .tanstack
-  --exclude .turbo
-  --exclude coverage
-  --exclude .DS_Store
-  # .env.example is the ONLY env file that ships — never copy real secrets.
-  # ORDER MATTERS: rsync uses the first matching pattern, so the include
-  # must precede the exclude.
-  --include .env.example
-  --exclude '.env*'
-  --exclude new-project.sh
+# --- 排除集:单一真源 ---------------------------------------------------------
+# 为什么不再手抄一份排除表:那和 `.gitignore` 是同一件事的两种写法,而手抄那份**已经漂移**
+# (.idea / .sentryclirc / *.pem / *.key / *.log / test-results … 全在 .gitignore 里、不在脚本里),
+# 结果是派生出来的项目带上本机垃圾甚至私钥。现在模板是 git 仓库时,由 **git 自己**给忽略集。
+#
+# ⚠️ 别把 .gitignore 整份抄成排除表:`*.html` / `*.xlsx` 是历史垃圾规则,抄过来会静默吞掉
+#    将来要分发的 `public/404.html`。git 派生没有这个问题 —— 被跟踪的文件永远不会被判为 ignored。
+# 所以这里只留「gitignore 表达不了、或必须无条件挡住」的:
+DENY=( .git node_modules .pnpm-store new-project.sh .serena )
+
+# 模板**不是** git 仓库时的兜底(pattern 形式;有 git 时不用这张表,那一路由 .gitignore 说话)
+# 注意这张表是"尽力而为的镜像",故意**不**抄 .gitignore 里的 `*.html` —— 那会静默吞掉
+# 将来要分发的 `public/404.html` 这类文件(见上面那段注释);宁可少排,不可误伤。
+FALLBACK_DENY=(
+  node_modules .pnpm-store .git .output dist .vite .tanstack .turbo coverage
+  .DS_Store .serena .idea .cache logs test-results playwright-report doc/archive
+  '*.log' '*.tsbuildinfo' '.eslintcache' '.stylelintcache' '.sentryclirc*' 'sentry.properties'
+  '*.pem' '*.key' '*.p12' '*.pfx' '*.sqlite' '*.sqlite3' '*.db' '*.bak' '*.tmp' '*.tgz' '*.xlsx'
+  '.pnp' '.pnp.js' '.nitro' '.vinxi' build .wrangler .vercel .netlify .firebase .serverless
 )
 
+# 被 `.gitignore` 命中的路径(不含"未跟踪但想要"的文件)—— 由 git 自己列,脚本不维护第二份。
+IGNORES_FROM_GIT=""
+if [ "$IS_GIT" -eq 1 ]; then
+  IGNORES_FROM_GIT="$(mktemp "${TMPDIR:-/tmp}/np-ignores.XXXXXX")"
+  if ! git -C "$TEMPLATE_DIR" status --porcelain --ignored=matching -z 2>/dev/null \
+       | tr '\0' '\n' | sed -n 's/^!! //p' \
+       | while IFS= read -r ignored; do
+           # 结尾的 `/` **要保留** —— rsync 里它表示"只匹配目录",连空目录一起排掉。
+           # (别改写成 `dir/**`:那只排内容、目录本身仍会被建出来 —— 实测留下空的 .output/ 与 .idea/)
+           # 带路径的按**根锚定**写(`/doc/archive/`),避免按 basename 误伤深处的同名目录;
+           # 其余按组件匹配(与 .gitignore 同义,`foo.log` 命中任意层级)。
+           case "$ignored" in
+             */*) printf '/%s\n' "$ignored" ;;
+             *) printf '%s\n' "$ignored" ;;
+           esac
+         done > "$IGNORES_FROM_GIT"; then
+    # 老 git 不认 --ignored=matching:忽略集退化成空 ⇒ 改用兜底表(宁可多排,别漏)
+    : > "$IGNORES_FROM_GIT"
+    DENY+=( "${FALLBACK_DENY[@]}" )
+    echo "提示: 当前 git 不支持 --ignored=matching,本次改用脚本内置的排除集。" >&2
+  fi
+fi
+
+# --- copy, excluding build/git artifacts, caches, secrets and this script ---
 if command -v rsync >/dev/null 2>&1; then
-  rsync -a "${EXCLUDES[@]}" "$TEMPLATE_DIR/" "$TARGET_DIR/"
+  # Prefer rsync when available (fast, preserves modes, respects trailing-slash semantics).
+  RSYNC_ARGS=( -a )
+  for pattern in "${DENY[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
+  # .env.example is the ONLY env file that ships — never copy real secrets.
+  # ORDER MATTERS: rsync uses the first matching pattern, so the include must precede the exclude.
+  RSYNC_ARGS+=( --include .env.example --exclude '.env*' )
+  if [ -n "$IGNORES_FROM_GIT" ]; then RSYNC_ARGS+=( --exclude-from "$IGNORES_FROM_GIT" ); fi
+  rsync "${RSYNC_ARGS[@]}" "$TEMPLATE_DIR/" "$TARGET_DIR/"
+elif [ "$IS_GIT" -eq 1 ]; then
+  # 没有 rsync:让 git 给出**要哪些文件**(tracked + 未跟踪但没被忽略)。
+  # 这一路最准,而且天然带上"边改模板边派生"的未跟踪新文件。
+  mkdir -p "$TARGET_DIR"
+  ( cd "$TEMPLATE_DIR" &&
+    git ls-files -z --cached --others --exclude-standard |
+    while IFS= read -r -d '' f; do
+      # 环境文件按 **basename** 兜一道:这条策略不能只靠 .gitignore(它是"绝不带真值"的硬规矩,
+      # 而 `.gitignore` 是会被改的业务配置)
+      case "$(basename "$f")" in
+        .env.example) ;;
+        .env*) continue ;;
+      esac
+      case "$f" in new-project.sh|.serena|.serena/*) continue ;; esac
+      mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
+    done
+  )
 else
-  # Fallback: copy with find, pruning the excluded dirs.
+  # 既没有 rsync 也不是 git 仓库:按兜底表剪枝 + 逐文件过滤。
+  # ⚠️ 过滤看的是 **basename** —— 老版本只挡得住根目录的 `./.env*`,嵌套的 `.env.local` 会被复制(真实漏洞)。
   mkdir -p "$TARGET_DIR"
   ( cd "$TEMPLATE_DIR"
-    find . \( -name node_modules -o -name .pnpm-store -o -name .git -o -name .output -o -name dist \
-              -o -name .vite -o -name .tanstack -o -name .turbo -o -name coverage \) -prune \
+    find . \( -name node_modules -o -name .pnpm-store -o -name .git -o -name .output \
+              -o -name .tanstack -o -name .cache \) -prune \
       -o -type f -print \
       | while IFS= read -r f; do
-          case "$f" in
-            ./new-project.sh) continue ;;
-            ./.env.example) ;;        # the only env file that ships
-            ./.env*) continue ;;      # .env / .env.local / .env.*.local — never copy
+          case "$(basename "$f")" in
+            .env.example) ;;        # the only env file that ships
+            .env*) continue ;;      # .env / .env.local / .env.*.local — never copy, 任意层级
           esac
-          mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp "$f" "$TARGET_DIR/$f"
+          skip=0
+          for pattern in "${FALLBACK_DENY[@]}"; do
+            case "$(basename "$f")" in $pattern) skip=1; break ;; esac
+            case "$f" in */"$pattern"|*/"$pattern"/*) skip=1; break ;; esac
+          done
+          if [ "$skip" -eq 1 ]; then continue; fi
+          mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
         done
   )
 fi
@@ -293,13 +351,20 @@ if [ -e "$TARGET_DIR/.git" ]; then
   exit 1
 fi
 
+# 数量核对:把"静默漏拷"变成一句人话(差值 = 被排除的项,不为零是正常的)
+if [ "$IS_GIT" -eq 1 ]; then
+  EXPECTED="$( ( cd "$TEMPLATE_DIR" && git ls-files --cached --others --exclude-standard ) | wc -l | tr -d ' ')"
+  ACTUAL="$(find "$TARGET_DIR" -type f | wc -l | tr -d ' ')"
+  echo "  拷贝 $ACTUAL 个文件(模板 git 视角 $EXPECTED 个;差值就是被排除的:new-project.sh / .serena 等)"
+fi
+
 # --- 权限归一化 ---------------------------------------------------------------
 # agent 的 write 工具默认产出 600(仅属主可读写),而 rsync -a 会把它原样带过来,
 # 结果项目里混着一批"同组/其他用户读不到"的文件。统一成 644 / 755。
 # 例外:env 文件含密钥,不参与归一化,单独收紧成 600(见下面的 .env.local 一段)。
-PERM_FIXED="$(find "$TARGET_DIR" -type f ! -name '.env*' ! -perm -o+r 2>/dev/null | wc -l | tr -d ' ')"
+PERM_FIXED="$(find "$TARGET_DIR" -type f ! -name '.env*' ! -perm -o+r -print -exec chmod go+r {} + 2>/dev/null \
+  | wc -l | tr -d ' ')"
 if [ "$PERM_FIXED" != "0" ]; then
-  find "$TARGET_DIR" -type f ! -name '.env*' ! -perm -o+r -exec chmod go+r {} + 2>/dev/null || true
   find "$TARGET_DIR" -type d ! -perm -o+x -exec chmod go+rx {} + 2>/dev/null || true
   echo "  修正 $PERM_FIXED 个文件的权限(600 → 644)"
 fi
@@ -340,7 +405,9 @@ fi
 ENV_EXAMPLE="$TARGET_DIR/.env.example"
 ENV_LOCAL="$TARGET_DIR/.env.local"
 if [ -f "$ENV_EXAMPLE" ]; then
-  cp "$ENV_EXAMPLE" "$ENV_LOCAL"
+  # umask 077 包住:让文件**生下来**就是 600,而不是先 644 再 chmod —— 中间那一瞬
+  # BETTER_AUTH_SECRET 是同组/其他可读的(单机影响小,但没理由留着)
+  ( umask 077; cp "$ENV_EXAMPLE" "$ENV_LOCAL" )
   SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))')"
   node -e '
     const fs = require("fs");
@@ -376,3 +443,18 @@ echo ""
 echo "提示:agent 的文件沙箱以「会话工作区」为界,工作区外的路径只能读、不能写。"
 echo "      要在 agent 里改这个项目的代码,请让它的工作区包含:"
 echo "        $TARGET_ROOT"
+
+# --- 模板名残留清单(只列不改)-------------------------------------------------
+# 脚本只改了 package.json / .cta.json;README、AGENTS 的标题里仍写着模板名。
+# **刻意不自动替换**:`doc/已知陷阱.md` 里那句「不要把 start-tpl 硬编码进业务代码」是**举例说明**,
+# 盲替换会把文档改坏 —— 所以只出清单,由人决定改哪些。
+if [ -n "$TEMPLATE_NAME" ] && [ "$TEMPLATE_NAME" != "$PROJECT_NAME" ]; then
+  LEFTOVER="$(grep -rlF -I "$TEMPLATE_NAME" "$TARGET_DIR" 2>/dev/null | grep -v '/pnpm-lock\.yaml$' || true)"
+  if [ -n "$LEFTOVER" ]; then
+    echo ""
+    echo "提示: 以下文件仍含模板名 '$TEMPLATE_NAME'(标题 / 文案按需自己改):"
+    printf '%s\n' "$LEFTOVER" | while IFS= read -r hit; do
+      printf '  %s\n' "${hit#"$TARGET_DIR"/}"
+    done
+  fi
+fi

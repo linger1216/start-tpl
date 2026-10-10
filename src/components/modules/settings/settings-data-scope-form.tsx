@@ -5,6 +5,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -196,8 +197,8 @@ export function SettingsDataScopeForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新增数据范围规则" : "修改数据范围规则"}</DialogTitle>
 					<DialogDescription>
 						规则说的是「谁 · 看哪张表的哪些行」。行是由值域插件算出来的值集合 —— 规则里不存人,所以调岗 /
@@ -205,7 +206,7 @@ export function SettingsDataScopeForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="flex flex-col gap-3">
+				<DialogBody className="flex flex-col gap-3">
 					<DetailRow label="谁" htmlFor="scope-kind">
 						<div className="flex flex-col gap-2">
 							<Select
@@ -353,10 +354,10 @@ export function SettingsDataScopeForm({
 							onChange={(event) => setRemark(event.target.value)}
 						/>
 					</DetailRow>
+				</DialogBody>
 
-					{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
-					{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
-				</div>
+				{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
+				{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
 
 				<DialogFooter>
 					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

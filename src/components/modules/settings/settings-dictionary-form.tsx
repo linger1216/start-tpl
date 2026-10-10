@@ -4,6 +4,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -86,7 +87,7 @@ export function SettingsDictionaryForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex h-[52vh] flex-col sm:max-w-2xl">
+			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
 				<DialogHeader className="shrink-0">
 					<DialogTitle className="text-balance">{editing ? `编辑字典 · ${values.name}` : "新增字典"}</DialogTitle>
 					<DialogDescription>
@@ -94,8 +95,8 @@ export function SettingsDictionaryForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				{/* 字段区自己滚 —— 弹窗本体永不出滚动条(高度铁律),与 settings-users-form 同形 */}
-				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+				{/* 字段区自己滚(DialogBody)—— 弹窗本体永不出滚动条(高度铁律),高度随内容长、封顶 85vh */}
+				<DialogBody className="flex flex-col gap-3 pr-1">
 					<div className="flex flex-col gap-1">
 						<DetailRow label="字典名称" htmlFor="dict-name">
 							<Input
@@ -206,7 +207,7 @@ export function SettingsDictionaryForm({
 							) : null}
 						</div>
 					</div>
-				</div>
+				</DialogBody>
 
 				{error ? (
 					<p

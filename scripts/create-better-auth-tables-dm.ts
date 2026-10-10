@@ -129,8 +129,8 @@ const STATEMENTS: string[] = [
 		"sort" int default 0 not null,
 		"status" tinyint default 1 not null,
 		"remark" varchar(255),
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
+		"created_at" datetime default current_timestamp not null,
+		"updated_at" datetime default current_timestamp not null,
 		"deleted_at" datetime,
 		primary key ("id")
 	)`,
@@ -142,8 +142,8 @@ const STATEMENTS: string[] = [
 		"sort" int default 0 not null,
 		"status" tinyint default 1 not null,
 		"remark" varchar(255),
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
+		"created_at" datetime default current_timestamp not null,
+		"updated_at" datetime default current_timestamp not null,
 		"deleted_at" datetime,
 		primary key ("id"),
 		unique ("name")
@@ -153,8 +153,8 @@ const STATEMENTS: string[] = [
 		"id" varchar(32) not null,
 		"department_id" varchar(32) not null,
 		"user_id" varchar(32) not null,
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
+		"created_at" datetime default current_timestamp not null,
+		"updated_at" datetime default current_timestamp not null,
 		primary key ("id"),
 		constraint "uk_sys_dm_unique" unique ("department_id", "user_id"),
 		constraint "fk_sys_dm_department" foreign key ("department_id") references ${S}."sys_dept" ("id") on delete cascade,
@@ -169,8 +169,8 @@ const STATEMENTS: string[] = [
 		"v0" varchar(80) not null,
 		"v1" varchar(128) not null,
 		"v2" varchar(16) default '' not null,
-		"create_time" datetime default current_timestamp not null,
-		"update_time" datetime default current_timestamp not null,
+		"created_at" datetime default current_timestamp not null,
+		"updated_at" datetime default current_timestamp not null,
 		primary key ("id"),
 		constraint "uk_sys_casbin_rule" unique ("ptype", "v0", "v1", "v2")
 	)`,
@@ -188,12 +188,12 @@ const STATEMENTS: string[] = [
 	  "size" bigint default 0 not null,
 	  "hash" char(64),
 	  "status" tinyint default 0 not null,
-	  "create_time" datetime default current_timestamp not null,
-	  "update_time" datetime default current_timestamp not null,
+	  "created_at" datetime default current_timestamp not null,
+	  "updated_at" datetime default current_timestamp not null,
 	  primary key ("id"),
 	  constraint "uk_sys_file_object" unique ("bucket", "object_key")
 	)`,
-	`create index if not exists "idx_sys_file_status" on ${S}."sys_file" ("status", "create_time")`,
+	`create index if not exists "idx_sys_file_status" on ${S}."sys_file" ("status", "created_at")`,
 	`create index if not exists "idx_sys_file_hash" on ${S}."sys_file" ("hash")`,
 	// ── sys_log(审计日志;只增不改,见 doc/审计日志.md)────────────────────
 	`create table if not exists ${S}."sys_log" (
@@ -211,12 +211,12 @@ const STATEMENTS: string[] = [
       "error_message" varchar(255),
       "input" text,
       "duration_ms" int,
-      "create_time" datetime default current_timestamp not null,
+      "created_at" datetime default current_timestamp not null,
       primary key ("id")
     )`,
-	`create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("create_time")`,
-	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "create_time")`,
-	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "create_time")`,
+	`create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("created_at")`,
+	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "created_at")`,
+	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "created_at")`,
 	// ── sys_notice(站内通知;一条一个收件人,见 doc/通知中心.md)────────────
 	`create table if not exists ${S}."sys_notice" (
       "id" varchar(32) not null,
@@ -226,10 +226,10 @@ const STATEMENTS: string[] = [
       "path" varchar(255),
       "level" varchar(16) default 'info' not null,
       "read_at" datetime,
-      "create_time" datetime default current_timestamp not null,
+      "created_at" datetime default current_timestamp not null,
       primary key ("id")
     )`,
-	`create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "create_time")`,
+	`create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "created_at")`,
 	// ── demo_grid(Demo:综合网格履职)──────────────────
 	`create table if not exists ${S}."demo_grid" (
       "id" varchar(32) not null,
@@ -240,8 +240,8 @@ const STATEMENTS: string[] = [
       "owner_id" varchar(32),
       "duty" varchar(64),
       "remark" varchar(255),
-      "create_time" datetime default current_timestamp not null,
-      "update_time" datetime default current_timestamp not null,
+      "created_at" datetime default current_timestamp not null,
+      "updated_at" datetime default current_timestamp not null,
       "deleted_at" datetime,
       primary key ("id")
     )`,
@@ -263,8 +263,8 @@ const STATEMENTS: string[] = [
       "value_key" varchar(64),
       "plugin_key" varchar(64),
       "remark" varchar(255),
-      "create_time" datetime default current_timestamp not null,
-      "update_time" datetime default current_timestamp not null,
+      "created_at" datetime default current_timestamp not null,
+      "updated_at" datetime default current_timestamp not null,
       "deleted_at" datetime,
       primary key ("id")
     )`,
@@ -282,8 +282,8 @@ const STATEMENTS: string[] = [
       "output_values" text,
       "status" tinyint default 1 not null,
       "remark" varchar(255),
-      "create_time" datetime default current_timestamp not null,
-      "update_time" datetime default current_timestamp not null,
+      "created_at" datetime default current_timestamp not null,
+      "updated_at" datetime default current_timestamp not null,
       "deleted_at" datetime,
       primary key ("id")
     )`,

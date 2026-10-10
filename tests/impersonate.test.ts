@@ -222,6 +222,11 @@ test("切换用户:切成没有该权限的人之后,仍然能切回原身(否�
 	assert.equal(res.status, 200);
 	const asTargetCookies = cookiesOf(res);
 	assert.ok(asTargetCookies.includes("impersonator_id"), "响应里带上了「原身」签名 cookie");
+	// 前端入口的显隐以**服务端**为准(新标签页 / 存储被清也丢不了入口)
+	const who = (await auth.api.impersonator({ headers: new Headers({ cookie: asTargetCookies }) })) as {
+		impersonator: { id: string; name: string } | null;
+	};
+	assert.equal(who?.impersonator?.id, operator.id, "服务端能报出原身是谁");
 
 	const asTarget = await auth.api.getSession({ headers: new Headers({ cookie: asTargetCookies }) });
 	assert.equal(asTarget?.user.id, target.id, "此刻是目标身份(它自己没有切换权限)");
@@ -235,6 +240,10 @@ test("切换用户:切成没有该权限的人之后,仍然能切回原身(否�
 	assert.equal(undo.status, 200, "切回原身不受权限限制");
 	const back = await auth.api.getSession({ headers: new Headers({ cookie: cookiesOf(undo) }) });
 	assert.equal(back?.user.id, operator.id, "回到了原身");
+	const whoBack = (await auth.api.impersonator({ headers: new Headers({ cookie: cookiesOf(undo) }) })) as {
+		impersonator: { id: string } | null;
+	};
+	assert.equal(whoBack.impersonator, null, "切回原身之后就没有「原身」了");
 
 	// 原身份有权限 ⇒ **带着它的签名 cookie 可以继续切别人**(等价于原身份本人在操作)
 	// 这不是提权:下面一条会验证「原身份被撤权后就不行了」。
@@ -260,6 +269,56 @@ test("切换用户:切成没有该权限的人之后,仍然能切回原身(否�
 		asResponse: true,
 	});
 	assert.equal(stillUndo.status, 200, "但切回原身的例外仍然保留(否则人被困住)");
+});
+
+test("切换用户:连续来回切 A→B→C→B→C 不会丢掉原身份", async () => {
+	const operator = await makeUser("chain_op");
+	await grantImpersonate(operator.id);
+	const b = await makeUser("chain_b"); // 两个目标都**不**授切换权限
+	const c = await makeUser("chain_c");
+
+	// A → B
+	const toB = await auth.api.switchUser({
+		body: { userId: b.id },
+		headers: new Headers({ cookie: await signInCookie(operator.email) }),
+		asResponse: true,
+	});
+	assert.equal(toB.status, 200);
+	let cookies = cookiesOf(toB);
+
+	// B → C(用上一次响应里的 cookie —— 原身份必须还是 operator,否则 B 没权限)
+	const toC = await auth.api.switchUser({
+		body: { userId: c.id },
+		headers: new Headers({ cookie: cookies }),
+		asResponse: true,
+	});
+	assert.equal(toC.status, 200, "B(无权限)应能借原身份继续切到 C");
+	cookies = cookiesOf(toC);
+
+	// C → B
+	const backB = await auth.api.switchUser({
+		body: { userId: b.id },
+		headers: new Headers({ cookie: cookies }),
+		asResponse: true,
+	});
+	assert.equal(backB.status, 200, "C 应能切回 B");
+	cookies = cookiesOf(backB);
+
+	// B → C(再来一次 —— 以前就是这一步丢了原身份,403 卡在 C 上)
+	const againC = await auth.api.switchUser({
+		body: { userId: c.id },
+		headers: new Headers({ cookie: cookies }),
+		asResponse: true,
+	});
+	assert.equal(againC.status, 200, "来回切之后依然能切到 C(原身份没丢)");
+
+	// 最后还能切回原身
+	const backOp = await auth.api.switchUser({
+		body: { userId: operator.id },
+		headers: new Headers({ cookie: cookiesOf(againC) }),
+		asResponse: true,
+	});
+	assert.equal(backOp.status, 200, "仍能切回原身");
 });
 
 test("切换用户:未登录 401 / 切自己 400 / 目标不存在 404", async () => {

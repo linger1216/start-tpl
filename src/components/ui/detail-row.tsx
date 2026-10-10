@@ -16,14 +16,23 @@ export function DetailRow({
 	label,
 	htmlFor,
 	children,
+	align = "start",
 }: {
 	label: React.ReactNode;
 	/** 表单里指到控件 id,点标签能聚焦(详情弹窗不用给) */
 	htmlFor?: string;
 	children: React.ReactNode;
+	/** 标签与内容的竖直对齐:详情多行内容用 `start`(默认);单行控件(表单)用 `center` 更齐 */
+	align?: "start" | "center";
 }) {
 	return (
-		<div className="grid grid-cols-[100px_1fr] items-start gap-3 py-2">
+		<div
+			className={
+				align === "center"
+					? "grid grid-cols-[100px_1fr] items-center gap-3 py-2"
+					: "grid grid-cols-[100px_1fr] items-start gap-3 py-2"
+			}
+		>
 			<Label htmlFor={htmlFor} className="text-xs font-normal text-muted-foreground">
 				{label}
 			</Label>

@@ -62,8 +62,8 @@ function toPara(key: string, row: typeof sysPara.$inferSelect | undefined) {
 		remark: row?.remark ?? fallback?.remark ?? "",
 		editable: Number(row?.editable ?? 1) !== 0,
 		status: Number(row?.status ?? 1),
-		createdAt: row?.create_time ? row.create_time.toISOString() : null,
-		updatedAt: row?.update_time ? row.update_time.toISOString() : null,
+		createdAt: row?.created_at ? row.created_at.toISOString() : null,
+		updatedAt: row?.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -138,7 +138,7 @@ export const paraRouter = createTRPCRouter({
 						...(input.remark !== undefined ? { remark: input.remark } : {}),
 						...(input.status !== undefined ? { status: input.status } : {}),
 						...(input.editable !== undefined ? { editable: input.editable } : {}),
-						update_time: new Date(),
+						updated_at: new Date(),
 					})
 					.where(eq(sysPara.para_key, input.key));
 			} else {
@@ -300,7 +300,7 @@ export const paraRouter = createTRPCRouter({
 					}
 					await db
 						.update(sysPara)
-						.set({ para_value: value, para_type: type, para_group: group, remark, update_time: new Date() })
+						.set({ para_value: value, para_type: type, para_group: group, remark, updated_at: new Date() })
 						.where(eq(sysPara.para_key, row.key));
 				} else {
 					await db.insert(sysPara).values({

@@ -432,8 +432,8 @@ async function insertIfAbsent(row: { ptype: string; v0: string; v1: string; v2?:
 		v0: row.v0,
 		v1: row.v1,
 		v2: row.v2 ?? "",
-		create_time: now,
-		update_time: now,
+		created_at: now,
+		updated_at: now,
 	});
 	return true;
 }
@@ -490,8 +490,8 @@ export async function setRoleMenus(roleId: string, menuIds: readonly string[]): 
 				v0: sub,
 				v1: `${MENU_PREFIX}${menuId}`,
 				v2: "access",
-				create_time: now,
-				update_time: now,
+				created_at: now,
+				updated_at: now,
 			})),
 		);
 	});
@@ -553,8 +553,8 @@ export async function setUserRoles(userId: string, roleIds: readonly string[], t
 				v0: sub,
 				v1,
 				v2: "",
-				create_time: now,
-				update_time: now,
+				created_at: now,
+				updated_at: now,
 			})),
 		);
 	};

@@ -299,6 +299,11 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"dataPlugin.create": "sys:plugin:add",
 	"dataPlugin.update": "sys:plugin:edit",
 	"dataPlugin.remove": "sys:plugin:remove",
+	// 任务闭环 ▸ 流程模板(页面码管详情读接口;三个写接口用按钮权限点,见 `scripts/seed-rbac.ts`)
+	"taskClose.workflowGet": pagePermOf("/task-close/workflows"),
+	"taskClose.workflowCreate": "sys:tcWorkflow:add",
+	"taskClose.workflowUpdate": "sys:tcWorkflow:edit",
+	"taskClose.workflowRemove": "sys:tcWorkflow:remove",
 };
 
 /**
@@ -380,6 +385,21 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 类别 4:v1 还没做 —— 后续要按部门 / 本人筛
 	"file.list",
 	"log.list",
+	// 类别 3:任务闭环 —— 任务可见**不是部门维度**(发起人 / 承办人常常跨部门),套 `sys_data_policy`
+	// 那套「我 + 我的角色 + 我的部门 + 子孙」表达不了「我创建 + 我是成员」。行级口径写在 resolver 里:
+	// `taskList` 的 `mine` 是 `creator_id ∪ tc_member`,其余按 `taskId` 直读(天生自限范围)。
+	"taskClose.workflowList",
+	"taskClose.taskList",
+	"taskClose.taskGet",
+	"taskClose.actionList",
+	"taskClose.actionMine",
+	"taskClose.commentList",
+	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
+	"taskClose.logList",
+	// 类别 2:流程模板详情 —— 模板是「全系统一份」的配置,不看部门
+	"taskClose.workflowGet",
+	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-close.ts)
+	"taskClose.attachmentUrl",
 ];
 
 /**
@@ -396,6 +416,20 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	// 类别 1:通知的已读 —— `user_id` 一律取 `ctx.user.id`,碰不到别人的行(见 doc/通知中心.md)
 	"notice.read",
 	"notice.readAll",
+	// 类别 2:任务闭环(tc_close)—— 本模块还没有菜单 / 按钮,硬配权限码等于造出「没人能被授予」的
+	// 假权限,结果是所有账号集体失权。它的授权是**任务级**的,由 `who` 协议在 resolver 内判定
+	// (创建者 / 参与者 / 执行者的角色存在 `tc_member`,RBAC 的角色模型表达不了)。
+	// 等菜单建起来、权限点收窄到「谁能进任务页」时,再按页面码挪进 `PERM_BY_PATH`。
+	"taskClose.taskCreate",
+	"taskClose.taskUpdate",
+	"taskClose.taskRemove",
+	"taskClose.taskTransit",
+	"taskClose.memberAdd",
+	"taskClose.memberRemove",
+	"taskClose.actionCreate",
+	"taskClose.actionRespond",
+	"taskClose.commentCreate",
+	"taskClose.commentRemove",
 ];
 
 /**
@@ -435,4 +469,18 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	// 页面本身刻意**不挂菜单授权**(不然"没勾设置菜单的人连自己资料都看不到"),
 	// 入口在顶栏用户菜单里,与 `/demo/*` 那类"不在菜单表里的页面"同一个口径(见 `canViewPath`)。
 	"user.profile",
+	// 类别 3:任务闭环 —— 任务本体 / 动作 / 评论本模块还没有页面级权限点,可见性 v1 口径是
+	// 「任何登录用户可读任何任务」,`tc_member` 只决定**推进权**(理由见 `UNMAPPED_MUTATIONS`)。
+	// `workflowList` 供**建任务选模板**与「我的任务」页共用,跨页面,不锁到流程模板页面码
+	// (锁了会把「有任务页、没模板页」的人拦死);流程模板页自己的 `workflowGet` 走页面码。
+	"taskClose.workflowList",
+	"taskClose.taskList",
+	"taskClose.taskGet",
+	"taskClose.actionList",
+	"taskClose.actionMine",
+	"taskClose.commentList",
+	// 活动日志(只读):同「任务可见即可读」,不做页面码 —— 它与详情页一体,锁了会把详情页打死
+	"taskClose.logList",
+	// 类别 3:任务附件取地址(登录即可;内部再校验 fileId 挂在本任务上)
+	"taskClose.attachmentUrl",
 ];

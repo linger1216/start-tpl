@@ -113,8 +113,8 @@ export const dataScopeRouter = createTRPCRouter({
 				pluginKey: row.plugin_key ?? null,
 				pluginLabel: plugin?.label ?? row.plugin_key ?? null,
 				remark: row.remark ?? "",
-				createdAt: row.create_time ? row.create_time.toISOString() : null,
-				updatedAt: row.update_time ? row.update_time.toISOString() : null,
+				createdAt: row.created_at ? row.created_at.toISOString() : null,
+				updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 			};
 		});
 	}),
@@ -233,8 +233,8 @@ export const dataScopeRouter = createTRPCRouter({
 				value_key: shape.valueKey,
 				plugin_key: shape.pluginKey,
 				remark: input.remark ?? null,
-				create_time: now,
-				update_time: now,
+				created_at: now,
+				updated_at: now,
 			});
 			clearDataScopeCache();
 			return { id };
@@ -301,7 +301,7 @@ export const dataScopeRouter = createTRPCRouter({
 					plugin_key: shape.pluginKey,
 					...(input.remark !== undefined ? { remark: input.remark } : {}),
 					status,
-					update_time: new Date(),
+					updated_at: new Date(),
 				})
 				.where(eq(sysDataPolicy.id, input.id));
 			clearDataScopeCache();

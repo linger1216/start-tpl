@@ -71,6 +71,17 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 	return <div data-slot="dialog-header" className={cn("flex flex-col gap-1 pr-8", className)} {...props} />;
 }
 
+/**
+ * 对话框**内容区** —— 详情 / 编辑弹窗高度策略的统一落点。
+ *
+ * 规矩(见 `doc/界面约定.md`):**宽度不动,高度随内容长、封顶于一个最大值**;
+ * 弹窗本体**永不出滚动条**,要滚只滚这一层(header / footer 钉住不动)。
+ * 配套用法:`DialogContent` 用 `flex max-h-[85vh] flex-col overflow-hidden`,`DialogBody` 管 `flex-1 overflow-y-auto`。
+ */
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+	return <div data-slot="dialog-body" className={cn("min-h-0 flex-1 overflow-y-auto", className)} {...props} />;
+}
+
 function DialogFooter({ className, children, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
@@ -108,6 +119,7 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
 
 export {
 	Dialog,
+	DialogBody,
 	DialogClose,
 	DialogContent,
 	DialogDescription,

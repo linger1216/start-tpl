@@ -27,7 +27,11 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
 // 79 → 80:新增 `para.import`(参数 Excel 导入,protectedProcedure)
 // 80 → 81:新增 `role.import`(角色 Excel 导入,protectedProcedure)
 // 81 → 82:新增 `user.import`(用户 Excel 导入,protectedProcedure)
-const EXPECTED_PROCEDURES = 82;
+// 82 → 98:新增任务闭环 `taskClose` 16 个(3 模板/任务 + 2 成员 + 4 动作 + 3 评论 …全部 protectedProcedure)
+// 98 → 102:任务闭环新增流程模板管理 4 个(`workflowGet/Create/Update/Remove`,protectedProcedure)
+// 102 → 103:任务闭环新增 `attachmentUrl`(任务附件取地址,protectedProcedure)
+// 103 → 104:任务闭环新增 `logList`(活动日志读接口,protectedProcedure)
+const EXPECTED_PROCEDURES = 104;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

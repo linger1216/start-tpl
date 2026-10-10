@@ -47,8 +47,8 @@ function toRole(row: typeof sysRole.$inferSelect, memberCount = 0) {
 		sort: Number(row.sort ?? 0),
 		status: Number(row.status ?? 1),
 		remark: row.remark ?? null,
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 		memberCount,
 	};
 }
@@ -104,8 +104,8 @@ export const roleRouter = createTRPCRouter({
 				sort,
 				status: 1,
 				remark: input.remark?.trim() || null,
-				create_time: new Date(),
-				update_time: new Date(),
+				created_at: new Date(),
+				updated_at: new Date(),
 			});
 			return toRole(await getRoleRow(id));
 		}),
@@ -130,7 +130,7 @@ export const roleRouter = createTRPCRouter({
 					...(input.sort !== undefined ? { sort: input.sort } : {}),
 					status: input.status ? 1 : 0,
 					remark: input.remark?.trim() || null,
-					update_time: new Date(),
+					updated_at: new Date(),
 				})
 				.where(eq(sysRole.id, input.id));
 
@@ -253,8 +253,8 @@ export const roleRouter = createTRPCRouter({
 						sort: row.sort ?? maxSort,
 						status: row.status ?? 1,
 						remark: row.remark,
-						create_time: new Date(),
-						update_time: new Date(),
+						created_at: new Date(),
+						updated_at: new Date(),
 					});
 					changed = true;
 					result.created += 1;
@@ -273,7 +273,7 @@ export const roleRouter = createTRPCRouter({
 				}
 				await db
 					.update(sysRole)
-					.set({ sort: nextSort, status: nextStatus, remark: nextRemark, update_time: new Date() })
+					.set({ sort: nextSort, status: nextStatus, remark: nextRemark, updated_at: new Date() })
 					.where(eq(sysRole.id, current.id));
 				changed = true;
 				result.created += 1;

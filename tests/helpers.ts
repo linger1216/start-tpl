@@ -330,7 +330,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	// ── 角色(先清策略表里指向它的行:授权是 `p` 行的 v0,成员关系与角色继承是 `g` 行的 v1 / v0)──
 	// `sys_role` 没有 `code` 列 —— 残留检测改用「测试用名字」(`__test__` 前缀),与 `code` 列相比更稳定
 	const staleRoles = (
-		await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole).where(lt(sysRole.create_time, cutoff))
+		await db.select({ id: sysRole.id, name: sysRole.name }).from(sysRole).where(lt(sysRole.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleRoles.length > 0) {
 		const ids = staleRoles.map((row) => row.id);
@@ -344,7 +344,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 
 	// ── 菜单(同样要先清授权行)──
 	const staleMenus = (
-		await db.select({ id: sysMenu.id, name: sysMenu.name }).from(sysMenu).where(lt(sysMenu.create_time, cutoff))
+		await db.select({ id: sysMenu.id, name: sysMenu.name }).from(sysMenu).where(lt(sysMenu.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleMenus.length > 0) {
 		const ids = staleMenus.map((row) => row.id);
@@ -363,7 +363,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 
 	// ── 部门(带子节点,从深到浅删)──
 	const staleDepts = (
-		await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).where(lt(sysDept.create_time, cutoff))
+		await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).where(lt(sysDept.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleDepts.length > 0) {
 		const all = await db.select({ id: sysDept.id, parentId: sysDept.parent_id }).from(sysDept);
@@ -392,7 +392,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	const staleLogs = await db
 		.select({ id: sysLog.id, operatorId: sysLog.operator_id })
 		.from(sysLog)
-		.where(lt(sysLog.create_time, cutoff));
+		.where(lt(sysLog.created_at, cutoff));
 	const logIds = staleLogs.filter((row) => isTestOperator(row.operatorId)).map((row) => row.id);
 	if (logIds.length > 0) {
 		await db.delete(sysLog).where(inArray(sysLog.id, logIds));
@@ -401,7 +401,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 
 	// ── 三张「配置类」表(键 / 编码带前缀,清理它们没有引用问题)──
 	const staleParas = (
-		await db.select({ key: sysPara.para_key }).from(sysPara).where(lt(sysPara.create_time, cutoff))
+		await db.select({ key: sysPara.para_key }).from(sysPara).where(lt(sysPara.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.key));
 	if (staleParas.length > 0) {
 		await db.delete(sysPara).where(
@@ -414,7 +414,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	}
 
 	const staleDicts = (
-		await db.select({ code: sysDict.code, name: sysDict.name }).from(sysDict).where(lt(sysDict.create_time, cutoff))
+		await db.select({ code: sysDict.code, name: sysDict.name }).from(sysDict).where(lt(sysDict.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.name));
 	if (staleDicts.length > 0) {
 		await db.delete(sysDict).where(
@@ -427,7 +427,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	}
 
 	const staleTags = (
-		await db.select({ id: sysTag.id, label: sysTag.label }).from(sysTag).where(lt(sysTag.create_time, cutoff))
+		await db.select({ id: sysTag.id, label: sysTag.label }).from(sysTag).where(lt(sysTag.created_at, cutoff))
 	).filter((row) => startsWithPrefix(row.label));
 	if (staleTags.length > 0) {
 		await db.delete(sysTag).where(
@@ -442,7 +442,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	// ── 数据权限的插件与规则(v2 之后输出值挂在插件上,残留几乎都在插件表)──
 	// `plugin_key` 是调用方手敲的,测试一律 `__test__` 打头;规则按它引用的插件判。
 	const stalePolicies = (
-		await db.select({ key: sysDataPolicy.plugin_key }).from(sysDataPolicy).where(lt(sysDataPolicy.create_time, cutoff))
+		await db.select({ key: sysDataPolicy.plugin_key }).from(sysDataPolicy).where(lt(sysDataPolicy.created_at, cutoff))
 	)
 		.map((row) => row.key)
 		.filter((key): key is string => startsWithPrefix(key));
@@ -452,7 +452,7 @@ async function sweepStaleTestData(olderThanMinutes = 30): Promise<number> {
 	}
 
 	const stalePlugins = (
-		await db.select({ key: sysDataPlugin.plugin_key }).from(sysDataPlugin).where(lt(sysDataPlugin.create_time, cutoff))
+		await db.select({ key: sysDataPlugin.plugin_key }).from(sysDataPlugin).where(lt(sysDataPlugin.created_at, cutoff))
 	)
 		.map((row) => row.key)
 		.filter((key): key is string => startsWithPrefix(key));

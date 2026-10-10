@@ -47,8 +47,8 @@ function toMenu(row: typeof sysMenu.$inferSelect) {
 		visible: Number(row.visible ?? 1),
 		type: asMenuType(row.type),
 		perm: row.perm ?? null,
-		createTime: row.create_time ? row.create_time.toISOString() : null,
-		updateTime: row.update_time ? row.update_time.toISOString() : null,
+		createTime: row.created_at ? row.created_at.toISOString() : null,
+		updateTime: row.updated_at ? row.updated_at.toISOString() : null,
 	};
 }
 
@@ -155,8 +155,8 @@ export const menuRouter = createTRPCRouter({
 					visible: input.visible ? 1 : 0,
 					type: input.type,
 					perm: input.perm?.trim() || null,
-					// 显式写 update_time:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP,靠应用补齐
-					update_time: new Date(),
+					// 显式写 updated_at:达梦不支持 DDL 的 ON UPDATE CURRENT_TIMESTAMP,靠应用补齐
+					updated_at: new Date(),
 				})
 				.where(eq(sysMenu.id, input.id));
 			// `perm` / `path` 变了,装载时的展开结果就变 —— 哪怕策略表一行没动
