@@ -10,6 +10,7 @@ import { buttonVariants } from "#/components/ui/button";
 import { Toaster } from "#/components/ui/sonner";
 import type { TRPCRouter } from "#/integrations/trpc/router";
 import { toApiError } from "#/lib/api/error";
+import { APP_TITLE } from "#/lib/app-meta";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles.css?url";
@@ -42,8 +43,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				// 占位标题 —— 派生新项目后改成自己的
-				title: "管理后台",
+				// 标题的唯一真源是 package.json 的 `app.title`(见 lib/app-meta.ts)
+				title: APP_TITLE,
 			},
 		],
 		links: [

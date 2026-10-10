@@ -462,10 +462,45 @@ function UsersPage() {
 模板自带 `new-project.sh`(在仓库根目录),按下面的方式派生一个干净的新项目:
 
 ```bash
-./new-project.sh my-app              # 派生到 ../my-app
-./new-project.sh my-app --into ~/src # 指定父目录
-./new-project.sh my-app --strict     # 模板有未提交改动时直接中止
+./new-project.sh my-app                      # 派生到 ../my-app(会逐项问你保留哪些功能)
+./new-project.sh my-app --into ~/src         # 指定父目录
+./new-project.sh my-app --strict             # 模板有未提交改动时直接中止
+./new-project.sh my-app --title '巡检系统'    # 中文标题 + ASCII 包名
+./new-project.sh my-app --minimal            # 只要核心(登录 / 外壳 / 数据库 / 权限判定 / UI 原语)
+./new-project.sh my-app --all                # 全要(等于以前的行为)
+./new-project.sh my-app --features task-close,notice
+./new-project.sh my-app --features -demo,-workbench   # 用推荐值,再关掉这两项
 ```
+
+**项目标题**(网页标题 + 侧边栏品牌)的唯一真源是 `package.json` 的 `app` 字段:
+
+```json
+"app": { "title": "管理后台", "subtitle": "TanStack Start 模板" }
+```
+
+`--title` 会写进 `app.title`(不给就用你输入的项目名);包名 `name` 仍是清洗后的小写 ASCII,
+两者互不影响 —— 读法只有一处(`src/lib/app-meta.ts`),消费方是 `routes/__root.tsx` 的
+`head()`(标签页标题)与 `layout/sidebar.tsx` 的品牌标题区。改标题只改这一个字段。
+
+### 功能切分(按需派生)
+
+**不是每个项目都要所有功能**,所以派生时先选功能:选中的才落进新项目,其余功能的
+**文件、菜单、路由注册、权限点、建表语句、package.json 脚本一并物理删除**(不留死代码、不留运行时开关)。
+
+- 清单在仓库根 **`features.json`**:每个功能的 `paths`(删哪些文件)/`rules`(注册点怎么改)/
+  `requires`(依赖)/`procedures`(贡献几个接口)都写在那里;
+- **依赖自动补齐**:选了 A 而 A 依赖 B,会一起带上并打印「自动补齐依赖:…」;
+- **规则必须命中**:模板重构后规则失配 ⇒ 派生**当场中止**(而不是产出一个跑不起来的项目);
+  裁完还会扫一遍**悬空引用**(代码里不该再出现被删域的 import / 标识符);
+- 裁剪由 `scripts/prune-features.mjs` 执行(纯 node,零依赖),它也随派生一起被删掉 ——
+  新项目里不留"模板怎么裁"的机器;
+- **裁完必跑** `pnpm install && pnpm generate-routes && pnpm typecheck`:
+  `routeTree.gen.ts` 是生成物,删过路由文件必须重建(脚本的收尾提示里也写了)。
+
+**已接线的功能**:任务闭环 / 框架能力 + 演示页 / 工作台 + UI 示例 / 通知中心 / 测试套件。
+其余能力(文件管理 / 审计日志 / 数据权限 / 系统设置的十二页 / 达梦 / 容器化 / Excel)
+当前**一律保留** —— `features.json` 的 `pending` 里列了它们与各自的接线要点(共用表、
+跨切面中间件、页面族),要接的时候照着前面的功能加一段清单即可。
 
 它做的事(都是纯文件操作,没有代码生成):
 
@@ -476,7 +511,7 @@ function UsersPage() {
 | 同名校验 | 只在**同一父目录**下才拦你(比较的是绝对路径,换个 `--into` 就能同名) |
 | 复制 | rsync 主路径,失败回落到 `find`;排除 `node_modules` / `.git` / `.output` / `dist` / `.vite` / `.tanstack` / `.turbo` / `coverage` / `new-project.sh` / 真实 `.env*` |
 | 带走的东西 | `.env.example`(**唯一的 env 文件**)、`pnpm-lock.yaml`(让 `pnpm install` 命中锁) |
-| 改写 | `package.json` 的 `name`、`.cta.json` 的 `projectName` |
+| 改写 | `package.json` 的 `name`(包名,小写 ASCII)与 `app.title`(展示标题,**你输入的原样**,中文也行)、`.cta.json` 的 `projectName` |
 | 生成 env | 由 `.env.example` 复制出 `.env.local`,随机填 32 字节 base64 的 `BETTER_AUTH_SECRET`,权限 600 |
 | 修权限 | 模板里 600 的文件归一成 644(否则新项目里 Git 会不认识) |
 
@@ -500,9 +535,11 @@ src/lib/demo-store.ts
 1. `src/routes/__root.tsx`:去掉 devtools `plugins` 数组里与 demo 相关的项(本模板当前只有 Router 与 Query 两项,无需改动)
 2. **`@tanstack/react-start` 的类型增强不用管** —— `(main)/route.tsx` 与 `integrations/tanstack-query/root-provider.tsx` 都引用了它,删掉整个 demo 目录也不会让 `server: { handlers }` 报 `'server' does not exist in type ...`
 3. `src/components/layout/nav-config.ts`:把 `NAV_NODES` 里「组件展示 / 框架能力」两枝删掉
-4. `src/components/layout/sidebar.tsx`:改品牌名(`<SidebarHeader title="管理后台" subtitle="TanStack Start 模板" />`,收起态只剩图标,名字走原生 `title`);`topbar.tsx` 不用动,它接的是真实会话用户
+4. **品牌名与页面标题**:改 `package.json` 的 `app.title` / `app.subtitle` 一处即可 ——
+   浏览器标签页标题(`__root.tsx` 的 `head()`)与侧边栏顶部品牌区(`sidebar.tsx` 的 `<SidebarHeader>`)都读它
+   (读法见 `src/lib/app-meta.ts`;收起态只剩图标,名字走原生 `title`);`topbar.tsx` 不用动,它接的是真实会话用户
 5. `src/lib/constants.ts`:把 `THEME_STORAGE_KEY` 改成自己的名字 —— 多个项目都用 `localhost:3000` 时同源共用 localStorage,主题会互相串
-6. `src/routes/__root.tsx`:改 `head()` 里的 `title`(`"管理后台"` 是占位)
+6. `src/routes/__root.tsx`:改 `head()` 里的 `description` 等元信息(`title` 已由 `app.title` 驱动,不用改)
 
 然后:
 

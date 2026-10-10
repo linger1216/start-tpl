@@ -3,6 +3,7 @@ import { ChevronRight, Layers } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useParaRaw } from "#/hooks/use-para-prefs";
+import { APP_SUBTITLE, APP_TITLE } from "#/lib/app-meta";
 import { parseSidebarCollapseMode, SIDEBAR_MODE_CONFIG_KEY, type SidebarCollapseMode } from "#/lib/sidebar-mode";
 import { cn } from "#/lib/utils";
 import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
@@ -92,7 +93,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 			)}
 		>
 			{/* 品牌标题区:独立组件(见文件头 ④)。收起成迷你栏时只留品牌图标 */}
-			<SidebarHeader compact={rail} title="管理后台" subtitle="TanStack Start 模板" />
+			<SidebarHeader compact={rail} title={APP_TITLE} subtitle={APP_SUBTITLE} />
 
 			<nav
 				className={cn(

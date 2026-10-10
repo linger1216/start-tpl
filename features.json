@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "_readme": [
+    "功能切分的唯一真源:new-project.sh 读它做交互与依赖补齐,scripts/prune-features.mjs 读它做裁剪。",
+    "改这里的三条纪律(与 tests/auth.test.ts 的分类守卫同一个立场 —— 漏了就直接红):",
+    "  1. 每条规则都必须命中,命中 0 处 = 派生中止(模板重构后请同步这里的规则);",
+    "  2. procedures 必须与代码对得上:core + Σ features 必须等于 tests/logging.test.ts 里的 EXPECTED_PROCEDURES,",
+    "     否则派生中止(加过接口就要回来加数字);",
+    "  3. tokens 只放**构建会炸**的东西(import 路径 / 掉不掉的标识符);注释里的中文提及交给收尾报告的「残留提及」。",
+    "规则种类:paths / lines(matches、prefixes、plus、min) / block(begin、end、back) / imports(from[]) / json(matches) / replace(from、to、count)。"
+  ],
+  "core": {
+    "procedures": 73,
+    "seeds": ["db:seed:menus", "db:seed:rbac", "db:seed:paras", "db:seed:dicts"],
+    "_note": "已接线之外的功能(用户管理 / 角色 / 部门 / 菜单 / 字典 / 参数 / 标签 / 文件管理 / 审计日志 / 数据权限 / 达梦 / 容器化)目前**一律保留**,它们的 procedures 记在这里;等各自接线后从这里减掉。",
+    "tables": [
+      "sys_menu", "sys_dict", "sys_para", "sys_tag", "sys_tag_relation",
+      "sys_user", "sys_session", "sys_account", "sys_verification", "sys_account_lockout", "sys_rate_limit",
+      "sys_dept", "sys_role", "sys_user_dept", "sys_casbin_rule",
+      "sys_notice", "sys_log", "sys_file", "sys_data_policy", "sys_data_plugin", "demo_grid",
+      "todos", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"
+    ]
+  },
+  "features": [
+    {
+      "id": "task-close",
+      "name": "任务闭环",
+      "description": "甲发任务给乙 → 处置 → 审批 → 关闭归档(含活动日志 tc_log)",
+      "default": false,
+      "requires": [],
+      "procedures": 22,
+      "paths": [
+        "src/components/modules/task-close",
+        "src/routes/(main)/task-close",
+        "src/integrations/trpc/routers/task-close.ts",
+        "src/lib/task-close-log.ts",
+        "src/lib/task-close-spec.ts",
+        "src/lib/task-content.ts",
+        "scripts/seed-task-close.ts",
+        "tests/task-close.test.ts",
+        "tests/task-close-log.test.ts",
+        "tests/task-content.test.ts",
+        "doc/task-close.md"
+      ],
+      "tokens": [
+        "taskCloseRouter",
+        "#/integrations/trpc/routers/task-close",
+        "#/components/modules/task-close",
+        "#/lib/task-close-log",
+        "#/lib/task-close-spec",
+        "#/lib/task-content"
+      ],
+      "rules": [
+        { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/task-close"] },
+        {
+          "file": "src/integrations/trpc/router.ts",
+          "kind": "lines",
+          "matches": ["taskClose: taskCloseRouter,"],
+          "prefixes": ["/** 任务闭环"],
+          "min": 2
+        },
+        {
+          "file": "src/components/layout/nav-config.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"任务闭环\",$",
+          "back": "^\\t\\{$",
+          "end": "^\\t\\},$"
+        },
+        { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.workflowGet\": pagePermOf", "end": "^\\t\"taskClose\\.workflowRemove\"" },
+        { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.workflowList\",$", "end": "^\\t\"taskClose\\.attachmentUrl\",$" },
+        { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.taskCreate\",$", "end": "^\\t\"taskClose\\.commentRemove\",$" },
+        {
+          "file": "src/db/data-base-schema.ts",
+          "kind": "block",
+          "begin": "^export const taskClose",
+          "back": "^/\\*\\*",
+          "end": "^\\}\\);$|^\\);$"
+        },
+        {
+          "file": "scripts/create-system-tables.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"tc_",
+          "back": "^\\t(?:\\{|/\\*\\*)",
+          "dropLeadingComments": true,
+          "end": "^\\t\\},$"
+        },
+        {
+          "file": "scripts/sync-table-meta.ts",
+          "kind": "lines",
+          "matches": ["tc_workflow:", "tc_log:"],
+          "plus": 1,
+          "min": 2
+        },
+        {
+          "file": "scripts/sync-table-meta.ts",
+          "kind": "lines",
+          "prefixes": [
+            "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
+            "{ table: \"tc_", "// tc_", "// ── 任务闭环"
+          ],
+          "min": 40
+        },
+        { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:task-close"] }
+      ],
+      "tables": ["tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
+      "seeds": [],
+      "hints": [
+        "`tc_*` 六张表不再建;`pnpm db:create` 只建剩下的表",
+        "tests/nav.test.ts 用 `/task-close/workflows` 当菜单夹具 —— 裁掉后跑 `pnpm test` 要先把那里的路径换成自己的页面"
+      ]
+    },
+    {
+      "id": "demo",
+      "name": "框架能力 + 演示页",
+      "description": "6 个能力样例页 + 2 个演示业务页(业务首页 / 网格履职)+ demo_grid 表",
+      "default": false,
+      "requires": [],
+      "procedures": 5,
+      "paths": [
+        "src/routes/(main)/demo",
+        "src/components/modules/demo",
+        "src/hooks/demo.form.tsx",
+        "src/hooks/demo.form-context.ts",
+        "src/lib/demo-store.ts",
+        "src/integrations/trpc/routers/demo-grid.ts",
+        "scripts/seed-demo.ts",
+        "tests/data-scope.test.ts",
+        "doc/测试数据"
+      ],
+      "tokens": ["demoGridRouter", "#/integrations/trpc/routers/demo-grid", "#/components/modules/demo", "#/lib/demo-store"],
+      "rules": [
+        { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/demo-grid"] },
+        {
+          "file": "src/integrations/trpc/router.ts",
+          "kind": "lines",
+          "matches": ["demoGrid: demoGridRouter,"],
+          "prefixes": ["/** Demo:综合网格履职"],
+          "min": 2
+        },
+        {
+          "file": "src/components/layout/nav-config.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"Demo\",$",
+          "back": "^\\t\\{$",
+          "end": "^\\t\\},$"
+        },
+        {
+          "file": "src/components/layout/nav-config.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"框架能力\",$",
+          "back": "^\\t\\{(\\n\\t\\t//.*)?$",
+          "end": "^\\t\\},$"
+        },
+        { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"demoGrid\\.list\": pagePermOf", "end": "^\\t\"demoGrid\\.assign\"" },
+        { "file": "src/lib/rbac.ts", "kind": "lines", "matches": ["\"demoGrid.list\": { resource: \"demo_grid\" },"] },
+        {
+          "file": "src/db/data-base-schema.ts",
+          "kind": "block",
+          "begin": "^export const sysDemoGrid",
+          "back": "^/\\*\\*",
+          "end": "^\\}\\);$|^\\);$"
+        },
+        {
+          "file": "scripts/create-system-tables.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"demo_grid\",$",
+          "back": "^\\t(?:\\{|/\\*\\*)",
+          "dropLeadingComments": true,
+          "end": "^\\t\\},$"
+        },
+        {
+          "file": "scripts/sync-table-meta.ts",
+          "kind": "lines",
+          "matches": ["demo_grid: \"Demo:综合网格履职\","],
+          "prefixes": ["{ table: \"demo_grid\"", "// demo_grid"],
+          "min": 11
+        },
+        { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:demo"] }
+      ],
+      "tables": ["demo_grid"],
+      "seeds": [],
+      "hints": ["「数据权限」的测试用 demo_grid 当夹具 → 已连带删掉 tests/data-scope.test.ts,那份覆盖要自己补回来"]
+    },
+    {
+      "id": "workbench",
+      "name": "工作台 + UI 示例",
+      "description": "落地页(上手清单 / 目录速查)+ 41 个原语与 16 个展示件的活文档(ui-gallery)",
+      "default": true,
+      "requires": [],
+      "procedures": 0,
+      "paths": ["src/components/modules/workbench", "src/routes/(main)/index.tsx"],
+      "tokens": ["#/components/modules/workbench"],
+      "rules": [
+        {
+          "file": "src/components/layout/nav-config.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"工作台\",$",
+          "back": "^\\t\\{$",
+          "end": "^\\t\\},$"
+        }
+      ],
+      "tables": [],
+      "seeds": [],
+      "hints": ["`/` 的落地页没了 —— 记得新建 `src/routes/(main)/index.tsx`(否则 / 是 404)"]
+    },
+    {
+      "id": "notice",
+      "name": "通知中心",
+      "description": "站内通知:列表 / 已读 / 铃铛 / SSE 实时推送 + sys_notice 表",
+      "default": true,
+      "requires": [],
+      "procedures": 4,
+      "paths": [
+        "src/components/modules/notice",
+        "src/components/layout/notification-bell.tsx",
+        "src/routes/(main)/notices.tsx",
+        "src/routes/api.sse.notice.ts",
+        "src/integrations/trpc/routers/notice.ts",
+        "src/lib/notice.ts",
+        "src/lib/notice-levels.ts",
+        "src/lib/use-notice-sse.ts",
+        "src/lib/sse-bus.ts",
+        "tests/notice.test.ts",
+        "tests/sse-bus.test.ts",
+        "doc/通知中心.md"
+      ],
+      "tokens": [
+        "noticeRouter",
+        "./routers/notice",
+        "#/integrations/trpc/routers/notice",
+        "#/components/modules/notice",
+        "#/lib/notice",
+        "#/lib/notice-levels",
+        "#/lib/use-notice-sse",
+        "#/lib/sse-bus",
+        "./notification-bell"
+      ],
+      "rules": [
+        { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/notice"] },
+        {
+          "file": "src/components/layout/topbar.tsx",
+          "kind": "imports",
+          "from": ["./notification-bell"]
+        },
+        {
+          "file": "src/components/layout/topbar.tsx",
+          "kind": "lines",
+          "matches": ["<NotificationBell />"],
+          "min": 1
+        },
+        {
+          "file": "src/integrations/trpc/router.ts",
+          "kind": "lines",
+          "matches": ["notice: noticeRouter,"],
+          "prefixes": ["/** 站内通知"],
+          "min": 2
+        },
+        {
+          "file": "src/components/layout/nav-config.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"我的通知\",$",
+          "back": "^\\t\\{$",
+          "end": "^\\t\\},$"
+        },
+        {
+          "file": "src/lib/rbac.ts",
+          "kind": "lines",
+          "matches": [
+            "\"notice.create\": \"sys:notice:add\",",
+            "\"notice.list\",",
+            "\"notice.read\",",
+            "\"notice.readAll\","
+          ],
+          "min": 5
+        },
+        {
+          "file": "src/db/data-base-schema.ts",
+          "kind": "block",
+          "begin": "^export const sysNotice",
+          "back": "^/\\*\\*",
+          "end": "^\\}\\);$|^\\);$"
+        },
+        {
+          "file": "scripts/create-system-tables.ts",
+          "kind": "block",
+          "begin": "^\\t\\tname: \"sys_notice\",$",
+          "back": "^\\t(?:\\{|/\\*\\*)",
+          "dropLeadingComments": true,
+          "end": "^\\t\\},$"
+        },
+        {
+          "file": "scripts/sync-table-meta.ts",
+          "kind": "lines",
+          "matches": ["sys_notice: \"站内通知(一条一个收件人;见 doc/通知中心.md)\","],
+          "prefixes": ["{ table: \"sys_notice\"", "// sys_notice"],
+          "min": 9
+        }
+      ],
+      "tables": ["sys_notice"],
+      "seeds": [],
+      "hints": [
+        "顶栏的铃铛(src/components/layout/notification-bell.tsx 与 topbar 里那一处 import / JSX)要手动摘掉",
+        "`/api/sse` 那条 SSE 路由(若存在)与 `seed-*/demo` 里的发通知调用也一并检查"
+      ]
+    },
+    {
+      "id": "tests",
+      "name": "测试套件",
+      "description": "直连真库的 27 个集成测试 + 覆盖率脚本",
+      "default": true,
+      "requires": [],
+      "procedures": 0,
+      "paths": ["tests"],
+      "tokens": [],
+      "rules": [{ "file": "package.json", "kind": "json", "matches": ["scripts.test", "scripts.test:cov"] }],
+      "tables": [],
+      "seeds": [],
+      "hints": ["`pnpm test` / `pnpm test:cov` 已从 package.json 移除"]
+    }
+  ],
+  "pending": [
+    { "id": "files", "note": "文件管理 + MinIO(6 个接口 + sys_file + .env 的 MINIO_* + compose 的 minio 服务 + use-file-upload)" },
+    { "id": "logs", "note": "审计日志(1 个接口 + sys_log + lib/audit.ts + init.ts 的 auditMiddleware;还要改 tests/auth.test.ts 里硬编码的 log.list)" },
+    { "id": "datascope", "note": "数据权限(12 个接口 + 两张表 + lib/data-scope* + init.ts 的 dataScopeMiddleware)" },
+    { "id": "settings-*", "note": "系统设置的十二个页面(用户 / 部门 / 角色 / 菜单 / 字典 / 参数 / 标签 / 个人资料)—— 与 core 权限模型共用表与接口,要先定「删页面还是删整链」" },
+    { "id": "excel", "note": "Excel 导入导出(跨 5 个页面的 UI 接线,不是自包含能力)" },
+    { "id": "dm", "note": "达梦支持(src/db/dm + db:dm:* + db/index.ts 的协议分支)" },
+    { "id": "docker", "note": "容器化(依赖 files:compose 里有 minio 服务与 db:minio:init)" }
+  ]
+}

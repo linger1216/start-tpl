@@ -10,6 +10,7 @@ import { Card, CardContent } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Spinner } from "#/components/ui/spinner";
+import { APP_TITLE } from "#/lib/app-meta";
 import { authClient } from "#/lib/auth-client";
 
 /**
@@ -244,7 +245,7 @@ function LoginPage() {
 						<LayoutDashboard className="size-5" />
 					</span>
 					<div>
-						<h1 className="text-lg font-semibold tracking-tight text-foreground">登录管理后台</h1>
+						<h1 className="text-lg font-semibold tracking-tight text-foreground">登录{APP_TITLE}</h1>
 						<p className="mt-1 text-sm text-muted-foreground">用邮箱与密码进入</p>
 					</div>
 				</div>

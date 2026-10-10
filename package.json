@@ -107,5 +107,9 @@
     "skills": [
       "*"
     ]
+  },
+  "app": {
+    "title": "管理后台",
+    "subtitle": "TanStack Start 模板"
   }
 }

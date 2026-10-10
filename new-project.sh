@@ -44,15 +44,28 @@ usage() {
 选项:
   --into <dir>  新项目放在哪个目录下(默认:模板的同级目录)
   --strict      模板目录存在未提交改动时直接中止(默认只警告并继续)
+  --title <名>  网页标题 + 侧边栏品牌名;可与包名不同(中文也行),默认用你输入的项目名
+  --all         功能全要(= 以前的行为)
+  --minimal     只要核心(登录 / 后台外壳 / 数据库 / 权限判定 / UI 原语)
+  --features a,b  按功能 id 选择(清单与说明见仓库根 features.json)
+  --no-input    不交互:功能按 features.json 的推荐值
   -h, --help    显示本帮助
 
 示例:
   ./new-project.sh my-cool-app
   ./new-project.sh MyApp --strict
   ./new-project.sh my-app --into ~/work/projects
+  ./new-project.sh my-app --title '巡检系统'          # 中文标题 + ASCII 包名
+  ./new-project.sh my-app --features task-close,notice
+  ./new-project.sh my-app --minimal
 
 说明:
   - 新项目不会包含 git 仓库,请自行在该目录执行 `git init`。
+  - **标题**:写进 `package.json` 的 `app.title`,网页标题(`<title>`)与侧边栏顶部一起用它;
+    包名 `name` 仍是清洗后的小写 ASCII —— 两者互不影响(读法见 `src/lib/app-meta.ts`)。
+  - **功能切分**:不带 `--features` 时会逐项问你;选中的才落进新项目,
+    其余功能的文件、菜单、路由注册、权限点、建表语句、脚本一并剔除(物理删除,不留死代码)。
+    依赖会自动补齐(如 demo → files)并告诉你补了什么。
   - 排除规则**取自模板的 .gitignore**(由 git 现算):想少带东西就改 .gitignore,
     不用改本脚本。只有模板不是 git 仓库时才用脚本内置的兜底清单。
   - agent(Claude Code / Cursor / DSH 等)的文件沙箱以「会话工作区」为界:
@@ -68,11 +81,33 @@ EOF
 RAW=""
 STRICT=0
 INTO=""
+# 功能选择:空 = 还没决定(交互式问);`__all__` / `__none__` 是 --all / --minimal 的哨兵
+FEATURES=""
+NO_INPUT=0
+# 展示标题(网页标题 + 侧边栏品牌)。空 = 用你输入的项目名原样;中文标题走这个参数
+TITLE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --strict) STRICT=1; shift ;;
+    --all) FEATURES="__all__"; shift ;;
+    --minimal) FEATURES="__none__"; shift ;;
+    --no-input) NO_INPUT=1; shift ;;
+    --title)
+      if [ $# -lt 2 ]; then
+        echo "Error: --title 需要一个显示名(可与包名不同,支持中文)。" >&2
+        exit 1
+      fi
+      TITLE="$2"; shift 2
+      ;;
+    --features)
+      if [ $# -lt 2 ]; then
+        echo "Error: --features 需要一个逗号分隔的列表(如 task-close,notice)。" >&2
+        exit 1
+      fi
+      FEATURES="$2"; shift 2
+      ;;
     --into)
       if [ $# -lt 2 ]; then
         echo "Error: --into 需要一个目录参数。" >&2
@@ -129,6 +164,27 @@ TEMPLATE_NAME="$(node -e '
   process.stdout.write(j.name);
 ' "$TEMPLATE_PKG")"
 
+# --- 功能选择(features.json 是唯一真源;没有它就退化成"全要") ------------------
+FEATURES_JSON="$TEMPLATE_DIR/features.json"
+PRUNER="$TEMPLATE_DIR/scripts/prune-features.mjs"
+FEATURES_IDS=""
+if [ ! -f "$FEATURES_JSON" ] || [ ! -f "$PRUNER" ]; then
+  echo "提示: 模板里没有 features.json / prune-features.mjs,本次按「全要」派生(不裁剪)。" >&2
+elif [ "$FEATURES" = "__all__" ]; then
+  FEATURES_IDS="$(node "$PRUNER" --list-ids)"
+elif [ "$FEATURES" = "__none__" ]; then
+  FEATURES_IDS=""
+elif [ -n "$FEATURES" ]; then
+  FEATURES_IDS="$FEATURES"
+else
+  # 交互式勾选;非 tty 或 --no-input 时用推荐值,不卡住脚本
+  if [ "$NO_INPUT" -eq 1 ] || [ ! -t 0 ]; then
+    FEATURES_IDS="$(node "$PRUNER" --pick --no-input | sed -n 's/^FEATURES=//p')"
+  else
+    FEATURES_IDS="$(node "$PRUNER" --pick | sed -n 's/^FEATURES=//p')"
+  fi
+fi
+
 # --- sanitize into a valid npm package name ----------------------------------
 # 小写化;非法字符转 '-' → 去掉首尾 '-'/下划线(npm 包名不允许以下划线开头)
 PROJECT_NAME="$(printf '%s' "$RAW" \
@@ -137,8 +193,13 @@ PROJECT_NAME="$(printf '%s' "$RAW" \
 
 if [ -z "$PROJECT_NAME" ]; then
   echo "Error: '$RAW' 清洗后为空,无法作为包名。" >&2
+  echo "       包名必须是 ASCII(字母 / 数字 / 短横线)。想用中文标题就分开写:" >&2
+  echo "         ./new-project.sh my-app --title '巡检系统'" >&2
   exit 1
 fi
+
+# 展示标题:没给 --title 就用输入原样(中文 / 大小写都保留)
+TITLE="${TITLE:-$RAW}"
 
 if [ "$PROJECT_NAME" != "$RAW" ]; then
   echo "注意: 项目名已从 '$RAW' 规范化为 '$PROJECT_NAME'"
@@ -229,6 +290,11 @@ fi
 echo "Scaffolding '$PROJECT_NAME' ..."
 echo "  from: $TEMPLATE_DIR"
 echo "  to:   $TARGET_DIR"
+if [ -n "$FEATURES_IDS" ]; then
+  echo "  功能: $FEATURES_IDS"
+else
+  echo "  功能: (仅核心 —— 所有可裁功能都不带)"
+fi
 
 # --- 任何失败(含出错、显式中止、Ctrl-C)都清掉半成品 ---------------------------
 # TARGET_DIR 在上面已确认原本不存在,所以这里 rm -rf 是安全的。
@@ -358,6 +424,13 @@ if [ "$IS_GIT" -eq 1 ]; then
   echo "  拷贝 $ACTUAL 个文件(模板 git 视角 $EXPECTED 个;差值就是被排除的:new-project.sh / .serena 等)"
 fi
 
+# --- 功能裁剪(物理删除 + 同步注册点;规则与依赖都在 features.json) -------------
+# 跑在复制之后:pruner 只做"删 + 定点编辑",不重新拷文件。
+# 任何规则未命中 / 有悬空引用 ⇒ 非零退出,由上面的 trap 把半成品目录一起清掉。
+if [ -f "$PRUNER" ] && [ -f "$FEATURES_JSON" ]; then
+  node "$PRUNER" --root "$TARGET_DIR" --features "$FEATURES_IDS"
+fi
+
 # --- 权限归一化 ---------------------------------------------------------------
 # agent 的 write 工具默认产出 600(仅属主可读写),而 rsync -a 会把它原样带过来,
 # 结果项目里混着一批"同组/其他用户读不到"的文件。统一成 644 / 755。
@@ -373,18 +446,21 @@ fi
 # 用 JSON 解析而不是正则替换:模板改过名、或 name 出现在别处都不会出错。
 node -e '
   const fs = require("fs");
-  const [p, name] = process.argv.slice(1);
+  const [p, name, title] = process.argv.slice(1);
   const j = JSON.parse(fs.readFileSync(p, "utf8"));
   j.name = name;
+  // 展示标题用**你输入的原样**(中文 / 大小写都保留),包名必须是小写 ASCII —— 两者分开,
+  // 见 src/lib/app-meta.ts:页面标题与侧边栏品牌都读 app.title。副标题留空,自己的品牌自己填。
+  j.app = { ...(j.app ?? {}), title, subtitle: "" };
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
   // 复核
   const back = JSON.parse(fs.readFileSync(p, "utf8"));
-  if (back.name !== name) {
-    console.error("Error: 写入后复核失败,name = " + back.name);
+  if (back.name !== name || back.app?.title !== title) {
+    console.error("Error: 写入后复核失败,name = " + back.name + ", app.title = " + back.app?.title);
     process.exit(1);
   }
-' "$PKG" "$PROJECT_NAME"
-echo "  package.json name -> $PROJECT_NAME"
+' "$PKG" "$PROJECT_NAME" "$TITLE"
+echo "  package.json name -> $PROJECT_NAME,app.title -> $TITLE(副标题留空,按需填)"
 
 # --- keep the TanStack CLI state file in sync --------------------------------
 CTA="$TARGET_DIR/.cta.json"
@@ -437,8 +513,11 @@ echo "Next steps:"
 echo "  cd $TARGET_DIR"
 echo "  git init -b main          # 新项目不含 git,按需自行初始化"
 echo "  pnpm install"
+echo "  pnpm generate-routes      # ★ 必跑:路由表是生成物,裁过功能(删过路由文件)必须重建"
+echo "  pnpm typecheck && pnpm check"
 echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
-echo "  pnpm dev"
+echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
+echo "  pnpm dev                  # 种子按上面「建议先跑的种子」那几个跑"
 echo ""
 echo "提示:agent 的文件沙箱以「会话工作区」为界,工作区外的路径只能读、不能写。"
 echo "      要在 agent 里改这个项目的代码,请让它的工作区包含:"
