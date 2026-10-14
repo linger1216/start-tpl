@@ -1,24 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-	AlertCircle,
-	ArrowLeft,
-	CalendarClock,
-	Clock,
-	Flag,
-	Info,
-	Paperclip,
-	Pencil,
-	Send,
-	Trash2,
-	UserPlus,
-} from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, Info, Paperclip, Pencil, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
+import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
 	TaskCloseForm,
 	type TaskFormEditing,
@@ -27,10 +16,8 @@ import {
 import { TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
 import { PriorityBadge } from "#/components/modules/task-close/task-close-priority";
 import { StatusBadge } from "#/components/modules/task-close/task-close-status";
-import { TaskStatusTimeline } from "#/components/modules/task-close/task-close-status-timeline";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
 import { TaskContentBlocks } from "#/components/modules/task-close/task-content-blocks";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -46,45 +33,41 @@ import {
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import type { TaskAttachment } from "#/lib/task-content";
-import { formatLocalMinute } from "#/lib/time";
+import { formatLocalDate, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /**
  * 任务详情 —— 闭环页(按 `assets/ui/任务详情.html` 原型重画)。
  *
- * 结构:
+ * 结构(以**事项流程**为骨架;状态类动作仍在记录头右上角):
  *   ┌─ topbar (外层 shell,这里不画) ───────────────────────┐
- *   ├─ 头部:面包屑 + 标题(带状态 / 优先级徽章) + 描述 +   ┤
- *   │         右上 4 个动作按钮 + meta-line 一行             ┤
- *   └─ main(layout): 左 main + 右 side(粘性 72px)          ┘
- *     - 左 main:
- *         · todo 横幅(轮到我,有 myActionIds 才出现)
- *         · 附件 block
- *         · 评论与回复 block(TaskCloseComments 接管输入+嵌套 thread)
- *     - 右 side:
- *         · 参与人员 block
- *         · 流程动态 block(状态流 TaskStatusTimeline + 事件 TaskCloseLogList)
+ *   ├─ 记录头:返回 + 标题(20px)+ 一行**中性**元信息(徽章 + 日期)  ┤
+ *   │         + 描述 + 右上动作组(ⓘ 转交 征询 审批 改状态 编辑 删除 刷新)┤
+ *   ├─ 流程脊(全宽):模板状态链,标出走过的 / 当前 / 未到 + 到达时刻   ┤
+ *   ├─ 轮到你(有我的待办才出现):横向动作条,就地 通过 / 驳回      │
+ *   └─ main: 左 画布(内容 / 附件 / 评论) + 右 检查器(人员 / 动态)┘
  *
- * 头部动作按钮(`@assets/ui/任务详情.html` 原型 + **按事项流程派生**,见下方 `canApprove` / `canSetStatus`):
- *   · 发起审批 —— 弹窗选**目标状态** + 「交给谁」。状态只列 `permissions.actionTargets`
- *     (模板里当前状态出发、我又有权发起的 `via=action` 边;多个就选),提交 `actionCreate`(带目标状态 → 任务锁定)。
- *   · 改状态 —— **直接改**。非管理员只列 `permissions.transitions`(模板里我能直改的 `direct` 边);
- *     **管理员例外**,列模板里的全部状态。提交 `taskTransit`。
- *   · 发起征询 —— 只选「交给谁」,提交 `actionCreate`(`toStatus = null`,不改状态、不锁任务)。
- *   · 转交 —— 弹窗从**参与人员**里选一人,提交 `taskTransfer`(原子换人:新人当执行人,原执行人降为参与者)。
- *   锁定期(`permissions.locked`,即状态 = `pending`)「发起审批 / 改状态」都不显示 —— 与服务端锁守卫一致。
+ * 状态类按钮(发起审批 / 改状态)按用户要求**留在右上角**,但成不成、有几个候选仍由
+ * `permissions` 派生(见 doc/task-close.md 的「按钮去向」):
+ *   · 发起审批 —— `permissions.actionTargets`(模板里当前状态出发、我有权发起的 `via=action` 边);
+ *     多个候选就在弹窗里选,再选「交给谁」,提交 `actionCreate`(带目标状态 → 任务锁定)。
+ *   · 改状态 —— 非管理员只列 `permissions.transitions`(我能直改的 `direct` 边);管理员可选模板里全部状态。
+ *     提交 `taskTransit`。
+ *   · 锁定期(`permissions.locked`,即状态 = `pending`)两个按钮都不出现 —— 与服务端锁守卫同形。
  *
- * 视觉:一条**虚线系统**(`border-dashed border-border`),位置固定为「**标题 / 标签与其内容之间**」——
- * ① 任务头**只画一条**:标题块的 `border-b`(标题 + 动作组,与下面那排元信息胶囊之间);
- * ② 除「任务内容」外,每个区块(附件 / 评论与回复 / 参与人员 / 流程动态)标题文字下方的 `border-b`
- *    —— 任务内容紧跟在任务头之后,再画就与①叠成两条,故**不画**。
- * 不再画「区块与区块之间」的额外分隔线;列表行用 hover 底色代替行分隔线。
- * 保留:输入框描边、内容表格的框、附件 chip 的框 —— 那是控件 / 容器边界,不是分割线。
+ * 与状态无关的动作同样在右上角:转交(选参与人员 → `taskTransfer`)、发起征询(选参与人员 →
+ * `actionCreate({toStatus: null})`)、编辑 / 删除 / 刷新,外加一颗 ⓘ 解释器。
+ *
+ * 视觉:色相只留三处 —— `primary`(在跑的状态节点 / 人头像)、`warn`(等你答复 / 锁定)、
+ * 优先级三色(只在徽章圆点上出现一次);其余一律中性。人员头像与评论头像**同色**(`bg-primary`)。
+ * 虚线(`border-dashed`)只画在「标签与其内容之间」与记录头底部;脊的连线用实线 + 箭头。
+ * 列表行用 hover 底色代替行分隔线;输入框描边、内容表格的框、附件 chip 的框保留(控件 / 容器边界)。
  */
 export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const trpc = useTRPC();
@@ -119,6 +102,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 管理员「改状态」弹窗:直接跳到模板里的任意状态 */
 	const [statusOpen, setStatusOpen] = useState(false);
 	const [statusTo, setStatusTo] = useState("");
+	/** 驳回弹窗:动作 id + 原因(驳回必须写原因,服务端也会拒空的) */
+	const [rejectId, setRejectId] = useState<string | null>(null);
+	const [rejectReason, setRejectReason] = useState("");
 	/** 正在预览的附件(开弹窗看 / 下载) */
 	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
 	/** 动态度:一次取多少条(「加载更多」每次 +20) */
@@ -164,6 +150,19 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				await invalidate();
 				setStatusOpen(false);
 				toast.success("状态已更新");
+			},
+			onError: (error) => toast.error(toApiError(error).message),
+		}),
+	);
+
+	/** 答复动作(通过 / 驳回)—— 只有指派人本人能答;驳回要写原因(服务端也会拒空的) */
+	const respondMutation = useMutation(
+		trpc.taskClose.actionRespond.mutationOptions({
+			onSuccess: async (_data, variables) => {
+				await invalidate();
+				setRejectId(null);
+				setRejectReason("");
+				toast.success(variables.approved ? "已通过" : "已驳回");
 			},
 			onError: (error) => toast.error(toApiError(error).message),
 		}),
@@ -310,11 +309,19 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		}
 		return (
 			<PageFrame>
-				<div className="space-y-3 py-12 text-center text-sm text-muted-foreground">
+				<div className="grid justify-items-center gap-3 py-12 text-center text-sm text-muted-foreground">
 					<p>{toApiError(detailQuery.error).message}</p>
-					<Link to="/task-close" className="text-primary underline-offset-4 hover:underline">
-						返回我的任务
-					</Link>
+					{/* 错误是恢复路径:先给「重试」(网络抖动不该逼人回列表),再给回列表 */}
+					<div className="flex items-center gap-2">
+						<Button variant="outline" size="sm" disabled={detailQuery.isFetching} onClick={() => detailQuery.refetch()}>
+							{detailQuery.isFetching ? "重试中…" : "重试"}
+						</Button>
+						<Link to="/task-close">
+							<Button variant="ghost" size="sm">
+								返回我的任务
+							</Button>
+						</Link>
+					</div>
 				</div>
 			</PageFrame>
 		);
@@ -335,20 +342,55 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	}));
 
 	/**
-	 * 「改状态」(直接改)的候选 —— **按事项流程派生**,不写死角色:
-	 *   · 管理员 → 模板里的**全部**状态(去掉当前态);
-	 *   · 其他角色 → `permissions.transitions`,即模板里他能直改的那几条 `direct` 边。
-	 * 锁定期(`permissions.locked`)两个状态类按钮都关掉 —— 服务端的锁守卫对管理员同样生效。
+	 * 「改状态」弹窗的候选:管理员 → 模板里的**全部**状态(去当前态);其他人 → `permissions.transitions`
+	 * (模板里他能直改的那几条 `direct` 边)。多个就让人在弹窗里选。
 	 */
 	const statusOptions = (
 		permissions.isAdmin
 			? statuses.map((status) => ({ value: status.value, label: status.label }))
 			: permissions.transitions.map((value) => ({ value, label: statusLabelOf(statuses, value) }))
 	).filter((option) => option.value !== task.status);
+
+	/**
+	 * 状态类按钮的候选 —— **全部由服务端 permissions 派生**,前端不自己解释 who / edges:
+	 *   · `actionTargets` → 发起审批(会锁任务,还要选交给谁);
+	 *   · `transitions` → 直接改;管理员例外,弹窗里可选模板里的**全部**状态。
+	 * 锁定期(`permissions.locked`)两个按钮都不出现 —— 与服务端锁守卫同形。
+	 *
+	 * 位置:回到**记录头右上角**的动作组(用户要求)。流程脊只画状态,不放动作。
+	 */
+	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
 	const canSetStatus = !permissions.locked && statusOptions.length > 0;
 
-	/** 「发起审批」按钮:有可发起的 action 边、且没被锁 */
-	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
+	/**
+	 * 「本状态该做的那一步」—— 右上动作组里**只给一个主按钮**的份量(checkup P1:八个控件齐平、没有主次)。
+	 * 两个状态动作都在时以「发起审批」为主动作(它才是往前推的那一步);只剩一个时,那一个就是主。
+	 */
+	const primaryStatusAction: "approve" | "setStatus" | null = canApprove
+		? "approve"
+		: canSetStatus
+			? "setStatus"
+			: null;
+
+	/**
+	 * 走过的状态 + 首次到达时刻 —— 读活动日志里 `toStatus` 非空的行(与流程条同源)。
+	 * 日志是倒序,翻正序后每个状态取**首次**那条;当前态也会命中,所以它自带"什么时候到的"。
+	 */
+	const reachedAt = new Map<string, string>();
+	for (const item of [...(logQuery.data?.items ?? [])].reverse()) {
+		if (!item.toStatus || !item.createdAt || reachedAt.has(item.toStatus)) continue;
+		reachedAt.set(item.toStatus, item.createdAt);
+	}
+
+	/** 「轮到你了」的待办 —— 指给我的、还没结的动作 */
+	const todoItems: TodoItem[] = myPendingActions.map((row) => ({
+		id: row.id,
+		title: row.toStatus
+			? `${row.createdName ?? "—"} 发起 ${statusLabelOf(statuses, row.fromStatus ?? "")} → ${statusLabelOf(statuses, row.toStatus)}`
+			: `${row.createdName ?? "—"} 发起征询`,
+		stateLabel: row.status === "active" ? "待答复" : "已发起",
+		actionable: row.status === "active",
+	}));
 
 	/**
 	 * 头部那颗 ⓘ 的文案 —— 把「当前身份 + 事项流程给这个身份的边」摊开,让用户自己核对按钮为什么是这几个。
@@ -397,11 +439,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 	return (
 		<PageFrame className="mx-auto w-full">
-			{/* ─── 头部(hd) ─────────────────────────────────────────────── */}
-			<header className="bg-background">
+			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
+			<header className="border-b border-dashed border-border bg-background">
 				<div className="px-8 pt-4 pb-5">
 					{/* 顶部左上:返回按钮(用户要求「顶部左上角」) */}
-					<div className="mb-2.5">
+					<div className="mb-1.5">
 						<Link to="/task-close">
 							<Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground">
 								<ArrowLeft className="size-3.5" />
@@ -410,24 +452,35 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</Link>
 					</div>
 
-					<div className="border-b border-dashed border-border grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_auto]">
-						{/* 主信息:标题(带徽章) + 描述 */}
+					<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+						{/* 主信息:记录头 —— 标题 + 一行**中性**元信息(徽章 + 日期,不再有彩色胶囊) */}
 						<div className="min-w-0">
-							<h1 className="mb-1.5 flex flex-wrap items-center gap-2 text-2xl font-bold leading-tight tracking-[-0.01em] text-foreground">
-								<span>{task.name}</span>
+							<h1 className="text-xl font-semibold leading-snug tracking-[-0.01em] text-foreground">{task.name}</h1>
+							<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
 								<StatusBadge status={task.status} label={statusLabelOf(statuses, task.status)} />
 								{task.priority ? (
 									<PriorityBadge priority={task.priority} label={priorityLabelOf(task.priority)} />
 								) : null}
-							</h1>
-							{task.description ? (
-								<p className="max-w-190 text-[13.5px] leading-relaxed text-muted-foreground wrap-break-word">
-									{task.description}
-								</p>
-							) : null}
+								<span className="inline-flex items-center gap-1.5">
+									<CalendarClock className="size-3.5 shrink-0" />
+									截止
+									<strong className="font-medium tabular-nums text-foreground">
+										{/* 日期字段按**天**显示 —— 选择器本来就只取到天,`00:00` 是假精度 */}
+										{task.dueAt ? formatLocalDate(task.dueAt) : "未设置"}
+									</strong>
+								</span>
+								<span className="inline-flex items-center gap-1.5">
+									<Clock className="size-3.5 shrink-0" />
+									创建于
+									<strong className="font-medium tabular-nums text-foreground">
+										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
+									</strong>
+								</span>
+							</div>
 						</div>
 
-						{/* 右上动作组 —— 与状态有关的按钮按事项流程派生,其余按身份(见上文 `myRole` / `canApprove` / `canSetStatus`) */}
+						{/* 右上动作组 —— **只放与状态无关的动作**(转交 / 征询 / 编辑 / 删除 / 刷新);
+						    改状态那类按钮搬进了流程脊的当前节点(见 `TaskFlowSpine`) */}
 						<div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
 							{/* 「为什么有这些按钮」—— 悬停 / 聚焦展开:当前身份 + 事项流程给这个身份的边,方便复核 */}
 							<TooltipProvider>
@@ -478,10 +531,10 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									发起征询
 								</Button>
 							) : null}
-							{/* 「发起审批」—— 按事项流程派生:当前状态有我能发起的 action 边才出现 */}
+							{/* 「发起审批」/「改状态」—— 由事项流程派生,但入口按用户要求**留在右上角动作组** */}
 							{canApprove ? (
 								<Button
-									variant="outline"
+									variant={primaryStatusAction === "approve" ? "default" : "outline"}
 									size="sm"
 									title="发起审批;任务会锁定,等对方答复"
 									disabled={peopleOptions.length === 0}
@@ -494,14 +547,13 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									发起审批
 								</Button>
 							) : null}
-							{/* 「改状态」—— 按事项流程派生:管理员任意状态;其他角色只有模板里他能直改的那几条 */}
 							{canSetStatus ? (
 								<Button
-									variant="outline"
+									variant={primaryStatusAction === "setStatus" ? "default" : "outline"}
 									size="sm"
 									title={permissions.isAdmin ? "直接把任务改到任意状态(管理员)" : "按事项流程直接改状态"}
 									onClick={() => {
-										setStatusTo("");
+										setStatusTo(statusOptions[0]?.value ?? "");
 										setStatusOpen(true);
 									}}
 								>
@@ -524,80 +576,49 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</div>
 					</div>
 
-					{/* meta-line:任务头那唯一一条虚线在「标题块」的 `border-b` 上(这里不再重复画),以下是三条胶囊化元信息 */}
-					<ul className="mt-4 flex flex-wrap items-center gap-2">
-						<li className="inline-flex items-center gap-1.5 rounded-full bg-hue-blue-soft px-2.5 py-1 text-[12px] text-hue-blue-fg">
-							<CalendarClock className="size-3.5 shrink-0" />
-							<span>截止</span>
-							<strong className="font-semibold">{task.dueAt ? formatLocalMinute(task.dueAt) : "未设置"}</strong>
-						</li>
-						<li className="inline-flex items-center gap-1.5 rounded-full bg-hue-violet-soft px-2.5 py-1 text-[12px] text-hue-violet-fg">
-							<Flag className="size-3.5 shrink-0" />
-							<span>优先级</span>
-							<strong className="font-semibold">{task.priority ? priorityLabelOf(task.priority) : "未设置"}</strong>
-						</li>
-						<li className="inline-flex items-center gap-1.5 rounded-full bg-hue-teal-soft px-2.5 py-1 text-[12px] text-hue-teal-fg">
-							<Clock className="size-3.5 shrink-0" />
-							<span>创建于</span>
-							<strong className="font-semibold">{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}</strong>
-						</li>
-					</ul>
+					{task.description ? (
+						<p className="mt-3 max-w-[70ch] text-[13px] leading-relaxed text-muted-foreground wrap-break-word">
+							{task.description}
+						</p>
+					) : null}
 				</div>
 			</header>
 
-			{/* ─── main layout ─────────────────────────────────────────── */}
-			<main className="grid gap-8 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+			{/* ─── 流程脊 —— 只画状态(走到哪了);动作在右上角动作组 ─────────────── */}
+			<section className="grid gap-3 px-8 pt-5">
+				<h2 className="text-[11px] font-semibold tracking-wide text-muted-foreground">事项流程</h2>
+				<TaskFlowSpine
+					statuses={statuses}
+					current={task.status}
+					visited={new Set(reachedAt.keys())}
+					reachedAt={reachedAt}
+					locked={permissions.locked}
+				/>
+			</section>
+
+			{/* ─── 轮到你了 —— 横向动作条:每条待办就地「通过 / 驳回」 ─────────────── */}
+			{myPendingActions.length > 0 ? (
+				<section className="px-8 pt-3">
+					<TaskTodoStrip
+						items={todoItems}
+						busy={respondMutation.isPending}
+						onApprove={(id) => respondMutation.mutate({ id, approved: true })}
+						onReject={(id) => {
+							setRejectReason("");
+							setRejectId(id);
+						}}
+					/>
+				</section>
+			) : null}
+
+			{/* ─── main:左 画布(内容 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
+			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_300px]">
 				{/* 左 main */}
 				<section className="grid gap-6 min-w-0">
-					{/* 轮到我横幅 —— `myActionIds ∩ 本任务未结动作` 非空才出现 */}
-					{myPendingActions.length > 0 ? (
-						<aside
-							role="alert"
-							className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3.5 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3.5 dark:border-amber-800 dark:bg-amber-950/40"
-						>
-							<div className="mt-0.5 flex size-7 items-center justify-center rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400">
-								<AlertCircle className="size-4" />
-							</div>
-							<div className="grid gap-1.5">
-								<div className="text-sm text-foreground">
-									<strong className="font-semibold">需你处理</strong> · {myPendingActions.length} 项待办
-								</div>
-								<ul className="grid gap-1">
-									{myPendingActions.slice(0, 3).map((row) => {
-										const arrow =
-											row.fromStatus && row.toStatus && row.fromStatus !== row.toStatus
-												? `${statusLabelOf(statuses, row.fromStatus)} → ${statusLabelOf(statuses, row.toStatus)}`
-												: "动作待办";
-										return (
-											<li key={row.id} className="inline-flex items-center gap-2 text-[12.5px]">
-												<span
-													className={cn(
-														"inline-flex h-[18px] items-center rounded px-1.5 text-[10.5px] font-bold",
-														row.status === "active"
-															? "bg-primary/10 text-primary"
-															: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-													)}
-												>
-													{row.status === "active" ? "待答复" : "已发起"}
-												</span>
-												<span className="text-foreground">{arrow}</span>
-											</li>
-										);
-									})}
-								</ul>
-							</div>
-							<div className="flex items-center gap-2 self-center">
-								<Button size="sm">去处理</Button>
-							</div>
-						</aside>
-					) : null}
-
 					{/* 任务内容 block —— 文本 / 表格 / 引用 / 外链,按注册表渲染(未知块降级成占位,不崩) */}
 					<section className="grid gap-3">
 						<header className="flex items-center justify-between">
-							<h2 className="inline-flex items-baseline gap-1.5 text-[13px] font-bold tracking-tight text-foreground">
-								任务内容
-							</h2>
+							<h2 className="text-base font-semibold tracking-tight text-foreground">任务内容</h2>
 						</header>
 						<TaskContentBlocks content={content} />
 					</section>
@@ -605,8 +626,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					{/* 附件 block */}
 					<section className="grid gap-3 pt-6">
 						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="inline-flex items-baseline gap-1.5 text-[13px] font-bold tracking-tight text-foreground">
-								附件 <span className="text-xs font-medium text-muted-foreground">{attachments.length}</span>
+							<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+								附件{" "}
+								<span className="text-[11px] font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
 							</h2>
 							{/* 新增附件:只有任务**创建人**能看到并使用(执行者 / 参与者 / 旁观者不显示) */}
 							{task.creatorId === meId ? (
@@ -629,73 +651,76 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					{/* 评论与回复 block —— TaskCloseComments 自带输入 + 嵌套 thread */}
 					<section className="grid gap-3 pt-6">
 						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="inline-flex items-baseline gap-1.5 text-[13px] font-bold tracking-tight text-foreground">
+							<h2 id="tc-comments-title" className="text-base font-semibold tracking-tight text-foreground">
 								评论与回复
 							</h2>
 						</header>
 						{/* 删评论:只有作者本人;`canRemoveAny` 只给管理员(创建者也不能删别人的) */}
-						<TaskCloseComments taskId={task.id} meId={meId} canRemoveAny={myRole === "admin"} />
+						<TaskCloseComments
+							taskId={task.id}
+							meId={meId}
+							canRemoveAny={myRole === "admin"}
+							labelledBy="tc-comments-title"
+						/>
 					</section>
 				</section>
 
-				{/* 右 side(sticky) */}
-				<aside className="sticky top-[72px] grid gap-6 self-start">
-					{/* 参与人员 block */}
-					<section className="grid gap-3">
-						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="inline-flex items-baseline gap-1.5 text-[13px] font-bold tracking-tight text-foreground">
-								参与人员 <span className="text-xs font-medium text-muted-foreground">{members.length + 1}</span>
-							</h2>
-							{can.addMember ? (
-								<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={() => setMemberOpen(true)}>
-									<UserPlus className="size-3.5" />
-								</Button>
-							) : null}
-						</header>
-						<ul className="grid gap-0.5">
-							<PeopleRow roleLabel="创建人" name={task.creatorName ?? "—"} main={false} />
-							{members.map((m) => (
-								<PeopleRow
-									key={`${m.userId}-${m.role}`}
-									roleLabel={roleText(m.role)}
-									name={m.name ?? m.userId}
-									main={m.isPrimary}
-									onRemove={
-										can.manageMembers
-											? () =>
-													setPendingRemoveMember({
-														userId: m.userId,
-														role: m.role as "participant" | "executor",
-														name: m.name ?? m.userId,
-													})
-											: undefined
-									}
-									removing={memberRemoveMutation.isPending}
-								/>
-							))}
-							{members.length === 0 ? (
-								<li className="py-3 text-[12.5px] text-muted-foreground">
-									还没有其他人。加人后他们能答复动作、参与讨论。
-								</li>
-							) : null}
-						</ul>
-					</section>
+				{/* 右 检查器 —— 两块合成**一张面板**:内部用 inset 细线分组,不再每块各画一条虚线 */}
+				<aside className="sticky top-[72px] self-start">
+					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
+						{/* 参与人员 */}
+						<section className="grid gap-2 p-3.5">
+							<header className="flex items-center justify-between">
+								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+									参与人员{" "}
+									<span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+										{members.length + 1}
+									</span>
+								</h2>
+								{can.addMember ? (
+									<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={() => setMemberOpen(true)}>
+										<UserPlus className="size-3.5" />
+									</Button>
+								) : null}
+							</header>
+							<ul className="grid gap-0.5">
+								<PeopleRow roleLabel="创建人" name={task.creatorName ?? "—"} main={false} />
+								{members.map((m) => (
+									<PeopleRow
+										key={`${m.userId}-${m.role}`}
+										roleLabel={m.isPrimary ? "主执行" : roleText(m.role)}
+										name={m.name ?? m.userId}
+										main={m.isPrimary}
+										onRemove={
+											can.manageMembers
+												? () =>
+														setPendingRemoveMember({
+															userId: m.userId,
+															role: m.role as "participant" | "executor",
+															name: m.name ?? m.userId,
+														})
+												: undefined
+										}
+										removing={memberRemoveMutation.isPending}
+									/>
+								))}
+								{members.length === 0 ? (
+									<li className="py-3 text-[13px] text-muted-foreground">
+										还没有其他人。加人后他们能答复动作、参与讨论。
+									</li>
+								) : null}
+							</ul>
+						</section>
 
-					{/* 流程动态 block —— 状态流(上) + 事件流(下) */}
-					<section className="grid gap-3 pt-6">
-						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="inline-flex items-baseline gap-1.5 text-[13px] font-bold tracking-tight text-foreground">
-								流程动态
-							</h2>
-							<Badge variant="secondary" className="text-[10px]">
-								<Send className="mr-1 size-3" />
-								实时
-							</Badge>
-						</header>
-						<TaskStatusTimeline logs={logQuery.data?.items ?? []} statuses={statuses} current={task.status} />
-						<div className="mt-3 grid gap-1">
-							<h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">事件</h3>
-							<TaskCloseLogList items={logQuery.data?.items ?? []} statuses={statuses} roleLabel={roleText} />
+						{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
+						<section className="grid gap-2 border-t border-border p-3.5">
+							<h2 className="text-base font-semibold tracking-tight text-foreground">动态</h2>
+							<TaskCloseLogList
+								items={logQuery.data?.items ?? []}
+								statuses={statuses}
+								roleLabel={roleText}
+								loading={logQuery.isPending}
+							/>
 							{(logQuery.data?.items?.length ?? 0) < (logQuery.data?.total ?? 0) ? (
 								<div className="pt-1.5 ps-7">
 									<Button
@@ -708,8 +733,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									</Button>
 								</div>
 							) : null}
-						</div>
-					</section>
+						</section>
+					</div>
 				</aside>
 			</main>
 
@@ -852,6 +877,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</DialogHeader>
 					<DialogBody className="space-y-1 py-1">
 						{actionMode === "approve" ? (
+							/* 目标状态:多个候选时让人在弹窗里选(入口在右上角,不像之前那样点节点即定) */
 							<DetailRow label="目标状态" align="center">
 								<Select
 									items={actionTargetOptions}
@@ -991,6 +1017,44 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</DialogContent>
 			</Dialog>
 
+			{/* 驳回 —— 必须写原因;原因会以一条评论留档(服务端同一口径) */}
+			<Dialog
+				open={rejectId !== null}
+				onOpenChange={(next) => {
+					if (!next) setRejectId(null);
+				}}
+			>
+				<DialogContent className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>驳回</DialogTitle>
+						<DialogDescription>驳回要填写原因,会作为一条评论留档,和相关人一起看。</DialogDescription>
+					</DialogHeader>
+					<DialogBody>
+						<DetailRow label="原因" align="center">
+							<Textarea
+								rows={3}
+								value={rejectReason}
+								placeholder="说明为什么驳回…"
+								onChange={(event) => setRejectReason(event.target.value)}
+							/>
+						</DetailRow>
+					</DialogBody>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setRejectId(null)} disabled={respondMutation.isPending}>
+							取消
+						</Button>
+						<Button
+							disabled={respondMutation.isPending || rejectReason.trim().length === 0}
+							onClick={() =>
+								rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
+							}
+						>
+							{respondMutation.isPending ? "提交中…" : "驳回"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
 			<TaskAttachmentPreview
 				taskId={task.id}
 				attachment={previewAttachment}
@@ -1035,12 +1099,15 @@ const ROLE_WHY: Record<string, string> = {
 };
 
 /**
- * 参与人员块里的一行 —— 左侧角色标签 + 右侧人名(主执行人用紫色高亮:头像 `bg-hue-violet`、名字 `text-hue-violet-fg`);
- * `onRemove` 非空时显式给「移出」按钮(原型的视觉占位)。
+ * 参与人员块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
  *
- * 头像底走品牌蓝 `bg-primary` / 紫色 `bg-hue-violet`,配 `text-*-foreground` / `text-hue-violet-on`
- * 这对**语义 token**(深色模式自动翻转);**不要写 `bg-accent`** —— 它在本项目是浅灰面 `#f8fafc`,
- * 白字压上去直接看不见(原型里的 `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。
+ * 头像与「评论与回复」`TaskCloseComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
+ * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
+ * 「主执行」这个身份靠**角色标签**(页面上传的是 `主执行`)+ 名字加粗来区分,不靠颜色。
+ *
+ * 用 `bg-primary` / `text-primary-foreground` 这对**语义 token**(深色模式自动翻转);
+ * **不要写 `bg-accent`** —— 它在本项目是浅灰面 `#f8fafc`,白字压上去直接看不见
+ * (原型里的 `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。
  *
  * `roleLabel` 不是 HTML `role` 属性 —— prop 名刻意避开 ARIA 关键字,免得 biome 把
  * 「创建人/主执行」之类的中文字面误判成 ARIA role。
@@ -1061,22 +1128,18 @@ function PeopleRow({
 	const initials = (name || "?").slice(0, 1);
 	return (
 		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-hover">
-			<span className="w-14 text-[11.5px] text-muted-foreground">{roleLabel}</span>
+			<span className="w-14 shrink-0 text-[11px] text-muted-foreground">{roleLabel}</span>
 			<div className="flex min-w-0 flex-1 items-center gap-1.5">
 				<span
 					className={cn(
-						"flex size-5.5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+						// 与「评论与回复」的头像**同色**:品牌蓝底 + 浅字 —— 同一个人在两处长得一样
+						"flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground",
 						"shadow-[0_0_0_1.5px_var(--color-background),0_0_0_2.5px_var(--color-border)]",
-						main
-							? "bg-hue-violet text-hue-violet-on ring-2 ring-hue-violet-line"
-							: "bg-primary text-primary-foreground",
 					)}
 				>
 					{initials}
 				</span>
-				<span className={cn("truncate text-[13px] font-medium", main ? "text-hue-violet-fg" : "text-foreground")}>
-					{name}
-				</span>
+				<span className={cn("truncate text-[13px] text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemove ? (
 				<Button variant="ghost" size="icon-sm" aria-label="移出成员" disabled={removing} onClick={onRemove}>

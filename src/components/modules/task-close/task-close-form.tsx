@@ -129,7 +129,7 @@ export function TaskCloseForm({
 					<DetailRow label="任务名称" htmlFor="tc-name">
 						<Input
 							id="tc-name"
-							className="h-8 text-sm"
+							className="h-9 text-base sm:h-8 sm:text-sm"
 							value={name}
 							onChange={(e) => setName(e.target.value)}
 							placeholder="比如:3 号机组巡检"
@@ -200,6 +200,7 @@ export function TaskCloseForm({
 						<Textarea
 							id="tc-desc"
 							rows={3}
+							className="text-base sm:text-sm"
 							value={description}
 							onChange={(e) => setDescription(e.target.value)}
 							placeholder="补充说明(可空)"

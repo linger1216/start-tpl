@@ -5,21 +5,15 @@ import { cn } from "#/lib/utils";
 /**
  * `tc_task.priority` 的展示 —— 三档 + 「未设置」。
  *
- * 色板遵循项目已有的 hue-* 软色调:
- *   P0(0 · 最高) → hue-rose(危机红)
- *   P1(1 · 高)   → hue-amber(琥珀)
- *   P2(2 · 普通) → hue-emerald(绿)
- *
- * 「未设置」走中性灰,与 StatusBadge 的 closed/archived 同形 —— **不靠颜色表意**,
- * 文字 label 一律在徽章里再确认。
+ * 造型与 `StatusBadge` 同构:中性描边胶囊 + 一颗**优先级圆点**。
+ * 色相沿用项目已有的 hue-*(P0 玫 / P1 琥 / P2 翠),但只落在 6px 的小圆点上 ——
+ * 「未设置」走中性,文字 label 一律在徽章里再确认,不靠颜色表意。
  */
-const PRIORITY_TONE: Record<TaskPriority, string> = {
-	0: "border-transparent bg-hue-rose-soft text-hue-rose-fg",
-	1: "border-transparent bg-hue-amber-soft text-hue-amber-fg",
-	2: "border-transparent bg-hue-emerald-soft text-hue-emerald-fg",
+const PRIORITY_DOT: Record<TaskPriority, string> = {
+	0: "bg-hue-rose",
+	1: "bg-hue-amber",
+	2: "bg-hue-emerald",
 };
-
-const NONE_TONE = "border-transparent bg-muted text-muted-foreground";
 
 /**
  * 优先级徽章 —— `priority` 为 null / 未知数字 → 「未设置」徽章,不抛错。
@@ -37,10 +31,11 @@ export function PriorityBadge({
 	className?: string;
 }) {
 	const isKnown = priority === 0 || priority === 1 || priority === 2 ? (priority as TaskPriority) : null;
-	const tone = isKnown !== null ? PRIORITY_TONE[isKnown] : NONE_TONE;
+	const dot = isKnown !== null ? PRIORITY_DOT[isKnown] : "bg-muted-foreground/40";
 	const text = label ?? (isKnown !== null ? priorityLabelOf(priority) : "未设置");
 	return (
-		<Badge variant="outline" className={cn(tone, className)}>
+		<Badge variant="outline" className={cn("gap-1.5 text-muted-foreground", className)}>
+			<span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", dot)} />
 			{text}
 		</Badge>
 	);

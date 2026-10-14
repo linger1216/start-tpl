@@ -32,12 +32,18 @@ export function TaskCloseComments({
 	meId,
 	meName,
 	canRemoveAny,
+	labelledBy,
 }: {
 	taskId: string;
 	meId: string;
 	/** `meName` 给 ci 输入区 avatar 当首字母;load 失败时 fallback "我" */
 	meName?: string | null;
 	canRemoveAny: boolean;
+	/**
+	 * 输入框的可见标签 id(调用方区块标题的 id)—— checkup P3:输入之后 placeholder 就没了,
+	 * 光靠它当标签不够;指到区块标题上,字段名在页面上始终存在。
+	 */
+	labelledBy?: string;
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -109,15 +115,16 @@ export function TaskCloseComments({
 			{/* ci —— 评论输入(原型的样:avatar + 边框 field + 工具条 + 发送) */}
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
 				<Avatar initials={(meName ?? "我").slice(0, 1)} />
-				{/* 输入框:静态描边(控件边界,不是分割线);去掉 focus 变色 / 外圈,也去掉内部两条虚线 */}
-				<div className="rounded-lg border border-border bg-card">
+				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
+				<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
 					<textarea
 						rows={3}
 						value={content}
 						onChange={(e) => setContent(e.target.value)}
 						placeholder="说点什么…  输入 @ 提及成员"
 						aria-label="评论"
-						className="block w-full resize-none bg-transparent px-3.5 py-3 text-[13.5px] leading-[1.55]  placeholder:text-muted-foreground"
+						aria-labelledby={labelledBy}
+						className="block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.55] placeholder:text-muted-foreground sm:text-[13px]"
 						onKeyDown={(e) => {
 							if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 								e.preventDefault();
@@ -193,15 +200,16 @@ export function TaskCloseComments({
 										<span className="text-[11.5px] text-muted-foreground">{formatLocalMinute(item.createdAt)}</span>
 									) : null}
 								</div>
-								<p className="mt-1 text-[13.5px] leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
+								<p className="mt-1 text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
 								{item.attachments.length > 0 ? (
 									<div className="mt-1.5">
 										{/* 复用任务附件的预览弹窗:chip 可点 → 预览 / 下载 */}
 										<TaskAttachmentList attachments={item.attachments} onOpen={setPreview} />
 									</div>
 								) : null}
+								{/* 悬停**或键盘聚焦**才显形 —— 只挂 group-hover 会让 Tab 落在一个看不见的按钮上 */}
 								{item.authorId === meId || canRemoveAny ? (
-									<div className="mt-1 inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+									<div className="mt-1 inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
 										<Button
 											size="sm"
 											variant="ghost"

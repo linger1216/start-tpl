@@ -290,7 +290,7 @@ function TableEditor({ value, onChange, disabled }: EditorProps) {
 											value={col.label}
 											aria-label={`第 ${index + 1} 列列名`}
 											placeholder="列名"
-											className="h-7 min-w-0 flex-1 text-xs font-medium"
+											className="h-7 min-w-0 flex-1 text-base sm:text-xs"
 											disabled={disabled}
 											onChange={(event) => setLabel(index, event.target.value)}
 										/>
@@ -316,7 +316,7 @@ function TableEditor({ value, onChange, disabled }: EditorProps) {
 											value={row[col.key] ?? ""}
 											aria-label={`第 ${rowIndex + 1} 行「${col.label || col.key}」`}
 											placeholder="—"
-											className="h-7 min-w-0 text-xs"
+											className="h-7 min-w-0 text-base sm:text-xs"
 											disabled={disabled}
 											onChange={(event) => setCell(rowIndex, col.key, event.target.value)}
 										/>
