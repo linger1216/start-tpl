@@ -373,13 +373,18 @@ async function permissionsOf(task: TaskRow, meId: string) {
 	const myRoles = [...(isAdmin ? ["admin"] : []), ...(isCreator ? ["creator"] : []), ...memberRoles];
 
 	const transitions: string[] = [];
+	/** 我能发起的「改状态」action 的目标状态(前端「发起审批」弹窗的候选项)—— 模板里枚举好的 `via=action` 边 */
+	const actionTargets: string[] = [];
 	let canInitiateStatusAction = false;
 	for (const edge of workflowOf(task).edges ?? []) {
 		if (edge.from !== task.status) continue;
 		// 管理员不受 `who` 限制:当前状态能走的边他都能走
 		if (!isAdmin && !(await canAct(task, meId, edge.who ?? [], memberRoles))) continue;
 		if (edge.via === "direct") transitions.push(edge.to);
-		else canInitiateStatusAction = true;
+		else {
+			canInitiateStatusAction = true;
+			actionTargets.push(edge.to);
+		}
 	}
 
 	return {
@@ -387,8 +392,12 @@ async function permissionsOf(task: TaskRow, meId: string) {
 		isAdmin,
 		isCreator,
 		myRoles,
+		/** 任务当前是否被未完成的审批动作锁住 —— 锁定期谁都改不了状态(前端据此把按钮禁掉) */
+		locked: await isLocked(task.id),
 		/** 我能**直接**改到的状态 */
 		transitions,
+		/** 我能发起「改状态」action 的目标状态(可空;多个时前端让用户选) */
+		actionTargets,
 		/** 我能发起「改状态」的 action */
 		canInitiateStatusAction,
 		/** 我能发起「不改状态」的 action(征询)—— creator / participant / executor / admin */
@@ -829,6 +838,10 @@ export const taskCloseRouter = createTRPCRouter({
 	 *
 	 * 三道校验,缺一不可:① 目标状态在快照的 `statuses` 里;② 从当前状态到目标存在 `via='direct'` 的边;
 	 * ③ 这条边的 `who` 命中当前用户。任务被锁(有未完成的 `is_locking` action)时一律拒绝。
+	 *
+	 * **只有管理员例外**:目标状态只要是模板里声明的,**任意状态都能直接改**(② ③ 都不查)。
+	 * 其他角色(含创建者)**一律按模板走** —— 前端只把 `permissions.transitions` 里那几条直改边列出来。
+	 * 锁守卫对所有人一视同仁(管理员也不能在锁定期改):那会留下一个 `to_status` 与任务状态对不上的活动作。
 	 */
 	taskTransit: protectedProcedure
 		.input(z.object({ id: ID, to: z.string().min(1).max(32) }))
@@ -850,11 +863,14 @@ export const taskCloseRouter = createTRPCRouter({
 				const edge = (workflow.edges ?? []).find(
 					(item) => item.from === task.status && item.to === input.to && item.via === "direct",
 				);
-				if (!edge) {
-					throw new TRPCError({ code: "BAD_REQUEST", message: `没有 ${task.status} → ${input.to} 的直接转移` });
-				}
-				if (!isAdmin && !(await canAct(task, me.id, edge.who ?? []))) {
-					throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限做这次状态转移" });
+				// 只有管理员免检;其他角色(含创建者)都必须走模板里声明的那条 direct 边、且 who 命中
+				if (!isAdmin) {
+					if (!edge) {
+						throw new TRPCError({ code: "BAD_REQUEST", message: `没有 ${task.status} → ${input.to} 的直接转移` });
+					}
+					if (!(await canAct(task, me.id, edge.who ?? []))) {
+						throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限做这次状态转移" });
+					}
 				}
 				const now = new Date();
 				await tx.update(taskCloseTask).set({ status: input.to, updated_at: now }).where(eq(taskCloseTask.id, task.id));
@@ -865,7 +881,7 @@ export const taskCloseRouter = createTRPCRouter({
 					actor: me,
 					fromStatus: task.status,
 					toStatus: input.to,
-					detail: { who: edge.who ?? [] },
+					detail: { who: edge?.who ?? [] },
 					at: now,
 				});
 			});
@@ -964,6 +980,93 @@ export const taskCloseRouter = createTRPCRouter({
 					actor: me,
 					targetId: input.userId,
 					detail: { role: input.role },
+					at: now,
+				});
+			});
+			return { ok: true };
+		}),
+
+	/**
+	 * **转交**执行人 —— 把「执行者」这个身份交给同任务里的另一位参与人员(原子换人)。
+	 *
+	 * 语义(用户约定):新人成为**唯一主执行人**;其余执行者一律降为参与者。
+	 * 能转交的:管理员,或当前是执行者的成员。目标只能是**本任务的成员**
+	 * (创建者不进 `tc_member`),且不能是自己。
+	 *
+	 * 为什么不拆成 `memberAdd` + `memberRemove` 两次调用:那是两条独立事务,中间会出现
+	 * 「两个主执行人 / 一个执行人都没有」的窗口;而且执行者本人并没有 `memberRemove` 权限。
+	 * `tc_member` 的 UK 是 `(task_id, user_id, role)`,所以「换角色」一律**先删行再插行**,
+	 * 免得同一人留下 participant + executor 两行。
+	 */
+	taskTransfer: protectedProcedure
+		.input(z.object({ taskId: ID, userId: z.string().min(1).max(36) }))
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			const isAdmin = await isAdminUser(me.id);
+			const now = new Date();
+			await db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.taskId);
+				const myRoles = await memberRolesOf(task.id, me.id, tx);
+				if (!isAdmin && !myRoles.includes("executor")) {
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有执行者或管理员能转交" });
+				}
+				if (input.userId === task.creator_id) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: "不能转交给创建者(他不在成员表里)" });
+				}
+				if (input.userId === me.id) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: "不能转交给自己" });
+				}
+				const target = await tx
+					.select({ id: taskCloseMember.id })
+					.from(taskCloseMember)
+					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)));
+				if (target.length === 0) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: "只能转交给这条任务的参与人员" });
+				}
+
+				// 转交前的主执行人(没有主执行人就退回「操作者本人,若他是执行者」)
+				const executors = await tx
+					.select({ userId: taskCloseMember.user_id, isPrimary: taskCloseMember.is_primary })
+					.from(taskCloseMember)
+					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.role, "executor")));
+				const fromUserId =
+					executors.find((row) => row.isPrimary === 1)?.userId ?? (myRoles.includes("executor") ? me.id : null);
+				const demote = executors.map((row) => row.userId).filter((userId) => userId !== input.userId);
+
+				// 目标 → 执行者 + 主执行人(先清掉它原有的行,免得留下 participant + executor 两行)
+				await tx
+					.delete(taskCloseMember)
+					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)));
+				await tx.insert(taskCloseMember).values({
+					id: newId(),
+					task_id: task.id,
+					user_id: input.userId,
+					role: "executor",
+					is_primary: 1,
+					created_at: now,
+					updated_at: now,
+				});
+				// 其余执行者 → 参与者(与目标同一人已排除)
+				for (const userId of demote) {
+					await tx
+						.delete(taskCloseMember)
+						.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, userId)));
+					await tx.insert(taskCloseMember).values({
+						id: newId(),
+						task_id: task.id,
+						user_id: userId,
+						role: "participant",
+						is_primary: 0,
+						created_at: now,
+						updated_at: now,
+					});
+				}
+				await logTaskEvent(tx, {
+					taskId: task.id,
+					event: "member.transfer",
+					actor: me,
+					targetId: input.userId,
+					detail: { from: fromUserId },
 					at: now,
 				});
 			});
@@ -1356,7 +1459,9 @@ export const taskCloseRouter = createTRPCRouter({
 		const personIds = rows.flatMap((row) => {
 			const detail = detailOf(row.detail);
 			const ids = [row.actor_name ? "" : row.actor_id];
-			if (row.event === "member.add" || row.event === "member.remove") ids.push(row.target_id ?? "");
+			if (row.event === "member.add" || row.event === "member.remove" || row.event === "member.transfer") {
+				ids.push(row.target_id ?? "");
+			}
 			if (row.event === "action.create" || row.event === "action.respond") {
 				ids.push(typeof detail.handleId === "string" ? detail.handleId : "");
 			}

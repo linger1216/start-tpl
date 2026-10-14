@@ -31,7 +31,8 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
 // 98 → 102:任务闭环新增流程模板管理 4 个(`workflowGet/Create/Update/Remove`,protectedProcedure)
 // 102 → 103:任务闭环新增 `attachmentUrl`(任务附件取地址,protectedProcedure)
 // 103 → 104:任务闭环新增 `logList`(活动日志读接口,protectedProcedure)
-const EXPECTED_PROCEDURES = 104;
+// 104 → 105:任务闭环新增 `taskTransfer`(转交执行人,protectedProcedure)
+const EXPECTED_PROCEDURES = 105;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

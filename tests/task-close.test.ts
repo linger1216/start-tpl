@@ -22,12 +22,14 @@ import {
 	taskCloseWorkflow,
 } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
+import { addUserRole, removeAllRolesOfUser } from "../src/lib/casbin.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
 import {
 	assertRejects,
 	caller,
 	callerAs,
 	closeDb,
+	getSystemAdminRoleRow,
 	purgeTestAuditRows,
 	TEST_PREFIX,
 	testId,
@@ -229,7 +231,8 @@ describe("任务闭环", () => {
 	it("活动日志与业务同事务:业务被拒就不留行", async () => {
 		const id = await newTask("日志回滚");
 		const before = (await asA().taskClose.logList({ taskId: id, pageSize: 100 })).total;
-		// open → closed 没有直改边 ⇒ 抛错;按「同事务」口径,日志一行都不能多
+		// 创建者改 open → closed:模板里没这条直改边 ⇒ 抛错(创建者也必须按事项流程走);
+		// 按「同事务」口径,日志一行都不能多
 		await assertRejects(() => asA().taskClose.taskTransit({ id, to: "closed" }), "直接转移");
 		const after = (await asA().taskClose.logList({ taskId: id, pageSize: 100 })).total;
 		assert.equal(after, before, "业务被拒就不该留下日志");
@@ -297,9 +300,74 @@ describe("任务闭环", () => {
 		assert.equal(mine.authorName, C.name, "回填作者姓名");
 		assert.deepEqual(mine.attachments, [], "不存在的附件 id 直接丢掉,不留空行");
 
-		await assertRejects(() => asB().taskClose.commentRemove({ id: commentId }), "作者本人");
+		await assertRejects(() => asB().taskClose.commentRemove({ id: commentId }), "只能删除自己的评论");
 		await asC().taskClose.commentRemove({ id: commentId });
 		assert.equal((await asA().taskClose.commentList({ taskId: id })).length, 0, "软删之后不再出现");
+	});
+
+	it("转交执行人:新人当执行者,原执行人降为参与者,且留痕", async () => {
+		const id = await newTask("转交");
+		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
+
+		// 参与者不能转交;目标只能是本任务成员(不能给创建者)
+		await assertRejects(() => asC().taskClose.taskTransfer({ taskId: id, userId: B.id }), "执行者或管理员");
+		await assertRejects(() => asB().taskClose.taskTransfer({ taskId: id, userId: A.id }), "创建者");
+
+		// 乙(主执行人)转交给丙
+		await asB().taskClose.taskTransfer({ taskId: id, userId: C.id });
+		const after = await asA().taskClose.taskGet({ id });
+		const next = after.members.find((m) => m.userId === C.id);
+		const prev = after.members.find((m) => m.userId === B.id);
+		assert.equal(next?.role, "executor");
+		assert.equal(next?.isPrimary, true, "新执行人是主执行");
+		assert.equal(prev?.role, "participant", "原执行人降为参与者");
+
+		const transfer = (await asA().taskClose.logList({ taskId: id })).items.find(
+			(row) => row.event === "member.transfer",
+		);
+		assert.ok(transfer, "转交要留痕");
+		assert.equal(transfer.targetName, C.name, "留痕的 target 是转交后的执行人");
+	});
+
+	it("管理员:可以直接把任务改到模板里的任意状态(不必存在对应的边)", async () => {
+		const id = await newTask("管理员改状态");
+		// 丙临时持「系统管理员」角色 —— `isAdminUser` 查的就是 casbin 这张图。
+		// 用丙(既不是创建者、也不是这条任务的成员),才验得到「管理员」这条路本身。
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			// 乙(执行者):open 没有到 archived 的 direct 边、也不是创建者 → 拒
+			await assertRejects(() => asB().taskClose.taskTransit({ id, to: "archived" }), "直接转移");
+			// 管理员:模板里声明的任意状态都能直接改
+			await asC().taskClose.taskTransit({ id, to: "archived" });
+			assert.equal((await asC().taskClose.taskGet({ id })).task.status, "archived");
+		} finally {
+			// 摘掉角色,别污染这个文件共用的甲 / 乙 / 丙
+			await removeAllRolesOfUser(C.id);
+		}
+	});
+
+	it("创建者:沿模板的 direct 边能改状态(默认流程 done → closed)", async () => {
+		const id = await newTask("创建者直改");
+		// 先走到「待核验」:执行者发起 open→done 的审批,指派人答复通过
+		const { id: actionId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
+		await asB().taskClose.actionRespond({ id: actionId, approved: true });
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "done");
+
+		// 创建者按模板里 done→closed 这条 direct 边直改
+		await asA().taskClose.taskTransit({ id, to: "closed" });
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "closed");
+	});
+
+	it("锁定期:连管理员也不能直接改状态", async () => {
+		const id = await newTask("锁定改状态");
+		// 乙发起审批 → 任务锁成 pending
+		await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			await assertRejects(() => asC().taskClose.taskTransit({ id, to: "closed" }), "锁定");
+		} finally {
+			await removeAllRolesOfUser(C.id);
+		}
 	});
 
 	it("待我处理:只列自己的、还活着的动作", async () => {
@@ -440,6 +508,7 @@ describe("流程模板", () => {
 		createdWorkflowIds.push(wfId);
 
 		const { id: taskId } = await asA().taskClose.taskCreate({ name: taskName("仅审批"), workflowId: wfId });
+		// 创建者也不行:这条 (open,done) 只有 action 边,没有 direct 边 —— 必须走审批
 		await assertRejects(() => asA().taskClose.taskTransit({ id: taskId, to: "done" }), "直接转移");
 	});
 });

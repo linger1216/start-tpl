@@ -19,7 +19,7 @@ import { statusLabelOf, type WorkflowStatus } from "./task-close-spec";
 export const LOCKED_STATUS = "pending";
 export const LOCKED_STATUS_LABEL = "待审批";
 
-/** 10 个事件码 —— **加事件要同时改**:这里 + `detail` 类型 + 界面注册表 + `doc/task-close.md` */
+/** 11 个事件码 —— **加事件要同时改**:这里 + `detail` 类型 + 界面注册表 + `doc/task-close.md` */
 export const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -31,6 +31,7 @@ export const TASK_LOG_EVENTS = [
 	"comment.remove",
 	"member.add",
 	"member.remove",
+	"member.transfer",
 ] as const;
 
 export type TaskLogEvent = (typeof TASK_LOG_EVENTS)[number];
@@ -47,6 +48,7 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"comment.remove": "删除评论",
 	"member.add": "加入成员",
 	"member.remove": "移出成员",
+	"member.transfer": "转交",
 };
 
 /**
@@ -82,6 +84,8 @@ export type TaskLogDetail = {
 	"comment.remove": null;
 	"member.add": { role: string; isPrimary: boolean };
 	"member.remove": { role: string };
+	/** `from` = 转交**前**的主执行人 user id(读取侧给 `target_id` = 转交后的执行人) */
+	"member.transfer": { from: string | null };
 };
 
 /**
@@ -228,6 +232,13 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 			return {
 				title: who ? `${TASK_LOG_LABEL["member.remove"]}:${who}` : TASK_LOG_LABEL["member.remove"],
 				note: role ? `角色:${ctx.roleLabel(role)}` : null,
+			};
+		}
+		case "member.transfer": {
+			const who = item.targetName ?? item.targetId;
+			return {
+				title: who ? `${TASK_LOG_LABEL["member.transfer"]}:${who}` : TASK_LOG_LABEL["member.transfer"],
+				note: "新执行人(主);原执行人改为参与者",
 			};
 		}
 		default:

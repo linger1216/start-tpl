@@ -220,6 +220,14 @@ function LinkEditor({ value, onChange, disabled }: EditorProps) {
 	);
 }
 
+/**
+ * 表格块编辑器 —— 直接画一张**可编辑的网格**:表头就是「列」(改的就是列名),表体就是「行」。
+ *
+ * 旧版把「列」和「行」拆成两个各自独立的输入列表,加一列看不出加到哪儿、每个格子还要靠 placeholder 认列;
+ * 现在:**新增列**在表头尾部(新列就长在那儿)、**新增行**在表尾,加在哪儿一眼可见。
+ *
+ * 列的机器 `key`(`col1`…)由代码生成、**不给人填** —— 它只是单元格的索引,手改反而会把已有数据对错位。
+ */
 function TableEditor({ value, onChange, disabled }: EditorProps) {
 	// 钩子必须在早退之前调用:非 table 时按 0 取,随后立刻 return null(注册表只会用对应 kind 渲染它)
 	const columnCount = value.kind === "table" ? value.columns.length : 0;
@@ -227,11 +235,11 @@ function TableEditor({ value, onChange, disabled }: EditorProps) {
 	const columnKeys = useStableKeys(columnCount, "tc-col");
 	const rowKeys = useStableKeys(rowCount, "tc-row");
 	if (value.kind !== "table") return null;
-	// 收窄后存一份 const —— 闭包(下面的 setColumn 等)里 narrowing 不保留,用 `table` 才拿得到具体类型
+	// 收窄后存一份 const —— 闭包(下面的 setLabel 等)里 narrowing 不保留,用 `table` 才拿得到具体类型
 	const table = value;
 
-	function setColumn(index: number, patch: Partial<{ key: string; label: string }>) {
-		onChange({ ...table, columns: table.columns.map((col, i) => (i === index ? { ...col, ...patch } : col)) });
+	function setLabel(index: number, label: string) {
+		onChange({ ...table, columns: table.columns.map((col, i) => (i === index ? { ...col, label } : col)) });
 	}
 	function addColumn() {
 		onChange({
@@ -252,6 +260,8 @@ function TableEditor({ value, onChange, disabled }: EditorProps) {
 		onChange({ ...table, rows: table.rows.filter((_, i) => i !== index) });
 	}
 
+	const canRemoveColumn = !disabled && table.columns.length > 1;
+
 	return (
 		<div className="space-y-3">
 			<DetailRow label="标题" htmlFor="tc-tbl-caption">
@@ -265,68 +275,74 @@ function TableEditor({ value, onChange, disabled }: EditorProps) {
 				/>
 			</DetailRow>
 
-			<div className="space-y-2">
-				<div className="flex items-center justify-between">
-					<span className="text-xs font-medium text-muted-foreground">列</span>
-					<ActionButton disabled={disabled || table.columns.length >= 12} onClick={addColumn}>
-						新增列
-					</ActionButton>
-				</div>
-				{table.columns.map((col, index) => (
-					<div key={columnKeys[index]} className="flex flex-wrap items-center gap-1.5">
-						<Input
-							value={col.key}
-							aria-label={`第 ${index + 1} 列标识`}
-							placeholder="键,如 name"
-							className="h-8 w-32 font-mono text-xs"
-							disabled={disabled}
-							onChange={(event) => setColumn(index, { key: event.target.value })}
-						/>
-						<Input
-							value={col.label}
-							aria-label={`第 ${index + 1} 列名`}
-							placeholder="显示名"
-							className="h-8 w-32 text-sm"
-							disabled={disabled}
-							onChange={(event) => setColumn(index, { label: event.target.value })}
-						/>
-						<ActionButton
-							tone="danger"
-							disabled={disabled || table.columns.length <= 1}
-							onClick={() => removeColumn(index)}
-						>
-							删除
-						</ActionButton>
-					</div>
-				))}
+			<div className="overflow-x-auto">
+				<table className="w-full border-collapse text-sm">
+					<thead>
+						<tr>
+							{table.columns.map((col, index) => (
+								<th
+									key={columnKeys[index]}
+									scope="col"
+									className="min-w-40 border-b border-border px-1.5 pt-0.5 pb-1.5 text-left align-top font-normal"
+								>
+									<div className="flex items-center gap-1.5">
+										<Input
+											value={col.label}
+											aria-label={`第 ${index + 1} 列列名`}
+											placeholder="列名"
+											className="h-7 min-w-0 flex-1 text-xs font-medium"
+											disabled={disabled}
+											onChange={(event) => setLabel(index, event.target.value)}
+										/>
+										<ActionButton tone="danger" disabled={!canRemoveColumn} onClick={() => removeColumn(index)}>
+											删除
+										</ActionButton>
+									</div>
+								</th>
+							))}
+							<th className="border-b border-border px-1.5 pt-0.5 pb-1.5 text-left align-top font-normal">
+								<ActionButton disabled={disabled || table.columns.length >= 12} onClick={addColumn}>
+									新增列
+								</ActionButton>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{table.rows.map((row, rowIndex) => (
+							<tr key={rowKeys[rowIndex]}>
+								{table.columns.map((col, colIndex) => (
+									<td key={columnKeys[colIndex]} className="border-b border-border px-1.5 py-1 align-top">
+										<Input
+											value={row[col.key] ?? ""}
+											aria-label={`第 ${rowIndex + 1} 行「${col.label || col.key}」`}
+											placeholder="—"
+											className="h-7 min-w-0 text-xs"
+											disabled={disabled}
+											onChange={(event) => setCell(rowIndex, col.key, event.target.value)}
+										/>
+									</td>
+								))}
+								<td className="border-b border-border px-1.5 py-1 align-middle">
+									<ActionButton tone="danger" disabled={disabled} onClick={() => removeRow(rowIndex)}>
+										删除
+									</ActionButton>
+								</td>
+							</tr>
+						))}
+						{table.rows.length === 0 ? (
+							<tr>
+								<td colSpan={table.columns.length + 1} className="px-1.5 pt-2 text-xs text-muted-foreground">
+									还没有行。点下面「新增行」。
+								</td>
+							</tr>
+						) : null}
+					</tbody>
+				</table>
 			</div>
 
-			<div className="space-y-2">
-				<div className="flex items-center justify-between">
-					<span className="text-xs font-medium text-muted-foreground">行</span>
-					<ActionButton disabled={disabled || table.rows.length >= 200} onClick={addRow}>
-						新增行
-					</ActionButton>
-				</div>
-				{table.rows.map((row, rowIndex) => (
-					<div key={rowKeys[rowIndex]} className="flex flex-wrap items-center gap-1.5">
-						{table.columns.map((col, colIndex) => (
-							<Input
-								key={columnKeys[colIndex]}
-								value={row[col.key] ?? ""}
-								aria-label={`第 ${rowIndex + 1} 行「${col.label || col.key}」`}
-								placeholder={col.label || col.key}
-								className="h-8 w-32 text-sm"
-								disabled={disabled}
-								onChange={(event) => setCell(rowIndex, col.key, event.target.value)}
-							/>
-						))}
-						<ActionButton tone="danger" disabled={disabled} onClick={() => removeRow(rowIndex)}>
-							删除
-						</ActionButton>
-					</div>
-				))}
-			</div>
+			<ActionButton disabled={disabled || table.rows.length >= 200} onClick={addRow}>
+				新增行
+			</ActionButton>
 		</div>
 	);
 }

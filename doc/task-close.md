@@ -60,6 +60,7 @@
 | `comment.remove` | `commentRemove` | null | — |
 | `member.add` | `memberAdd` | null | `{role, isPrimary}` |
 | `member.remove` | `memberRemove` | null | `{role}` |
+| `member.transfer` | `taskTransfer` | null | `{from}`(转交前的主执行人 user id;`target_id` = 转交后的执行人) |
 
 每行另有 `target_id`(动作 / 评论 / 人的 id —— **类型由 `event` 决定**,所以不存 `target_type`)与
 `actor_id` + `actor_name`(姓名**快照**,账号被删历史仍读得懂;与 `sys_log.operator_name` 同口径)。
@@ -222,6 +223,8 @@ CREATE TABLE `tc_log` (
   - **「必须经过 action」= 给这对状态只留 `via:"action"` 的边、不加对应的 `direct` 边**:
     `taskTransit` 只认 `direct` 边(没有就直接拒「没有 X → Y 的直接转移」),`actionCreate` 只认 `action` 边。
     两条并存会让两条路都通,"必须"就失效 —— 所以唯一键按状态对而不是按 `(from,to,via)`。
+    **唯一的例外是管理员**:目标状态只要在 `statuses` 里,管理员就 `taskTransit` 得动(不看边、不看 `who`)。
+    ⚠️ 这是「管理员什么都可以」的逃生口,**不是**模板语义的一部分 —— 派生项目若不要这个口子,去掉 `taskTransit` 里那个 `isAdmin` 分支即可。
   - `who` 的含义随 `via` 变:`direct` = 谁能**直接改**;`action` = 谁能**发起**这次审批(`action` 边的**审批人**
     不在模板里,是发起时按 `handle_id` 现选的)。
 
@@ -339,15 +342,57 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 | 编辑任务(`task.update`)/ 删任务(`task.remove`) | ✓ | × | × | ✓ | × |
 | 加成员(`member.add`) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 移出成员(`member.remove`) | ✓ | × | × | ✓ | × |
+| 转交执行人(`member.transfer`) | × | × | ✓ | ✓ | × |
 | 删评论(`comment.remove`) | × | × | × | ✓(全部) | 作者本人(仅自己) |
 
 > **管理员什么都可以**:管理员 = 「系统管理员」角色(`lib/casbin.ts` 的 `isAdminUser`),上表所有 ✓ 都对他成立,
 > 且**不受 `who` / `tc_member` 限制**。读路径由 `taskGet.permissions.isAdmin` 下发,写路径
-> (`taskUpdate` / `taskRemove` / `memberRemove` 的 `assertCanManage`、`taskTransit` / `actionCreate` 的 `canAct`、
-> `commentRemove`)与读路径**同源放行** —— 仍受状态机完整性约束(边必须存在),只是不查 `who`。
+> (`taskUpdate` / `taskRemove` / `memberRemove` 的 `assertCanManage`、`actionCreate` 的 `canAct`、
+> `commentRemove`)与读路径**同源放行**。
+> **改状态更进一步**:管理员走 `taskTransit` 可以**直接改到模板里的任意状态** —— 不要求存在对应的边、也不查 `who`
+> (前端对应头部的「改状态」按钮)。唯一仍生效的守卫是**锁语义**:任务被未完成的审批动作锁住时,谁都不能直接改状态
+> (否则那条 action 的 `to_status` 会与任务状态对不上)。
 >
-> 前端按钮矩阵据此取最高一档:管理员 → 全显;创建者 → 编辑 / 删除 / 刷新 / 发起征询;
-> 执行者 → 转交 / 发起征询 / 发起审批 / 刷新;参与者 → 发起征询 / 刷新。
+> 前端按钮矩阵见下节「头部按钮(按事项流程派生)」。
+
+## 头部按钮(按事项流程派生)
+
+**与状态有关的两个按钮不写死角色**,由服务端 `taskGet.permissions`(来自任务快照的模板)派生 —— 换模板不用改前端:
+
+| 按钮 | 出现条件 | 选项 |
+|---|---|---|
+| 发起审批 | `permissions.actionTargets` 非空(当前状态有我发起的 `via=action` 边)且未锁定 | `actionTargets` |
+| 改状态 | 未锁定,且(`permissions.isAdmin` 或 `permissions.transitions` 非空) | 管理员 = 模板**全部**状态;其他人 = `transitions`(我能直改的 `direct` 边) |
+
+**锁定期**(`permissions.locked` / 状态 = `pending`)这两个按钮都不出现 —— 与服务端锁守卫一致,**管理员也不例外**。
+
+头部动作组**最左边还有一颗 ⓘ**(`ui/tooltip`):悬停 / 聚焦展开「当前身份 + 本事项流程给这个身份的边」的一行说明
+(如「当前身份:创建者 / 状态:进行中 / 发起审批:→ 待核验 / 直接改状态:无」),就是为了让人当场核对这些按钮为什么是这几个。
+它只是解释规则,不代替服务端授权。
+
+其余按钮与状态无关,按角色(`myRole` = admin / creator / executor / participant / null):
+
+| 角色 | 转交 | 发起征询 | 编辑 | 删除 | 刷新 |
+|---|---|---|---|---|---|
+| 管理员 | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 创建者 | × | ✓ | ✓ | ✓ | ✓ |
+| 执行者 | ✓ | ✓ | × | × | ✓ |
+| 参与者 | × | ✓ | × | × | ✓ |
+| 旁观者 | × | × | × | × | × |
+
+按**默认事项流程**(`scripts/seed-task-close.ts`)展开,头部实际长这样:
+
+| 当前状态 | 创建者 | 执行者 | 参与者 | 管理员 |
+|---|---|---|---|---|
+| 进行中 `open` | 发起审批(→待核验)· 征询 · 编辑 · 删除 · 刷新 | 发起审批(→待核验)· 转交 · 征询 · 刷新 | 征询 · 刷新 | 全显 + 改状态(任意) |
+| 待审批 `pending`(锁定) | 刷新 | 刷新 | 刷新 | 刷新(锁定期不能改状态) |
+| 待核验 `done` | 改状态(→已关闭 / →进行中)· 征询 · 编辑 · 删除 · 刷新 | 转交 · 征询 · 刷新 | 征询 · 刷新 | 全显 + 改状态(任意) |
+| 已关闭 `closed` | 改状态(→进行中 / →已归档)· 征询 · 编辑 · 删除 · 刷新 | 转交 · 征询 · 刷新 | 征询 · 刷新 | 全显 + 改状态(任意) |
+| 已归档 `archived` | 征询 · 编辑 · 删除 · 刷新 | 转交 · 征询 · 刷新 | 征询 · 刷新 | 全显 + 改状态(任意) |
+
+> **创建者也按流程走**:默认流程里 `open→done` 是 action 边、`who` 含 creator,所以创建者在「进行中」看到的是
+> **发起审批**(不是直改);`done→closed` 等四条直改边 `who=["creator"]`,所以创建者在「待核验 / 已关闭」看到的是
+> **改状态**。**只有管理员**能绕开模板直接改到任意状态。
 
 > 「全员可评论」= 任务可见即可,不限 `tc_member`。RBAC 决定谁能 **看到** 任务;`tc_member` 决定谁**参与推进**。
 >
@@ -366,7 +411,7 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 
 ## 接口
 
-21 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
+22 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
 
 | 路径 | 类型 | 入参 | 谁能调 |
 |---|---|---|---|
@@ -380,9 +425,10 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 | `taskCreate` | mutation | `{name,description?,dueAt?,workflowId,payload?,members?}` | 登录 |
 | `taskUpdate` | mutation | `{id,name,description?,dueAt?,payload?}` | creator / 管理员 |
 | `taskRemove` | mutation | `{id}` | creator / 管理员 |
-| `taskTransit` | mutation | `{id,to}` | 边的 `who`(管理员不受限) |
+| `taskTransit` | mutation | `{id,to}` | 边的 `who`;**管理员可改到任意状态** |
 | `memberAdd` | mutation | `{taskId,userId,role,isPrimary?}` | 登录(所有角色都能加) |
 | `memberRemove` | mutation | `{taskId,userId,role}` | creator / 管理员 |
+| `taskTransfer` | mutation | `{taskId,userId}` | 执行者 / 管理员(目标必须是本任务成员,且不能是自己 / 创建者) |
 | `actionList` | query | `{taskId}` | 登录 |
 | `actionMine` | query | `{page?,pageSize?}` | 登录(只读自己的) |
 | `actionCreate` | mutation | `{taskId,toStatus?,handleId,parentActionId?}` | 见权限矩阵 |
@@ -395,9 +441,10 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 **可见性** v1 口径:任何登录用户可读任何任务(无菜单 = RBAC 允许访客);`tc_member` 只决定**推进权**。
 `taskList.mine = true` 是「我创建 + 我是成员」的过滤,是**便利筛选**不是安全边界。
 
-**`taskGet.permissions`** 由服务端算好下发(`transitions` / `canInitiateStatusAction` / `canInitiateConsult` /
-`canAddMember`(恒 true)/ `canManageMembers`(仅创建者)/ `canUpdate` / `canRemove` / `myRoles` / `isCreator`),
-前端不再自己解释 `who` / `edges`。
+**`taskGet.permissions`** 由服务端算好下发(`transitions`(可直接改到的状态)/ `actionTargets`(可发起「改状态」
+action 的目标状态,「发起审批」弹窗的候选项)/ `canInitiateStatusAction` / `canInitiateConsult` /
+`canAddMember`(恒 true)/ `canManageMembers`(仅创建者)/ `canUpdate` / `canRemove` / `isAdmin` / `locked`(任务是否被
+未完成的审批动作锁住)/ `myRoles` / `isCreator`),前端不再自己解释 `who` / `edges`。
 `taskGet` 另回 `meId` —— 前端靠它判断「这条动作 / 评论是不是我的」,不必再单独问一次会话。
 
 **动作派生规则**(服务端定,客户端只传 `toStatus`):

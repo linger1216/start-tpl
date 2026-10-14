@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -48,6 +49,8 @@ export function TaskCloseComments({
 	const [uploading, setUploading] = useState(false);
 	/** 正在预览的**已有**评论附件 */
 	const [preview, setPreview] = useState<TaskAttachment | null>(null);
+	/** 待确认删除的评论 —— 删除是破坏性操作,先弹 `ConfirmDialog`(非空即打开) */
+	const [pendingRemove, setPendingRemove] = useState<{ id: string; authorName: string | null } | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
 	// 评论也会进活动日志(`tc_log`)—— 失效要连日志一起,否则「动态」卡还停在发评论之前
@@ -106,7 +109,7 @@ export function TaskCloseComments({
 			{/* ci —— 评论输入(原型的样:avatar + 边框 field + 工具条 + 发送) */}
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
 				<Avatar initials={(meName ?? "我").slice(0, 1)} />
-				{/* 输入框:去掉 focus 变色边框 / 外圈(用户嫌丑)—— 只留一层静态描边 */}
+				{/* 输入框:静态描边(控件边界,不是分割线);去掉 focus 变色 / 外圈,也去掉内部两条虚线 */}
 				<div className="rounded-lg border border-border bg-card">
 					<textarea
 						rows={3}
@@ -123,11 +126,11 @@ export function TaskCloseComments({
 						}}
 					/>
 					{attachments.length > 0 ? (
-						<div className="flex flex-wrap gap-1.5 border-t border-dashed border-border px-3 pt-2">
+						<div className="flex flex-wrap gap-1.5 px-3 pt-2">
 							{attachments.map((file) => (
 								<span
 									key={file.id}
-									className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-0.5 text-xs"
+									className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-0.5 text-xs"
 								>
 									{file.name}
 									<button
@@ -204,7 +207,7 @@ export function TaskCloseComments({
 											variant="ghost"
 											aria-label="删除评论"
 											disabled={removeMutation.isPending}
-											onClick={() => removeMutation.mutate({ id: item.id })}
+											onClick={() => setPendingRemove({ id: item.id, authorName: item.authorName })}
 										>
 											<Trash2 className="size-3.5" />
 											<span>删除</span>
@@ -216,6 +219,22 @@ export function TaskCloseComments({
 					))}
 				</ul>
 			)}
+
+			{/* 删除评论 —— 破坏性操作,先确认(软删:从讨论流里消失,历史仍留痕) */}
+			<ConfirmDialog
+				open={pendingRemove !== null}
+				onOpenChange={(next) => {
+					if (!next) setPendingRemove(null);
+				}}
+				title="删除评论"
+				description={`删除「${pendingRemove?.authorName ?? "—"}」的这条评论?删除后讨论流里不再显示。`}
+				isPending={removeMutation.isPending}
+				confirmText="删除"
+				onConfirm={() => {
+					if (!pendingRemove) return;
+					removeMutation.mutate({ id: pendingRemove.id }, { onSuccess: () => setPendingRemove(null) });
+				}}
+			/>
 
 			<TaskAttachmentPreview
 				taskId={taskId}

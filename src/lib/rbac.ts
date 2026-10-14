@@ -426,6 +426,7 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.taskTransit",
 	"taskClose.memberAdd",
 	"taskClose.memberRemove",
+	"taskClose.taskTransfer",
 	"taskClose.actionCreate",
 	"taskClose.actionRespond",
 	"taskClose.commentCreate",

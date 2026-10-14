@@ -41,6 +41,7 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"comment.remove": MessageSquareX,
 	"member.add": UserPlus,
 	"member.remove": UserMinus,
+	"member.transfer": ArrowRightLeft,
 };
 
 /**
