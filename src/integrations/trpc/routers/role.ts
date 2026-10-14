@@ -139,26 +139,34 @@ export const roleRouter = createTRPCRouter({
 			return toRole(await getRoleRow(input.id));
 		}),
 
-	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
-		const row = await getRoleRow(input.id);
-		// 引用检查走**角色 id**(策略表里存的是 `role:<id>`)
-		const used = await userIdsOfRole(row.id);
-		if (used.length > 0) {
-			throw new TRPCError({
-				code: "PRECONDITION_FAILED",
-				message: `还有 ${used.length} 个用户在用「${row.name}」,请先给他们换成别的角色`,
-			});
-		}
-		// 授权行与成员行本来靠外键 cascade 随角色一起删;策略表不是关系表、没有外键可依,必须显式清
-		await removeRoleEverywhere(row.id);
-		// 角色行**软删**(审计留痕)+ 角色名墓碑:`uk_sys_role_name` 是唯一索引,不让位的话
-		// 「测试角色」这个名字会被死行永久占住,管理员再也建不出同名角色
-		await db
-			.update(sysRole)
-			.set({ ...softDeleted(), name: tombstone(row.name, row.id, 32) })
-			.where(eq(sysRole.id, input.id));
-		return { success: true };
-	}),
+	remove: protectedProcedure
+		.input(z.object({ ids: z.array(z.string().min(1)).min(1, "至少选一个角色").max(100, "一次最多删 100 个角色") }))
+		.mutation(async ({ input }) => {
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)
+			for (const id of input.ids) {
+				const row = await getRoleRow(id);
+				// 引用检查走**角色 id**(策略表里存的是 `role:<id>`)
+				const used = await userIdsOfRole(row.id);
+				if (used.length > 0) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: `还有 ${used.length} 个用户在用「${row.name}」,请先给他们换成别的角色`,
+					});
+				}
+			}
+			for (const id of input.ids) {
+				const row = await getRoleRow(id);
+				// 授权行与成员行本来靠外键 cascade 随角色一起删;策略表不是关系表、没有外键可依,必须显式清
+				await removeRoleEverywhere(row.id);
+				// 角色行**软删**(审计留痕)+ 角色名墓碑:`uk_sys_role_name` 是唯一索引,不让位的话
+				// 「测试角色」这个名字会被死行永久占住,管理员再也建不出同名角色
+				await db
+					.update(sysRole)
+					.set({ ...softDeleted(), name: tombstone(row.name, row.id, 32) })
+					.where(eq(sysRole.id, row.id));
+			}
+			return { removed: input.ids.length };
+		}),
 
 	/**
 	 * 角色 Excel 导入 —— **按角色名 upsert**(角色名是业务键,`sys_role` 上只有 `id` 是主键)。

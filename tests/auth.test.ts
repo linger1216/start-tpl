@@ -83,15 +83,15 @@ describe("服务端鉴权", () => {
 	it("未登录:受保护接口一律 UNAUTHORIZED(以前根本测不了这一条)", async () => {
 		await assertRejects(() => anonymousCaller.role.list(), "请先登录");
 		await assertRejects(() => anonymousCaller.file.list(), "请先登录");
-		await assertRejects(() => anonymousCaller.role.remove({ id: "whatever" }), "请先登录");
+		await assertRejects(() => anonymousCaller.role.remove({ ids: ["whatever"] }), "请先登录");
 		// 个人资料页的读接口:它**不挂菜单授权**(没勾设置菜单的人也要能看自己),
 		// 但"要登录"这条不能少 —— 否则任何人都能靠它探到别人的资料(它的 SQL 只认 ctx.user.id)
 		await assertRejects(() => anonymousCaller.user.profile(), "请先登录");
 	});
 
 	it("未登录:会话路径上的写接口同样被拦(不只是读)", async () => {
-		await assertRejects(() => anonymousCaller.dict.remove({ code: "whatever" }), "请先登录");
-		await assertRejects(() => anonymousCaller.user.remove({ id: "whatever" }), "请先登录");
+		await assertRejects(() => anonymousCaller.dict.remove({ codes: ["whatever"] }), "请先登录");
+		await assertRejects(() => anonymousCaller.user.remove({ ids: ["whatever"] }), "请先登录");
 	});
 
 	it("权限:有权限体系但这个账号没有该权限 ⇒ FORBIDDEN(不是只靠前端藏按钮)", async () => {
@@ -302,7 +302,7 @@ describe("审计日志", () => {
 			assert.equal(entry.input?.includes(created.id), false, "入参快照就是入参,不该出现服务端生成的东西");
 			assert.ok(entry.duration_ms !== null);
 		} finally {
-			await caller.role.remove({ id: created.id });
+			await caller.role.remove({ ids: [created.id] });
 			const extra = await db.select().from(sysLog).where(eq(sysLog.path, "role.remove"));
 			createdLogIds.push(...extra.map((row) => row.id));
 		}
@@ -351,7 +351,7 @@ describe("审计日志", () => {
 			assert.ok(failedRow, "失败的调用也应该留痕");
 			assert.ok(failedRow?.error_code, "要记下错误码");
 		} finally {
-			await caller.role.remove({ id: first.id });
+			await caller.role.remove({ ids: [first.id] });
 			const extra = await db.select().from(sysLog).where(eq(sysLog.path, "role.remove"));
 			createdLogIds.push(...extra.map((row) => row.id));
 		}
@@ -370,7 +370,7 @@ describe("审计日志", () => {
 			assert.ok(snapshot.includes("***"), `入参快照应已脱敏,实际:${snapshot.slice(0, 200)}`);
 			assert.ok(!snapshot.includes("S3cret-Passw0rd"), "明文密码绝不能进审计");
 		} finally {
-			await caller.user.remove({ id: created.id });
+			await caller.user.remove({ ids: [created.id] });
 			const extra = await db
 				.select()
 				.from(sysLog)

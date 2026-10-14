@@ -63,7 +63,10 @@ export function logCategoryOf(event: string): TaskLogCategory | null {
 /** 需要按事件塞进 `tc_log.detail` 的补充信息(判别联合:每个事件一个形状) */
 export type TaskLogDetail = {
 	"task.create": { workflowId: string; members: Array<{ userId: string; role: string; isPrimary: boolean }> };
-	"task.update": { fields: Array<{ key: string; from: string | null; to: string | null }>; payloadChanged: boolean };
+	"task.update": {
+		fields: Array<{ key: string; from: string | number | null; to: string | number | null }>;
+		payloadChanged: boolean;
+	};
 	"task.remove": null;
 	"task.transit": { who: string[] };
 	"action.create": {
@@ -126,6 +129,7 @@ export const TASK_LOG_FIELD_LABEL: Record<string, string> = {
 	name: "标题",
 	description: "说明",
 	dueAt: "截止时间",
+	priority: "优先级",
 	payload: "内容 / 附件",
 };
 

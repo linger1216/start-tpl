@@ -9,6 +9,8 @@
  *  4. 带了**编造的 token** → 400「人机验证失败」;
  *  5. 带了**真 token**(真答题换来的 proof token)→ 放行,能登进去;密码错仍照常被拒;
  *  6. proof token **一次性** —— 同一个 token 提交第二次必须失败。
+ *  7. **开关关掉后不带 token 也能登录** —— 参数 `login.captcha_enabled`(默认 true);
+ *     服务端钩子与登录页读同一个值,这里只覆盖服务端那一半(前端在 `routes/login.tsx`)。
  *
  * ⚠️ **为什么走 `auth.handler(Request)` 而不是 `auth.api.signInEmail(...)`**:
  * better-auth 的 `hooks` 只在**有请求上下文**时才拿得到 header。直调 `auth.api.*` 时
@@ -30,10 +32,13 @@ import { after, before, test } from "node:test";
 
 import { createChallenge, verifyCaptcha } from "captchakit/server";
 import { inArray, like } from "drizzle-orm";
-import { sysAccount, sysAccountLockout, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { sysAccount, sysAccountLockout, sysPara, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
 import { ensureCaptchaSecret } from "../src/lib/captcha-secret.ts";
+import { newId } from "../src/lib/ids.ts";
+import { CAPTCHA_ENABLED_KEY, PARA_TYPE } from "../src/lib/para-spec.ts";
+import { clearParaCache } from "../src/lib/sys-para.ts";
 import { closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const PASSWORD = "Passw0rd!123";
@@ -230,4 +235,47 @@ test("proof token 是一次性的:同一个 token 提交第二次必须失败", 
 	const replay = await signIn(email, PASSWORD, ip, proof);
 	assert.equal(replay.status, 400, "proof token 已被消费过,重放应该失败");
 	assert.equal(replay.message, "人机验证失败,请重试");
+});
+
+/**
+ * 改「人机验证」开关并**清掉参数缓存**。
+ *
+ * `getParaBool` 带 30 秒缓存(`lib/sys-para.ts`),不清缓存就会读到旧值 —— 症状是
+ * 「参数明明改成 false 了,登录还是被 400 挡下」。断言失败时先怀疑这一步。
+ */
+async function setCaptchaEnabled(enabled: boolean): Promise<void> {
+	const value = String(enabled);
+	await db
+		.insert(sysPara)
+		.values({
+			id: newId(),
+			para_key: CAPTCHA_ENABLED_KEY,
+			para_value: value,
+			para_type: PARA_TYPE.BOOL,
+			para_group: "登录",
+		})
+		.onDuplicateKeyUpdate({ set: { para_value: value } });
+	clearParaCache();
+}
+
+/**
+ * 7. **开关关掉后,不带 token 也能登录** —— 参数 `login.captcha_enabled`(默认 `true`)。
+ *
+ * 这里只测**服务端那一半**(`lib/auth.ts` 的 `/sign-in/email` 钩子);前端画不画验证码栏在
+ * `routes/login.tsx`,由同一个参数经 `createServerFn` 拿值。用例收尾必须还原成 `true`。
+ */
+test("开关关掉:login.captcha_enabled=false 时,不带 proof token 也能登录", async () => {
+	const email = await makeUser(`off_${uniqueSuffix()}`);
+	await setCaptchaEnabled(false);
+	try {
+		const res = await signIn(email, PASSWORD, freshIp());
+		assert.equal(
+			res.status,
+			200,
+			`关掉人机验证后不带 token 也该放行,实际 ${res.status} ${res.message}` +
+				"(若仍是 400「请先完成人机验证」,先确认 setCaptchaEnabled 里的 clearParaCache 生效了)",
+		);
+	} finally {
+		await setCaptchaEnabled(true);
+	}
 });

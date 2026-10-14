@@ -22,7 +22,7 @@
  * 每一个 mutation 尾部都要 `clearDataScopeCache()` —— 缓存 30 秒,不清就得等它过期。
  */
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -314,17 +314,22 @@ export const dataScopeRouter = createTRPCRouter({
 	 *
 	 * 预查这一行**故意不带 `alive()`** —— 它正是删除过程要操作的那一行(重复删除仍按原语义返回)。
 	 */
-	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input }) => {
-		const [row] = await db
-			.select({ id: sysDataPolicy.id })
-			.from(sysDataPolicy)
-			.where(eq(sysDataPolicy.id, input.id))
-			.limit(1);
-		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "没有这条数据范围规则" });
-		await db.update(sysDataPolicy).set(softDeleted()).where(eq(sysDataPolicy.id, input.id));
-		clearDataScopeCache();
-		return { id: input.id, removed: true };
-	}),
+	remove: protectedProcedure
+		.input(z.object({ ids: z.array(z.string().min(1)).min(1, "至少选一条规则").max(100, "一次最多删 100 条") }))
+		.mutation(async ({ input }) => {
+			// 预查这些行**故意不带 `alive()`** —— 它们正是删除过程要操作的那几行(重复删除仍按原语义返回)。
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)
+			const rows = await db
+				.select({ id: sysDataPolicy.id })
+				.from(sysDataPolicy)
+				.where(inArray(sysDataPolicy.id, input.ids));
+			if (rows.length !== new Set(input.ids).size) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "有数据范围规则不存在" });
+			}
+			await db.update(sysDataPolicy).set(softDeleted()).where(inArray(sysDataPolicy.id, input.ids));
+			clearDataScopeCache();
+			return { removed: rows.length };
+		}),
 });
 
 /** `subject` 里那个 id(写法不对 / 不是这个 kind 就回 null) */

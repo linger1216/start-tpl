@@ -81,6 +81,14 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "文件管理",
 		remark: "允许上传的后缀(逗号分隔,小写、不带点);不在名单里的一律拒绝",
 	},
+	// 登录 —— 由 lib/auth.ts 的 `/sign-in/email` 钩子与登录页各读一次(两边看同一个值)。
+	// 改完**立即生效**:para.update 会 clearParaCache(),不用等 30 秒。
+	"login.captcha_enabled": {
+		value: "true",
+		type: PARA_TYPE.BOOL,
+		group: "登录",
+		remark: "登录页的人机验证(默认开)。关掉后登录接口不再要求验证码,只剩限流 + 账号锁定兜底 —— 生产环境不建议关",
+	},
 };
 
 const CACHE_TTL_MS = 30_000;

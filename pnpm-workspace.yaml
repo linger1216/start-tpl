@@ -13,3 +13,5 @@ allowBuilds:
 # 然后 `pnpm install` 时会按 user/global 配置走。
 storeDir: /Users/lid/Library/pnpm/store/v11
 
+packages:
+  - "."

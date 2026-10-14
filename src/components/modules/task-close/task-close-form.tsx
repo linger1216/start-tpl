@@ -18,6 +18,7 @@ import { Input } from "#/components/ui/input";
 import { SearchSelect, type SearchSelectOption } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
+import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task-close-spec";
 import type { TaskAttachment, TaskContentBlock } from "#/lib/task-content";
 import { formatLocalDate } from "#/lib/time";
 
@@ -31,12 +32,20 @@ export function fromDateInput(date: string): string | null {
 	return date ? new Date(`${date}T00:00:00`).toISOString() : null;
 }
 
+/** 优先级 Select 的固定选项 —— 「未设置」(null)放最前,允许保留旧值不变 */
+const PRIORITY_OPTIONS: { value: TaskPriority | null; label: string }[] = [
+	{ value: null, label: "未设置" },
+	...TASK_PRIORITIES.map((value) => ({ value, label: TASK_PRIORITY_LABEL[value] })),
+];
+
 /** 编辑态回填 —— 模板与成员是建任务时定的,之后各有自己的接口;内容 / 附件随任务本身走 */
 export type TaskFormEditing = {
 	id: string;
 	name: string;
 	description: string | null;
 	dueAt: string | null;
+	/** `0|1|2|null` —— 服务端的 `tinyint(1)` 读出来是 number,严格档位不在这里断,在 server zod 上校验 */
+	priority: number | null;
 	content: TaskContentBlock[];
 	attachments: TaskAttachment[];
 };
@@ -45,6 +54,8 @@ export type TaskFormPayload = {
 	name: string;
 	description: string | null;
 	dueAt: string | null;
+	/** 提交时:`null` = 没选,`0|1|2` = 选定档;接口上 `undefined` 表示「不动旧值」,**这里**总是显式传值 */
+	priority: number | null;
 	workflowId: string;
 	executorId: string | null;
 	content: TaskContentBlock[];
@@ -57,7 +68,7 @@ export type Option = SearchSelectOption<string>;
 /**
  * 新建 / 编辑任务。
  *
- * 新建:`taskCreate`(选模板 + 选一名执行人);编辑:`taskUpdate`(只改名称 / 描述 / 截止)。
+ * 新建:`taskCreate`(选模板 + 选一名执行人);编辑:`taskUpdate`(只改名称 / 描述 / 截止 / 优先级)。
  * **一件事一个接口**,所以这里也按模式分派,不做「一个提交按钮打两个接口」。
  */
 export function TaskCloseForm({
@@ -81,6 +92,8 @@ export function TaskCloseForm({
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [due, setDue] = useState("");
+	/** `null` = 未设置;`0|1|2` = P0/P1/P2。DB 列是 tinyint,运行时是 number */
+	const [priority, setPriority] = useState<number | null>(null);
 	const [workflowId, setWorkflowId] = useState("");
 	const [executorId, setExecutorId] = useState("");
 	const [content, setContent] = useState<TaskContentBlock[]>([]);
@@ -92,6 +105,7 @@ export function TaskCloseForm({
 		setName(editing?.name ?? "");
 		setDescription(editing?.description ?? "");
 		setDue(toDateInput(editing?.dueAt));
+		setPriority(editing?.priority ?? null);
 		setWorkflowId(editing ? "" : (workflowOptions[0]?.value ?? ""));
 		setExecutorId("");
 		setContent(editing?.content ?? []);
@@ -107,7 +121,7 @@ export function TaskCloseForm({
 					<DialogTitle>{editing ? "编辑任务" : "新建任务"}</DialogTitle>
 					<DialogDescription>
 						{editing
-							? "只改名称 / 描述 / 截止时间;成员与状态走详情页。"
+							? "可改名称 / 描述 / 截止时间 / 优先级;成员与状态走详情页。"
 							: "状态从模板的初始状态开始;执行人能发起「改状态」动作。"}
 					</DialogDescription>
 				</DialogHeader>
@@ -158,6 +172,30 @@ export function TaskCloseForm({
 						<DatePicker id="tc-due" value={due} onChange={setDue} placeholder="选择日期" />
 					</DetailRow>
 
+					<DetailRow label="优先级">
+						<Select
+							items={PRIORITY_OPTIONS}
+							value={priority}
+							onValueChange={(next) => {
+								// `next` 可能是 `0|1|2` 或在「未设置」分支里被传回 `""`,
+								// 统一归到 number | null:空串 / 非 number / 越界 → null
+								const raw = next as unknown;
+								setPriority(typeof raw === "number" && (raw === 0 || raw === 1 || raw === 2) ? raw : null);
+							}}
+						>
+							<SelectTrigger size="sm" className="w-full">
+								<SelectValue placeholder="未设置" />
+							</SelectTrigger>
+							<SelectContent>
+								{PRIORITY_OPTIONS.map((item) => (
+									<SelectItem key={String(item.value ?? "null")} value={item.value as unknown as string}>
+										{item.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</DetailRow>
+
 					<DetailRow label="描述" htmlFor="tc-desc">
 						<Textarea
 							id="tc-desc"
@@ -191,6 +229,7 @@ export function TaskCloseForm({
 								name: name.trim(),
 								description: description.trim() || null,
 								dueAt: fromDateInput(due),
+								priority,
 								workflowId,
 								executorId: executorId || null,
 								content,

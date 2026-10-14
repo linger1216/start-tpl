@@ -286,7 +286,7 @@ export function SettingsDataScopePage() {
 				description={`确认删除「${pendingDelete?.subjectLabel ?? ""} · ${pendingDelete?.resourceLabel ?? ""}」这条规则?删掉之后这条范围就不再生效。`}
 				isPending={removeMutation.isPending}
 				pendingText="删除中…"
-				onConfirm={() => pendingDelete && removeMutation.mutate({ id: pendingDelete.id })}
+				onConfirm={() => pendingDelete && removeMutation.mutate({ ids: [pendingDelete.id] })}
 			/>
 		</PageFrame>
 	);

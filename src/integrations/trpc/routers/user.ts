@@ -277,42 +277,48 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * ⚠️ **不允许删自己**:删掉自己的会话等于立刻掉线,页面连报错都来不及显示。
 	 */
-	remove: protectedProcedure.input(z.object({ id: z.string().min(1) })).mutation(async ({ input, ctx }) => {
-		// admin 守卫:被删的人是 admin 时拒。`ctx.user` 由 protectedProcedure 中间件保证存在。
-		if (await isAdminUser(input.id)) {
+	remove: protectedProcedure
+		.input(z.object({ ids: z.array(z.string().min(1)).min(1, "至少选一个账号").max(100, "一次最多删 100 个账号") }))
+		.mutation(async ({ input, ctx }) => {
 			const me = requireCurrentUser(ctx);
-			if (!(await isAdminUser(me.id, me.isSuper === true))) {
-				throw new TRPCError({
-					code: "FORBIDDEN",
-					message: "不能删除管理员账号",
-				});
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)
+			for (const id of input.ids) {
+				// admin 守卫:被删的人是 admin 时拒。`ctx.user` 由 protectedProcedure 中间件保证存在。
+				if ((await isAdminUser(id)) && !(await isAdminUser(me.id, me.isSuper === true))) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: "不能删除管理员账号",
+					});
+				}
 			}
-		}
-		const me = await getCurrentUserId();
-		if (me && me === input.id) {
-			throw new TRPCError({ code: "FORBIDDEN", message: "不能删除当前登录的账号" });
-		}
-		// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 已软删的行也要能拿到 email 让位
-		const [row] = await db
-			.select({ id: sysUser.id, email: sysUser.email })
-			.from(sysUser)
-			.where(eq(sysUser.id, input.id))
-			.limit(1);
-		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个账号不存在(可能已被删除)" });
+			const meId = await getCurrentUserId();
+			if (meId && input.ids.includes(meId)) {
+				throw new TRPCError({ code: "FORBIDDEN", message: "不能删除当前登录的账号" });
+			}
+			// 这一行就是删除过程要操作的目标,故意**不带** `alive()` —— 已软删的行也要能拿到 email 让位
+			const rows = await db
+				.select({ id: sysUser.id, email: sysUser.email })
+				.from(sysUser)
+				.where(inArray(sysUser.id, input.ids));
+			if (rows.length !== new Set(input.ids).size) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "有账号不存在(可能已被删除)" });
+			}
 
-		// ①~③ 登录凭据与组织关系**硬删**:凭证真没掉才算真的注销,join 表本身不参与软删口径
-		await db.delete(sysSession).where(eq(sysSession.userId, input.id));
-		await db.delete(sysAccount).where(eq(sysAccount.userId, input.id));
-		await db.delete(sysUserDept).where(eq(sysUserDept.user_id, input.id));
-		// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
-		await removeAllRolesOfUser(input.id);
-		// ⑤ 用户行**软删** + 邮箱墓碑:`tombstone()` 把唯一键让出来,新账号才能用同一个邮箱重开
-		await db
-			.update(sysUser)
-			.set({ ...softDeleted(), email: tombstone(row.email, row.id, 255) })
-			.where(eq(sysUser.id, input.id));
-		return { id: input.id, success: true };
-	}),
+			// ①~③ 登录凭据与组织关系**硬删**:凭证真没掉才算真的注销,join 表本身不参与软删口径
+			await db.delete(sysSession).where(inArray(sysSession.userId, input.ids));
+			await db.delete(sysAccount).where(inArray(sysAccount.userId, input.ids));
+			await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, input.ids));
+			// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
+			for (const row of rows) await removeAllRolesOfUser(row.id);
+			// ⑤ 用户行**软删** + 邮箱墓碑(逐行:墓碑值里带 id,不能一条 SQL 批量写)
+			for (const row of rows) {
+				await db
+					.update(sysUser)
+					.set({ ...softDeleted(), email: tombstone(row.email, row.id, 255) })
+					.where(eq(sysUser.id, row.id));
+			}
+			return { removed: rows.length };
+		}),
 
 	/**
 	 * 用户 Excel 导入 —— **批量开账号,只建不改**。

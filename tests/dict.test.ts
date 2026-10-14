@@ -36,8 +36,8 @@ after(async () => {
 	for (const row of leftovers) {
 		if (row.code.includes(TEST_PREFIX) || row.name.includes(TEST_PREFIX)) createdIds.push(row.id);
 	}
-	await caller.dict.remove({ code: CODE }).catch(() => undefined);
-	await caller.dict.remove({ code: IMPORT_CODE }).catch(() => undefined);
+	await caller.dict.remove({ codes: [CODE] }).catch(() => undefined);
+	await caller.dict.remove({ codes: [IMPORT_CODE] }).catch(() => undefined);
 	const ids = [...new Set(createdIds)];
 	if (ids.length > 0) {
 		await db.delete(sysDict).where(inArray(sysDict.id, ids));
@@ -137,7 +137,7 @@ test("更新不存在的编码 → NOT_FOUND", async () => {
 test("删除:按 code 软删,行保留(deleted_at 非空),byCode 就当它不存在", async () => {
 	const before = await caller.dict.byCode({ code: CODE });
 	assert.ok(before, "删除前应读得到");
-	await caller.dict.remove({ code: CODE });
+	await caller.dict.remove({ codes: [CODE] });
 	assert.equal(await caller.dict.byCode({ code: CODE }), null);
 	const [kept] = await db.select().from(sysDict).where(eq(sysDict.id, before.id));
 	assert.ok(kept, "软删要留行(审计留痕),不是物理删除");
@@ -147,7 +147,7 @@ test("删除:按 code 软删,行保留(deleted_at 非空),byCode 就当它不存
 });
 
 test("删除不存在的编码 → NOT_FOUND", async () => {
-	await assertRejects(() => caller.dict.remove({ code: `t_missing_y_${uniqueSuffix()}` }), "不存在");
+	await assertRejects(() => caller.dict.remove({ codes: [`t_missing_y_${uniqueSuffix()}`] }), "不存在");
 });
 
 /**

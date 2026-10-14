@@ -337,20 +337,28 @@ export const paraRouter = createTRPCRouter({
 	 * 否则新行插不进同一个 key,`create` / `import` 想重建这条参数会直接撞主键。
 	 * 读路径(list / byKey / 查重 / 导入先查)一律要带 `alive()`,漏一处就把删除的行又当成了覆盖值。
 	 */
-	remove: protectedProcedure.input(z.object({ key: z.string().min(1).max(64) })).mutation(async ({ input }) => {
-		// 先按 key 查出这一行 —— 软删要拿它的 `para_key` 写墓碑(主键让位)。查询带 `alive()`:
-		// 已经软删过的行不该再删一次(list 里也看不见它),所以查不到就是 NOT_FOUND
-		const [row] = await db
-			.select()
-			.from(sysPara)
-			.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
-			.limit(1);
-		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "这个参数不存在(可能已被删除)" });
-		await db
-			.update(sysPara)
-			.set({ ...softDeleted(), para_key: tombstone(row.para_key, row.id, 64) })
-			.where(eq(sysPara.para_key, input.key));
-		clearParaCache();
-		return { key: input.key };
-	}),
+	remove: protectedProcedure
+		.input(
+			z.object({ keys: z.array(z.string().min(1).max(64)).min(1, "至少选一条参数").max(100, "一次最多删 100 条") }),
+		)
+		.mutation(async ({ input }) => {
+			// 先按 key 查出这些行 —— 软删要拿它的 `para_key` 写墓碑(主键让位)。查询带 `alive()`:
+			// 已经软删过的行不该再删一次(list 里也看不见它),所以查不到就是 NOT_FOUND。
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)
+			const rows = await db
+				.select()
+				.from(sysPara)
+				.where(and(inArray(sysPara.para_key, input.keys), alive(sysPara)));
+			if (rows.length !== new Set(input.keys).size) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "有参数不存在(可能已被删除)" });
+			}
+			for (const row of rows) {
+				await db
+					.update(sysPara)
+					.set({ ...softDeleted(), para_key: tombstone(row.para_key, row.id, 64) })
+					.where(eq(sysPara.para_key, row.para_key));
+			}
+			clearParaCache();
+			return { keys: rows.map((row) => row.para_key), removed: rows.length };
+		}),
 });

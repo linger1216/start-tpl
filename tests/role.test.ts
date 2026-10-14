@@ -147,11 +147,11 @@ test("角色:被用户引用时不让删", async () => {
 	const user = await makeUser("usedrole");
 	await assignRoles(user, [role.id]);
 
-	await assertRejects(() => caller.role.remove({ id: role.id }), "个用户在用");
+	await assertRejects(() => caller.role.remove({ ids: [role.id] }), "个用户在用");
 
 	// 把角色从他的角色里去掉 → 就能删了
 	await assignRoles(user, []);
-	assert.equal((await caller.role.remove({ id: role.id })).success, true);
+	assert.equal((await caller.role.remove({ ids: [role.id] })).removed, 1);
 });
 
 test("角色授权:只勾子节点 → 自动补全祖先(否则侧边栏那一枝无处安放)", async () => {

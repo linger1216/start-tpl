@@ -49,6 +49,13 @@ export const PARA_VALUE_MAX = 4000;
  * 出现"界面允许传、后端拒收"这种最难查的错。
  */
 export const FILE_ALLOW_EXT_DEFAULT = "jpg,jpeg,png,gif,webp,pdf,xlsx,docx";
+
+/**
+ * 登录人机验证的开关键 —— `PARA_DEFAULTS` 里的登记在 `lib/sys-para.ts`(服务端专用),
+ * 这里只放**键名**,好让客户端(登录页)也能引用同一份,不必 import 那个会拉 `#/db` 的模块。
+ * 消费方:`lib/auth.ts` 的 `/sign-in/email` 钩子(强制校验)与 `routes/login.tsx`(画不画验证码栏)。
+ */
+export const CAPTCHA_ENABLED_KEY = "login.captcha_enabled";
 export const FILE_MAX_SIZE_MB_DEFAULT = 20;
 
 export function isParaType(value: unknown): value is ParaType {

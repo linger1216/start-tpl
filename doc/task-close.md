@@ -330,20 +330,28 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 
 ## 权限矩阵
 
-| 操作 | 创建者 | 参与者 | 执行者 | 任意登录用户(RBAC 允许访客)|
-|---|---|---|---|---|
-| 评论(`tc_comment`) | ✓ | ✓ | ✓ | ✓ |
-| 发起「不改状态」action(`to_status` = NULL,征询等) | ✓ | ✓ | ✓ | × |
-| 发起「改状态」action(`to_status` ≠ NULL) | ✓ | × | ✓ | × |
-| 关闭任务(对应 `payload.edges` 的 `who=["creator"]` 边) | ✓ | × | × | × |
-| 编辑任务(`task.update`)/ 删任务(`task.remove`) | ✓ | × | × | × |
-| 加成员(`member.add`) | ✓ | ✓ | ✓ | ✓ |
-| 移出成员(`member.remove`) | ✓ | × | × | × |
-| 删评论(`comment.remove`) | ✓(任务的所有评论) | × | × | 作者本人 |
+| 操作 | 创建者 | 参与者 | 执行者 | 管理员 | 任意登录用户(RBAC 允许访客)|
+|---|---|---|---|---|---|
+| 评论(`tc_comment`) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 发起「不改状态」action(`to_status` = NULL,征询等) | ✓ | ✓ | ✓ | ✓ | × |
+| 发起「改状态」action(`to_status` ≠ NULL) | ✓ | × | ✓ | ✓ | × |
+| 关闭任务(对应 `payload.edges` 的 `who=["creator"]` 边) | ✓ | × | × | ✓ | × |
+| 编辑任务(`task.update`)/ 删任务(`task.remove`) | ✓ | × | × | ✓ | × |
+| 加成员(`member.add`) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 移出成员(`member.remove`) | ✓ | × | × | ✓ | × |
+| 删评论(`comment.remove`) | × | × | × | ✓(全部) | 作者本人(仅自己) |
+
+> **管理员什么都可以**:管理员 = 「系统管理员」角色(`lib/casbin.ts` 的 `isAdminUser`),上表所有 ✓ 都对他成立,
+> 且**不受 `who` / `tc_member` 限制**。读路径由 `taskGet.permissions.isAdmin` 下发,写路径
+> (`taskUpdate` / `taskRemove` / `memberRemove` 的 `assertCanManage`、`taskTransit` / `actionCreate` 的 `canAct`、
+> `commentRemove`)与读路径**同源放行** —— 仍受状态机完整性约束(边必须存在),只是不查 `who`。
+>
+> 前端按钮矩阵据此取最高一档:管理员 → 全显;创建者 → 编辑 / 删除 / 刷新 / 发起征询;
+> 执行者 → 转交 / 发起征询 / 发起审批 / 刷新;参与者 → 发起征询 / 刷新。
 
 > 「全员可评论」= 任务可见即可,不限 `tc_member`。RBAC 决定谁能 **看到** 任务;`tc_member` 决定谁**参与推进**。
 >
-> **「加成员」对所有登录用户开放**(与「全员可评论」同口径:任务可见即可加);**「移出成员」仍仅创建者**。
+> **「加成员」对所有登录用户开放**(与「全员可评论」同口径:任务可见即可加);**「移出成员」仅创建者 / 管理员**。
 >
 > 「执行者可更改状态」= 通过发起 `to_status` ≠ NULL 的 `tc_action`,**只有根级 action**(子 action 不推进任务);判定走现有的 `who` 协议。
 >
@@ -370,18 +378,18 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 | `taskList` | query | `{status?,keyword?,mine?,page?,pageSize?}` | 登录 |
 | `taskGet` | query | `{id}` | 登录 |
 | `taskCreate` | mutation | `{name,description?,dueAt?,workflowId,payload?,members?}` | 登录 |
-| `taskUpdate` | mutation | `{id,name,description?,dueAt?,payload?}` | creator |
-| `taskRemove` | mutation | `{id}` | creator |
-| `taskTransit` | mutation | `{id,to}` | 边的 `who` |
+| `taskUpdate` | mutation | `{id,name,description?,dueAt?,payload?}` | creator / 管理员 |
+| `taskRemove` | mutation | `{id}` | creator / 管理员 |
+| `taskTransit` | mutation | `{id,to}` | 边的 `who`(管理员不受限) |
 | `memberAdd` | mutation | `{taskId,userId,role,isPrimary?}` | 登录(所有角色都能加) |
-| `memberRemove` | mutation | `{taskId,userId,role}` | creator |
+| `memberRemove` | mutation | `{taskId,userId,role}` | creator / 管理员 |
 | `actionList` | query | `{taskId}` | 登录 |
 | `actionMine` | query | `{page?,pageSize?}` | 登录(只读自己的) |
 | `actionCreate` | mutation | `{taskId,toStatus?,handleId,parentActionId?}` | 见权限矩阵 |
 | `actionRespond` | mutation | `{id,approved,reason?}` | `handle_id` 本人(**驳回必填 `reason`**) |
 | `commentList` | query | `{taskId}` | 登录 |
 | `commentCreate` | mutation | `{taskId,content,attachments?}` | 登录 |
-| `commentRemove` | mutation | `{id}` | 作者本人 / creator |
+| `commentRemove` | mutation | `{id}` | 作者本人 / 管理员 |
 | `attachmentUrl` | query | `{taskId,fileId,download?}` | 登录(内部校验该附件挂在本任务上) |
 
 **可见性** v1 口径:任何登录用户可读任何任务(无菜单 = RBAC 允许访客);`tc_member` 只决定**推进权**。

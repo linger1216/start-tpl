@@ -459,7 +459,7 @@ test("规则的增删改查:出参带人话标签,删掉后条件也跟着消失
 	const after = (await caller.dataScope.list()).find((item) => item.id === id);
 	assert.equal(after?.remark, "改过");
 
-	await caller.dataScope.remove({ id });
+	await caller.dataScope.remove({ ids: [id] });
 	assert.equal(
 		(await caller.dataScope.list()).some((item) => item.id === id),
 		false,
@@ -702,7 +702,7 @@ test("自定义函数插件:保存时真编译一次,能预览,被规则引用�
 		"内置插件",
 	);
 	// 内置插件不能删
-	await assertRejects(() => caller.dataPlugin.remove({ pluginKey: "fixed" }), "不能删");
+	await assertRejects(() => caller.dataPlugin.remove({ pluginKeys: ["fixed"] }), "不能删");
 
 	// 预览:拿当前登录的人真跑一次,并且**把"按什么上下文算的"一起回出来**
 	// (取不到值时管理员得能一眼看出是"配置错了"还是"这个人恰好没有")
@@ -739,9 +739,9 @@ test("自定义函数插件:保存时真编译一次,能预览,被规则引用�
 		pluginKey: PLUGIN_KEY,
 		remark: "测试用:引用自定义插件",
 	});
-	await assertRejects(() => caller.dataPlugin.remove({ pluginKey: PLUGIN_KEY }), "强制删除");
+	await assertRejects(() => caller.dataPlugin.remove({ pluginKeys: [PLUGIN_KEY] }), "强制删除");
 
-	await caller.dataPlugin.remove({ pluginKey: PLUGIN_KEY, force: true });
+	await caller.dataPlugin.remove({ pluginKeys: [PLUGIN_KEY], force: true });
 	assert.equal(
 		(await caller.dataPlugin.list()).custom.some((item) => item.pluginKey === PLUGIN_KEY),
 		false,
@@ -750,7 +750,7 @@ test("自定义函数插件:保存时真编译一次,能预览,被规则引用�
 	// 插件没了 ⇒ 那条规则还在,但取不到值 ⇒ 失败关闭(不是放行)
 	const preview = await caller.dataScope.trial({ resource: "demo_grid" });
 	assert.equal(preview.visible, 0, "被删插件的规则必须变成一行也看不到,绝不能整表放行");
-	await caller.dataScope.remove({ id: ruleId });
+	await caller.dataScope.remove({ ids: [ruleId] });
 });
 
 test("插件形态 v1.3:插件只回答「哪些值算他的」,字段仅 pluginKey/label/outputValues/status", async () => {
@@ -790,8 +790,8 @@ test("插件形态 v1.3:插件只回答「哪些值算他的」,字段仅 plugin
 	});
 	const preview = await caller.dataScope.trial({ resource: "demo_grid" });
 	assert.ok(preview.visible > 0, "清单给出真实街镇 ⇒ 应能筛出至少 1 行");
-	await caller.dataScope.remove({ id: ruleId });
-	await caller.dataPlugin.remove({ pluginKey: customKey });
+	await caller.dataScope.remove({ ids: [ruleId] });
+	await caller.dataPlugin.remove({ pluginKeys: [customKey] });
 });
 
 // ───────────────────────────── 状态流转:新建(启用)→ 试算 → 上线 ─────────────────────────────
@@ -971,5 +971,5 @@ test("写插件谁都能:有权限点的普通角色也建得来(m21097)", async
 
 	// 改 / 删也走得通
 	await plain.dataPlugin.update({ pluginKey: key, label: "改名" });
-	await plain.dataPlugin.remove({ pluginKey: key });
+	await plain.dataPlugin.remove({ pluginKeys: [key] });
 });

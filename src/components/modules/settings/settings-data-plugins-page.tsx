@@ -108,7 +108,7 @@ export function SettingsDataPluginsPage() {
 				await queryClient.invalidateQueries(trpc.dataScope.pathFilter());
 				setPendingDelete(null);
 				setForceDelete(false);
-				toast.success(`已删除插件 ${outcome.pluginKey}`);
+				toast.success(`已删除 ${outcome.removed} 个插件`);
 			},
 			onError: (error) => {
 				const message = toApiError(error).message;
@@ -286,7 +286,7 @@ export function SettingsDataPluginsPage() {
 				onConfirm={() =>
 					pendingDelete &&
 					removeMutation.mutate({
-						pluginKey: pendingDelete.pluginKey,
+						pluginKeys: [pendingDelete.pluginKey],
 						force: forceDelete || undefined,
 					})
 				}

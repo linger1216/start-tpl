@@ -69,10 +69,94 @@ function toneOf(item: TaskLogItem): string {
 }
 
 /**
- * 任务**动态** —— `tc_log` 的只读流:谁、什么时候、把什么从 A 改成 B。
+ * 任务**动态** —— 详情页右栏「流程动态」下半段(状态流之上)的事件时间轴。
  *
- * 数据由详情页统一取(`logList`),同一批 `items` 还给顶部的「流程条」用 —— 一处查询供两处。
+ * 拆成两块对外,免得详情页重复打 `Card` 头:
+ *  - `TaskCloseLogList` —— 纯列表(无 Card 标题,便于内嵌到任意 block);样式是「贯穿竖线 + 节点」时间轴
+ *  - `TaskCloseLog` —— Card 包装,含「动态」标题,留作将来被独立页面引用的入口
+ *
+ * 数据由详情页统一取(`logList`),同一批 `items` 还给右栏上方的「状态流」用 —— 一处查询供两处。
  * 认不出的 `event` 有占位(见 `describeLog` 的 default 分支),不崩、不错位。
+ */
+
+/** 纯列表,无 Card 标题。详情页右栏内嵌使用。 */
+export function TaskCloseLogList({
+	items,
+	statuses,
+	roleLabel,
+}: {
+	items: TaskLogItem[];
+	statuses: WorkflowStatus[];
+	roleLabel: (role: string) => string;
+}) {
+	if (items.length === 0) {
+		return <p className="py-2 text-xs text-muted-foreground">还没有事件。状态、动作、评论、成员的变动都会记在这里。</p>;
+	}
+	return (
+		<ul className="relative ms-2.5 space-y-1">
+			{/* 贯穿竖线:left 7px 从第一项顶部留出 12px 起到最后一项底部 12px 止 */}
+			<span aria-hidden className="pointer-events-none absolute start-[7px] top-3 bottom-3 w-px bg-border" />
+			{items.map((item) => {
+				const Icon = TASK_LOG_ICON[item.event] ?? FileQuestion;
+				const { title, note } = describeLog(item, {
+					statusLabel: (value) => logStatusLabel(statuses, value),
+					roleLabel,
+				});
+				return (
+					<li key={item.id} className="relative flex items-start gap-2 py-1.5 ps-7">
+						{/* 节点:色调走 CATEGORY_TONE / 负向色,与原版同形,但缩到 size-5 适配右栏窄列 */}
+						<span
+							className={cn(
+								"absolute start-0 mt-0.5 flex size-5 items-center justify-center rounded-full ring-2 ring-card",
+								toneOf(item),
+							)}
+						>
+							<Icon className="size-3" />
+						</span>
+						<div className="min-w-0 flex-1">
+							<div className="flex items-baseline justify-between gap-2 text-xs leading-snug">
+								<span className="text-foreground">
+									<span className="font-medium">{item.actorName ?? item.actorId}</span>
+									<span className="ms-1">{title}</span>
+								</span>
+								<span className="shrink-0 tabular-nums text-[10.5px] text-muted-foreground">
+									{item.createdAt ? formatLocalMinute(item.createdAt) : "—"}
+								</span>
+							</div>
+							{note ? <p className="mt-0.5 wrap-break-word text-[11px] text-muted-foreground">{note}</p> : null}
+						</div>
+					</li>
+				);
+			})}
+		</ul>
+	);
+}
+
+/** 「加载更多」按钮 —— 抽离出来两处都可复用 */
+function LoadMore({
+	loading,
+	total,
+	loaded,
+	onLoadMore,
+}: {
+	loading: boolean;
+	total: number;
+	loaded: number;
+	onLoadMore: () => void;
+}) {
+	if (loaded >= total) return null;
+	return (
+		<div className="pt-1.5 ps-7">
+			<Button variant="ghost" size="sm" disabled={loading} onClick={onLoadMore}>
+				{loading ? "加载中…" : "加载更多"}
+			</Button>
+		</div>
+	);
+}
+
+/**
+ * 「动态」Card(独立使用场景,详情页内嵌用 `TaskCloseLogList` 而不再走这条)——
+ * 留作将来被「单独动态页面」之类的入口复用,内部由 List + LoadMore 拼装。
  */
 export function TaskCloseLog({
 	items,
@@ -87,9 +171,7 @@ export function TaskCloseLog({
 	/** 「加载更多」在飞 */
 	loading: boolean;
 	onLoadMore: () => void;
-	/** 任务的模板状态清单(把 `value` 翻成展示名) */
 	statuses: WorkflowStatus[];
-	/** 成员角色 → 展示名(复用调用点既有的 `roleText`) */
 	roleLabel: (role: string) => string;
 }) {
 	return (
@@ -98,45 +180,8 @@ export function TaskCloseLog({
 				<CardTitle className="text-base">动态</CardTitle>
 			</CardHeader>
 			<CardContent className="pt-0">
-				{items.length === 0 ? (
-					<p className="py-3 text-sm text-muted-foreground">还没有动态。状态、动作、评论、成员的变动都会记在这里。</p>
-				) : (
-					<ul className="divide-y divide-border">
-						{items.map((item) => {
-							const Icon = TASK_LOG_ICON[item.event] ?? FileQuestion;
-							const { title, note } = describeLog(item, {
-								statusLabel: (value) => logStatusLabel(statuses, value),
-								roleLabel,
-							});
-							return (
-								<li key={item.id} className="flex items-start gap-3 py-2.5">
-									<span
-										className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full", toneOf(item))}
-									>
-										<Icon className="size-3.5" />
-									</span>
-									<div className="min-w-0 flex-1">
-										<p className="text-sm text-foreground">
-											<span className="font-medium">{item.actorName ?? item.actorId}</span>
-											<span className="ml-1.5">{title}</span>
-										</p>
-										{note ? <p className="mt-0.5 wrap-break-word text-xs text-muted-foreground">{note}</p> : null}
-									</div>
-									<span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-										{item.createdAt ? formatLocalMinute(item.createdAt) : "—"}
-									</span>
-								</li>
-							);
-						})}
-					</ul>
-				)}
-				{items.length < total ? (
-					<div className="pt-3">
-						<Button variant="outline" size="sm" disabled={loading} onClick={onLoadMore}>
-							{loading ? "加载中…" : "加载更多"}
-						</Button>
-					</div>
-				) : null}
+				<TaskCloseLogList items={items} statuses={statuses} roleLabel={roleLabel} />
+				<LoadMore loading={loading} total={total} loaded={items.length} onLoadMore={onLoadMore} />
 			</CardContent>
 		</Card>
 	);

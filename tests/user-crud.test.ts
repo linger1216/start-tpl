@@ -233,7 +233,7 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	const before = await db.select().from(sysSession).where(eq(sysSession.userId, created.id));
 	assert.ok(before.length > 0, "前置条件:登录后应该有会话");
 
-	await caller.user.remove({ id: created.id });
+	await caller.user.remove({ ids: [created.id] });
 
 	// 软删:行还在(审计留痕)、deleted_at 写上、邮箱让位(墓碑)—— 登录凭证才是真删
 	const [afterRow] = await db.select().from(sysUser).where(eq(sysUser.id, created.id));
@@ -270,7 +270,7 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 });
 
 test("user.remove:账号不存在时给 NOT_FOUND 而不是静默成功", async () => {
-	await assertRejects(() => caller.user.remove({ id: "not-exists-id" }), "不存在");
+	await assertRejects(() => caller.user.remove({ ids: ["not-exists-id"] }), "不存在");
 });
 
 test("user.update:部门是覆盖式 —— 加一个 / 去掉一个,传进去的就是最终状态", async () => {
@@ -472,7 +472,7 @@ test("user.remove:被删的人是 admin 时拒", async () => {
 	await addUserRole(nonAdmin.id, editor.roleId);
 	const nonAdminCaller = callerAs({ id: nonAdmin.id, name: nonAdmin.name, isSuper: false });
 
-	await assertRejects(() => nonAdminCaller.user.remove({ id: target.id }), "不能删除管理员账号");
+	await assertRejects(() => nonAdminCaller.user.remove({ ids: [target.id] }), "不能删除管理员账号");
 
 	// 库里的用户还在(被拒后不该删)
 	const [row] = await db.select().from(sysUser).where(eq(sysUser.id, target.id));

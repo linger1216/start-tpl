@@ -327,7 +327,7 @@ export function SettingsRolesPage() {
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"
-				onConfirm={() => pendingDelete && deleteMutation.mutate({ id: pendingDelete.id })}
+				onConfirm={() => pendingDelete && deleteMutation.mutate({ ids: [pendingDelete.id] })}
 			/>
 		</PageFrame>
 	);

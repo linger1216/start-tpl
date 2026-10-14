@@ -1033,7 +1033,7 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     letter-spacing: 0.02em;
   }
   /* 全局聚焦环:边框 + 3px soft ring,蓝调,符合设计系统 */
-  :where(button, a, input, select, textarea, [role='button'], [role='switch']):focus-visible {
+  :where(button, a, input, select,  [role='button'], [role='switch']):focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--af-blue-ring);
     border-color: var(--af-blue);

@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { Captcha } from "captchakit";
 import { LayoutDashboard } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import { Label } from "#/components/ui/label";
 import { Spinner } from "#/components/ui/spinner";
 import { APP_TITLE } from "#/lib/app-meta";
 import { authClient } from "#/lib/auth-client";
+import { CAPTCHA_ENABLED_KEY } from "#/lib/para-spec";
 
 /**
  * 登录页 —— `/login`,**故意放在 `src/routes/` 根下**(不在 `(main)` 里),这样它没有后台外壳:
@@ -23,11 +25,18 @@ import { authClient } from "#/lib/auth-client";
  * 验证码用 **CaptchaKit 自托管**(不对接 Turnstile / reCAPTCHA 等任何第三方):
  * 题面与答案全在本进程,只有 proof token 回服务端消费一次。
  *
- * ⚠️ 这一栏**无条件显示** —— 服务端 `/sign-in/email` 也无条件校验,两边对不齐就会出现
- * 「页面让人填、服务端说没填」的空转。密钥没配时由 `lib/captcha-secret.ts` 现场生成,
- * 所以也不需要在这里问「服务端开了没」(上一版为此专门开过一个 `createServerFn` 问句:
- * 判据是环境变量、浏览器看不见,现在既然不再有开关,那个问句就没有存在理由了)。
+ * ⚠️ 这一栏**默认显示**,开关是「参数管理」的 `login.captcha_enabled`(默认 true;见 `lib/para-spec.ts`
+ * 的 `CAPTCHA_ENABLED_KEY`)。服务端 `/sign-in/email` 读**同一个值**决定要不要校验 proof token ——
+ * 两边必须一致,所以本文件用下面那个 `createServerFn` 问服务端要开关,而不是自己猜(判据在库里,
+ * 浏览器看不见)。首屏就问,SSR 阶段拿到值 ⇒ 关掉后不会先闪一下验证码栏再消失。
  */
+const readCaptchaEnabled = createServerFn({ method: "GET" }).handler(async (): Promise<boolean> => {
+	// **动态 import**:`#/lib/sys-para` 拉 `#/db`,静态 import 会把 mysql2 打进浏览器包
+	// (与 `(main)/route.tsx` 的会话守卫同一个坑)
+	const { getParaBool } = await import("#/lib/sys-para");
+	return getParaBool(CAPTCHA_ENABLED_KEY, true);
+});
+
 export const Route = createFileRoute("/login")({
 	/**
 	 * `?redirect=` 是守卫带过来的原地址。**只接受站内路径**(必须以单个 `/` 开头),
@@ -38,12 +47,16 @@ export const Route = createFileRoute("/login")({
 		const ok = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//");
 		return { redirect: ok ? (raw as string) : undefined };
 	},
+	/** 人机验证开关(服务端读的参数):`false` 时本页不画验证码栏、提交也不带 token */
+	beforeLoad: async () => ({ captchaEnabled: await readCaptchaEnabled() }),
 	component: LoginPage,
 });
 
 function LoginPage() {
 	const router = useRouter();
 	const { redirect: to } = Route.useSearch();
+	/** 服务端给的开关(见上面 `beforeLoad`):`false` = 不画验证码栏、提交不带 token */
+	const { captchaEnabled } = Route.useRouteContext();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const [email, setEmail] = useState("admin@example.com");
 	const [password, setPassword] = useState("Passw0rd123");
@@ -174,8 +187,9 @@ function LoginPage() {
 		 *  - 或者用户根本没输,直接点登录。
 		 * 两种都拦成「请先完成验证码」太蠢 —— 点登录本身就是验证的入口,主动触发一次并等结果。
 		 */
-		const token = captchaToken ?? (await ensureCaptchaVerified());
-		if (!token) {
+		// 关掉人机验证时:不要 token,也不带那个头(服务端读同一个参数,同样不校验)
+		const token = captchaEnabled ? (captchaToken ?? (await ensureCaptchaVerified())) : null;
+		if (captchaEnabled && !token) {
 			setError("请先完成验证码");
 			return;
 		}
@@ -188,7 +202,7 @@ function LoginPage() {
 				// 的 body 写了严格 schema(多一个字段就报错);第二个位置参数直接就是 fetch 选项,
 				// 不用再包一层 `fetchOptions`。服务端读同一个头 ——
 				// 与 better-auth 自带 captcha 插件的 `x-captcha-response` 同套路。
-				{ headers: { "x-captcha-token": token } },
+				token ? { headers: { "x-captcha-token": token } } : undefined,
 			);
 			if (signInError) {
 				// better-auth 对「用户不存在」和「密码错」返回同一条信息 —— 这是对的,别在界面泄露哪个邮箱存在
@@ -221,6 +235,7 @@ function LoginPage() {
 	 * resolve(null) → 调用方当作「未拿到 token」处理,提示「请先完成验证码」。
 	 */
 	function ensureCaptchaVerified(): Promise<string | null> {
+		if (!captchaEnabled) return Promise.resolve(null);
 		if (captchaToken) return Promise.resolve(captchaToken);
 		const root = captchaRootRef.current;
 		const input = root?.querySelector<HTMLInputElement>(".captchakit-input");
@@ -278,27 +293,29 @@ function LoginPage() {
 								/>
 							</div>
 
-							<div className="space-y-1.5">
-								<Label>验证码</Label>
-								{/* `locale` 只有 en / fa 两种(题面文案是包内置的),中文登录页用 en。
-							    `math` + `easy`:登录是唯一入口,别把门槛设太高。
-							    组件自带一套灰阶外观,已由 `src/styles.css` 的「CaptchaKit 外观适配」段
-							    接到本项目的令牌上 —— 这里不用传 `classNames`,外观不归本文件管。
-							    自带的「Verify」按钮由样式表整块藏掉,改由 `captchaRootRef` 那个 useEffect
-							    监听输入、debounce 后派发 Enter 走包内 verify 流程 —— 拿到的 proof token
-							    落在 `captchaToken`,登录按钮直接发请求。 */}
-								<div ref={captchaRootRef}>
-									<Captcha
-										key={captchaNonce}
-										type="math"
-										difficulty="easy"
-										locale="en"
-										onVerify={onCaptchaVerify}
-										onError={onCaptchaError}
-										disabled={submitting}
-									/>
+							{captchaEnabled ? (
+								<div className="space-y-1.5">
+									<Label>验证码</Label>
+									{/* `locale` 只有 en / fa 两种(题面文案是包内置的),中文登录页用 en。
+								    `math` + `easy`:登录是唯一入口,别把门槛设太高。
+								    组件自带一套灰阶外观,已由 `src/styles.css` 的「CaptchaKit 外观适配」段
+								    接到本项目的令牌上 —— 这里不用传 `classNames`,外观不归本文件管。
+								    自带的「Verify」按钮由样式表整块藏掉,改由 `captchaRootRef` 那个 useEffect
+								    监听输入、debounce 后派发 Enter 走包内 verify 流程 —— 拿到的 proof token
+								    落在 `captchaToken`,登录按钮直接发请求。 */}
+									<div ref={captchaRootRef}>
+										<Captcha
+											key={captchaNonce}
+											type="math"
+											difficulty="easy"
+											locale="en"
+											onVerify={onCaptchaVerify}
+											onError={onCaptchaError}
+											disabled={submitting}
+										/>
+									</div>
 								</div>
-							</div>
+							) : null}
 
 							{error ? (
 								<p role="alert" className="text-xs text-danger">

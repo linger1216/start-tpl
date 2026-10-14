@@ -810,6 +810,9 @@ export const taskCloseWorkflow = mysqlTable("tc_workflow", {
  * 之后 `tc_workflow` 表怎么改都不影响已建任务。
  * `payload` 是用户自定义业务数据(JSON,可空)。
  * 软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
+ *
+ * `priority` —— `tinyint(1)` 存数字档位:`0` = P0(最高)、`1` = P1(高)、`2` = P2(普通);
+ * 映射见 `lib/task-close-spec.ts` 的词表。允许 null:老数据没有,新建时可空。
  */
 export const taskCloseTask = mysqlTable(
 	"tc_task",
@@ -820,6 +823,8 @@ export const taskCloseTask = mysqlTable(
 		status: varchar("status", { length: 32 }).notNull(),
 		creator_id: varchar("creator_id", { length: 191 }).notNull(),
 		due_at: datetime("due_at", { mode: "date" }),
+		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */
+		priority: tinyint("priority"),
 		payload: json("payload"),
 		workflow: json("workflow").notNull(),
 		deleted_at: datetime("deleted_at", { mode: "date" }),

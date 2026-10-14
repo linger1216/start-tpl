@@ -272,7 +272,7 @@ export function SettingsUsersPage() {
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"
 				onConfirm={() => {
-					if (pendingDelete) deleteMutation.mutate({ id: pendingDelete.id });
+					if (pendingDelete) deleteMutation.mutate({ ids: [pendingDelete.id] });
 				}}
 			/>
 		</PageFrame>

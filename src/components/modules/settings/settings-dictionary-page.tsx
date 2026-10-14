@@ -182,7 +182,7 @@ export function SettingsDictionaryPage() {
 		[updateMutation],
 	);
 
-	const busyId = deleteMutation.isPending ? (deleteMutation.variables?.code ?? null) : null;
+	const busyId = deleteMutation.isPending ? (deleteMutation.variables?.codes?.[0] ?? null) : null;
 	const columns = useMemo(() => dictionaryColumns({ callbacks, busyId }), [callbacks, busyId]);
 	const { table, persistColumns } = useLedgerTable({
 		columns,
@@ -301,7 +301,7 @@ export function SettingsDictionaryPage() {
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"
 				onConfirm={() => {
-					if (pendingDelete) deleteMutation.mutate({ code: pendingDelete.code });
+					if (pendingDelete) deleteMutation.mutate({ codes: [pendingDelete.code] });
 				}}
 			/>
 		</PageFrame>

@@ -358,7 +358,9 @@ plugins: [tanstackStartCookies(), userSwitchPlugin()], // 后者是运维用的�
 
 没接的部分(**不开放自注册**,账号要先在库里建 —— 见 `AGENTS.md` 的「认证」):注册页 / 忘记密码、第三方登录(加 `socialProviders` 即可,表结构不用改)。
 
-登录安全:人机验证**默认就是开的**(CaptchaKit 自托管,密钥没配会自动生成,见 `src/lib/captcha-secret.ts`);邮件则默认只打到终端,要真发配 `MAIL_DRIVER=smtp`(见 `src/lib/mailer.ts` 与 `.env.example`)。异常监控不在模板内置 —— 想接 Sentry 或自建告警,自己在 `lib/` 里加。
+登录安全:人机验证**默认就是开的**(CaptchaKit 自托管,密钥没配会自动生成,见 `src/lib/captcha-secret.ts`);
+开关在「系统设置 ▸ 参数管理」的参数 `login.captcha_enabled`(默认 `true`;关掉后登录接口不再要求验证码,
+只剩限流 + 账号锁定兜底 —— 生产不建议关)。邮件则默认只打到终端,要真发配 `MAIL_DRIVER=smtp`(见 `src/lib/mailer.ts` 与 `.env.example`)。异常监控不在模板内置 —— 想接 Sentry 或自建告警,自己在 `lib/` 里加。
 
 改动 adapter 时注意:better-auth 升级后字段若变了,会在**运行时**报「Model xxx not found」/「field not found」,`typecheck` 抓不到 —— 升级后请重新核对四张表的字段。具体选项以 [Better Auth 文档](https://www.better-auth.com)为准。
 

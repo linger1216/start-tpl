@@ -11,7 +11,9 @@ import { clearSignInFailures, isAccountLocked, recordSignInFailure } from "#/lib
 import { ensureCaptchaSecret } from "#/lib/captcha-secret";
 import { logger } from "#/lib/logger";
 import { sendMail } from "#/lib/mailer";
+import { CAPTCHA_ENABLED_KEY } from "#/lib/para-spec";
 import { purgeExpiredRateLimitsThrottled, rateLimitStorage } from "#/lib/rate-limit-storage";
+import { getParaBool } from "#/lib/sys-para";
 
 /**
  * Better Auth 的 origin 校验白名单。
@@ -207,9 +209,13 @@ export const auth = betterAuth({
 			/**
 			 * CaptchaKit 人机验证(自托管,不对接 Turnstile / reCAPTCHA 任何第三方)。
 			 *
-			 * **无条件要求** —— 没有「关掉验证码」这个开关。`ensureCaptchaSecret()` 会在
-			 * `CAPTCHAKIT_SECRET` 没配时现场生成一把(开发态写回 `.env.local`,见 `lib/captcha-secret.ts`),
-			 * 所以「忘了配密钥」不等于「登录接口裸奔」。想换密钥改环境变量即可,不必改代码。
+			 * **默认要求,开关在「参数管理」的 `login.captcha_enabled`**(默认 `true`)。
+			 * 关掉后这里直接放行 —— 登录接口就只剩限流与账号锁定兜底,生产不建议关。
+			 * 参数读的是 30 秒缓存,但 `para.update` 会 `clearParaCache()` ⇒ 改完立即生效;
+			 * 读不到 / 没配过一律按 `true`(fail-safe:宁可多要一次验证码,不可裸奔)。
+			 *
+			 * `ensureCaptchaSecret()` 会在 `CAPTCHAKIT_SECRET` 没配时现场生成一把(开发态写回
+			 * `.env.local`,见 `lib/captcha-secret.ts`),所以「忘了配密钥」不等于「登录接口裸奔」。
 			 *
 			 * 这一层是**兜底**:`/api/captcha` 端点(见 `routes/api.captcha.ts`)已经在前端答题时
 			 * verify 过一次;这里再过一次是为了「绕过前端直 POST /api/auth/sign-in/email」这条路也走不通。
@@ -217,6 +223,7 @@ export const auth = betterAuth({
 			 * token 走 `x-captcha-token` 请求头而不是 body:better-auth 客户端给 `signIn.email`
 			 * 的 body 写了严格 schema,多一个字段就得 cast;走头两边都干净。
 			 */
+			if (!(await getParaBool(CAPTCHA_ENABLED_KEY, true))) return;
 			ensureCaptchaSecret();
 			const captchaToken = readCaptchaToken(ctx);
 			if (!captchaToken) {

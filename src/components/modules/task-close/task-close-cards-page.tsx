@@ -8,6 +8,7 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
+import { PriorityBadge } from "#/components/modules/task-close/task-close-priority";
 import { StatusBadge } from "#/components/modules/task-close/task-close-status";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -101,6 +102,7 @@ export function TaskCloseCardsPage() {
 			name: payload.name,
 			description: payload.description,
 			dueAt: payload.dueAt,
+			priority: payload.priority,
 			workflowId: payload.workflowId,
 			payload: { content: payload.content, attachments: payload.attachments },
 			members: payload.executorId
@@ -192,7 +194,11 @@ export function TaskCloseCardsPage() {
 									<div className="flex size-9 items-center justify-center rounded-sm bg-primary/10 text-primary">
 										<ClipboardList className="size-[18px]" />
 									</div>
-									<StatusBadge status={item.status} label={labelOf(item.status)} />
+									{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}
+									<div className="flex flex-wrap items-center justify-end gap-1.5">
+										{item.priority ? <PriorityBadge priority={item.priority} /> : null}
+										<StatusBadge status={item.status} label={labelOf(item.status)} />
+									</div>
 								</div>
 								<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{item.name}</h3>
 								<p className="mb-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">

@@ -20,3 +20,36 @@ export type WorkflowStatus = { value: string; label: string };
 export function statusLabelOf(statuses: readonly WorkflowStatus[] | undefined, value: string): string {
 	return statuses?.find((item) => item.value === value)?.label ?? value;
 }
+
+/**
+ * 任务优先级 —— 三档,`tc_task.priority` 存为 `tinyint(1)` 数字:
+ *   `0` = P0 · 最高(紧急)
+ *   `1` = P1 · 高
+ *   `2` = P2 · 普通
+ *
+ * `value` 是档位编号(进库),`label` 是展示名(`P0 · 最高` 等),renderer 一律走 label。
+ * 取不到 / 为 null → 回退 "未设置",不抛错(老数据 / 未选优先级 都是这个分支)。
+ *
+ * 顺序敏感:`priorityToneOf` 也用同一编号索引,要改值就同时改 spec + 组件色板。
+ */
+export const TASK_PRIORITIES = [0, 1, 2] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
+	0: "P0 · 最高",
+	1: "P1 · 高",
+	2: "P2 · 普通",
+};
+
+/** 取键为 `P0`/`P1`/`P2` 的展示短名(给详情头 meta-line 用)。null / 未知 → "未设置" */
+export function priorityShortLabel(priority: TaskPriority | null | undefined): string {
+	if (priority === null || priority === undefined) return "未设置";
+	return `P${priority}`;
+}
+
+/** 从 `tc_task.priority` 取展示名;null/未知/空 → "未设置" */
+export function priorityLabelOf(priority: number | string | null | undefined): string {
+	if (priority === null || priority === undefined || priority === "") return "未设置";
+	const n = typeof priority === "string" ? Number(priority) : priority;
+	return TASK_PRIORITY_LABEL[n as TaskPriority] ?? "未设置";
+}

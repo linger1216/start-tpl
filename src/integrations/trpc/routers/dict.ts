@@ -152,16 +152,26 @@ export const dictRouter = createTRPCRouter({
 	 * 用 `tombstone()` 把编码改成墓碑值让位 —— 否则删掉的编码被死行永久占住,再也建不回来。
 	 * 读路径(列表 / byCode / 查重 / 导入先查)必须处处带 `alive()`,漏一处就把已删除的字典又暴露出去。
 	 */
-	remove: protectedProcedure.input(z.object({ code: dictCode })).mutation(async ({ input }) => {
-		// 查不到就 NOT_FOUND:墓碑已经把 `code` 让出去了,重复删除走的也是这条路
-		const existing = await getByCode(input.code);
-		if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "这个字典不存在(可能已被删除)" });
-		await db
-			.update(sysDict)
-			.set({ ...softDeleted(), code: tombstone(existing.code, existing.id, 64) })
-			.where(eq(sysDict.code, input.code));
-		return { id: existing.id, code: input.code };
-	}),
+	remove: protectedProcedure
+		.input(z.object({ codes: z.array(dictCode).min(1, "至少选一个字典").max(100, "一次最多删 100 个字典") }))
+		.mutation(async ({ input }) => {
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)。
+			// 查不到就 NOT_FOUND:墓碑已经把 `code` 让出去了,重复删除走的也是这条路
+			const rows = await db
+				.select()
+				.from(sysDict)
+				.where(and(inArray(sysDict.code, input.codes), alive(sysDict)));
+			if (rows.length !== new Set(input.codes).size) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "有字典不存在(可能已被删除)" });
+			}
+			for (const row of rows) {
+				await db
+					.update(sysDict)
+					.set({ ...softDeleted(), code: tombstone(row.code, row.id, 64) })
+					.where(eq(sysDict.code, row.code));
+			}
+			return { codes: rows.map((row) => row.code), removed: rows.length };
+		}),
 
 	/**
 	 * **Excel 导入** —— 一行 = 一个字典项(`code / name / label / value / remark`),按字典编码聚合后落库。

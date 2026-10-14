@@ -22,7 +22,7 @@
  * 每一个 mutation 尾部都要 `clearPluginCache()` —— 缓存是 30 秒的,不清就得等它过期。
  */
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -213,35 +213,47 @@ export const dataPluginRouter = createTRPCRouter({
 	 * 读路径(清单 / 改 / 查重 / `rulesUsing` 的规则统计)必须处处带 `alive()`。
 	 */
 	remove: protectedProcedure
-		.input(z.object({ pluginKey: z.string().min(1), force: z.boolean().optional() }))
+		.input(
+			z.object({
+				pluginKeys: z.array(z.string().min(1)).min(1, "至少选一个插件").max(100, "一次最多删 100 个插件"),
+				force: z.boolean().optional(),
+			}),
+		)
 		.mutation(async ({ input }) => {
-			if (BUILTIN_PLUGIN_KEYS.includes(input.pluginKey)) {
-				throw new TRPCError({ code: "FORBIDDEN", message: `「${input.pluginKey}」是内置插件,不能删` });
+			for (const key of input.pluginKeys) {
+				if (BUILTIN_PLUGIN_KEYS.includes(key)) {
+					throw new TRPCError({ code: "FORBIDDEN", message: `「${key}」是内置插件,不能删` });
+				}
 			}
-			// 这一行就是删除过程要操作的目标:`id` 与 `plugin_key` 都要拿来写墓碑(只查活着的行 —— 已经删过的不该再删)
-			const [row] = await db
+			// 这些行就是删除过程要操作的目标:`id` 与 `plugin_key` 都要拿来写墓碑(只查活着的行)。
+			// **先全量校验、再写**:批量删除不允许"删了一半"(前端也不许逐条循环,见 doc/后端接口约定.md §三)
+			const rows = await db
 				.select({ id: sysDataPlugin.id, plugin_key: sysDataPlugin.plugin_key })
 				.from(sysDataPlugin)
-				.where(and(eq(sysDataPlugin.plugin_key, input.pluginKey), alive(sysDataPlugin)))
-				.limit(1);
-			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: `没有这个插件:${input.pluginKey}` });
-
+				.where(and(inArray(sysDataPlugin.plugin_key, input.pluginKeys), alive(sysDataPlugin)));
+			if (rows.length !== new Set(input.pluginKeys).size) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "有插件不存在(可能已被删除)" });
+			}
 			if (!input.force) {
-				const used = await rulesUsing(input.pluginKey);
-				if (used > 0) {
-					throw new TRPCError({
-						code: "CONFLICT",
-						message: `还有 ${used} 条启用中的规则在用这个插件;删掉后它们会变成「一行也看不到」。确认要删请勾选强制删除`,
-					});
+				for (const row of rows) {
+					const used = await rulesUsing(row.plugin_key);
+					if (used > 0) {
+						throw new TRPCError({
+							code: "CONFLICT",
+							message: `还有 ${used} 条启用中的规则在用「${row.plugin_key}」;删掉后它们会变成「一行也看不到」。确认要删请勾选强制删除`,
+						});
+					}
 				}
 			}
 
 			// 行**软删** + `plugin_key` 墓碑:唯一键让出来,同一个标识才能重新建
-			await db
-				.update(sysDataPlugin)
-				.set({ ...softDeleted(), plugin_key: tombstone(row.plugin_key, row.id, 64) })
-				.where(eq(sysDataPlugin.plugin_key, input.pluginKey));
+			for (const row of rows) {
+				await db
+					.update(sysDataPlugin)
+					.set({ ...softDeleted(), plugin_key: tombstone(row.plugin_key, row.id, 64) })
+					.where(eq(sysDataPlugin.plugin_key, row.plugin_key));
+			}
 			clearPluginCache();
-			return { pluginKey: input.pluginKey, removed: true };
+			return { removed: rows.length };
 		}),
 });

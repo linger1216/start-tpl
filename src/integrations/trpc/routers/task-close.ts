@@ -13,6 +13,7 @@ import {
 	taskCloseTask,
 	taskCloseWorkflow,
 } from "#/db/data-base-schema";
+import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { getStorage, isPublicBucket } from "#/lib/storage";
@@ -33,6 +34,10 @@ import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../ini
  *
  * **可见性 v1 口径**:任何登录用户都能读任何任务(无菜单 = RBAC 允许访客)。
  * `tc_member` 决定的是**谁能推进**,不是**谁能看见** —— 见文档「权限矩阵」。
+ *
+ * **管理员旁路**:「系统管理员」角色(`isAdminUser`)在本模块**什么都可以** —— 读路径由
+ * `permissionsOf` 下发 `isAdmin`,写路径的 `assertCanManage` / `canAct` / `commentRemove` 一并放行,
+ * 三处判据同源。仍受状态机完整性约束(边必须存在),只是不受 `who` 限制。
  */
 
 type TaskRow = typeof taskCloseTask.$inferSelect;
@@ -142,6 +147,8 @@ const toTaskBrief = (row: TaskRow, creatorName: string | null) => ({
 	creatorName,
 	dueAt: row.due_at ? row.due_at.toISOString() : null,
 	createdAt: row.created_at ? row.created_at.toISOString() : null,
+	/** `0` = P0 / `1` = P1 / `2` = P2;老数据为 null,前端兜底 "未设置" */
+	priority: row.priority ?? null,
 });
 
 /** 详情用的全量投影(含 `workflow` 快照,前端要靠它渲染状态图) */
@@ -205,9 +212,16 @@ async function lockTask(tx: Tx, id: string): Promise<TaskRow> {
 	return row;
 }
 
-function assertCreator(task: TaskRow, meId: string) {
-	if (task.creator_id !== meId) {
-		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者能做这个操作" });
+/**
+ * 只有**创建者或管理员**能做的写操作(`taskUpdate` / `taskRemove` / `memberRemove`)。
+ *
+ * 管理员判据是 `isAdminUser`(「系统管理员」角色)——「管理员什么都可以」是本模块的既定口径
+ * (见 `doc/task-close.md` 权限矩阵),与 `permissionsOf` 下发的 `isAdmin` 同一判据,
+ * 免得出现「前端显示能点、后端 403」。
+ */
+async function assertCanManage(task: TaskRow, meId: string) {
+	if (task.creator_id !== meId && !(await isAdminUser(meId))) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者或管理员能做这个操作" });
 	}
 }
 
@@ -353,33 +367,38 @@ async function resolveAttachments(ids: readonly string[]) {
  */
 async function permissionsOf(task: TaskRow, meId: string) {
 	const isCreator = task.creator_id === meId;
+	/** 「系统管理员」—— 什么都可以(见 `doc/task-close.md` 权限矩阵);与写路径的 `assertCanManage` 同判据 */
+	const isAdmin = await isAdminUser(meId);
 	const memberRoles = await memberRolesOf(task.id, meId);
-	const myRoles = [...(isCreator ? ["creator"] : []), ...memberRoles];
+	const myRoles = [...(isAdmin ? ["admin"] : []), ...(isCreator ? ["creator"] : []), ...memberRoles];
 
 	const transitions: string[] = [];
 	let canInitiateStatusAction = false;
 	for (const edge of workflowOf(task).edges ?? []) {
 		if (edge.from !== task.status) continue;
-		if (!(await canAct(task, meId, edge.who ?? [], memberRoles))) continue;
+		// 管理员不受 `who` 限制:当前状态能走的边他都能走
+		if (!isAdmin && !(await canAct(task, meId, edge.who ?? [], memberRoles))) continue;
 		if (edge.via === "direct") transitions.push(edge.to);
 		else canInitiateStatusAction = true;
 	}
 
 	return {
+		/** 是否「系统管理员」—— 前端按钮矩阵的最高一档 */
+		isAdmin,
 		isCreator,
 		myRoles,
 		/** 我能**直接**改到的状态 */
 		transitions,
 		/** 我能发起「改状态」的 action */
 		canInitiateStatusAction,
-		/** 我能发起「不改状态」的 action(征询)—— creator / participant / executor */
+		/** 我能发起「不改状态」的 action(征询)—— creator / participant / executor / admin */
 		canInitiateConsult: myRoles.length > 0,
 		/** 加成员:所有登录用户(任务可见即可)—— 与「全员可评论」同口径 */
 		canAddMember: true,
-		/** 移出成员:仅创建者 */
-		canManageMembers: isCreator,
-		canUpdate: isCreator,
-		canRemove: isCreator,
+		/** 移出成员:创建者或管理员 */
+		canManageMembers: isAdmin || isCreator,
+		canUpdate: isAdmin || isCreator,
+		canRemove: isAdmin || isCreator,
 	};
 }
 
@@ -654,6 +673,8 @@ export const taskCloseRouter = createTRPCRouter({
 				description: z.string().max(5000).nullish(),
 				/** ISO 字符串,例:`2026-10-09T18:00:00.000Z` */
 				dueAt: z.string().max(64).nullish(),
+				/** `0` = P0 / `1` = P1 / `2` = P2;留空表示「未设置」 */
+				priority: z.number().int().min(0).max(2).nullish(),
 				workflowId: ID,
 				payload: taskPayloadSchema.nullish(),
 				members: z
@@ -688,6 +709,7 @@ export const taskCloseRouter = createTRPCRouter({
 					status: snapshot.initial,
 					creator_id: me.id,
 					due_at: input.dueAt ? new Date(input.dueAt) : null,
+					priority: input.priority ?? null,
 					payload: normalizePayload(input.payload),
 					workflow: snapshot,
 					created_at: now,
@@ -734,41 +756,47 @@ export const taskCloseRouter = createTRPCRouter({
 				name: z.string().min(1, "任务名称不能为空").max(255),
 				description: z.string().max(5000).nullish(),
 				dueAt: z.string().max(64).nullish(),
+				/** `undefined` = 不传(保旧值);`null` = 显式清空;`0|1|2` = 改值 */
+				priority: z.number().int().min(0).max(2).nullish(),
 				payload: taskPayloadSchema.nullish(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const task = await getTaskRow(input.id);
-			assertCreator(task, me.id);
+			await assertCanManage(task, me.id);
 
 			// 变更前的值只能在这里取(update 之后就没了)—— 日志要写"从什么改成什么"
 			const nextName = input.name.trim();
 			const nextDescription = input.description?.trim() || null;
 			const nextDueAt = input.dueAt ? new Date(input.dueAt) : null;
+			/** 优先级 `undefined` = 不动;`null` = 显式清空;字符串 = 改值 */
+			const nextPriority = input.priority === undefined ? undefined : input.priority;
 			const nextPayload = normalizePayload(input.payload);
 			const prevDueAt = task.due_at ? task.due_at.toISOString() : null;
 			const nextDueText = nextDueAt ? nextDueAt.toISOString() : null;
-			const fields: Array<{ key: string; from: string | null; to: string | null }> = [];
+			const fields: Array<{ key: string; from: string | number | null; to: string | number | null }> = [];
 			if (nextName !== task.name) fields.push({ key: "name", from: task.name, to: nextName });
 			if (nextDescription !== task.description) {
 				fields.push({ key: "description", from: task.description, to: nextDescription });
 			}
 			if (nextDueText !== prevDueAt) fields.push({ key: "dueAt", from: prevDueAt, to: nextDueText });
+			if (nextPriority !== undefined && nextPriority !== task.priority) {
+				fields.push({ key: "priority", from: task.priority, to: nextPriority });
+			}
 			const payloadChanged = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
 
 			const now = new Date();
 			await db.transaction(async (tx) => {
-				await tx
-					.update(taskCloseTask)
-					.set({
-						name: nextName,
-						description: nextDescription,
-						due_at: nextDueAt,
-						payload: nextPayload,
-						updated_at: now,
-					})
-					.where(eq(taskCloseTask.id, task.id));
+				const setValue: Partial<typeof taskCloseTask.$inferInsert> = {
+					name: nextName,
+					description: nextDescription,
+					due_at: nextDueAt,
+					payload: nextPayload,
+					updated_at: now,
+				};
+				if (nextPriority !== undefined) setValue.priority = nextPriority;
+				await tx.update(taskCloseTask).set(setValue).where(eq(taskCloseTask.id, task.id));
 				await logTaskEvent(tx, {
 					taskId: task.id,
 					event: "task.update",
@@ -784,7 +812,7 @@ export const taskCloseRouter = createTRPCRouter({
 	taskRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
-		assertCreator(task, me.id);
+		await assertCanManage(task, me.id);
 		const now = new Date();
 		await db.transaction(async (tx) => {
 			await tx
@@ -806,6 +834,7 @@ export const taskCloseRouter = createTRPCRouter({
 		.input(z.object({ id: ID, to: z.string().min(1).max(32) }))
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
+			const isAdmin = await isAdminUser(me.id);
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
 				if (task.status === input.to) {
@@ -824,7 +853,7 @@ export const taskCloseRouter = createTRPCRouter({
 				if (!edge) {
 					throw new TRPCError({ code: "BAD_REQUEST", message: `没有 ${task.status} → ${input.to} 的直接转移` });
 				}
-				if (!(await canAct(task, me.id, edge.who ?? []))) {
+				if (!isAdmin && !(await canAct(task, me.id, edge.who ?? []))) {
 					throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限做这次状态转移" });
 				}
 				const now = new Date();
@@ -917,7 +946,7 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const task = await getTaskRow(input.taskId);
-			assertCreator(task, me.id);
+			await assertCanManage(task, me.id);
 			const now = new Date();
 			await db.transaction(async (tx) => {
 				await tx
@@ -1021,6 +1050,7 @@ export const taskCloseRouter = createTRPCRouter({
 
 			const id = newId();
 			const now = new Date();
+			const isAdmin = await isAdminUser(me.id);
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.taskId);
 
@@ -1054,10 +1084,10 @@ export const taskCloseRouter = createTRPCRouter({
 						if (!edge) {
 							throw new TRPCError({ code: "BAD_REQUEST", message: `没有 ${task.status} → ${toStatus} 的审批边` });
 						}
-						if (!(await canAct(task, me.id, edge.who ?? []))) {
+						if (!isAdmin && !(await canAct(task, me.id, edge.who ?? []))) {
 							throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限发起这次状态变更" });
 						}
-					} else if ((await memberRolesOf(task.id, me.id, tx)).length === 0 && task.creator_id !== me.id) {
+					} else if (!isAdmin && (await memberRolesOf(task.id, me.id, tx)).length === 0 && task.creator_id !== me.id) {
 						throw new TRPCError({ code: "FORBIDDEN", message: "只有创建者 / 参与者 / 执行者能发起征询" });
 					}
 				}
@@ -1270,7 +1300,7 @@ export const taskCloseRouter = createTRPCRouter({
 			return { id };
 		}),
 
-	/** 删评论(软删)—— 作者本人,或任务创建者(他要能清掉不合适的言论) */
+	/** 删评论(软删)—— **只有作者本人**;管理员可删任意评论(任务创建者**不**在此列) */
 	commentRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const [row] = await db
@@ -1280,8 +1310,8 @@ export const taskCloseRouter = createTRPCRouter({
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "评论不存在" });
 		const task = await getTaskRow(row.task_id);
-		if (row.author_id !== me.id && task.creator_id !== me.id) {
-			throw new TRPCError({ code: "FORBIDDEN", message: "只有作者本人或任务创建者能删除评论" });
+		if (row.author_id !== me.id && !(await isAdminUser(me.id))) {
+			throw new TRPCError({ code: "FORBIDDEN", message: "只能删除自己的评论(管理员除外)" });
 		}
 		await db.transaction(async (tx) => {
 			await tx
