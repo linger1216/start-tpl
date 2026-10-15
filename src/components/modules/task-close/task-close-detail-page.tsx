@@ -13,7 +13,7 @@ import {
 	type TaskFormEditing,
 	type TaskFormPayload,
 } from "#/components/modules/task-close/task-close-form";
-import { TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
+import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
 import { PriorityBadge } from "#/components/modules/task-close/task-close-priority";
 import { StatusBadge } from "#/components/modules/task-close/task-close-status";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
@@ -721,18 +721,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								roleLabel={roleText}
 								loading={logQuery.isPending}
 							/>
-							{(logQuery.data?.items?.length ?? 0) < (logQuery.data?.total ?? 0) ? (
-								<div className="pt-1.5 ps-7">
-									<Button
-										variant="ghost"
-										size="sm"
-										disabled={logQuery.isFetching}
-										onClick={() => setLogPageSize((size) => size + 20)}
-									>
-										{logQuery.isFetching ? "加载中…" : "加载更多"}
-									</Button>
-								</div>
-							) : null}
+							<LoadMore
+								loading={logQuery.isFetching}
+								total={logQuery.data?.total ?? 0}
+								loaded={logQuery.data?.items?.length ?? 0}
+								onLoadMore={() => setLogPageSize((size) => size + 20)}
+							/>
 						</section>
 					</div>
 				</aside>

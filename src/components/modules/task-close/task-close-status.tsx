@@ -34,7 +34,3 @@ export function StatusBadge({ status, label, className }: { status: string; labe
 		</Badge>
 	);
 }
-
-/** `tc_action.status` 的中文名(动作自身状态,与模板状态无关) */
-export const actionStatusText = (status: string) =>
-	({ active: "待答复", queued: "排队中", done: "已通过", rejected: "已驳回" })[status] ?? status;

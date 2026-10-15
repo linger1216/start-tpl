@@ -23,12 +23,12 @@ import type { TaskAttachment, TaskContentBlock } from "#/lib/task-content";
 import { formatLocalDate } from "#/lib/time";
 
 /** ISO → 本地 `YYYY-MM-DD`(日期选择器只认这个形状;空值回空串) */
-export function toDateInput(iso: string | null | undefined): string {
+function toDateInput(iso: string | null | undefined): string {
 	return iso ? formatLocalDate(iso) : "";
 }
 
 /** 本地 `YYYY-MM-DD` → ISO(按本地 0 点算,避免 `new Date("YYYY-MM-DD")` 当 UTC 差一天) */
-export function fromDateInput(date: string): string | null {
+function fromDateInput(date: string): string | null {
 	return date ? new Date(`${date}T00:00:00`).toISOString() : null;
 }
 
@@ -63,7 +63,7 @@ export type TaskFormPayload = {
 	attachments: string[];
 };
 
-export type Option = SearchSelectOption<string>;
+type Option = SearchSelectOption<string>;
 
 /**
  * 新建 / 编辑任务。

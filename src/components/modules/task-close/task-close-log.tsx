@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import {
 	describeLog,
 	logCategoryOf,
@@ -72,9 +71,9 @@ function toneOf(item: TaskLogItem): string {
 /**
  * 任务**动态** —— 详情页右栏「流程动态」下半段(状态流之上)的事件时间轴。
  *
- * 拆成两块对外,免得详情页重复打 `Card` 头:
+ * 拆成两块对外:
  *  - `TaskCloseLogList` —— 纯列表(无 Card 标题,便于内嵌到任意 block);样式是「贯穿竖线 + 节点」时间轴
- *  - `TaskCloseLog` —— Card 包装,含「动态」标题,留作将来被独立页面引用的入口
+ *  - `LoadMore` —— 「加载更多」按钮(详情页与未来入口共用)
  *
  * 数据由详情页统一取(`logList`),同一批 `items` 还给右栏上方的「状态流」用 —— 一处查询供两处。
  * 认不出的 `event` 有占位(见 `describeLog` 的 default 分支),不崩、不错位。
@@ -140,8 +139,8 @@ export function TaskCloseLogList({
 	);
 }
 
-/** 「加载更多」按钮 —— 抽离出来两处都可复用 */
-function LoadMore({
+/** 「加载更多」按钮 —— `loaded >= total` 时不渲染(空态由父级自己处理) */
+export function LoadMore({
 	loading,
 	total,
 	loaded,
@@ -159,38 +158,5 @@ function LoadMore({
 				{loading ? "加载中…" : "加载更多"}
 			</Button>
 		</div>
-	);
-}
-
-/**
- * 「动态」Card(独立使用场景,详情页内嵌用 `TaskCloseLogList` 而不再走这条)——
- * 留作将来被「单独动态页面」之类的入口复用,内部由 List + LoadMore 拼装。
- */
-export function TaskCloseLog({
-	items,
-	total,
-	loading,
-	onLoadMore,
-	statuses,
-	roleLabel,
-}: {
-	items: TaskLogItem[];
-	total: number;
-	/** 「加载更多」在飞 */
-	loading: boolean;
-	onLoadMore: () => void;
-	statuses: WorkflowStatus[];
-	roleLabel: (role: string) => string;
-}) {
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-base">动态</CardTitle>
-			</CardHeader>
-			<CardContent className="pt-0">
-				<TaskCloseLogList items={items} statuses={statuses} roleLabel={roleLabel} />
-				<LoadMore loading={loading} total={total} loaded={items.length} onLoadMore={onLoadMore} />
-			</CardContent>
-		</Card>
 	);
 }

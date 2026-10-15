@@ -110,7 +110,7 @@ export type TaskLogItem = {
 	createdAt: string | null;
 };
 
-/** 这次事件有没有动任务状态 —— 流程条就取这些行(见 `task-close-status-timeline.tsx`) */
+/** 这次事件有没有动任务状态 —— 流程脊(`TaskFlowSpine`)就取这些行 */
 export function logMovedStatus(item: Pick<TaskLogItem, "toStatus">): boolean {
 	return item.toStatus !== null;
 }
