@@ -73,6 +73,13 @@
 - `created_at` 是 **`datetime(3)`**(毫秒):同一事务里可能写多行,秒精度会撞点;
   同毫秒撞点时读取侧用 `id` 兜底排序 —— **只为稳定,不表示语义**;
 - **不加 `deleted_at`**(流水表,见 `lib/soft-delete.ts`)、**不加 `updated_at`**(不可变);
+- **通知是写入动作的伴生物**(走 `lib/notice.ts`,只插账、不进业务事务):发起审批 / 征询给被指派人发
+  「轮到你了」(`notifyAssigned`);评论与回复里出现「`@` + 参与人姓名」给被点到的**参与人**
+  (创建者 + 在册成员,名单由服务端算)发提及通知(`notifyMentions`);两者都带
+  `path: /task-close/{taskId}`,点铃铛那条直接进任务详情;
+- 侧边栏「我的任务」的**红点** = `taskClose.menuBadge`:只数**未读的任务通知**
+  (@提及 / "轮到你了",路径都指向 `/task-close/{id}`)—— **标已读的那一下就是消红点的那一下**;
+  动作本身的待办不进徽标(「我的任务」页自己看得见)。它登记在 `UNMAPPED_QUERIES` / `UNSCOPED_QUERIES` 的外壳级类别;
 - 库里**不存中文**:状态存 `value`、事件存英文码,展示名由 `src/lib/task-close-log.ts` 的词表 +
   模板的 `statuses` 现算(与「状态存 value、UI 显示 label」同口径);认不出的 `event` 降级成占位,不崩;
 - 读接口 `taskClose.logList`(登录 + 任务可见,`pageInput` 分页);权限分类在 `lib/rbac.ts` 的
@@ -422,7 +429,7 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 
 ## 接口
 
-24 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
+25 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
 
 | 路径 | 类型 | 入参 | 谁能调 |
 |---|---|---|---|
@@ -449,6 +456,7 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 | `commentRemove` | mutation | `{id}` | 作者本人 / 管理员 |
 | `attachmentUrl` | query | `{taskId,fileId,download?}` | 登录(内部校验该附件挂在本任务上) |
 | `actionReply` | mutation | `{id,content,attachments?}` | `handle_id` 本人(**回复征询**:意见落成一条评论,动作即结) |
+| `menuBadge` | query | — | 登录(侧边栏「我的任务」红点:待我处理的动作数 + 未读任务通知) |
 | `logList` | query | `{taskId,page?,pageSize?}` | 登录 |
 
 **可见性** v1 口径:任何登录用户可读任何任务(无菜单 = RBAC 允许访客);`tc_member` 只决定**推进权**。

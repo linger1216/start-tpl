@@ -355,6 +355,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"department.members",
 	"notice.list",
 	"tag.list",
+	// 类别 1:外壳级 —— 「我的任务」侧栏红点(待办数 + 未读任务通知,都按 me 自限,不涉数据范围)
+	"taskClose.menuBadge",
 	// 类别 2:全局定义 / 配置类
 	"menu.list",
 	"role.list",
@@ -455,6 +457,8 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"notice.list",
 	// 类别 1:外壳级 —— 侧栏模式 / 树展开 / 页大小 / 列偏好,每个页面都在用
 	"para.byKey",
+	// 类别 1:外壳级 —— 侧边栏「我的任务」的红点徽标,和铃铛一个性质(要登录,不用授权)
+	"taskClose.menuBadge",
 	// 类别 1:外壳级 —— 字典的按编码取值器,跨页面消歧用,不是某个页面的数据
 	"dict.byCode",
 	// 类别 1:工作台打标签那一格(工作台不挂菜单授权) —— 标签页自己的 `tag.list` 也没有登记,

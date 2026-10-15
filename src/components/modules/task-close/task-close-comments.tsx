@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Trash2, X } from "lucide-react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
+import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
@@ -50,6 +52,7 @@ export function TaskCloseComments({
 	const queryClient = useQueryClient();
 	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
+	const textRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const [content, setContent] = useState("");
 	const [attachments, setAttachments] = useState<Pending[]>([]);
@@ -60,8 +63,20 @@ export function TaskCloseComments({
 	const [pendingRemove, setPendingRemove] = useState<{ id: string; authorName: string | null } | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
+	// 参与人名单(创建者 + 成员,去掉自己)供 @选单过滤 —— 用 taskGet(详情页同键,缓存共享,不多打一次)
+	const taskQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
+	const participants: Participant[] | undefined = (() => {
+		const detail = taskQuery.data;
+		if (!detail) return undefined;
+		const roster = [
+			{ id: detail.task.creatorId, name: detail.task.creatorName ?? "" },
+			...detail.members.map((member) => ({ id: member.userId, name: member.name ?? "" })),
+		];
+		return roster.filter((person) => person.id !== meId && person.name);
+	})();
 	// 评论也会进活动日志(`tc_log`)—— 失效要连日志一起,否则「动态」卡还停在发评论之前
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
+	const mention = useMentionPicker(participants, setContent, textRef);
 
 	const createMutation = useMutation(
 		trpc.taskClose.commentCreate.mutationOptions({
@@ -120,20 +135,34 @@ export function TaskCloseComments({
 				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
 				<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
 					<textarea
+						ref={textRef}
 						rows={3}
 						value={content}
-						onChange={(e) => setContent(e.target.value)}
+						onChange={(event) => {
+							setContent(event.target.value);
+							mention.track(event.target.value, event.target.selectionStart);
+						}}
 						placeholder="说点什么…  输入 @ 提及成员"
 						aria-label="评论"
 						aria-labelledby={labelledBy}
 						className="block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.55] placeholder:text-muted-foreground sm:text-sm"
-						onKeyDown={(e) => {
-							if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-								e.preventDefault();
+						onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+							// @选单在场时,↑↓/Enter/Tab/Esc 归它管 —— 别把"回车发送"带出来
+							if (mention.onKeyDown(event)) return;
+							if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+								event.preventDefault();
 								submit();
 							}
 						}}
+						onBlur={() => mention.close()}
 					/>
+					{mention.state ? (
+						<MentionList
+							options={mention.options}
+							highlight={mention.highlight}
+							onPick={(person) => mention.insert(person.name, content)}
+						/>
+					) : null}
 					{attachments.length > 0 ? (
 						<div className="flex flex-wrap gap-1.5 px-3 pt-2">
 							{attachments.map((file) => (
@@ -169,9 +198,10 @@ export function TaskCloseComments({
 							<Button
 								variant="ghost"
 								size="sm"
-								aria-label="提及"
-								title="提及成员:暂未实现"
-								onClick={() => toast.info("@提及:暂未实现,需要新交互后再接上")}
+								aria-label="提及成员"
+								title="提及参与人(在光标处插入 @)"
+								disabled={uploading}
+								onClick={() => mention.insertAtCursor(content)}
 							>
 								<span aria-hidden className="text-base leading-none">
 									@

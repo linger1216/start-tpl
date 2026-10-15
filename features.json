@@ -28,7 +28,7 @@
       "description": "甲发任务给乙 → 处置 → 审批 → 关闭归档(含活动日志 tc_log)",
       "default": false,
       "requires": [],
-      "procedures": 24,
+      "procedures": 25,
       "paths": [
         "src/components/modules/task-close",
         "src/routes/(main)/task-close",

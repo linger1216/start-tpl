@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, like, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
 import {
 	sysFile,
+	sysNotice,
 	sysUser,
 	taskCloseAction,
 	taskCloseComment,
@@ -15,6 +16,7 @@ import {
 } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
+import { notify, notifyMany } from "#/lib/notice";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { getStorage, isPublicBucket } from "#/lib/storage";
 import { LOCKED_STATUS, type TaskLogEvent } from "#/lib/task-close-log";
@@ -280,10 +282,61 @@ async function isLocked(taskId: string, reader: Reader = db): Promise<boolean> {
 
 /** 一批 user_id → 姓名。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */
 async function nameMapOf(ids: readonly string[]): Promise<Map<string, string>> {
-	const uniq = [...new Set(ids.filter(Boolean))];
-	if (uniq.length === 0) return new Map();
-	const rows = await db.select({ id: sysUser.id, name: sysUser.name }).from(sysUser).where(inArray(sysUser.id, uniq));
+	const unique = [...new Set(ids.filter(Boolean))];
+	if (unique.length === 0) return new Map();
+	const rows = await db.select({ id: sysUser.id, name: sysUser.name }).from(sysUser).where(inArray(sysUser.id, unique));
 	return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+/**
+ * **@提及通知** —— 扫评论正文里「`@` + 参与人姓名」,给被点到的人各发一条站内通知。
+ *
+ * 参与人名单由**服务端**算(创建者 + 在册成员,不含已软删行):不信任前端传名单,
+ * 提及不在任务上的人(评论里写了个路人姓名)就没有通知可发。
+ * 同名两个人会一起被 @ 上(可接受:中文姓名本来就常重)。
+ * `notify()` 内部吞错、也不在本模块的事务里 —— 通知晚半秒到无所谓,业务**绝不能**因它回滚;
+ * 所以两个调用点都放在**事务成功之后**。
+ */
+async function notifyMentions(task: TaskRow, content: string, author: { id: string; name: string }): Promise<void> {
+	const memberRows = await db
+		.select({ user_id: taskCloseMember.user_id })
+		.from(taskCloseMember)
+		.where(eq(taskCloseMember.task_id, task.id));
+	const roster = new Set<string>([task.creator_id, ...memberRows.map((row) => row.user_id)]);
+	roster.delete(author.id);
+
+	const names = await nameMapOf([...roster]);
+	const receivers: string[] = [];
+	for (const [id, name] of names) {
+		if (name && content.includes(`@${name}`)) receivers.push(id);
+	}
+	if (receivers.length === 0) return;
+	await notifyMany(receivers, {
+		title: `${author.name || "有人"} 在「${task.name}」的讨论里 @ 你`,
+		body: content.slice(0, 120),
+		path: `/task-close/${task.id}`,
+		level: "info",
+	});
+}
+
+/**
+ * 「指派」类通知:发起 / 子级动作把 `handle_id` 指给了谁,那个人就要有一条
+ * **"轮到你了"**的站内通知(铃铛会响、侧边栏「我的任务」红点亮起)。
+ * 与 `notifyMentions` 同样的事务外发送口径(`actionCreate` 的事务返回之后调用)。
+ */
+async function notifyAssigned(
+	task: TaskRow,
+	kind: "approval" | "consult",
+	handleId: string,
+	initiator: { id: string; name: string },
+): Promise<void> {
+	if (handleId === initiator.id) return;
+	await notify(handleId, {
+		title: `轮到你:${task.name}`,
+		body: `${initiator.name || "有人"} ${kind === "approval" ? "发起审批" : "征询了你"} —— 到「我的任务」查看`,
+		path: `/task-close/${task.id}`,
+		level: "info",
+	});
 }
 
 /** 稳定序列化(键排序)—— **只用来比**「内容区 / 附件有没有变」,别拿去存库 */
@@ -1129,6 +1182,23 @@ export const taskCloseRouter = createTRPCRouter({
 	}),
 
 	/**
+	 * 侧边栏「我的任务」的**红点计数** —— 只数**未读的站内任务通知**
+	 * (@提及 / "轮到你了"这类,路径都指向 `/task-close/{id}`);标已读的那一下就是消红点的那一下 ——
+	 * 动作本身的待办在「我的任务」页里自己看得见,不再给徽标双记账。
+	 *
+	 * 它是**外壳级**读口(每个页面都在用,只哨登录,登记在 `UNMAPPED_QUERIES` 类别 1);
+	 * 侧边栏 30s 轮询 + SSE(`notice.new`)一起喂它,新通知秒亮、已读秒消。
+	 */
+	menuBadge: protectedProcedure.query(async ({ ctx }) => {
+		const me = requireCurrentUser(ctx);
+		const [taskNotices] = await db
+			.select({ n: count() })
+			.from(sysNotice)
+			.where(and(eq(sysNotice.user_id, me.id), isNull(sysNotice.read_at), like(sysNotice.path, "/task-close/%")));
+		return { count: Number(taskNotices?.n ?? 0) };
+	}),
+
+	/**
 	 * 发起动作 —— 审批(`toStatus` 有值)和征询(`toStatus` 为空)是同一张表的同一种模式。
 	 *
 	 * 派生规则(文档「状态机推进」):
@@ -1150,15 +1220,19 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const [handle] = await db
-				.select({ id: sysUser.id })
+				.select({ id: sysUser.id, name: sysUser.name })
 				.from(sysUser)
 				.where(and(eq(sysUser.id, input.handleId), alive(sysUser)))
 				.limit(1);
 			if (!handle) throw new TRPCError({ code: "NOT_FOUND", message: "指派人不存在" });
 
+			const taskRow = await getTaskRow(input.taskId);
+
 			const id = newId();
 			const now = new Date();
 			const isAdmin = await isAdminUser(me.id);
+			// 事务外先算「这次是不是审批」—— 事务成功后发通知要用它(局部变量出不了事务的闭包)
+			const replyKind: "approval" | "consult" = input.toStatus ? "approval" : "consult";
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.taskId);
 
@@ -1241,6 +1315,8 @@ export const taskCloseRouter = createTRPCRouter({
 					at: now,
 				});
 			});
+			// 事务**成功之后**才发通知("轮到你了"):晚半秒到无所谓,绝不能拖累业务。
+			await notifyAssigned(taskRow, replyKind, input.handleId, me);
 			return { id };
 		}),
 
@@ -1346,6 +1422,7 @@ export const taskCloseRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
+			let taskForNotice: TaskRow | null = null;
 			await db.transaction(async (tx) => {
 				const [action] = await tx.select().from(taskCloseAction).where(eq(taskCloseAction.id, input.id)).limit(1);
 				if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
@@ -1357,6 +1434,7 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 				const content = input.content.trim();
 				if (!content) throw new TRPCError({ code: "BAD_REQUEST", message: "回复内容不能为空" });
+				taskForNotice = await getTaskRow(action.task_id);
 
 				const now = new Date();
 				const commentId = newId();
@@ -1387,6 +1465,8 @@ export const taskCloseRouter = createTRPCRouter({
 					at: now,
 				});
 			});
+			// 事务后通知:回复里如果 @ 了谁,被点到的人也要有一条站内通知(与评论同一口径)
+			if (taskForNotice) await notifyMentions(taskForNotice, input.content, me);
 			return { ok: true };
 		}),
 
@@ -1445,7 +1525,7 @@ export const taskCloseRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			await getTaskRow(input.taskId);
+			const task = await getTaskRow(input.taskId);
 			// zod 的 min(1) 拦不住 "   ":trim 后为空的评论等于没写,直接拒(与驳回原因同一口径)
 			if (!input.content.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "评论内容不能为空" });
 			const id = newId();
@@ -1469,6 +1549,8 @@ export const taskCloseRouter = createTRPCRouter({
 					at: now,
 				});
 			});
+			// 事务成功之后扫 @提及 —— 通知发不进事务(晚半秒到无所谓,业务绝不能因它回滚)
+			await notifyMentions(task, input.content, me);
 			return { id };
 		}),
 

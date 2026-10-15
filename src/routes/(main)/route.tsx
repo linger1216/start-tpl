@@ -73,10 +73,11 @@ export const Route = createFileRoute("/(main)")({
 	},
 
 	/**
-	 * 预取外壳依赖的两份服务端数据,让首屏(SSR)直出就是最终形态:
+	 * 预取外壳依赖的三份服务端数据,让首屏(SSR)直出就是最终形态:
 	 *  1. `sys_menu` 的菜单 —— 否则先渲染静态 NAV_NODES 再被表里的菜单替换;
-	 *  2. 侧边栏收起形态(`sys_para` 的一条偏好)—— 否则收起时宽度会闪一下。
-	 * 第 2 条失败不阻断外壳:解析侧会回落默认值(见 lib/sidebar-mode.ts),所以单独吞掉错误。
+	 *  2. 侧边栏收起形态(`sys_para` 的一条偏好)—— 否则收起时宽度会闪一下;
+	 *  3. 「我的任务」红点计数 —— 否则首帧没点、有"轮到你了"时闪一下才补。
+	 * 第 2 / 3 条失败不阻断外壳(红点晚一拍再亮而已):各自吞掉错误。
 	 */
 	loader: async ({ context }) => {
 		await Promise.all([
@@ -86,6 +87,7 @@ export const Route = createFileRoute("/(main)")({
 			context.queryClient
 				.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: SIDEBAR_MODE_CONFIG_KEY }))
 				.catch(() => undefined),
+			context.queryClient.ensureQueryData(context.trpc.taskClose.menuBadge.queryOptions()).catch(() => undefined),
 		]);
 	},
 

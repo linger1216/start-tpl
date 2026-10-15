@@ -1,14 +1,20 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronRight, Layers } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useParaRaw } from "#/hooks/use-para-prefs";
+import { useTRPC } from "#/integrations/trpc/react";
 import { APP_SUBTITLE, APP_TITLE } from "#/lib/app-meta";
 import { parseSidebarCollapseMode, SIDEBAR_MODE_CONFIG_KEY, type SidebarCollapseMode } from "#/lib/sidebar-mode";
+import { useNoticeSse } from "#/lib/use-notice-sse";
 import { cn } from "#/lib/utils";
 import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
 import { useNavNodes, useNavTrail } from "./nav-data";
 import { SidebarHeader } from "./sidebar-header";
+
+/** 「我的任务」的菜单 path;红点只挂它与它所在的分组 / 迷你图标上 */
+const TASK_MENU_PATH = "/task-close";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    侧边栏 —— 只做导航(规格见 DESIGN.md §5.1)
@@ -42,6 +48,13 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 	const rail = collapsed && mode === "rail";
 
 	const nodes = useNavNodes();
+
+	// 「我的任务」红点:当前用户的待办动作数 + 未读任务通知(taskClose.menuBadge,30s 轮询兜底;
+	// 新通知由 SSE 举旗 —— useNoticeSse 在收到 notice.new 时也会失效 taskClose 的查询缓存)
+	const trpc = useTRPC();
+	useNoticeSse();
+	const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });
+	const taskDot = (badgeQuery.data?.count ?? 0) > 0;
 
 	// 当前路径命中的分组链 —— 决定初始展开哪些分支
 	const trail = useNavTrail(pathname);
@@ -102,7 +115,9 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 				)}
 			>
 				{rail
-					? nodes.map((node) => <RailItem key={node.name} node={node} pathname={pathname} activePath={activePath} />)
+					? nodes.map((node) => (
+							<RailItem key={node.name} node={node} pathname={pathname} activePath={activePath} taskDot={taskDot} />
+						))
 					: nodes.map((node) => (
 							<NavItem
 								key={node.name}
@@ -111,6 +126,7 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 								activePath={activePath}
 								collapsedIds={collapsedIds}
 								onToggle={toggleCollapsedId}
+								taskDot={taskDot}
 							/>
 						))}
 			</nav>
@@ -150,6 +166,7 @@ function NavItem({
 	activePath,
 	collapsedIds,
 	onToggle,
+	taskDot,
 }: {
 	node: NavNode;
 	pathname: string;
@@ -157,6 +174,8 @@ function NavItem({
 	activePath: string | null;
 	collapsedIds: ReadonlySet<string>;
 	onToggle: (id: string) => void;
+	/** 「我的任务」有红点要亮(待办动作数 + 未读任务通知)—— 只画在那一项与其分组 */
+	taskDot: boolean;
 }) {
 	const Icon = NAV_ICON_MAP[node.icon] ?? Layers;
 	const hasChildren = !!node.children?.length;
@@ -178,6 +197,8 @@ function NavItem({
 		// 蓝色只属于"被点中的那一项",所以父级这里必须用 `===` 而不是 prefix 匹配。
 		const selfSelected = pathname === node.path;
 		const open = !collapsedIds.has(nodeId);
+		// 分组级红点:子树里有「我的任务」时把提示上提一层 —— 用户可以先看见再展开
+		const groupDot = taskDot && (node.children ?? []).some((child) => child.path === TASK_MENU_PATH);
 
 		return (
 			<div>
@@ -205,6 +226,7 @@ function NavItem({
 					>
 						{node.name}
 					</span>
+					{groupDot ? <MenuDot /> : null}
 					{/* chevron 只做**旋转**,不换图标 —— 换图标是硬切,旋转才是连续的 */}
 					<ChevronRight
 						aria-hidden
@@ -223,6 +245,7 @@ function NavItem({
 					open={open}
 					collapsedIds={collapsedIds}
 					onToggle={onToggle}
+					taskDot={taskDot}
 				/>
 			</div>
 		);
@@ -249,8 +272,15 @@ function NavItem({
 				)}
 			/>
 			<span className="flex-1 truncate">{node.name}</span>
+			{/* 「我的任务」的红点:有待办动作(被审批 / 被征询)或未读任务通知(@提及…就有) */}
+			{taskDot && node.path === TASK_MENU_PATH ? <MenuDot /> : null}
 		</Link>
 	);
+}
+
+/** 告警小红点(大小随挂点:项目里唯一允许用它顶替"待办提醒"的地方) */
+function MenuDot() {
+	return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-destructive" />;
 }
 
 /**
@@ -265,6 +295,7 @@ function NavPanel({
 	open,
 	collapsedIds,
 	onToggle,
+	taskDot,
 }: {
 	node: NavNode;
 	pathname: string;
@@ -272,6 +303,8 @@ function NavPanel({
 	open: boolean;
 	collapsedIds: ReadonlySet<string>;
 	onToggle: (id: string) => void;
+	/** 与 NavItem 的红点同源(透传给子项) */
+	taskDot: boolean;
 }) {
 	const children = node.children ?? [];
 
@@ -287,6 +320,7 @@ function NavPanel({
 							activePath={activePath}
 							collapsedIds={collapsedIds}
 							onToggle={onToggle}
+							taskDot={taskDot}
 						/>
 					))}
 				</div>
@@ -300,7 +334,18 @@ function NavPanel({
    名字用**原生 title**:自绘浮层会被侧边栏的 overflow-hidden 裁掉,而 CSS 无法同时
    "纵向 auto + 横向可见"(一个轴为 auto,另一个轴必然也是 auto)。 */
 
-function RailItem({ node, pathname, activePath }: { node: NavNode; pathname: string; activePath: string | null }) {
+function RailItem({
+	node,
+	pathname,
+	activePath,
+	taskDot,
+}: {
+	node: NavNode;
+	pathname: string;
+	activePath: string | null;
+	/** 与展开态同源:子树里有「我的任务」红点时,迷你图标也点一下 */
+	taskDot: boolean;
+}) {
 	const Icon = NAV_ICON_MAP[node.icon] ?? Layers;
 	const own = !!node.path && node.path === activePath;
 	/** 含当前页的分组也要高亮 —— 否则停在子页(/settings/users)时整条栏没有一个亮点 */
@@ -315,7 +360,7 @@ function RailItem({ node, pathname, activePath }: { node: NavNode; pathname: str
 			aria-label={node.name}
 			aria-current={own ? "page" : undefined}
 			className={cn(
-				"flex size-9 shrink-0 items-center justify-center rounded-xl transition-[color,background-color,box-shadow] duration-150 ease-brand",
+				"relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-[color,background-color,box-shadow] duration-150 ease-brand",
 				// 选中态与展开态**共用同一套底色**:浅蓝底 + 主色图标。
 				// 这里曾经是实心主色块(`bg-primary` + 反白 + glow)—— 一收起,整条栏的主色面积
 				// 就和展开态判若两物(展开态只有淡淡一层浅蓝)。用户要的正是"统一成不折叠的背景色"。
@@ -323,6 +368,9 @@ function RailItem({ node, pathname, activePath }: { node: NavNode; pathname: str
 			)}
 		>
 			<Icon className="size-4" />
+			{taskDot && navNodeContains(node, TASK_MENU_PATH) ? (
+				<span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-destructive" />
+			) : null}
 		</Link>
 	);
 }

@@ -10,9 +10,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, isNull, like } from "drizzle-orm";
 
 import {
+	sysNotice,
 	sysUser,
 	taskCloseAction,
 	taskCloseComment,
@@ -460,6 +461,59 @@ describe("任务闭环", () => {
 		const after = await asA().taskClose.taskGet({ id });
 		assert.equal(after.task.status, "pending", "子动作答复不解锁");
 		assert.equal(after.actions.find((row) => row.id === childId)?.status, "done");
+	});
+
+	it("通知与红点:被审批 / 被征询 / 被 @ 都发铃铛,menuBadge 计数随之走,已读即消", async () => {
+		const id = await newTask("通知与红点");
+		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
+
+		const badgeOf = async () => (await asA().taskClose.menuBadge()).count;
+		const before = await badgeOf();
+
+		// ② 征询也一样:甲征询丙 → 丙收到「轮到你了」(body 里写明是征询)。
+		// (先建再建审批:审批一上任务就锁,征询类**不占锁**,所以这条要排在锁之前)
+		await asA().taskClose.actionCreate({ taskId: id, handleId: C.id });
+		const consultNotice = await db
+			.select()
+			.from(sysNotice)
+			.where(and(eq(sysNotice.user_id, C.id), like(sysNotice.body, "%征询%")));
+		assert.ok(consultNotice.length > 0, "被征询的人也要收到通知(body 写明「征询了你」)");
+
+		// ① 乙发起审批,指给**创建者**甲 —— 甲有一条未读的「轮到你了」通知,红点 +1;
+		// **读掉它红点就消**(动作本身的待办不进徽标,「我的任务」页自己看得见)
+		await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: A.id });
+		const assignRows = await db
+			.select()
+			.from(sysNotice)
+			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.path, `/task-close/${id}%`)));
+		assert.ok(
+			assignRows.some((row) => row.title.includes("轮到你") && row.read_at === null),
+			"被审批的人要有未读的「轮到你了」通知",
+		);
+		assert.equal(await badgeOf(), before + 1, "新任务通知未读时点亮红点");
+
+		// ② @提及:丙(参与者)评论里 @ 甲 → 甲再 +1;@陪路人 → 没有
+		const beforeComment = await badgeOf();
+		await asC().taskClose.commentCreate({ taskId: id, content: `@${A.name} 请看附件` });
+		assert.equal(await badgeOf(), beforeComment + 1, "被 @ 的参与人要有通知");
+		const mentionRows = await db
+			.select()
+			.from(sysNotice)
+			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.title, "%@ 你%")));
+		assert.ok(
+			mentionRows.some((row) => row.title.includes(C.name)),
+			"提及通知的标题里带**作者**(丙)",
+		);
+		await asB().taskClose.commentCreate({ taskId: id, content: "@某人不存在 看看" });
+		assert.equal(await badgeOf(), beforeComment + 1, "提到不在参与名单里的名字不会产生任何通知");
+
+		// ③ **把这一趟的两条读完 → 红点归零**(读了通知就消)
+		const unreadTasks = await db
+			.select()
+			.from(sysNotice)
+			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.path, `/task-close/${id}%`), isNull(sysNotice.read_at)));
+		for (const row of unreadTasks) await asA().notice.read({ id: row.id });
+		assert.equal(await badgeOf(), before, "读了通知,红点取消");
 	});
 
 	it("管理员:能删别人的评论(任务创建者不行 —— 口径是「作者本人或管理员」)", async () => {

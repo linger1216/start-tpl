@@ -2,7 +2,7 @@
  * 客户端订阅通知 SSE 的 hook。
  *
  * - 挂载时建 EventSource('/api/sse/notice');卸载/路由切换时关;
- * - 服务端推 `notice.new` 事件 → `invalidateQueries(['notice.list'])` → 铃铛秒级刷新;
+ * - 服务端推 `notice.new` 事件 → 送流的同时失效铃铛与「我的任务」红点的查询缓存;
  * - 网络中断由浏览器自动重连,失败上限由我们用指数退避 + onerror 节流;
  * - **失败关闭**:EventSource 出错就关掉,不再连(避免 401 后端一直拒绝却反复打日志)。
  */
@@ -21,6 +21,8 @@ export function useNoticeSse(): void {
 		const es = new EventSource("/api/sse/notice", { withCredentials: true });
 		const onNotice = () => {
 			void queryClient.invalidateQueries(trpc.notice.pathFilter());
+			// 「我的任务」红点也吃通知(@提及 / 轮到你了都发 notice)—— 同一个事件举两杆旗
+			void queryClient.invalidateQueries(trpc.taskClose.pathFilter());
 		};
 		es.addEventListener("notice.new", onNotice);
 

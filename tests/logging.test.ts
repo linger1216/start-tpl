@@ -33,7 +33,8 @@ import { anonymousCaller, caller, closeDb } from "./helpers.ts";
 // 103 → 104:任务闭环新增 `logList`(活动日志读接口,protectedProcedure)
 // 104 → 105:任务闭环新增 `taskTransfer`(转交执行人,protectedProcedure)
 // 105 → 106:任务闭环新增 `actionReply`(回复征询 → 意见落成评论,protectedProcedure)
-const EXPECTED_PROCEDURES = 106;
+// 106 → 107:任务闭环新增 `menuBadge`(侧边栏「我的任务」红点计数,外壳级 protectedQuery)
+const EXPECTED_PROCEDURES = 107;
 
 /**
  * 循环里会**故意**用无身份 caller 调每一个 procedure(在 `requireUser` 那层就被挡下,不会有副作用),

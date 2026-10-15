@@ -1,7 +1,7 @@
 import { ArrowRight, Check, Lock, Paperclip, ReplyIcon, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { useFileUpload } from "#/hooks/use-file-upload";
@@ -105,6 +105,7 @@ export function TaskTodoStrip({
 	items,
 	busy,
 	replyBusy,
+	participants,
 	onApprove,
 	onReject,
 	onReply,
@@ -112,16 +113,21 @@ export function TaskTodoStrip({
 	items: TodoItem[];
 	busy: boolean;
 	replyBusy: boolean;
+	/** @提及选单的候选(创建者 + 成员,去掉回复人自己;由页面给 **服务端名册**) */
+	participants: readonly Participant[] | undefined;
 	onApprove: (id: string) => void;
 	onReject: (id: string) => void;
 	onReply: (id: string, content: string, attachments: string[]) => void;
 }) {
 	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
+	const textRef = useRef<HTMLTextAreaElement | null>(null);
 	const [replyFor, setReplyFor] = useState<string | null>(null);
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<ReplyFile[]>([]);
 	const [uploading, setUploading] = useState(false);
+	// 选单状态挂在**回复行是否打开**上:切换待办/关闭时把 @词 的踪迹一并清掉
+	const mention = useMentionPicker(participants, setText, textRef);
 
 	if (items.length === 0) return null;
 
@@ -129,6 +135,7 @@ export function TaskTodoStrip({
 		setReplyFor((prev) => (prev === id ? null : id));
 		setText("");
 		setFiles([]);
+		mention.close();
 	}
 
 	async function pickReplyFiles(list: FileList | null) {
@@ -203,13 +210,28 @@ export function TaskTodoStrip({
 						{item.actionable && item.consult && replyFor === item.id ? (
 							<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
 								<textarea
+									ref={textRef}
 									rows={2}
 									value={text}
-									onChange={(event) => setText(event.target.value)}
-									placeholder="把意见写在这里,发表后进评论区…"
+									onChange={(event) => {
+										setText(event.target.value);
+										mention.track(event.target.value, event.target.selectionStart);
+									}}
+									placeholder="把意见写在这里,发表后进评论区…(可用 @ 提及参与人)"
 									aria-label="回复意见"
 									className="block w-full resize-none bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground"
+									onKeyDown={(event) => {
+										if (mention.onKeyDown(event)) return;
+									}}
+									onBlur={() => mention.close()}
 								/>
+								{mention.state ? (
+									<MentionList
+										options={mention.options}
+										highlight={mention.highlight}
+										onPick={(person) => mention.insert(person.name, text)}
+									/>
+								) : null}
 								{files.length > 0 ? (
 									<div className="flex flex-wrap gap-1.5 px-3 pt-2">
 										{files.map((file) => (

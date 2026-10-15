@@ -597,6 +597,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						items={todoItems}
 						busy={respondMutation.isPending}
 						replyBusy={replyMutation.isPending}
+						// @选单候选 = 参与人名册(创建者 + 成员,去掉自己);taskGet 同键缓存,零额外请求
+						participants={[
+							{ id: task.creatorId, name: task.creatorName ?? "" },
+							...members.map((member) => ({ id: member.userId, name: member.name ?? "" })),
+						].filter((person) => person.id !== meId && person.name)}
 						onApprove={(id) => respondMutation.mutate({ id, approved: true })}
 						onReject={(id) => {
 							setRejectReason("");
