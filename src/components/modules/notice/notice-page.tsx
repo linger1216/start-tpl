@@ -14,6 +14,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { matchKeyword } from "#/lib/table";
@@ -54,11 +55,10 @@ export function NoticePage() {
 	);
 	const createMutation = useMutation(
 		trpc.notice.create.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setComposing(false);
-				toast.success(`已发给 ${outcome.created} 个人`);
-			},
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setComposing(false),
+				message: (o) => `已发给 ${o.created} 个人`,
+			}),
 		}),
 	);
 

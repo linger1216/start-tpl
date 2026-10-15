@@ -40,13 +40,14 @@ function extOf(name: string): string {
 async function readPolicy() {
 	const map = await getParaMap();
 	const maxMb = Number(map.get("file.max_size_mb") ?? FILE_MAX_SIZE_MB_DEFAULT);
-	const allowExt = (map.get("file.allow_ext") ?? "")
+	const allowExt = (map.get("file.allow_ext") ?? FILE_ALLOW_EXT_DEFAULT)
 		.split(",")
 		.map((item) => item.trim().toLowerCase())
 		.filter(Boolean);
 	return {
 		maxBytes: Math.max(1, maxMb) * 1024 * 1024,
-		allowExt: allowExt.length > 0 ? allowExt : FILE_ALLOW_EXT_DEFAULT.split(","),
+		/** 空名单 = **不限制后缀**,收所有文件类型(仍受大小上限与 Content-Type 防线约束) */
+		allowExt,
 	};
 }
 
@@ -133,7 +134,8 @@ export const fileRouter = createTRPCRouter({
 		.mutation(async ({ input }) => {
 			const policy = await readPolicy();
 			const ext = extOf(input.name);
-			if (!ext || !policy.allowExt.includes(ext)) {
+			// 名单为空 = 收所有后缀;配了名单才做白名单校验
+			if (!ext || (policy.allowExt.length > 0 && !policy.allowExt.includes(ext))) {
 				throw new TRPCError({ code: "BAD_REQUEST", message: `不允许的文件类型(${policy.allowExt.join(" / ")})` });
 			}
 			if (input.size > policy.maxBytes) {

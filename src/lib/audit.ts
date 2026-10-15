@@ -136,7 +136,7 @@ type AuditEntry = {
  *
  * 审计是 fire-and-forget,所以**写库可能比调用方后续的动作更晚落地** ——
  * 测试的 `after()` 里"先清测试数据、再关连接"会跑在它前面,库里就留下 `__test__…` 的审计残留
- * (实测:每跑一次 `tests/demo-grid.test.ts` 留 6~8 行,30 分钟的兜底清扫才收)。
+ * (实测:每跑一次 `tests/task-close.test.ts` 留 6~8 行,30 分钟的兜底清扫才收)。
  * 用例在删审计行之前 `await flushAuditWrites()` 就把它变成确定的 —— 不要用"睡一会儿再查"来猜。
  */
 const inFlight = new Set<Promise<void>>();

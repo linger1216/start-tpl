@@ -91,6 +91,24 @@ describe("活动日志文本", () => {
 		assert.equal(rejected.note, "驳回原因:证据不足");
 	});
 
+	it("回复征询:意见进附注,展示名是被回复的征询发起人", () => {
+		const reply = describeLog(
+			item({
+				event: "action.reply",
+				targetName: "甲",
+				excerpt: "东西我看过了,流程没问题",
+				detail: { consultOf: "u1", commentId: "c1", attachments: 2 },
+			}),
+			ctx,
+		);
+		assert.equal(reply.title, "回复征询(对 甲)");
+		assert.equal(reply.note, "意见:东西我看过了,流程没问题 · 附 2 个附件");
+
+		const plain = describeLog(item({ event: "action.reply", detail: { consultOf: "u1", commentId: "c1" } }), ctx);
+		assert.equal(plain.title, "回复征询(对 u1)", "名字查不到回退 id");
+		assert.equal(plain.note, null);
+	});
+
 	it("成员 / 评论:对象与摘要要落到文字上", () => {
 		const added = describeLog(
 			item({ event: "member.add", targetName: "王五", detail: { role: "executor", isPrimary: true } }),

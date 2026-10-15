@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -77,7 +78,7 @@ export function TaskAttachmentPreview({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-3xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-3xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle className="wrap-break-word">{attachment?.name ?? "附件"}</DialogTitle>
 					<DialogDescription>

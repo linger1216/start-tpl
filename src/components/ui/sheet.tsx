@@ -1,7 +1,14 @@
+/**
+ * Sheet —— 同一个 @base-ui Dialog 原语的**侧滑形态**(dialog.tsx 是居中形态)。
+ *
+ * 与 `dialog.tsx` 共用:`DialogPortal`(转发层)、`DialogTitle`/`DialogDescription`(尺寸覆写);
+ * 侧边定位与滑动动画(`side` data 属性上的位移)是 Sheet 自己的,留在本文件。
+ */
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { Button } from "#/components/ui/button";
+import { DialogDescription, DialogPortal, DialogTitle } from "#/components/ui/dialog";
 import { cn } from "#/lib/utils";
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
@@ -14,10 +21,6 @@ function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {
 
 function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
 	return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
-}
-
-function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {
-	return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
 function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
@@ -44,7 +47,7 @@ function SheetContent({
 	showCloseButton?: boolean;
 }) {
 	return (
-		<SheetPortal>
+		<DialogPortal>
 			<SheetOverlay />
 			<SheetPrimitive.Popup
 				data-slot="sheet-content"
@@ -66,7 +69,7 @@ function SheetContent({
 					</SheetPrimitive.Close>
 				)}
 			</SheetPrimitive.Popup>
-		</SheetPortal>
+		</DialogPortal>
 	);
 }
 
@@ -78,24 +81,13 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
 	return <div data-slot="sheet-footer" className={cn("mt-auto flex flex-col gap-2 p-4", className)} {...props} />;
 }
 
+/** 标题 / 描述复用 `dialog.tsx` 的字型,只把尺寸压成侧边抽屉的规格 */
 function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
-	return (
-		<SheetPrimitive.Title
-			data-slot="sheet-title"
-			className={cn("font-heading text-base font-medium text-foreground", className)}
-			{...props}
-		/>
-	);
+	return <DialogTitle data-slot="sheet-title" className={cn("text-base font-medium", className)} {...props} />;
 }
 
 function SheetDescription({ className, ...props }: SheetPrimitive.Description.Props) {
-	return (
-		<SheetPrimitive.Description
-			data-slot="sheet-description"
-			className={cn("text-sm text-muted-foreground", className)}
-			{...props}
-		/>
-	);
+	return <DialogDescription data-slot="sheet-description" className={cn("text-sm", className)} {...props} />;
 }
 
 export { Sheet, SheetTrigger, SheetClose, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription };

@@ -4,11 +4,12 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
+import { ActionIconButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useFileUpload } from "#/hooks/use-file-upload";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -20,7 +21,7 @@ type Pending = { id: string; name: string };
  *
  * 三段:
  *   1. ci —— 评论输入:左 avatar + 右圆角 field(textarea + 工具条:附件 / @ / 发送)
- *   2. ul.thread —— 评论流:每条 avatar + 人/时间 + 正文 + 操作(删除)+ 附件
+ *   2. ul.thread —— 评论流:每条 avatar + 人/时间(右侧悬停出删除)+ 正文 + 附件
  *
  * 上传是**选完即传**(复用 `useFileUpload` 的秒传/直传链路),提交评论时只带 `sys_file.id` 列表;
  * 不打包成「提交时一起传」是刻意的:大文件先传完,点提交就是一次轻量写。
@@ -64,19 +65,20 @@ export function TaskCloseComments({
 
 	const createMutation = useMutation(
 		trpc.taskClose.commentCreate.mutationOptions({
-			onSuccess: async () => {
-				setContent("");
-				setAttachments([]);
-				await invalidate();
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => {
+					setContent("");
+					setAttachments([]);
+				},
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const removeMutation = useMutation(
 		trpc.taskClose.commentRemove.mutationOptions({
-			onSuccess: () => invalidate(),
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 
@@ -124,7 +126,7 @@ export function TaskCloseComments({
 						placeholder="说点什么…  输入 @ 提及成员"
 						aria-label="评论"
 						aria-labelledby={labelledBy}
-						className="block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.55] placeholder:text-muted-foreground sm:text-[13px]"
+						className="block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.55] placeholder:text-muted-foreground sm:text-sm"
 						onKeyDown={(e) => {
 							if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 								e.preventDefault();
@@ -185,7 +187,7 @@ export function TaskCloseComments({
 
 			{/* thread —— 评论流(原型的 thread + thread__item) */}
 			{items.length === 0 ? (
-				<p className="py-1 pl-[48px] text-[12.5px] text-muted-foreground">
+				<p className="py-1 pl-[48px] text-xs text-muted-foreground">
 					{listQuery.isPending ? "加载中…" : "还没有评论。"}
 				</p>
 			) : (
@@ -194,32 +196,33 @@ export function TaskCloseComments({
 						<li key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3 group">
 							<Avatar initials={(item.authorName ?? "?").slice(0, 1)} />
 							<div className="min-w-0 pt-0.5">
-								<div className="inline-flex items-baseline gap-2 text-[13px] flex-wrap">
+								{/* 名字 + 时间 + 删除同一行:删除是**纯图标**(ActionIconButton 的行内规格),
+								    紧跟在日期右侧、与文字同一视觉水平;悬停/键盘聚焦才显形 */}
+								<div className="inline-flex items-baseline gap-2 text-sm flex-wrap">
 									<strong className="font-semibold text-foreground">{item.authorName ?? "—"}</strong>
 									{item.createdAt ? (
-										<span className="text-[11.5px] text-muted-foreground">{formatLocalMinute(item.createdAt)}</span>
+										<span className="text-xs text-muted-foreground">{formatLocalMinute(item.createdAt)}</span>
+									) : null}
+									{item.authorId === meId || canRemoveAny ? (
+										// 悬停**或键盘聚焦**才显形 —— 只挂 group-hover 会让 Tab 落在一个看不见的按钮上
+										<ActionIconButton
+											tone="danger"
+											label="删除评论"
+											disabled={removeMutation.isPending}
+											onClick={() => setPendingRemove({ id: item.id, authorName: item.authorName })}
+											className={cn(
+												"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+											)}
+										>
+											<Trash2 className="size-3" />
+										</ActionIconButton>
 									) : null}
 								</div>
-								<p className="mt-1 text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
+								<p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
 								{item.attachments.length > 0 ? (
 									<div className="mt-1.5">
 										{/* 复用任务附件的预览弹窗:chip 可点 → 预览 / 下载 */}
 										<TaskAttachmentList attachments={item.attachments} onOpen={setPreview} />
-									</div>
-								) : null}
-								{/* 悬停**或键盘聚焦**才显形 —— 只挂 group-hover 会让 Tab 落在一个看不见的按钮上 */}
-								{item.authorId === meId || canRemoveAny ? (
-									<div className="mt-1 inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-										<Button
-											size="sm"
-											variant="ghost"
-											aria-label="删除评论"
-											disabled={removeMutation.isPending}
-											onClick={() => setPendingRemove({ id: item.id, authorName: item.authorName })}
-										>
-											<Trash2 className="size-3.5" />
-											<span>删除</span>
-										</Button>
 									</div>
 								) : null}
 							</div>
@@ -273,8 +276,8 @@ function Avatar({ initials }: { initials: string }) {
 	return (
 		<span
 			className={cn(
-				"flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-bold text-primary-foreground",
-				"shadow-[0_0_0_2px_var(--color-background),0_0_0_3px_var(--color-border)]",
+				"flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground",
+				"outline-1 outline-offset-2 outline-border",
 			)}
 		>
 			{initials}

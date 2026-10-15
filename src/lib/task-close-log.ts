@@ -19,7 +19,7 @@ import { statusLabelOf, type WorkflowStatus } from "./task-close-spec";
 export const LOCKED_STATUS = "pending";
 export const LOCKED_STATUS_LABEL = "待审批";
 
-/** 11 个事件码 —— **加事件要同时改**:这里 + `detail` 类型 + 界面注册表 + `doc/task-close.md` */
+/** 12 个事件码 —— **加事件要同时改**:这里 + `detail` 类型 + 界面注册表 + `doc/task-close.md` */
 export const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -27,6 +27,7 @@ export const TASK_LOG_EVENTS = [
 	"task.transit",
 	"action.create",
 	"action.respond",
+	"action.reply",
 	"comment.create",
 	"comment.remove",
 	"member.add",
@@ -44,6 +45,7 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"task.transit": "改状态",
 	"action.create": "发起审批",
 	"action.respond": "答复审批",
+	"action.reply": "回复征询",
 	"comment.create": "发表评论",
 	"comment.remove": "删除评论",
 	"member.add": "加入成员",
@@ -80,6 +82,8 @@ export type TaskLogDetail = {
 		sequence: number;
 	};
 	"action.respond": { approved: boolean; reason: string | null; actionStatus: string };
+	/** 回复征询 —— 意见直接落成一条评论(`commentId` / `attachments` 给动态流直接渲染) */
+	"action.reply": { consultOf: string; commentId: string; attachments: number };
 	"comment.create": { attachments: number };
 	"comment.remove": null;
 	"member.add": { role: string; isPrimary: boolean };
@@ -209,6 +213,17 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 					? `${TASK_LOG_LABEL["action.respond"]}:通过${moved ? `(${arrow(from, to)})` : ""}`
 					: `${TASK_LOG_LABEL["action.respond"]}:驳回${moved ? `(${arrow(from, to)})` : ""}`,
 				note: note ? `驳回原因:${note}` : null,
+			};
+		}
+		case "action.reply": {
+			const of = item.targetName ?? text(detail.consultOf);
+			const count = typeof detail.attachments === "number" ? detail.attachments : 0;
+			const parts = [item.excerpt ? `意见:${item.excerpt}` : null, count > 0 ? `附 ${count} 个附件` : null].filter(
+				(part): part is string => part !== null,
+			);
+			return {
+				title: of ? `回复征询(对 ${of})` : TASK_LOG_LABEL["action.reply"],
+				note: parts.length > 0 ? parts.join(" · ") : null,
 			};
 		}
 		case "comment.create": {

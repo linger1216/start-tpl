@@ -7,13 +7,10 @@
 #   runtime  —— 生产镜像:`.output` + **生产依赖**
 #
 # 为什么运行镜像还要装一遍依赖(踩过的坑,不是偷懒):
-#   Nitro 的 node-server 产物**不是自包含的**。`pnpm build` 的最后一步是
-#   `cp instrument.server.mjs .output/server`,这个文件是**原样拷贝、不过打包器**的,
-#   而它第一行就是 `import * as Sentry from '@sentry/tanstackstart-react'`。
-#   只 COPY `.output` 的镜像启动即崩:
-#     Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@sentry/tanstackstart-react'
-#     imported from .output/server/instrument.server.mjs
+#   Nitro 的 node-server 产物**不是自包含的**(`.output/server` 里仍是裸引用 node_modules 的运行时)。
+#   只 COPY `.output` 的镜像启动会抛 ERR_MODULE_NOT_FOUND。
 #   实测带上生产依赖后:`/` → 307、`/api/auth/ok` → 200、`POST /api/auth/sign-in/email` → 200。
+#   (如需接入 Sentry:按官方方式引入 SDK,恢复 `--import` 注入并把对应包加进生产依赖。)
 #
 # 构建期**不**注入 `.env.local`(也不给哑 `DATABASE_URL`):
 #   `VITE_*` 会被编译进前端产物,机密不该进镜像;运行期环境变量由 `docker run -e` /
@@ -73,4 +70,4 @@ EXPOSE 3000
 # 用 node 自带的 fetch,不额外装 curl。
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
 	CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/auth/ok').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "--import", "./.output/server/instrument.server.mjs", ".output/server/index.mjs"]
+CMD ["node", ".output/server/index.mjs"]

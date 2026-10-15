@@ -3,6 +3,7 @@ import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -87,7 +88,7 @@ export function SettingsDictionaryForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle className="text-balance">{editing ? `编辑字典 · ${values.name}` : "新增字典"}</DialogTitle>
 					<DialogDescription>

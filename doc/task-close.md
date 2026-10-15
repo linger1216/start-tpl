@@ -56,6 +56,7 @@
 | `task.transit` | `taskTransit` | 目标状态 | `{who[]}` |
 | `action.create` | `actionCreate` | 锁定时 → `pending`,否则 null | `{intendedTo, handleId, isLocking, parentActionId, sequence}` |
 | `action.respond` | `actionRespond` | 通过 → 目标态 / 驳回 → 退回原态;没动则 null | `{approved, reason, actionStatus}` |
+| `action.reply` | `actionReply` | null(回复征询**不**动任务状态) | `{consultOf, commentId, attachments}`(`target_id` = 意见那条评论,读取侧取它当摘要) |
 | `comment.create` | `commentCreate` | null | `{attachments}` |
 | `comment.remove` | `commentRemove` | null | — |
 | `member.add` | `memberAdd` | null | `{role, isPrimary}` |
@@ -370,8 +371,12 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 **流程脊**(`TaskFlowSpine`)**只画状态**,不放动作:模板状态链 + 走过的 / 当前 / 未到 + 到达时刻;
 锁定期把当前节点画成带锁的 `warn` 节点。同一个入口别在两处各握一半,否则人会来回找。
 
-**「轮到你」动作条**(有指给我的未结动作才出现):每条待办就地给「通过 / 驳回(必须填原因)→ 原因落一条评论」,
-调用 `actionRespond`。这是闭环最容易断的一环 —— 发起审批会把任务锁住,答复入口必须就在眼前。
+**「轮到你」动作条**(有指给我的未结动作才出现):按动作类型分流 ——
+- **审批**:就地「通过 / 驳回(必须填原因 → 原因落一条评论)」,调 `actionRespond`。
+  这是闭环最容易断的一环 —— 发起审批会把任务锁住,答复入口必须就在眼前。
+- **征询**:不摊通过 / 驳回(征询是征意见,不是判卷),只有「**回复**」——
+  就地展开意见框(可带附件),发表调 `actionReply`:意见直接落成**一条评论**、征询动作即结、任务状态与锁定不因此变化。
+  动态里记 `action.reply`(**"回复征询(对 发起人)"**,意见正文进附注),不会再出现"答复审批:通过"这种错位文案。
 
 记录头右侧的动作组另放与状态无关的动作,按角色(`myRole` = admin / creator / executor / participant / null):
 
@@ -417,7 +422,7 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 
 ## 接口
 
-22 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
+24 个过程,router 名 `taskClose`(实现在 `src/integrations/trpc/routers/task-close.ts`)。
 
 | 路径 | 类型 | 入参 | 谁能调 |
 |---|---|---|---|
@@ -443,6 +448,8 @@ creator **不入 `tc_member`**(已在 `tc_task.creator_id` 列里);参与者 / �
 | `commentCreate` | mutation | `{taskId,content,attachments?}` | 登录 |
 | `commentRemove` | mutation | `{id}` | 作者本人 / 管理员 |
 | `attachmentUrl` | query | `{taskId,fileId,download?}` | 登录(内部校验该附件挂在本任务上) |
+| `actionReply` | mutation | `{id,content,attachments?}` | `handle_id` 本人(**回复征询**:意见落成一条评论,动作即结) |
+| `logList` | query | `{taskId,page?,pageSize?}` | 登录 |
 
 **可见性** v1 口径:任何登录用户可读任何任务(无菜单 = RBAC 允许访客);`tc_member` 只决定**推进权**。
 `taskList.mine = true` 是「我创建 + 我是成员」的过滤,是**便利筛选**不是安全边界。
@@ -486,18 +493,17 @@ action 的目标状态,「发起审批」弹窗的候选项)/ `canInitiateStatus
 | `/task-close/workflows` | `task-close-workflows-page.tsx` | 流程模板:卡片视图 + 增删改查(卡上「详情 / 编辑 / 删除」)|
 
 配套件:`task-close-flow-spine.tsx`(**流程脊** —— 模板状态链 + 走过的 / 当前 / 未到 + 到达时刻,
-外加「轮到你」动作条;它**不放动作**,状态类按钮在记录头右上角,见「按钮去向」)、`task-close-form.tsx`(新建 / 编辑弹窗)、
-`task-close-comments.tsx`(评论,附件走 `useFileUpload` 传进 `sys_file`)、`task-close-status.tsx`(状态徽章 —— 名字由模板 label 给)、
+外加「轮到你」动作条;它**不放动作**,状态类按钮在记录头右上角,见「按钮去向」)、`task-close-badge.tsx`
+(状态 / 优先级**徽章对** —— 两枚同构圆点徽章合流于此,名字均由模板 label 或 `priorityLabelOf` 给)、`task-close-form.tsx`(新建 / 编辑弹窗)、
+`task-close-comments.tsx`(评论,附件走 `useFileUpload` 传进 `sys_file`)、
 `task-close-workflow-form.tsx`(结构化编辑器:状态行(value + label)+ 初始态 + 边的行表格)、`task-close-workflow-detail.tsx`(只读详情)、
 `task-content-blocks.tsx` / `task-content-editor.tsx`(内容块只读 / 编辑注册表)、`task-content-attachments.tsx`(附件选择 / 列表)、
 `task-close-log.tsx`(「动态」:图标 + 人名 + 人话 + 时间;事件词表与文本在 `src/lib/task-close-log.ts`,客户端安全)、
 `task-close-attachment-preview.tsx`(附件预览 / 下载弹窗)。
 
-> **目前未接入**(留着给派生项目,别当死代码删):
-> · `task-close-status-timeline.tsx` —— 竖版**历史**状态轴。2026-10 redesign 后,状态史(走过的状态 + 到达时刻)
->   已由**流程脊**承担(脊上走过的节点带时刻),页面上不再重复画第二条,故暂时没有调用方。
-> · `task-close-actions.tsx` —— 「发起动作 + 时间线 + 答复」的卡片版。答复能力已搬进「轮到你」动作条,
->   发起动作已搬进流程脊;这张卡整块不再渲染。
+> 2026-10 redesign 后已删:竖版历史状态轴(`status-timeline`,流程脊已承担状态史)、
+> 「发起动作 + 时间线 + 答复」的卡片版(`task-close-actions`,能力分别搬进流程脊与「轮到你」动作条)。
+> 重新拆这类组件时参考本轮 git 历史即可,代码里不再留占位。
 
 三条口径:
 

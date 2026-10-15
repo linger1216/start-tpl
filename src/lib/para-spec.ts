@@ -44,11 +44,12 @@ export const PARA_VALUE_MAX = 4000;
 /**
  * 上传策略两键的**兜底值** —— 库里读不到 / 没配过时用它。
  *
- * 三处共用这一份,以前是三处各写一遍字面量(后端 `routers/file.ts` 的 `readPolicy()`、
+ * 两处共用这一份,以前是各写一遍字面量(后端 `routers/file.ts` 的 `readPolicy()`、
  * 上传对话框 `settings-files-upload.tsx`、参数管理页的 `PARA_DEFAULTS`),改了名单忘了别处就会
  * 出现"界面允许传、后端拒收"这种最难查的错。
  */
-export const FILE_ALLOW_EXT_DEFAULT = "jpg,jpeg,png,gif,webp,pdf,xlsx,docx";
+/** 允许的后缀名单 —— **留空 = 不限制,收所有后缀**(大小上限与 `text/html` / `svg` 的 Content-Type 防线仍然生效)。要收紧类型直接在参数管理里填逗号分隔名单。 */
+export const FILE_ALLOW_EXT_DEFAULT = "";
 
 /**
  * 登录人机验证的开关键 —— `PARA_DEFAULTS` 里的登记在 `lib/sys-para.ts`(服务端专用),

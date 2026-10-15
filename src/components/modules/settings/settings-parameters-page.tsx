@@ -1,7 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cog, Plus, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
@@ -20,8 +19,8 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
@@ -53,34 +52,29 @@ export function SettingsParametersPage() {
 
 	const updateMutation = useMutation(
 		trpc.para.update.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setEditing(null);
-				toast.success(`已保存 ${outcome.key}`, { description: `新值:${outcome.value}` });
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setEditing(null),
+				message: (o) => `已保存 ${o.key}`,
+				description: (o) => `新值:${o.value}`,
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const createMutation = useMutation(
 		trpc.para.create.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setCreating(false);
-				toast.success(`已新增参数 ${outcome.key}`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setCreating(false), message: (o) => `已新增参数 ${o.key}` }),
+			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.para.remove.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setPendingDelete(null);
-				toast.success(`已删除 ${outcome.removed} 条参数`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setPendingDelete(null),
+				message: (o) => `已删除 ${o.removed} 条参数`,
+			}),
+			onError: writeError,
 		}),
 	);
 

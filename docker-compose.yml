@@ -98,7 +98,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # 一次性初始化:建 19 张系统表 + 四个种子 + 建 MinIO 两个桶。
+  # 一次性初始化:建 27 张系统表(20 张 sys_* + 6 张 tc_*) + 四个种子 + 建 MinIO 两个桶。
   #   全量:docker compose --profile setup run --rm bootstrap
   #   只灌演示数据:docker compose --profile setup run --rm bootstrap sh -c "pnpm db:seed:demo"
   # 用 dev 镜像(要跑 tsx 脚本),不常驻 —— profile 保证 `up -d` 不会带上它。

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import type { MenuRow } from "#/components/layout/nav-menu";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
@@ -23,9 +22,9 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { matchKeyword } from "#/lib/table";
 import { bySortThenName, groupByParent } from "#/lib/tree";
@@ -163,18 +162,14 @@ export function SettingsRolesPage() {
 
 	const addUserMutation = useMutation(
 		trpc.role.addUser.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 	const removeUserMutation = useMutation(
 		trpc.role.removeUser.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 
@@ -184,34 +179,25 @@ export function SettingsRolesPage() {
 
 	const createMutation = useMutation(
 		trpc.role.create.mutationOptions({
-			onSuccess: async (row) => {
-				await invalidate();
-				setCreating(false);
-				toast.success(`已新增角色「${row.name}」`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setCreating(false),
+				message: (row) => `已新增角色「${row.name}」`,
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.role.update.mutationOptions({
-			onSuccess: async (row) => {
-				await invalidate();
-				setEditing(null);
-				toast.success(`已保存「${row.name}」`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: (row) => `已保存「${row.name}」` }),
+			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.role.remove.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setPendingDelete(null);
-				toast.success("已删除角色");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "已删除角色" }),
+			onError: writeError,
 		}),
 	);
 

@@ -324,7 +324,7 @@ DENY=( .git node_modules .pnpm-store new-project.sh .serena )
 # 将来要分发的 `public/404.html` 这类文件(见上面那段注释);宁可少排,不可误伤。
 FALLBACK_DENY=(
   node_modules .pnpm-store .git .output dist .vite .tanstack .turbo coverage
-  .DS_Store .serena .idea .cache logs test-results playwright-report doc/archive
+  .DS_Store .serena .idea .cache logs test-results playwright-report
   '*.log' '*.tsbuildinfo' '.eslintcache' '.stylelintcache' '.sentryclirc*' 'sentry.properties'
   '*.pem' '*.key' '*.p12' '*.pfx' '*.sqlite' '*.sqlite3' '*.db' '*.bak' '*.tmp' '*.tgz' '*.xlsx'
   '.pnp' '.pnp.js' '.nitro' '.vinxi' build .wrangler .vercel .netlify .firebase .serverless
@@ -339,7 +339,7 @@ if [ "$IS_GIT" -eq 1 ]; then
        | while IFS= read -r ignored; do
            # 结尾的 `/` **要保留** —— rsync 里它表示"只匹配目录",连空目录一起排掉。
            # (别改写成 `dir/**`:那只排内容、目录本身仍会被建出来 —— 实测留下空的 .output/ 与 .idea/)
-           # 带路径的按**根锚定**写(`/doc/archive/`),避免按 basename 误伤深处的同名目录;
+           # 带路径的按**根锚定**写(如 `/doc/旧目录/`),避免按 basename 误伤深处的同名目录;
            # 其余按组件匹配(与 .gitignore 同义,`foo.log` 命中任意层级)。
            case "$ignored" in
              */*) printf '/%s\n' "$ignored" ;;

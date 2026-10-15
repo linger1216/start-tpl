@@ -67,14 +67,17 @@ export function SettingsFilesUpload({
 	const [busy, setBusy] = useState(false);
 
 	// 策略来自参数管理。兜底值与后端 `readPolicy()`、参数管理页的 `PARA_DEFAULTS` 共用
-	// `lib/para-spec.ts` 里那两份常量 —— 三处各写一遍字面量的年代已经过去了。
+	// `lib/para-spec.ts` 里那两份常量 —— 各写一遍字面量的年代已经过去了。
+	// `file.allow_ext` 留空 = 不限制类型:不给出 accept/白名单提示,收所有后缀。
 	const allowExt = useParaRaw("file.allow_ext");
 	const maxSize = useParaRaw("file.max_size_mb");
-	const extList = (allowExt || FILE_ALLOW_EXT_DEFAULT)
+	const acceptRaw = allowExt === undefined ? FILE_ALLOW_EXT_DEFAULT : allowExt;
+	const accept = acceptRaw
 		.split(",")
-		.map((v) => v.trim())
-		.filter(Boolean);
-	const accept = extList.map((ext) => `.${ext}`).join(",");
+		.map((v) => v.trim().replace(/^\./, "").toLowerCase())
+		.filter(Boolean)
+		.map((ext) => `.${ext}`)
+		.join(",");
 	const maxSizeMb = Number(maxSize || FILE_MAX_SIZE_MB_DEFAULT);
 
 	const working = busy || items.some((item) => item.status === "doing");

@@ -15,7 +15,7 @@
 ```bash
 pnpm install
 cp .env.example .env.local     # 然后按需填写 DATABASE_URL 等
-pnpm db:create                 # 建 21 张系统表(20 张 sys_* + demo 用的 demo_grid,幂等)
+pnpm db:create                 # 建 27 张系统表系统表(20 张 sys_* + demo_grid + 6 张 tc_*,幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
 pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是本机手工准备的,种子不建)
 pnpm dev                       # http://localhost:3000
@@ -53,6 +53,7 @@ src/
 │   │   ├── route.tsx             # 后台外壳 + 页面级权限守卫(beforeLoad 读会话 / 判页面权限)
 │   │   ├── index.tsx             # 工作台(入口页 + UI 示例)
 │   │   ├── notices.tsx           # 通知中心
+│   │   ├── task-close/           # 任务闭环(3 个路由:我的任务 / 流程模板 / 任务详情)
 │   │   ├── demo/                 # 框架能力样例(8 个路由文件)
 │   │   └── settings/             # 系统设置(13 个路由文件 = 索引 + 12 页)
 │   ├── api.trpc.$.tsx            # tRPC 请求入口 /api/trpc/*
@@ -62,7 +63,8 @@ src/
 │   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 + nav-config / nav-menu / nav-data
 │   ├── modules/shared/           # 16 个领域无关展示件(表格套件 / 工具栏 / 详情 / 树 / 标签 / 权限树 / Excel…)
 │   ├── modules/workbench/        # 工作台 + UI 示例(ui-gallery)
-│   ├── modules/settings/         # 系统设置十二页的页面 / 表格 / 表单 / 详情件(49 个文件)
+│   ├── modules/task-close/       # 任务闭环的三页与配套件
+│   ├── modules/settings/         # 系统设置十二页的页面 / 表格 / 表单 / 详情件(52 个文件)
 │   ├── modules/demo/             # 框架能力样例的页面件
 │   └── modules/notice/           # 通知中心件
 ├── lib/
@@ -75,21 +77,23 @@ src/
 │   ├── sys-para.ts / para-spec.ts / menu-spec.ts / notice.ts / sidebar-mode.ts
 │   ├── audit.ts / logger.ts / ids.ts / time.ts / format.ts / multi-value.ts / tree.ts / constants.ts
 │   ├── storage.ts / storage-minio.ts / menu-detail-path.ts / mock-table.ts / demo-store.ts / utils.ts
+│   ├── task-close-spec.ts / task-close-log.ts / task-content.ts # 任务闭环的规格 / 词表 / 内容块(客户端可引)
+│   ├── data-scope*.ts / soft-delete.ts / reorder.ts / file-preview.ts …(完整清单见 doc/后端代码导读.md §7)
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 21 张系统表(20 张 sys_* + demo_grid:设置 / 认证 / 权限 / 数据权限 / 日志…)
+│   ├── data-base-schema.ts       # 27 张表(20 张 sys_* + demo_grid + 6 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
-│   ├── trpc/                     # init.ts / router.ts / react.ts + routers/(12 个域)
+│   ├── trpc/                     # init.ts / router.ts / react.ts + routers/(14 个域)
 │   └── tanstack-query/           # root-provider.tsx(getContext + TRPCProvider)
-├── hooks/                        # use-dict / use-para-prefs / use-perms / use-file-upload / use-ledger-table / use-stable-keys / demo.form*
+├── hooks/                        # use-para-prefs / use-perms / use-file-upload / use-ledger-table / use-ledger-write / use-stable-keys / demo.form*
 ├── router.tsx                    # ★ createRouter + SSR Query 集成(按约定路径被插件加载,别删)
 ├── routeTree.gen.ts              # 生成物,不要手改
 └── styles.css                    # Tailwind v4 入口 + 设计 token
 ```
 
-`lib/` 的 33 个文件、`ui/` 的 41 个原语、`shared/` 的 16 个展示件(口径:`ls src/lib/*.ts` / `src/components/ui/*` / `src/components/modules/shared/*.tsx`),当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只有两组:Excel 那一组(`lib/excel.ts` + `shared/ledger-excel.ts` + `shared/excel-import.tsx`)与 `hooks/use-dict.ts`(字典读取器;目前只有管理页在写字典,没有页面在读),理由见下文「随模板分发、当前没有调用方的件」。
+`lib/` 的 47 个文件、`ui/` 的 41 个原语、`shared/` 的 16 个展示件(口径:`ls src/lib/**/*.ts` / `src/components/ui/*` / `src/components/modules/shared/*.tsx`),当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只剩一组:Excel 链(`lib/excel.ts` + `shared/ledger-excel.ts` + `shared/excel-import.tsx`,导出面已接入四页,导入是重依赖按需加载),理由见下文「随模板分发、当前没有调用方的件」。
 
 ---
 
@@ -190,7 +194,7 @@ src/
 | `pnpm typecheck` | `tsc --noEmit` | 类型检查,只报告不写文件 |
 | `pnpm check` | `biome check --write .` | 格式化 + lint + 整理 import,**会写回文件** |
 | `pnpm generate-routes` | `tsr generate` | 扫描 `src/routes/` 重新生成 `routeTree.gen.ts` |
-| `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 20 个测试文件,直连真库;跑完会清掉自己造的 `__test__*` 数据 |
+| `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 26 个测试文件,直连真库;跑完会清掉自己造的 `__test__*` 数据 |
 | `pnpm test:cov` | 同上 + `--experimental-test-coverage` | 覆盖率是 Node 自带的(**没有 c8 / vitest**)。口径见下文「覆盖率怎么读」 |
 | `pnpm check:legacy` | `node scripts/check-legacy.mjs` | 业务语汇残留扫描(清空业务后应当无输出) |
 
@@ -199,7 +203,7 @@ src/
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit;只管 `src/db/schema.ts`(当前是 `todos`) |
-| `pnpm db:create` | 建 **21 张**系统表(20 张 `sys_*` + `demo_grid`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:create` | 建 **27 张**系统表(20 张 `sys_*` + `demo_grid` + 6 张 `tc_*`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
 | `pnpm db:sync:meta` | 只对齐列注释与索引名(老库升级用,**幂等**;第二次必须打印「无需改动」) |
 | `pnpm db:migrate:ids` | 把自增 id 迁成 nanoid(一次性) |
 | `pnpm db:dm:smoke` / `db:dm:defaults` | 达梦专项:drizzle 冒烟 / 默认值对齐 |
@@ -233,7 +237,7 @@ docker compose up -d                                  # http://localhost:3000
 | `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
 | `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
-| `bootstrap` | — | profile `setup` 的一次性任务:建 21 张表 + 四个种子 + `db:minio:init` |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 27 张表 + 四个种子 + `db:minio:init` |
 
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
@@ -288,7 +292,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **21 张系统表**(20 张 `sys_*` + `demo_grid`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **27 张表**(20 张 `sys_*` + `demo_grid` + 6 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -419,18 +423,18 @@ function UsersPage() {
 
 ## 刻意留着、但业务页还没接的件
 
-实测:仓里**没有无调用方的死件**。`lib/` 33 个文件、`ui/` 41 个原语、`shared/` 16 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-tree`(角色授权弹窗)、`formatCode`(业务编号)也都有真实调用方。
+实测:仓里**没有无调用方的死件**。`lib/` 47 个文件、`ui/` 41 个原语、`shared/` 16 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-tree`(角色授权弹窗)、`formatCode`(业务编号)也都有真实调用方。
 
-刻意保留、业务页尚未接的是下面两组(其余件都有调用方):
+刻意保留、业务页尚未接的是下面一组(其余件都有调用方):
 
 | 件 | 位置 | 说明 |
 | --- | --- | --- |
 | 列类型 + 写盘点 | `src/lib/excel.ts` | 导出列类型与 `writeSheet` / `cellText`(全仓唯一写盘点) |
-| 台账导出 | `src/components/modules/shared/ledger-excel.ts` | 拉全量 → 行映射 → XLSX → 下载 |
-| 导入弹窗 | `src/components/modules/shared/excel-import.tsx` | 解析 → 校验 → 提交 mutation 的对话框 |
+| 台账导出 | `src/components/modules/shared/ledger-excel.ts` | 拉全量 → 行映射 → XLSX → 下载(已经 `shared/excel-actions` 接到四个台账页) |
+| 导入弹窗 | `src/components/modules/shared/excel-import.tsx` | 解析 → 校验 → 提交 mutation 的对话框(xlsx 重依赖,按需动态加载) |
 | 运行示例 | 工作台 `/` 页 | 三者的最小可用示例 |
 
-**`hooks/use-dict.ts`(字典读取器)** 也属于这一类:接口是现成的(`dict.byCode`),但目前只有字典管理页在**写**字典,还没有页面**读**它做下拉 —— 留着当模板件,新项目做业务表单时会第一个用到。
+> 曾经同列表的 `hooks/use-dict.ts`(字典读取器)已在收敛轮删除:它的过程级真源 `dict.byCode` 仍在(服务端按编码取值 + 软删语义的测试依赖),客户端 hook 却没有任何页面在读 —— 派生项目要做字典下拉时,从 `trpc.dict.byCode.queryOptions({ code })` 起步即可。
 
 **约定**:新增可复用件时,**要么给它一个真实调用方,要么在工作台 UI 示例里展示,要么登记进本节** —— 三者都不做,它会被下一轮清理当成死代码删掉。
 
@@ -626,6 +630,11 @@ pnpm check
 
 ### 第五轮:「面向收敛」精简重构(2026-09)
 
+> **现状注**:以下是历轮的**决策快照**,当时的基线数字(如 `150/150`、`284 files`)不要当成当前值 ——
+> 现行口径以本文各处的「当前」段落与 `pnpm typecheck / check / build / test` 实测为准。
+> 个别当时"刻意保留"的件(`hooks/use-dict`、`@tanstack/devtools-event-client`、HoldButton 与其 CSS)
+> 在之后的收敛轮已经删除;历史句保持原样,不再逐条改写。
+
 这一轮只用一个判据动刀:**同一个东西是否存在第二个实现**。删除优先于新增,但**只有逐字相同**的部分才允许上升为共用件 —— 凡是要靠加开关才能通用的,一律不抽。
 
 | 改了什么 | 说明 |
@@ -658,7 +667,7 @@ pnpm check
 | **测试脚手架** | `tests/helpers.ts` 的兜底清扫原先只认 `operator_id = "test-admin"`,漏掉 `test-nobody` / `test-other-*`(实测曾漏 863 行),且完全没覆盖 `sys_data_plugin` / `sys_data_policy` → 收敛成一个 `isTestOperator()`(`test-` 前缀 ∪ `__test__` 前缀)+ 两张表按 `plugin_key` 前缀清;顺手把库里 1775 行历史测试数据清掉(311 行 `__` 打头 + 1459 行 `test-*` 身份 + 4 个插件 + 1 条规则,清前先 `mysqldump` 到 `/tmp`) |
 | **伪信号** | `route-progress` 原是「pathname 一变就无条件转 720ms」的假进度条 → 改读路由自己的 `isLoading`,连带删掉 `useRef` / `useState` / `useEffect` / `setTimeout` 四个状态位(27 → 24 行);CSS 注释同步改成「一次**真实加载**」。已知取舍:单次扫光,加载比它久会提前淡出 —— 不为它引入 nprogress 那套状态机 |
 | **伪扩展点** | 导出面收敛到「真的有人 import」:**15 个**只有本文件用的类型 / 常量去掉 `export`(data-scope 的 `ScopeRow` / `ScopePreview` / `DraftRule` / `ResourceMeta` / `ResourceColumnMeta` / `PolicyUser`、`mock-table` 的 `MockTableStore`、`policy-context-block` 的 props、`use-para-prefs` 的 `PAGE_COLUMNS_KEY` / `PAGE_TREE_KEY` / `PAGE_SIZE_FALLBACK` / `parsePageColumns` 与 4 个偏好形状;其中 `parsePageColumns` / `PageColumnsMap` 已在第八轮**直接删掉** —— 它就是个 `parsePageRecord` 的薄封装);**真死件** `parsePageTree` + `PageTreeMap` 直接删(`useParaRecord` 自己就会解析,这两个包装没人调);`rbac.ts` 里与 `layout/nav-menu.ts` **同名不同形**的 `MenuRow` → `SysMenuRow`。剩下的 22 个零引用导出**全部是有意留的**:6 个 UI 原语的类型、Excel 链 11 个、文档点名的 `RuleItem` / `ResolvedPlugin` / `PluginInfo` / `TimeCell`、靠约定路径加载的 `getRouter` |
-| **刻意不做** | 维持第五轮结论**不并** sheet/dialog(只补登记);**不删** Excel 三件、`hooks/use-dict.ts`、`tests/helpers.ts` 里零调用方的 `testId` / `purgeTestAuditRows`(都是登记在册的「已实现、无调用方」,且不是本轮造的东西);**不接线** Excel 导入导出 —— 那是加功能不是收敛;不动 lucide 动态取值(动行为);`/demo/table` 自带的那个 `SortIcon` 不并入 `table-kit`(该页刻意手搓,属「table 封装例外」);`@tanstack/devtools-event-client` 那行 `devDependencies` 确认冗余,但本机 `pnpm` store 异常、无法验证删除,先留着 |
+| **刻意不做** | 维持第五轮结论**不并** sheet/dialog(只补登记);**不删** Excel 三件、`hooks/use-dict.ts`、`tests/helpers.ts` 里零调用方的 `testId` / `purgeTestAuditRows`(都是登记在册的「已实现、无调用方」,且不是本轮造的东西);**不接线** Excel 导入导出 —— 那是加功能不是收敛;不动 lucide 动态取值(动行为);`/demo/table` 自带的那个 `SortIcon` 不并入 `table-kit`(该页刻意手搓,属「table 封装例外」);`@tanstack/devtools-event-client` 那行 `devDependencies` 确认冗余,但本机 `pnpm` store 异常、无法验证删除,先留着(后续轮次已删) |
 
 基线:`pnpm typecheck` 0 · `npx biome check .` Checked 256 files / **0 error / 4 warning / 1 info**(与上一轮逐项相同)· `pnpm db:create` 幂等(全「已存在 / 不存在,跳过」,表注释 / 列注释 / 索引名「已是最新」)· `pnpm build` 通过 · `LOG_SILENT=1 pnpm test` **150 / 150**。
 
@@ -813,11 +822,11 @@ pnpm check
 - `doc/通知中心.md` · `doc/文件管理.md` —— 通知与 MinIO 文件的能力边界
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
+- `doc/task-close.md` —— 任务闭环(唯一保留的业务示例模块):三页、六张 `tc_*` 表与 `who` 协议、状态机与活动日志
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)
 - `DESIGN.md` —— 视觉规范(品牌 7 色 + 点缀 6 色相 + 间距 / 圆角 / 阴影 / 动效原语清单)
-- `doc/archive/` —— 原业务系统的设计文档(表结构设计、需求清单、测试方案…),**仅供追溯,与新项目无关**
 
 外部资料:
 

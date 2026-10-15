@@ -40,7 +40,7 @@ pnpm check            # biome check --write —— 格式化 + lint + 整理 imp
 pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生成物,不要手改)
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
-pnpm db:create        # 建系统表 21 张(20 张 sys_* + demo_grid;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
+pnpm db:create        # 建系统表 27 张(20 张 sys_* + demo_grid + 6 张 tc_*;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
 pnpm db:dm:create-ba  # 达梦线:建 17 张表(逐张清单见 doc/达梦支持.md,幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
 pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo   # 六个种子都幂等「只补不覆盖」
@@ -72,7 +72,8 @@ pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期
 - **详情 / 表单的字段**:直接用 `ui/detail-row` 的 `DetailRow` **单列**内联写,**没有 `fields={[...]}` 声明式封装**;
   **`label` 只给一句纯描述**(别加 fragment、别塞灰色小字);**创建 / 更新时间不进字段列表**(由 `DetailDialog` 的 `meta` 渲染在底部)。
 - **版式骨架照抄,不要自创**:列表页 = 台账布局(页头 → StatCards → 工具条在卡外 → 卡内表格 + 分页);
-  三个树页栅格统一 `lg:grid-cols-[30rem_minmax(0,1fr)]`;三个 tab 编辑器 `sm:max-w-2xl` + `flex h-[52vh] flex-col`。
+  三个树页栅格统一 `lg:grid-cols-[30rem_minmax(0,1fr)]`;dialog/弹窗统一 `ui/dialog` 的 **`DIALOG_FIT`** 预设
+  (`flex max-h-[85vh] flex-col overflow-hidden` + `DialogBody` 自己滚),宽度仍用 `sm:max-w-2xl`。
   细节与理由 → `doc/界面约定.md`。
 - **高度铁律**:**弹窗本身永远不出滚动条**,滚的只能是控件内部(候选列表 / 字段区 / 权限树);动作行与内容留 12px。
 - **新增可复用件**:要么给它真实调用方,要么在工作台(`components/modules/workbench/ui-gallery.tsx`)加一格,要么登记进 `doc/界面约定.md` 的备选表 —— 三者都不做会被当死代码清掉。

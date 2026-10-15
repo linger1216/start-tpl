@@ -82,6 +82,13 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
 	return <div data-slot="dialog-body" className={cn("min-h-0 flex-1 overflow-y-auto", className)} {...props} />;
 }
 
+/**
+ * 上面那条"高度随内容长、封顶 85vh"规矩的**预设三件套** ——
+ * 详情 / 编辑弹窗的 `DialogContent` 统一 `className={\`${DIALOG_FIT} sm:max-w-2xl\`}` 的写法,
+ * 不要再逐字手抄这组 class(改高度策略只动这里)。
+ */
+export const DIALOG_FIT = "flex max-h-[85vh] flex-col overflow-hidden";
+
 function DialogFooter({ className, children, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
@@ -117,6 +124,10 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
 	);
 }
 
+/**
+ * 导出。`DialogPortal` 同时是 `sheet.tsx` 共用的转发层
+ * (Sheet 就是同一个 @base-ui Dialog 原语的侧滑形态,见 sheet.tsx)。
+ */
 export {
 	Dialog,
 	DialogBody,
@@ -125,7 +136,6 @@ export {
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
-	DialogOverlay,
 	DialogPortal,
 	DialogTitle,
 	DialogTrigger,

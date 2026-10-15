@@ -117,7 +117,7 @@ export function FileDropzone({
 			<input
 				ref={inputRef}
 				type="file"
-				accept={accept}
+				accept={accept || undefined}
 				multiple={multiple}
 				className="hidden"
 				onChange={(event) => {

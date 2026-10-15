@@ -18,8 +18,8 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { buildTree, bySortThenName } from "#/lib/tree";
 
 /**
@@ -70,65 +70,56 @@ export function SettingsDepartmentsPage() {
 
 	const createMutation = useMutation(
 		trpc.department.create.mutationOptions({
-			onSuccess: async (row) => {
-				await invalidate();
-				setSelectedId(row.id);
-				setValues(deptFormValues({ ...row, depth: 0, children: [] }));
-				toast.success(`已新增「${row.name}」`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: (row) => {
+					setSelectedId(row.id);
+					setValues(deptFormValues({ ...row, depth: 0, children: [] }));
+				},
+				message: (row) => `已新增「${row.name}」`,
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.department.update.mutationOptions({
-			onSuccess: async (row) => {
-				await invalidate();
-				toast.success(`已保存「${row.name}」`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { message: (row) => `已保存「${row.name}」` }),
+			onError: writeError,
 		}),
 	);
 
 	const reorderMutation = useMutation(
 		trpc.department.reorder.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.department.remove.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setDeleteOpen(false);
-				setSelectedId(null);
-				setValues(null);
-				toast.success("已删除");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => {
+					setDeleteOpen(false);
+					setSelectedId(null);
+					setValues(null);
+				},
+				message: () => "已删除",
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const memberMutation = useMutation(
 		trpc.department.addMember.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				toast.success("已更新成员角色");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { message: () => "已更新成员角色" }),
+			onError: writeError,
 		}),
 	);
 
 	const removeMemberMutation = useMutation(
 		trpc.department.removeMember.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				toast.success("已移出该部门");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { message: () => "已移出该部门" }),
+			onError: writeError,
 		}),
 	);
 

@@ -6,6 +6,7 @@ import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -193,7 +194,7 @@ export function TaskCloseWorkflowForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{editing ? "编辑流程模板" : "新建流程模板"}</DialogTitle>
 					<DialogDescription>

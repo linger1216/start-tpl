@@ -5,6 +5,7 @@ import {
 	FilePlus2,
 	FileQuestion,
 	MessageSquare,
+	MessageSquareReply,
 	MessageSquareX,
 	Pencil,
 	Send,
@@ -36,6 +37,7 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"task.transit": ArrowRightLeft,
 	"action.create": Send,
 	"action.respond": CheckCheck,
+	"action.reply": MessageSquareReply,
 	"comment.create": MessageSquare,
 	"comment.remove": MessageSquareX,
 	"member.add": UserPlus,
@@ -94,7 +96,7 @@ export function TaskCloseLogList({
 }) {
 	if (items.length === 0) {
 		return (
-			<p className="py-2 text-[13px] text-muted-foreground">
+			<p className="py-2 text-sm text-muted-foreground">
 				{loading ? "加载中…" : "还没有事件。状态、动作、评论、成员的变动都会记在这里。"}
 			</p>
 		);
@@ -121,16 +123,16 @@ export function TaskCloseLogList({
 							<Icon className="size-3" />
 						</span>
 						<div className="min-w-0 flex-1">
-							<div className="flex items-baseline justify-between gap-2 text-[13px] leading-snug">
+							<div className="flex items-baseline justify-between gap-2 text-sm leading-snug">
 								<span className="text-foreground">
 									<span className="font-medium">{item.actorName ?? item.actorId}</span>
 									<span className="ms-1">{title}</span>
 								</span>
-								<span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">
+								<span className="shrink-0 tabular-nums text-xs text-muted-foreground">
 									{item.createdAt ? formatLocalMinute(item.createdAt) : "—"}
 								</span>
 							</div>
-							{note ? <p className="mt-0.5 wrap-break-word text-[11px] text-muted-foreground">{note}</p> : null}
+							{note ? <p className="mt-0.5 wrap-break-word text-xs text-muted-foreground">{note}</p> : null}
 						</div>
 					</li>
 				);

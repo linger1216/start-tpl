@@ -21,7 +21,7 @@
  *
  * 派生新项目时,这几张表基本可以直接复用:
  *  - `sys_menu` 侧边栏 / 面包屑 / 模块概览的运行时来源(`NAV_NODES` 只是兜底);
- *  - `sys_dict` 全系统共用的字典(`useDict` 读它);
+ *  - `sys_dict` 全系统共用的字典(`dict.byCode` 按编码取值);
  *  - `sys_para` 「系统设置 ▸ 参数管理」的数据源(`para_key` / `para_value` / `para_type`);
  *  - `sys_tag` / `sys_tag_relation` 标签体系与"对象打了哪些标签"。
  *
@@ -639,11 +639,11 @@ export const sysDemoGrid = mysqlTable(
 		name: varchar("name", { length: 64 }).notNull(),
 		/** 所属街镇(Excel 原样文本,便于列表直接展示) */
 		town_name: varchar("town_name", { length: 32 }),
-		/** 所属街镇 → `sys_dept.id`(只用于展示 / 筛选 / 统计) */
+		/** 所属街镇 → `sys_dept.id`(行级数据权限的筛选键:插件按「我的部门及以下」命中它) */
 		town_id: varchar("town_id", { length: 32 }),
 		/** 网格长姓名(Excel 原样;92 位真实姓名里没几个能对上账号,所以另存 owner_id) */
 		owner_name: varchar("owner_name", { length: 32 }),
-		/** 负责人 → `sys_user.id`(只用于展示 / 筛选 / 统计) */
+		/** 负责人 → `sys_user.id`(行级数据权限的筛选键,与 town_id 同一套) */
 		owner_id: varchar("owner_id", { length: 32 }),
 		/** 工作职务(Excel 原样) */
 		duty: varchar("duty", { length: 64 }),

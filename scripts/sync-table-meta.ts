@@ -29,10 +29,10 @@ import { sql } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 
-/** 表注释(19 张表全要有:与 `create-system-tables.ts` 的 `TABLES` 一一对应) */
+/** 表注释(27 张系统表 + `todos` 示例表全要有;`create-system-tables.ts` 只建系统 27 张) */
 const TABLE_COMMENTS: Record<string, string> = {
 	sys_menu: "后台菜单(侧边栏 / 面包屑 / 模块概览的运行时来源;代码里的 NAV_NODES 只是兜底)",
-	sys_dict: "系统字典(全系统共用的枚举;读写走 hooks/use-dict)",
+	sys_dict: "系统字典(全系统共用的枚举;读写走 trpc.dict)",
 	sys_para: "系统参数(「系统设置 ▸ 参数管理」的数据源)",
 	sys_tag: "标签树(维度 = 一级节点,标签 = 叶子)",
 	sys_tag_relation: "标签与业务对象的关联(某个对象打了哪些标签)",
@@ -450,7 +450,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		table: "tc_log",
 		column: "event",
 		comment:
-			"事件码(英文):task.create / task.update / task.remove / task.transit / action.create / action.respond / comment.create / comment.remove / member.add / member.remove",
+			"事件码(英文):task.create / task.update / task.remove / task.transit / action.create / action.respond / action.reply / comment.create / comment.remove / member.add / member.remove / member.transfer",
 	},
 	{ table: "tc_log", column: "from_status", comment: "本次事件**之前**的任务状态(value);事件没动状态就是 NULL" },
 	{

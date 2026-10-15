@@ -12,7 +12,7 @@
  *  - 表格那种"一格里塞不下"的例子不挤进网格 —— 给它自己的整宽卡片(见 `UiGalleryTable`)。
  *  - **分层展示**:能独立渲染的就真跑(拖拽 / 勾选 / 校验都点得动);满足不了下面任一条的只给
  *    「签名 + 指路」卡 —— ① 需要 TanStack Form 的 field context(见 `/demo/form.simple`);
- *    ② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 全量 lucide;`shared/excel-*` → xlsx);
+ *    ② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 策展的图标解析;`shared/excel-*` → xlsx);
  *    ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。
  */
 
@@ -67,7 +67,6 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { FileDropzone } from "#/components/ui/file-dropzone";
-import { HoldButton } from "#/components/ui/hold-button";
 import { Input } from "#/components/ui/input";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Label } from "#/components/ui/label";
@@ -89,7 +88,7 @@ import {
 import { Separator } from "#/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "#/components/ui/sheet";
 import { Skeleton, StatCardsSkeleton, TableSkeleton } from "#/components/ui/skeleton";
-import { RateSlider, Slider } from "#/components/ui/slider";
+import { Slider } from "#/components/ui/slider";
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { Table, TableHead, TableHeader, TableRow } from "#/components/ui/table";
@@ -200,7 +199,6 @@ export function UiGallery() {
 	const [checkOn, setCheckOn] = useState(false);
 	const [sliderVal, setSliderVal] = useState(40);
 	const [numVal, setNumVal] = useState(8);
-	const [rateVal, setRateVal] = useState(3.5);
 	const [selectVal, setSelectVal] = useState("b");
 	const [searchVal, setSearchVal] = useState<string | undefined>("sh");
 	const [tags, setTags] = useState<Array<{ value: string }>>([{ value: "紧急" }]);
@@ -268,9 +266,6 @@ export function UiGallery() {
 				</Cell>
 				<Cell name="NumField" hint="数字输入(带 min/max)">
 					<NumField value={numVal} onChange={setNumVal} min={0} max={99} />
-				</Cell>
-				<Cell name="RateSlider" hint="评分滑杆">
-					<RateSlider value={rateVal} onChange={setRateVal} label="满意度" />
 				</Cell>
 				<Cell name="Select" hint="下拉选择(可分组)">
 					{/* ⚠️ 根上必须给 `items`:Base UI 不会从 <SelectItem> 收集 label,没有它就显示原始 value("b" 而不是"选项 B") */}
@@ -372,7 +367,7 @@ export function UiGallery() {
 				</Cell>
 			</Group>
 
-			<Group title="按钮与动作" desc="按钮的变体 / 尺寸 / 组合、行内操作按钮,以及需要防误触的「长按执行」。">
+			<Group title="按钮与动作" desc="按钮的变体 / 尺寸 / 组合、行内操作按钮与描边按钮组。">
 				<Cell name="ActionButton" hint="操作按钮:纯文字 + hover 下划线(表格行内 / 工具条 / 详情卡里那些小动作)" wide>
 					<div className="flex flex-wrap items-center gap-4">
 						<ActionButton>详情</ActionButton>
@@ -422,18 +417,6 @@ export function UiGallery() {
 					<Button size="sm" disabled>
 						禁用
 					</Button>
-				</Cell>
-				<Cell name="HoldButton" hint="长按到进度走满才执行(防误触)">
-					<HoldButton
-						variant="destructive"
-						holdingLabel="松手取消…"
-						onHold={() => toast.success("已执行(示例)", { description: "松手早于进度走满则取消" })}
-					>
-						长按清空
-					</HoldButton>
-					<HoldButton variant="outline" onHold={() => toast.info("已提交(示例)")}>
-						长按提交
-					</HoldButton>
 				</Cell>
 				<Cell name="ButtonGroup" hint="并排按钮组">
 					<ButtonGroup>
@@ -823,7 +806,7 @@ function ModuleGallery() {
 							<code className="font-mono">IconPicker</code> —— props:
 							<code className="font-mono">value / onChange / placeholder</code>
 							<p className="text-muted-foreground">
-								它的图标来自 <code className="font-mono">lucide-react</code> <b>全量</b>;在工作台 import
+								它的图标解析来自 <code className="font-mono">icons-list</code> 的<b>策展清单</b>;在工作台 import
 								会把整包打进首屏。 实活示例在「系统设置 ▸ 菜单管理」的图标选择器。
 							</p>
 						</div>
@@ -1011,7 +994,8 @@ function ModuleGallery() {
 							<div className="font-sans font-medium text-foreground">lib/excel.ts(重依赖)</div>
 							<div>readSheetTable(buf, opts) / writeSheet(columns, rows, fileName) / cellText(v)</div>
 							<div className="font-sans text-muted-foreground">
-								依赖 <code className="font-mono">xlsx</code>;模板里目前**没有业务调用方**(见上面那张「签名 + 指路」卡)。
+								依赖 <code className="font-mono">xlsx</code>;业务页都经 `shared/excel-actions` 懒加载它,别在页面直接
+								import。
 							</div>
 						</div>
 					</div>
@@ -1027,7 +1011,7 @@ function ModuleGallery() {
 						<li>
 							<code className="font-mono text-foreground">shared/icons-list</code> +{" "}
 							<code className="font-mono">use-lucide-icons</code> —— 图标名清单与「名字 → 组件」解析,是{" "}
-							<code className="font-mono">IconPicker</code> 的底座(见上面那张卡:它带全量 lucide,不在这页 import)。
+							<code className="font-mono">IconPicker</code> 的底座(见上面那张卡:图标按名义上 import,不在这页拖整包)。
 						</li>
 						<li>
 							<code className="font-mono text-foreground">lib/constants</code> —— 三个全局常量:

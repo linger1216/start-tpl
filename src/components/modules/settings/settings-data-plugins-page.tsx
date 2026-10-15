@@ -19,6 +19,7 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
@@ -81,23 +82,23 @@ export function SettingsDataPluginsPage() {
 
 	const createMutation = useMutation(
 		trpc.dataPlugin.create.mutationOptions({
-			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.dataPlugin.pathFilter());
-				setCreating(false);
-				toast.success(`已新增插件 ${outcome.pluginKey}`, { description: "立即可用,不用重启服务。" });
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataPlugin.pathFilter()), {
+				close: () => setCreating(false),
+				message: (o) => `已新增插件 ${o.pluginKey}`,
+				description: () => "立即可用,不用重启服务。",
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.dataPlugin.update.mutationOptions({
-			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.dataPlugin.pathFilter());
-				setEditing(null);
-				toast.success(`已保存插件 ${outcome.pluginKey}`, { description: "缓存 30 秒内过期,以后按新定义取数。" });
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataPlugin.pathFilter()), {
+				close: () => setEditing(null),
+				message: (o) => `已保存插件 ${o.pluginKey}`,
+				description: () => "缓存 30 秒内过期,以后按新定义取数。",
+			}),
+			onError: writeError,
 		}),
 	);
 

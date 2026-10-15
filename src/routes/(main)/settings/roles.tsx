@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsRolesPage } from "#/components/modules/settings/settings-roles-page";
-import { PAGE_SIZE_KEY } from "#/hooks/use-para-prefs";
+import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/roles")({
 	/**
@@ -11,7 +11,7 @@ export const Route = createFileRoute("/(main)/settings/roles")({
 	 */
 	loader: async ({ context }) => {
 		await Promise.all([
-			context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY })),
+			ensurePageSize(context),
 			context.queryClient.ensureQueryData(context.trpc.role.list.queryOptions()),
 			context.queryClient.ensureQueryData(context.trpc.menu.list.queryOptions()),
 		]);

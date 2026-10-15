@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "#/components/ui/button";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -81,7 +82,7 @@ export function DetailDialog({
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle className="flex flex-wrap items-center gap-2">
 						{title}

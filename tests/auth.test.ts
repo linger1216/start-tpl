@@ -7,10 +7,10 @@ import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
 import { ADMIN_ROLE_NAME } from "../src/lib/menu-spec.ts";
+import { pagePermOf } from "../src/lib/perm-code.ts";
 import {
 	DATA_SCOPE_BY_PATH,
 	PERM_BY_PATH,
-	pagePermOf,
 	UNMAPPED_MUTATIONS,
 	UNMAPPED_QUERIES,
 	UNSCOPED_QUERIES,

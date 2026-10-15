@@ -6,6 +6,7 @@ import { Button } from "#/components/ui/button";
 import { DatePicker } from "#/components/ui/date-picker";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -116,7 +117,7 @@ export function TaskCloseForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{editing ? "编辑任务" : "新建任务"}</DialogTitle>
 					<DialogDescription>

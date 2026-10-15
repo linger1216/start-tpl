@@ -15,6 +15,7 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { buildTree, bySortThenLabel } from "#/lib/tree";
@@ -48,15 +49,16 @@ export function SettingsTagsPage() {
 
 	const createMutation = useMutation(
 		trpc.tag.create.mutationOptions({
-			onSuccess: async (row) => {
-				await queryClient.invalidateQueries(trpc.tag.pathFilter());
-				setCreateOpen(false);
-				setCreateParent(null);
-				setSelectedId(row.id);
-				setValues(tagFormValues(row));
-				toast.success("已新增标签节点");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.tag.pathFilter()), {
+				close: (row) => {
+					setCreateOpen(false);
+					setCreateParent(null);
+					setSelectedId(row.id);
+					setValues(tagFormValues(row));
+				},
+				message: () => "已新增标签节点",
+			}),
+			onError: writeError,
 		}),
 	);
 

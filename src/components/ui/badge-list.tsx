@@ -33,7 +33,7 @@ import { cn } from "#/lib/utils";
  *  现在全部改走 `styles.css` 的「点缀色谱」—— 6 个低饱和色相(9%–13% 彩度),
  *  每个色相的软底/文字态由 token 保证浅底深字可读性。
  *
- *  这套替换是**全局生效**的:表格标签列、可编辑标签输入、快速筛选 chip、已选筛选 pill
+ *  这套替换是**全局生效**的:表格标签列、可编辑标签输入与之后的 filter-chips 展示件
  *  都读这张表,所以改这里 = 全站分类色一次性统一。
  *
  *  各主题的区别在**色相轮转顺序**(每页从不同的色相起手),而不是"用不同的色板" ——
@@ -95,7 +95,7 @@ export const BADGE_THEMES = {
 	],
 } as const satisfies Record<string, readonly string[]>;
 
-export type BadgeThemeName = keyof typeof BADGE_THEMES;
+type BadgeThemeName = keyof typeof BADGE_THEMES;
 
 /** 彩色主题(规范外分类色板)—— "stable" 模式从这里选 */
 const COLORFUL_THEMES = (Object.keys(BADGE_THEMES) as BadgeThemeName[]).filter((n) => n !== "brand");

@@ -28,7 +28,7 @@
       "description": "甲发任务给乙 → 处置 → 审批 → 关闭归档(含活动日志 tc_log)",
       "default": false,
       "requires": [],
-      "procedures": 22,
+      "procedures": 24,
       "paths": [
         "src/components/modules/task-close",
         "src/routes/(main)/task-close",
@@ -306,7 +306,7 @@
     {
       "id": "tests",
       "name": "测试套件",
-      "description": "直连真库的 27 个集成测试 + 覆盖率脚本",
+      "description": "直连真库的 26 个集成测试 + 覆盖率脚本",
       "default": true,
       "requires": [],
       "procedures": 0,

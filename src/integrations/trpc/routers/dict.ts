@@ -5,7 +5,7 @@
  * `id` 是 nanoid 主键(只用来定位行)。所以本路由的入参一律用 `code`:
  *  - `byCode` / `update` / `delete` 都收 `code`;
  *  - `create` 由调用方给 `code`,主键在服务端生成(`newId()`)。
- * 前端统一用 `#/hooks/use-dict` 读;字典没有对应编码就回空数组(不编造候选)。
+ * 前端读它走 `trpc.dict.*`(`byCode` 是跨页面的按编码取值器);字典没有对应编码就回空数组(不编造候选)。
  *
  * Excel 的列契约(导出表头 / 导入字段 / 摊平)在
  * `src/components/modules/settings/settings-dictionary-excel.ts` —— **一行 = 一个字典项**,
@@ -77,7 +77,7 @@ async function getByCode(code: string) {
 export const dictRouter = createTRPCRouter({
 	/** 全部字典(前端按需取用;字典表很小,直接全给) */
 	list: protectedProcedure.query(async () => {
-		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 消费侧(useDict)自己只看启用的那些。
+		// 字段管理页要能看到停用的字典(便于重新启用),所以不过滤 status —— 要「只看启用的」由读取方自己筛。
 		// 但**软删**的行要过滤:它留着只是审计留痕,不该出现在「库里有这些字典」里
 		const rows = await db.select().from(sysDict).where(alive(sysDict)).orderBy(asc(sysDict.code));
 		return rows.map(toDict);

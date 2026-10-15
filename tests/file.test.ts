@@ -46,11 +46,24 @@ after(async () => {
 	await closeDb();
 });
 
-test("presign 拒绝白名单外的后缀", async () => {
-	await assertRejects(
-		() => caller.file.presign({ name: `${TEST_PREFIX}x.${SUFFIX}.html`, size: 10, kind: "private" }),
-		"不允许的文件类型",
-	);
+test("presign:默认不限制后缀(任意类型都收);参数里配了白名单才拦名单外的后缀", async () => {
+	// 默认策略(file.allow_ext 留空)收**所有**类型 —— 用一个没在旧名单里的后缀验证":
+	const open = await caller.file.presign({ name: `${TEST_PREFIX}odd.${SUFFIX}.7z`, size: 10, kind: "private" });
+	created.push(open.objectKey);
+
+	// 管理员把名单配成只剩 png → .html 的 presign 应被拒;还原后又要能通
+	await caller.para.update({ key: "file.allow_ext", value: "png" });
+	try {
+		await assertRejects(
+			() => caller.file.presign({ name: `${TEST_PREFIX}x.${SUFFIX}.html`, size: 10, kind: "private" }),
+			"不允许的文件类型",
+		);
+	} finally {
+		await caller.para.update({ key: "file.allow_ext", value: "" });
+	}
+	// 名单清空恢复"全收" —— 与开头那条呼应
+	const again = await caller.file.presign({ name: `${TEST_PREFIX}x.${SUFFIX}.html`, size: 10, kind: "private" });
+	created.push(again.objectKey);
 });
 
 test("presign 拒绝超过大小上限的文件", async () => {

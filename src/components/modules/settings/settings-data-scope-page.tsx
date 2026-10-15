@@ -19,6 +19,7 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
@@ -54,14 +55,12 @@ export function SettingsDataScopePage() {
 
 	const createMutation = useMutation(
 		trpc.dataScope.create.mutationOptions({
-			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.dataScope.pathFilter());
-				setCreating(false);
-				toast.success("已新增数据范围规则", {
-					description: "现在是「启用」,引擎还不加载它 —— 点这一行的「预览」算一遍,对了再「上线」。",
-				});
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataScope.pathFilter()), {
+				close: () => setCreating(false),
+				message: () => "已新增数据范围规则",
+				description: () => "现在是「启用」,引擎还不加载它 —— 点这一行的「预览」算一遍,对了再「上线」。",
+			}),
+			onError: writeError,
 		}),
 	);
 
@@ -96,12 +95,11 @@ export function SettingsDataScopePage() {
 
 	const removeMutation = useMutation(
 		trpc.dataScope.remove.mutationOptions({
-			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.dataScope.pathFilter());
-				setPendingDelete(null);
-				toast.success("已删除数据范围规则");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataScope.pathFilter()), {
+				close: () => setPendingDelete(null),
+				message: () => "已删除数据范围规则",
+			}),
+			onError: writeError,
 		}),
 	);
 

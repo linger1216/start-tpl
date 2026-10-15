@@ -1,7 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { TRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-
 import { useTRPC } from "#/integrations/trpc/react";
+import type { TRPCRouter } from "#/integrations/trpc/router";
 import { PAGE_SIZES } from "#/lib/constants";
 import type { MockRow, useAppTable } from "#/lib/table";
 
@@ -167,4 +169,16 @@ export function useTreePrefs(pageKey: string) {
  */
 export function usePageSize(): number {
 	return parsePageSize(useParaRaw(PAGE_SIZE_KEY));
+}
+
+/**
+ * 页面 loader 预取的首选动作:**把 `page.size` 预取好**(否则分页器首帧拿不到默认档)。
+ *
+ * 过去每一个列表路由的 loader 第一行都逐字复制
+ * `context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY }))`;
+ * 收成这一个函数后,"还有哪些必要预取"才是各页 loader 的唯一差异点。
+ * `context` 的形状与 `routes/__root.tsx` 的 `MyRouterContext` 相同(此处用结构类型,不让 hooks 依赖 routes)。
+ */
+export async function ensurePageSize(context: { queryClient: QueryClient; trpc: TRPCOptionsProxy<TRPCRouter> }) {
+	await context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY }));
 }

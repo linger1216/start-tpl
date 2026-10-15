@@ -18,6 +18,7 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -64,24 +65,25 @@ export function SettingsFilesPage() {
 
 	const renameMutation = useMutation(
 		trpc.file.rename.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setEditing(null);
-				toast.success(`已重命名为 ${outcome.originName}`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setEditing(null),
+				message: (o) => `已重命名为 ${o.originName}`,
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.file.remove.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setPendingDelete(null);
-				clearSelectionRef.current();
-				toast.success(`已删除 ${outcome.removed} 个文件`, { description: "对象已从桶里清掉,记录保留(状态=已删除)" });
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => {
+					setPendingDelete(null);
+					clearSelectionRef.current();
+				},
+				message: (o) => `已删除 ${o.removed} 个文件`,
+				description: () => "对象已从桶里清掉,记录保留(状态=已删除)",
+			}),
+			onError: writeError,
 		}),
 	);
 

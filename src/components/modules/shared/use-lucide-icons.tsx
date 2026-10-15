@@ -149,15 +149,13 @@ import { cn } from "#/lib/utils";
 import type { IconProps } from "./icons-list";
 import { resolveLucideIconKey } from "./icons-list";
 
+// 转发 icons-list 的解析结果(只转发真有调用方的;ICON_NAMES/pascal/legacy 由测试或内部用)
 export {
 	ALL_LUCIDE_ICONS,
-	ICON_NAMES,
 	iconToLabel,
-	LEGACY_ALIAS,
 	PINNED_ICONS,
 	resolveLucideIconKey,
 	toKebabCase,
-	toPascalCase,
 } from "./icons-list";
 
 /**

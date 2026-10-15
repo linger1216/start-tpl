@@ -6,12 +6,6 @@
 allowBuilds:
   esbuild: true
   lightningcss: true
-  '@sentry/cli': true
-
-# 模板里把 store 钉到全局目录,避免每个项目自动建 .pnpm-store/v11 留下一份大缓存。
-# 移动后这条会留作注释指导;本地如果没这条,新克隆项目需要先 cp .env.example .env.local
-# 然后 `pnpm install` 时会按 user/global 配置走。
-storeDir: /Users/lid/Library/pnpm/store/v11
 
 packages:
   - "."

@@ -41,44 +41,4 @@ function Slider({ className, defaultValue, value, min = 0, max = 100, ...props }
 	);
 }
 
-/** 把 base-ui Slider 回调值归一成 number(兼容 number | number[]) */
-function sliderNumber(v: unknown): number {
-	if (Array.isArray(v)) return Number(v[0] ?? 0);
-	return Number(v ?? 0);
-}
-
-function RateSlider({
-	value,
-	onChange,
-	label,
-	className,
-	disabled = false,
-}: {
-	value: number;
-	onChange?: (v: number) => void;
-	label: string;
-	className?: string;
-	disabled?: boolean;
-}) {
-	return (
-		<div className={cn("flex items-center gap-2", disabled && "opacity-60", className)}>
-			<span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-			<div className="w-28">
-				<Slider
-					value={value}
-					min={0}
-					max={100}
-					step={5}
-					disabled={disabled}
-					onValueChange={(v) => {
-						if (disabled) return;
-						onChange?.(sliderNumber(v));
-					}}
-				/>
-			</div>
-			<span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{value}%</span>
-		</div>
-	);
-}
-
-export { RateSlider, Slider, sliderNumber };
+export { Slider };

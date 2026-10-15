@@ -65,7 +65,7 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 | `rose` | `oklch(0.570 0.128 14)` | 停用类、需要留意但不告警的计数 |
 | `emerald` | `oklch(0.528 0.098 162)` | 在线状态、可用性 |
 
-**四个角色,必须配对使用**(定义在 `src/styles.css` 的「点缀色谱」段):
+**五个角色,必须配对使用**(定义在 `src/styles.css` 的「点缀色谱」段):
 
 | 角色 | token | 值 | 用在哪 |
 |---|---|---|---|
@@ -555,11 +555,10 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
     letter-spacing: 0.08px;
     border: 0;
     cursor: pointer;
-    transition: transform .16s cubic-bezier(.23,1,.32,1),
-                box-shadow .16s cubic-bezier(.23,1,.32,1);
+    transition: box-shadow .16s cubic-bezier(.23,1,.32,1);
   }
+  /* hover 只动阴影,不动位移 —— §7 明令 hover 不做 translateY(抖动红线) */
   .btn-primary:hover {
-    transform: translateY(-1px);
     box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--color-accent) 32%, transparent);
   }
 
@@ -581,7 +580,7 @@ Airtable 的网站是企业级友好的清爽平台,通过白底画布 + 深海�
 
 - **改视觉只改 token**,不要在组件里写死 hex 或逐个改色值。
 - 品牌色映射:`#1b61c9`(Airtable Blue)→ `--primary` / `--ring`;`#181d26` → `--foreground`;`#ffffff` → `--background`;`#f8fafc` → `--card` / `--muted` / `--secondary` / `--accent`;`#333333` → `--muted-foreground`;`#e0e2e6` → `--border` / `--input`;`#006400` → `--success`。
-- **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相四个角色 —— 实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`,外加反白前景 `--hue-X-on`(浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
+- **点缀色谱(6 色相)**:`--hue-{blue,violet,teal,amber,rose,emerald}`,每个色相五个角色(实体 `--hue-X`、文字 `--hue-X-fg`、软底 `--hue-X-soft`、描边 `--hue-X-line`、反白前景 `--hue-X-on`,浅色=白 / 深色=深海军蓝,**不要在调用点硬编码 `text-white`**)。色相不是装饰:一级模块各认一色(侧边栏 → 面包屑 → 页头强调条 → 工作台入口卡四处一致)。规格见 `DESIGN.md` §2.1。
   - 色相 → 类名的映射**只有一份**:`src/styles.css` 的 `@theme inline`(`--color-hue-X` / `-fg` / `-soft` / `-line` / `-on`)。加色相改三处:①`:root` ②`.dark` ③`@theme inline` —— 漏了第 ③ 步,`bg-hue-X-soft` 这类工具类不会生成(Tailwind 扫不到、也不报错)。
   - 同理,`--af-*` 那套中性/品牌 token 也在 `@theme inline` 里映射成了标准工具类(`bg-hover` / `bg-brand-soft` / `border-border-strong` / `shadow-card` / `shadow-raise-1` …)。**组件里不要再写 `bg-[color:var(--af-hover)]` 这种任意值** —— 又长又容易拼错 var 名,拼错了整条规则静默失效。
   - **Tailwind 只扫描源码里的字面量类名**,不能写 `bg-hue-${tone}-soft` 这种拼接 —— 扫描不到就不会生成 CSS。所有按色相取类名的地方必须查表。

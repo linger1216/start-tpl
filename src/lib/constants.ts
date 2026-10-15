@@ -1,6 +1,6 @@
 /**
  * 全局常量 —— 展示层与业务层共用。只放常量,不放函数
- * (helper 就近归到各自域:展示 → format.ts,错误 → api/error.ts,入库归一 → json.ts)。
+ * (helper 就近归到各自域:展示 → format.ts,时间 → time.ts,错误 → api/error.ts)。
  *
  * ponytail: 常量量级还小,单文件集中管理;等超过 ~12 组再按域拆目录。
  */

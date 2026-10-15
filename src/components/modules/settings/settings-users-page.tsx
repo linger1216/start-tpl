@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Plus, UserCheck, Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
@@ -23,8 +22,8 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
@@ -78,34 +77,26 @@ export function SettingsUsersPage() {
 
 	const updateMutation = useMutation(
 		trpc.user.update.mutationOptions({
-			onSuccess: async (updated) => {
-				await invalidate();
-				setEditing(null);
-				toast.success(`已保存 ${updated.name}`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: (u) => `已保存 ${u.name}` }),
+			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.user.remove.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setPendingDelete(null);
-				toast.success("账号已删除");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "账号已删除" }),
+			onError: writeError,
 		}),
 	);
 
 	const createMutation = useMutation(
 		trpc.user.create.mutationOptions({
-			onSuccess: async (created) => {
-				await invalidate();
-				setCreateOpen(false);
-				toast.success(`已创建账号 ${created.email}`, { description: "还没有角色 —— 点「编辑」给他分配。" });
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setCreateOpen(false),
+				message: (created) => `已创建账号 ${created.email}`,
+				description: () => "还没有角色 —— 点「编辑」给他分配。",
+			}),
+			onError: writeError,
 		}),
 	);
 

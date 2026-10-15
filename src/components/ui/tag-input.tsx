@@ -12,8 +12,7 @@
  *  - 输入框自身始终保持空白(条目存到列表)
  *  - 达到 max 后禁用添加;展开后超过 max 会被截断
  *
- * 注意:本组件保持业务无关 —— 跳过率等业务概念(addr-sim 前后缀)由
- * 业务模块自己渲染(参见 addr-sim-step-row 的 RateSlider),不塞进通用控件。
+ * 注意:本组件保持业务无关 —— 业务概念(评分之类)由业务模块自己渲染,不塞进通用控件。
  */
 
 import { Plus } from "lucide-react";
@@ -24,7 +23,7 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 
 /** 标签条目(通用形态:仅一个 value 字段) */
-export type TagEntry = { value: string };
+type TagEntry = { value: string };
 
 /**
  * 草稿展开:把 `"a,b,c"` 拆成多值、把 `'["x","y"]'` 识别为 JSON 数组并展开;

@@ -4,6 +4,7 @@ import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -132,7 +133,7 @@ export function SettingsDataPluginsForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新增值域插件" : "修改值域插件"}</DialogTitle>
 					<DialogDescription>

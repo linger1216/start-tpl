@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
+import { PriorityBadge, StatusBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
@@ -14,8 +15,6 @@ import {
 	type TaskFormPayload,
 } from "#/components/modules/task-close/task-close-form";
 import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
-import { PriorityBadge } from "#/components/modules/task-close/task-close-priority";
-import { StatusBadge } from "#/components/modules/task-close/task-close-status";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
 import { TaskContentBlocks } from "#/components/modules/task-close/task-content-blocks";
 import { Button } from "#/components/ui/button";
@@ -35,6 +34,7 @@ import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
@@ -50,7 +50,7 @@ import { cn } from "#/lib/utils";
  *   ├─ 记录头:返回 + 标题(20px)+ 一行**中性**元信息(徽章 + 日期)  ┤
  *   │         + 描述 + 右上动作组(ⓘ 转交 征询 审批 改状态 编辑 删除 刷新)┤
  *   ├─ 流程脊(全宽):模板状态链,标出走过的 / 当前 / 未到 + 到达时刻   ┤
- *   ├─ 轮到你(有我的待办才出现):横向动作条,就地 通过 / 驳回      │
+ *   ├─ 轮到你(有我的待办才出现):审批就地 通过/驳回;征询就地 回复(意见落评论)┤
  *   └─ main: 左 画布(内容 / 附件 / 评论) + 右 检查器(人员 / 动态)┘
  *
  * 状态类按钮(发起审批 / 改状态)按用户要求**留在右上角**,但成不成、有几个候选仍由
@@ -134,24 +134,16 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 转交执行人 */
 	const transferMutation = useMutation(
 		trpc.taskClose.taskTransfer.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setTransferOpen(false);
-				toast.success("已转交");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setTransferOpen(false), message: () => "已转交" }),
+			onError: writeError,
 		}),
 	);
 
 	/** 管理员「改状态」—— 直接跳到模板里的任意状态(服务端对管理员开了旁路) */
 	const transitMutation = useMutation(
 		trpc.taskClose.taskTransit.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setStatusOpen(false);
-				toast.success("状态已更新");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setStatusOpen(false), message: () => "状态已更新" }),
+			onError: writeError,
 		}),
 	);
 
@@ -168,26 +160,26 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
+	/** 回复征询 —— 意见(+附件)落成一条评论,征询动作即算处理完(不做"通过 / 驳回"判卷) */
+	const replyMutation = useMutation(
+		trpc.taskClose.actionReply.mutationOptions({
+			onSuccess: writeSuccess(invalidate, { message: () => "意见已回复,进了评论区" }),
+			onError: writeError,
+		}),
+	);
+
 	const updateMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setEditOpen(false);
-				toast.success("已保存");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setEditOpen(false), message: () => "已保存" }),
+			onError: writeError,
 		}),
 	);
 
 	/** 附件弹窗专用保存 —— 只改 `payload.attachments`;名称 / 描述 / 截止 / 优先级原样带回,别被清空 */
 	const attachMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setAttachOpen(false);
-				toast.success("附件已更新");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setAttachOpen(false), message: () => "附件已更新" }),
+			onError: writeError,
 		}),
 	);
 
@@ -205,21 +197,22 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 	const memberAddMutation = useMutation(
 		trpc.taskClose.memberAdd.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setMemberOpen(false);
-				setNewMemberId("");
-				setNewMemberRole("executor");
-				toast.success("已加入成员");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => {
+					setMemberOpen(false);
+					setNewMemberId("");
+					setNewMemberRole("executor");
+				},
+				message: () => "已加入成员",
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const memberRemoveMutation = useMutation(
 		trpc.taskClose.memberRemove.mutationOptions({
-			onSuccess: () => invalidate(),
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 
@@ -382,7 +375,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		reachedAt.set(item.toStatus, item.createdAt);
 	}
 
-	/** 「轮到你了」的待办 —— 指给我的、还没结的动作 */
+	/** 「轮到你了」的待办 —— 指给我的、还没结的动作;`toStatus` 为空 = 征询(不摊通过 / 驳回) */
 	const todoItems: TodoItem[] = myPendingActions.map((row) => ({
 		id: row.id,
 		title: row.toStatus
@@ -390,6 +383,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			: `${row.createdName ?? "—"} 发起征询`,
 		stateLabel: row.status === "active" ? "待答复" : "已发起",
 		actionable: row.status === "active",
+		consult: row.toStatus === null,
 	}));
 
 	/**
@@ -456,7 +450,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						{/* 主信息:记录头 —— 标题 + 一行**中性**元信息(徽章 + 日期,不再有彩色胶囊) */}
 						<div className="min-w-0">
 							<h1 className="text-xl font-semibold leading-snug tracking-[-0.01em] text-foreground">{task.name}</h1>
-							<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
+							<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
 								<StatusBadge status={task.status} label={statusLabelOf(statuses, task.status)} />
 								{task.priority ? (
 									<PriorityBadge priority={task.priority} label={priorityLabelOf(task.priority)} />
@@ -493,8 +487,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									</TooltipTrigger>
 									<TooltipContent side="bottom" align="end" className="block max-w-72">
 										<div className="text-xs font-medium">当前身份:{roleLabel}</div>
-										<p className="mt-1 text-[11px] leading-relaxed opacity-90">{roleWhy}</p>
-										<ul className="mt-1.5 grid gap-0.5 text-[11px] leading-relaxed opacity-90">
+										<p className="mt-1 text-xs leading-relaxed opacity-90">{roleWhy}</p>
+										<ul className="mt-1.5 grid gap-0.5 text-xs leading-relaxed opacity-90">
 											{tipLines.map((line) => (
 												<li key={line}>{line}</li>
 											))}
@@ -577,7 +571,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</div>
 
 					{task.description ? (
-						<p className="mt-3 max-w-[70ch] text-[13px] leading-relaxed text-muted-foreground wrap-break-word">
+						<p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-muted-foreground wrap-break-word">
 							{task.description}
 						</p>
 					) : null}
@@ -586,7 +580,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 			{/* ─── 流程脊 —— 只画状态(走到哪了);动作在右上角动作组 ─────────────── */}
 			<section className="grid gap-3 px-8 pt-5">
-				<h2 className="text-[11px] font-semibold tracking-wide text-muted-foreground">事项流程</h2>
+				<h2 className="text-xs font-semibold tracking-wide text-muted-foreground">事项流程</h2>
 				<TaskFlowSpine
 					statuses={statuses}
 					current={task.status}
@@ -596,17 +590,19 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				/>
 			</section>
 
-			{/* ─── 轮到你了 —— 横向动作条:每条待办就地「通过 / 驳回」 ─────────────── */}
+			{/* ─── 轮到你了 —— 动作条:审批就地「通过 / 驳回」;征询就地「回复」(意见落成评论) ─── */}
 			{myPendingActions.length > 0 ? (
 				<section className="px-8 pt-3">
 					<TaskTodoStrip
 						items={todoItems}
 						busy={respondMutation.isPending}
+						replyBusy={replyMutation.isPending}
 						onApprove={(id) => respondMutation.mutate({ id, approved: true })}
 						onReject={(id) => {
 							setRejectReason("");
 							setRejectId(id);
 						}}
+						onReply={(id, content, attachments) => replyMutation.mutate({ id, content, attachments })}
 					/>
 				</section>
 			) : null}
@@ -628,7 +624,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
 							<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
 								附件{" "}
-								<span className="text-[11px] font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
+								<span className="text-xs font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
 							</h2>
 							{/* 新增附件:只有任务**创建人**能看到并使用(执行者 / 参与者 / 旁观者不显示) */}
 							{task.creatorId === meId ? (
@@ -673,9 +669,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<header className="flex items-center justify-between">
 								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
 									参与人员{" "}
-									<span className="text-[11px] font-medium tabular-nums text-muted-foreground">
-										{members.length + 1}
-									</span>
+									<span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
 								</h2>
 								{can.addMember ? (
 									<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={() => setMemberOpen(true)}>
@@ -705,9 +699,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									/>
 								))}
 								{members.length === 0 ? (
-									<li className="py-3 text-[13px] text-muted-foreground">
-										还没有其他人。加人后他们能答复动作、参与讨论。
-									</li>
+									<li className="py-3 text-sm text-muted-foreground">还没有其他人。加人后他们能答复动作、参与讨论。</li>
 								) : null}
 							</ul>
 						</section>
@@ -1121,19 +1113,19 @@ function PeopleRow({
 }) {
 	const initials = (name || "?").slice(0, 1);
 	return (
-		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-hover">
-			<span className="w-14 shrink-0 text-[11px] text-muted-foreground">{roleLabel}</span>
+		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
+			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
 			<div className="flex min-w-0 flex-1 items-center gap-1.5">
 				<span
 					className={cn(
 						// 与「评论与回复」的头像**同色**:品牌蓝底 + 浅字 —— 同一个人在两处长得一样
-						"flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground",
-						"shadow-[0_0_0_1.5px_var(--color-background),0_0_0_2.5px_var(--color-border)]",
+						"flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground",
+						"outline-1 outline-offset-2 outline-border",
 					)}
 				>
 					{initials}
 				</span>
-				<span className={cn("truncate text-[13px] text-foreground", main && "font-semibold")}>{name}</span>
+				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemove ? (
 				<Button variant="ghost" size="icon-sm" aria-label="移出成员" disabled={removing} onClick={onRemove}>

@@ -6,7 +6,7 @@ import { Input } from "#/components/ui/input";
 import { cn } from "#/lib/utils";
 
 /**
- * 台账工具栏 —— 跨域共用件(见 `doc/前端结构与组件约定.md` §5.4)。
+ * 台账工具栏 —— 跨域共用件(见 `doc/界面约定.md` §5.4)。
  *
  * 版式不变式:
  *  1. **左侧搜索框吃掉剩余宽度**(`flex-1 min-w-80`),右侧操作组**宽度固定**(`min-w-72` + 右对齐),

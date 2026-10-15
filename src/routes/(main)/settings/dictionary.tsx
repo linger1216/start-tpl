@@ -2,13 +2,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { SettingsDictionaryPage } from "#/components/modules/settings/settings-dictionary-page";
-import { PAGE_SIZE_KEY } from "#/hooks/use-para-prefs";
+import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/dictionary")({
 	loader: ({ context }) =>
-		Promise.all([
-			context.queryClient.ensureQueryData(context.trpc.para.byKey.queryOptions({ key: PAGE_SIZE_KEY })),
-			context.queryClient.ensureQueryData(context.trpc.dict.list.queryOptions()),
-		]),
+		Promise.all([ensurePageSize(context), context.queryClient.ensureQueryData(context.trpc.dict.list.queryOptions())]),
 	component: SettingsDictionaryPage,
 });

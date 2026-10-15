@@ -5,11 +5,12 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *
  * 这里只剩模板的示例表 `todos`。**其它表都不在本文件**,分两组口径,不要混:
  *
- *  1. **系统表十七张**:`src/db/data-base-schema.ts` —— 五张系统设置(`sys_menu` / `sys_dict` / `sys_para` /
- *     `sys_tag` / `sys_tag_relation`)+ **认证四张**(`sys_user` / `sys_session` / `sys_account` /
- *     `sys_verification`,Better Auth 内核)+ **权限四张**(`sys_dept` / `sys_role` / `sys_user_dept` /
- *     `sys_casbin_rule`)+ `sys_file` / `sys_log` / `sys_notice` +
- *     示例表 `demo_grid`。它们只声明「读写的形状」、**不进迁移**
+ *  1. **系统表(20 张 `sys_*` + 6 张 `tc_*`)**:`src/db/data-base-schema.ts` —— 五张系统设置
+ *     (`sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`)+ **认证四张**
+ *     (`sys_user` / `sys_session` / `sys_account` / `sys_verification`,Better Auth 内核)+
+ *     **权限四张**(`sys_dept` / `sys_role` / `sys_user_dept` / `sys_casbin_rule`)+
+ *     `sys_file` / `sys_log` / `sys_notice` + 示例表 `demo_grid` + 任务闭环六张 `tc_*`。
+ *     它们只声明「读写的形状」、**不进迁移**
  *     (库里已存在,进了 1050 报错);DDL 由 `scripts/create-system-tables.ts`(MySQL)与
  *     `scripts/create-better-auth-tables-dm.ts`(达梦)维护。
  *
@@ -26,16 +27,7 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  * (原先那份内存 mock 已整体删除,不摆假数据)。
  */
 
-// ══ 二、当年那套内存 RBAC 五表 —— 已下线(2026-09)════════════
-//
-// 原先这里声明的 `role` / `permission` / `user_role` / `role_permission` / `user_permission`
-// 与种子脚本 `scripts/seed-permissions.ts` **都已删除**:真正的 RBAC 实装在
-// `data-base-schema.ts`(部门 / 角色 / 成员 / 角色→菜单 + casbin 策略),不再走这套内存模型。
-//
-// **前端页面状态**:系统设置十二页全部接真实数据 —— 原先撑着它们的 `src/mocks/settings.ts`
-// (纯内存 mock)也一并删除,页面不摆假数据。
-
-// ══ 三、模板示例表(删 demo 时一并删)═════════════════════════
+// ══ 二、模板示例表(删 demo 时一并删)═════════════════════════
 
 export const todos = mysqlTable("todos", {
 	id: int().primaryKey().autoincrement(),

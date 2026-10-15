@@ -36,7 +36,8 @@ import {
 } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
-import { pagePermOf, withAncestorIds } from "../src/lib/rbac.ts";
+import { pagePermOf } from "../src/lib/perm-code.ts";
+import { withAncestorIds } from "../src/lib/rbac.ts";
 import {
 	caller,
 	closeDb,

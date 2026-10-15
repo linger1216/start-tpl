@@ -79,7 +79,7 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		value: FILE_ALLOW_EXT_DEFAULT,
 		type: PARA_TYPE.STRING,
 		group: "文件管理",
-		remark: "允许上传的后缀(逗号分隔,小写、不带点);不在名单里的一律拒绝",
+		remark: "允许上传的后缀(逗号分隔,小写、不带点);留空 = 不限制,收所有后缀(大小上限与脚本类 Content-Type 防线仍生效)",
 	},
 	// 登录 —— 由 lib/auth.ts 的 `/sign-in/email` 钩子与登录页各读一次(两边看同一个值)。
 	// 改完**立即生效**:para.update 会 clearParaCache(),不用等 30 秒。

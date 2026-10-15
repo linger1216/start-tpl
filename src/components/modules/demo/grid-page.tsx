@@ -27,9 +27,9 @@ import {
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
@@ -67,42 +67,32 @@ export function GridPage() {
 	};
 	const createMutation = useMutation(
 		trpc.demoGrid.create.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setCreating(false);
-				toast.success("已新增网格");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setCreating(false), message: () => "已新增网格" }),
+			onError: writeError,
 		}),
 	);
 	const updateMutation = useMutation(
 		trpc.demoGrid.update.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setEditing(null);
-				toast.success("已保存");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: () => "已保存" }),
+			onError: writeError,
 		}),
 	);
 	const deleteMutation = useMutation(
 		trpc.demoGrid.remove.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setPendingDelete(null);
-				toast.success(`已删除 ${outcome.removed} 条`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setPendingDelete(null),
+				message: (o) => `已删除 ${o.removed} 条`,
+			}),
+			onError: writeError,
 		}),
 	);
 	const assignMutation = useMutation(
 		trpc.demoGrid.assign.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setAssignOpen(false);
-				toast.success(`已把 ${outcome.assigned} 条指派给负责人`);
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setAssignOpen(false),
+				message: (o) => `已把 ${o.assigned} 条指派给负责人`,
+			}),
+			onError: writeError,
 		}),
 	);
 

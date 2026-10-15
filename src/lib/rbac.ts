@@ -23,16 +23,14 @@ import { db } from "#/db";
 import { sysMenu } from "#/db/data-base-schema";
 import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbin";
 import { MENU_TYPE } from "#/lib/menu-spec";
-import { PERM_FORMAT, pagePermOf, permMatches } from "#/lib/perm-code";
+import { pagePermOf } from "#/lib/perm-code";
 import { alive } from "#/lib/soft-delete";
 import { collectAncestorIds } from "#/lib/tree";
 
 /**
  * 权限码的**形状与比较**住在 `lib/perm-code.ts` —— 功能权限的引擎(`lib/casbin.ts`)与本文件
- * 都要用它,而两者互相依赖,语法抽到最底层就没有环。这里**原样再导出**,老调用方一行都不用改
- * (`routers/menu.ts` / `trpc/init.ts` / `tests/*` 都从本文件 import)。
+ * 都要用它,而两者互相依赖,语法抽到最底层就没有环。各消费方直接从 perm-code import。
  */
-export { PERM_FORMAT, pagePermOf, permMatches };
 
 /**
  * `sys_menu` 的一行(**整行**,服务端用)。
@@ -429,6 +427,8 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.taskTransfer",
 	"taskClose.actionCreate",
 	"taskClose.actionRespond",
+	// 回复征询:`who` 判据 = 被征询的人(handle_id),与 actionRespond 同理
+	"taskClose.actionReply",
 	"taskClose.commentCreate",
 	"taskClose.commentRemove",
 ];
@@ -455,7 +455,7 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"notice.list",
 	// 类别 1:外壳级 —— 侧栏模式 / 树展开 / 页大小 / 列偏好,每个页面都在用
 	"para.byKey",
-	// 类别 1:外壳级 —— `useDict` 的取值器(工作台也在用),不是某个页面的数据
+	// 类别 1:外壳级 —— 字典的按编码取值器,跨页面消歧用,不是某个页面的数据
 	"dict.byCode",
 	// 类别 1:工作台打标签那一格(工作台不挂菜单授权) —— 标签页自己的 `tag.list` 也没有登记,
 	// 因为同一个 `tag.list` 被工作台共用;标签页的可见性由路由守卫保证

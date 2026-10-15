@@ -2,23 +2,21 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Link } from "@tanstack/react-router";
 import { CalendarClock, ClipboardList, Plus, User } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
+import { PriorityBadge, StatusBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
-import { PriorityBadge } from "#/components/modules/task-close/task-close-priority";
-import { StatusBadge } from "#/components/modules/task-close/task-close-status";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { PAGE_SIZES } from "#/lib/constants";
 import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
@@ -88,12 +86,8 @@ export function TaskCloseCardsPage() {
 
 	const createMutation = useMutation(
 		trpc.taskClose.taskCreate.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setCreateOpen(false);
-				toast.success("任务已创建");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setCreateOpen(false), message: () => "任务已创建" }),
+			onError: writeError,
 		}),
 	);
 

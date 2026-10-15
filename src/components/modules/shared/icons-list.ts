@@ -201,10 +201,9 @@ export const PINNED_ICONS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * kebab-case 旧名 → 现代 lucide 名的兼容映射
- * (kebab→Pascal 兜不到的名才需要在这里补)。
+ * kebab-case 旧名 → 现代 lucide 名的兼容映射(kebab→Pascal 兜不到的名才需要补;只被 resolve 内部用)
  */
-export const LEGACY_ALIAS: Record<string, string> = {
+const LEGACY_ALIAS: Record<string, string> = {
 	dashboard: "LayoutDashboard",
 	poi: "MapPin",
 	region: "Map",
@@ -213,8 +212,8 @@ export const LEGACY_ALIAS: Record<string, string> = {
 	"bar-chart": "BarChart3",
 };
 
-/** kebab-case → PascalCase("map-pin" → "MapPin") */
-export function toPascalCase(kebab: string): string {
+/** kebab-case → PascalCase("map-pin" → "MapPin";只被 resolve 内部用) */
+function toPascalCase(kebab: string): string {
 	return kebab
 		.split("-")
 		.filter(Boolean)

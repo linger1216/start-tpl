@@ -7,8 +7,8 @@ import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 
 /**
  * 工作台 · **打标签**示例(标签 ↔ 业务对象 的多态多对多)。
@@ -66,21 +66,18 @@ export function WorkbenchTagging() {
 
 	const linkMutation = useMutation(
 		trpc.tag.link.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				setPickTag("");
-				toast.success(outcome.created ? "已打标签" : "这个标签已经贴过了");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setPickTag(""),
+				message: (o) => (o.created ? "已打标签" : "这个标签已经贴过了"),
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const unlinkMutation = useMutation(
 		trpc.tag.unlink.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate),
+			onError: writeError,
 		}),
 	);
 

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, GitBranch, Layers, Pencil, Plus, Trash2, Workflow } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -21,9 +20,9 @@ import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -82,35 +81,28 @@ export function TaskCloseWorkflowsPage() {
 
 	const createMutation = useMutation(
 		trpc.taskClose.workflowCreate.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setFormOpen(false);
-				toast.success("流程模板已创建");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setFormOpen(false), message: () => "流程模板已创建" }),
+			onError: writeError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.taskClose.workflowUpdate.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setFormOpen(false);
-				setEditing(null);
-				toast.success("流程模板已保存");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => {
+					setFormOpen(false);
+					setEditing(null);
+				},
+				message: () => "流程模板已保存",
+			}),
+			onError: writeError,
 		}),
 	);
 
 	const removeMutation = useMutation(
 		trpc.taskClose.workflowRemove.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-				setPendingDelete(null);
-				toast.success("流程模板已删除");
-			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "流程模板已删除" }),
+			onError: writeError,
 		}),
 	);
 
@@ -306,12 +298,12 @@ function WorkflowCard({
 				</div>
 				<div className="flex items-center gap-1.5">
 					{item.builtin ? (
-						<Badge variant="secondary" className="h-7 gap-1 px-2 text-[11px]">
+						<Badge variant="secondary" className="h-7 gap-1 px-2 text-xs">
 							<span aria-hidden className="size-1.5 rounded-full bg-hue-emerald" />
 							内置
 						</Badge>
 					) : (
-						<span className="flex h-7 items-center px-2 text-[11px] text-muted-foreground">自建</span>
+						<span className="flex h-7 items-center px-2 text-xs text-muted-foreground">自建</span>
 					)}
 					<div className="flex items-center gap-1">
 						{canEdit ? (

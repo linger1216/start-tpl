@@ -6,6 +6,7 @@ import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogBody,
 	DialogContent,
@@ -72,7 +73,7 @@ export function NoticeForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle>发通知</DialogTitle>
 					<DialogDescription>

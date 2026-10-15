@@ -22,7 +22,8 @@ import { db } from "../src/db/index.ts";
 import { clearCasbinCache } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { MENU_TYPE } from "../src/lib/menu-spec.ts";
-import { effectiveMenusFor, PERM_FORMAT, permMatches } from "../src/lib/rbac.ts";
+import { PERM_FORMAT, permMatches } from "../src/lib/perm-code.ts";
+import { effectiveMenusFor } from "../src/lib/rbac.ts";
 import {
 	assertRejects,
 	caller,

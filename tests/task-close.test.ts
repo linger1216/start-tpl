@@ -329,6 +329,40 @@ describe("任务闭环", () => {
 		assert.equal(transfer.targetName, C.name, "留痕的 target 是转交后的执行人");
 	});
 
+	it("回复征询:意见落成评论、动作即结、任务不动;只有被征询的人能回、不能回两次", async () => {
+		const id = await newTask("回复征询");
+		const { id: consultId } = await asA().taskClose.actionCreate({ taskId: id, handleId: B.id });
+
+		// 非被征询人(甲是发起者、丙是无关人)都不能替乙回
+		await assertRejects(() => asA().taskClose.actionReply({ id: consultId, content: "替问" }), "被征询的人");
+		await assertRejects(() => asC().taskClose.actionReply({ id: consultId, content: "围观" }), "被征询的人");
+		// 纯空白不当有效回复落库
+		await assertRejects(() => asB().taskClose.actionReply({ id: consultId, content: "   " }), "回复内容不能为空");
+
+		// 乙回复(带附件 id)—— 意见进评论流,动作亮灯,任务保持 open
+		await asB().taskClose.actionReply({ id: consultId, content: "意见:先补台账", attachments: ["fake-id"] });
+		const detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.task.status, "open", "回复征询不推任务状态");
+		assert.equal(detail.actions.find((row) => row.id === consultId)?.status, "done", "回复即算处理完");
+
+		const comments = await asA().taskClose.commentList({ taskId: id });
+		assert.ok(
+			comments.some((comment) => comment.content === "意见:先补台账"),
+			"意见要在评论区可见",
+		);
+		// 不存在的附件 id 同样直接丢掉(与 commentCreate 同口径)
+		assert.deepEqual(comments.find((comment) => comment.content === "意见:先补台账")?.attachments, []);
+
+		// 动态:action.reply 一行,摘要取意见正文,展示名是征询发起人
+		const replyLog = (await asA().taskClose.logList({ taskId: id })).items.find((row) => row.event === "action.reply");
+		assert.ok(replyLog, "回复征询要留痕");
+		assert.match(replyLog.excerpt ?? "", /先补台账/);
+		assert.equal(replyLog.targetName, A.name, "展示名是被回复的征询发起人");
+
+		// 同一条征询不能回复两次
+		await assertRejects(() => asB().taskClose.actionReply({ id: consultId, content: "再补一句" }), "已经回复过了");
+	});
+
 	it("管理员:可以直接把任务改到模板里的任意状态(不必存在对应的边)", async () => {
 		const id = await newTask("管理员改状态");
 		// 丙临时持「系统管理员」角色 —— `isAdminUser` 查的就是 casbin 这张图。
@@ -378,6 +412,88 @@ describe("任务闭环", () => {
 		assert.ok(row, "指派人要能看到这条");
 		assert.equal(row.taskName, taskName("待办"), "带上任务名,列表才不用二次查询");
 		assert.ok((await asA().taskClose.actionMine({})).items.every((item) => item.handleId === A.id));
+	});
+
+	it("征询:不锁任务、答复后状态不动;驳回同样要填原因;重复答复要挡", async () => {
+		const id = await newTask("征询结算");
+		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
+
+		// 乙(执行者)征询甲 —— 不锁、任务保持 open;法人由创建者直接答也可以被乙追(先测 B 征询 A)
+		const { id: consultId } = await asB().taskClose.actionCreate({ taskId: id, handleId: A.id });
+		let detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.task.status, "open", "征询不推状态、不锁定");
+		assert.equal(detail.actions.find((row) => row.id === consultId)?.isLocking, false);
+
+		// 征询的驳回也要写原因(同一口径);写完之后任务仍旧 open、动作变 rejected
+		await assertRejects(() => asA().taskClose.actionRespond({ id: consultId, approved: false }), "驳回要填写原因");
+		await asA().taskClose.actionRespond({ id: consultId, approved: false, reason: "口径没对齐" });
+		detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.task.status, "open", "征询答复不推进任务");
+		assert.equal(detail.actions.find((row) => row.id === consultId)?.status, "rejected");
+
+		// 同一条动作不能答第二次
+		await assertRejects(() => asA().taskClose.actionRespond({ id: consultId, approved: true }), "已经答复过");
+	});
+
+	it("追问(子动作):答复只落在动作本身,任务状态 / 锁定都不动", async () => {
+		const id = await newTask("追问");
+		const { id: rootId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "pending", "根级审批先锁上");
+
+		// 在锁定期间,成员可以对这条审批发起追问(子级征询)—— 锁守卫不拦子动作
+		const { id: childId } = await asB().taskClose.actionCreate({
+			taskId: id,
+			handleId: A.id,
+			parentActionId: rootId,
+		});
+		const detail = await asA().taskClose.taskGet({ id });
+		const child = detail.actions.find((row) => row.id === childId);
+		const root = detail.actions.find((row) => row.id === rootId);
+		assert.equal(child?.parentActionId, rootId);
+		assert.equal(child?.isLocking, false);
+		assert.equal(child?.fromStatus, null, "子动作 from/to 都是空(不推任务状态)");
+		assert.equal(child?.sequence, (root?.sequence ?? 0) + 1, "子动作 sequence = 父 + 1");
+		assert.equal(root?.status, "active", "追问不影响父动作的进行中");
+
+		// 甲答复追问:只把子动作点亮,任务的锁还在 —— 父审批没答,状态仍然 pending
+		await asA().taskClose.actionRespond({ id: childId, approved: true });
+		const after = await asA().taskClose.taskGet({ id });
+		assert.equal(after.task.status, "pending", "子动作答复不解锁");
+		assert.equal(after.actions.find((row) => row.id === childId)?.status, "done");
+	});
+
+	it("管理员:能删别人的评论(任务创建者不行 —— 口径是「作者本人或管理员」)", async () => {
+		const id = await newTask("管理员删评论");
+		const { id: commentId } = await asB().taskClose.commentCreate({ taskId: id, content: "乙的评论" });
+
+		// 甲是**创建者**但不能删乙的评论(创建者没有这个豁免)
+		await assertRejects(() => asA().taskClose.commentRemove({ id: commentId }), "管理员除外");
+
+		// 丙持「系统管理员」→ 可以删任意评论
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			await asC().taskClose.commentRemove({ id: commentId });
+			assert.equal((await asA().taskClose.commentList({ taskId: id })).length, 0, "管理员删完同样软删不出");
+		} finally {
+			await removeAllRolesOfUser(C.id);
+		}
+	});
+
+	it("输入校验:纯空白的名称 / 评论不当有效值落库", async () => {
+		const id = await newTask("输入校验");
+		// zod 的 min(1) 拦得住 undefined / "",拦不住 "   " —— trim 后为空必须拒
+		await assertRejects(() => asA().taskClose.commentCreate({ taskId: id, content: "   " }), "评论内容不能为空");
+		await assertRejects(() => asA().taskClose.taskCreate({ name: "   ", workflowId }), "任务名称不能为空");
+
+		const { id: createdId } = await asA().taskClose.taskCreate({ name: taskName("输入校验"), workflowId });
+		await assertRejects(() => asA().taskClose.taskUpdate({ id: createdId, name: "   " }), "任务名称不能为空");
+		// 编辑成功路径不受影响(名称没有任何多余空格)
+		await asA().taskClose.taskUpdate({ id: createdId, name: `  ${taskName("输入校验")}-改  ` });
+		assert.equal(
+			(await asA().taskClose.taskGet({ id: createdId })).task.name,
+			`${taskName("输入校验")}-改`,
+			"名称去首尾空格",
+		);
 	});
 });
 

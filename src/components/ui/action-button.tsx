@@ -60,10 +60,8 @@ export function ActionButton({
 	);
 }
 
-export { actionButtonVariants };
-
 /**
- * **图标操作按钮** —— 只给"空间极窄的行内"用(目前唯一场景:**树的行尾**,一行还要放名称/徽章)。
+ * **图标操作按钮** —— 只给"空间极窄的行内"用(树行尾 / 评论行的悬停删除这类独行窄位)。
  *
  * 与 `ActionButton`(纯文字)是同一族的两种形态:
  *  - 表格行内 / 工具条 / 详情卡 → `ActionButton`(文字,hover 下划线);
@@ -77,6 +75,7 @@ export function ActionIconButton({
 	tone,
 	disabled,
 	onClick,
+	className,
 	children,
 }: {
 	/** 必填:既要给读屏软件(`aria-label`),也要给鼠标悬浮提示(`title`) */
@@ -84,6 +83,8 @@ export function ActionIconButton({
 	tone?: "default" | "danger";
 	disabled?: boolean;
 	onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+	/** 追加类(如悬停显形的 opacity 切换) */
+	className?: string;
 	/** 图标元素(如 `<Plus className="size-3.5" />`) */
 	children: React.ReactNode;
 }) {
@@ -100,6 +101,7 @@ export function ActionIconButton({
 				"flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors duration-150 ease-brand outline-none",
 				"focus-visible:ring-[2px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45",
 				tone === "danger" ? "hover:bg-destructive/10 hover:text-destructive" : "hover:bg-primary/10 hover:text-primary",
+				className,
 			)}
 		>
 			{children}

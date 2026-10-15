@@ -64,7 +64,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_dict_code\` (\`code\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '系统字典(全系统共用)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '系统字典(全系统共用的枚举;读写走 trpc.dict)'`,
 	},
 	{
 		name: "sys_para",
@@ -98,7 +98,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			key \`idx_sys_tag_parent_sort\` (\`parent_id\`, \`sort\`)
-		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '标签体系(维度 → 标签 两级)'`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '标签树(维度 = 一级节点,标签 = 叶子)'`,
 	},
 	{
 		name: "sys_tag_relation",

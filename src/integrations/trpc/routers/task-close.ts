@@ -27,10 +27,10 @@ import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../ini
  *
  * 表 / 状态机 / `who` 协议的设计真源是 `doc/task-close.md`,这里只写接口。
  *
- * **授权不走 RBAC 权限点**,由 `who` 协议在 resolver 内判定(见 `canAct`)。
- * 理由:本模块还没有菜单 / 按钮,硬配权限码等于造出「没人能被授予」的假权限,
- * 结果是所有账号集体失权(`lib/rbac.ts` 文件头写过这个坑)。
- * 所以 16 个接口全部登记在 `UNMAPPED_MUTATIONS` / `UNMAPPED_QUERIES` 里。
+ * **授权 双轨**:任务推进类接口(19 个)的 `who` / 边 / 角色判定在 resolver 内做
+ * (`canAct`),结果全部登记在 `UNMAPPED_MUTATIONS` / `UNMAPPED_QUERIES`;
+ * 流程模板的 4 个接口(`workflowGet/Create/Update/Remove`)走页面合成码
+ * `pagePermOf("/task-close/workflows")`(`PERM_BY_PATH`),按钮级另配 `sys:tcWorkflow:*` 权限点。
  *
  * **可见性 v1 口径**:任何登录用户都能读任何任务(无菜单 = RBAC 允许访客)。
  * `tc_member` 决定的是**谁能推进**,不是**谁能看见** —— 见文档「权限矩阵」。
@@ -131,7 +131,9 @@ function normalizeWorkflow(input: z.infer<typeof workflowInput>): WorkflowPayloa
 		seen.set(key, edge.via);
 		return { from, to, who: [...edge.who], via: edge.via };
 	});
-	return { name: input.name.trim(), statuses, initial, edges };
+	const name = input.name.trim();
+	if (!name) throw new TRPCError({ code: "BAD_REQUEST", message: "模板名称不能为空" });
+	return { name, statuses, initial, edges };
 }
 
 // ────────────────────────────── 投影 ──────────────────────────────
@@ -707,6 +709,8 @@ export const taskCloseRouter = createTRPCRouter({
 				.limit(1);
 			if (!workflow) throw new TRPCError({ code: "NOT_FOUND", message: "状态图模板不存在" });
 			const snapshot = workflow.payload as WorkflowPayload;
+			// zod 的 min(1) 只拦 undefined / 空串,"   " 这类纯空白要 trim 后再拦(编辑侧也过 name.trim())
+			if (!input.name.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "任务名称不能为空" });
 
 			const id = newId();
 			const now = new Date();
@@ -777,6 +781,7 @@ export const taskCloseRouter = createTRPCRouter({
 
 			// 变更前的值只能在这里取(update 之后就没了)—— 日志要写"从什么改成什么"
 			const nextName = input.name.trim();
+			if (!nextName) throw new TRPCError({ code: "BAD_REQUEST", message: "任务名称不能为空" });
 			const nextDescription = input.description?.trim() || null;
 			const nextDueAt = input.dueAt ? new Date(input.dueAt) : null;
 			/** 优先级 `undefined` = 不动;`null` = 显式清空;字符串 = 改值 */
@@ -1323,6 +1328,68 @@ export const taskCloseRouter = createTRPCRouter({
 			return { ok: true };
 		}),
 
+	/**
+	 * **回复征询** —— 征询是「征意见」,不是审批:不需要通过 / 驳回,
+	 * 指派人给一条意见(**可带附件**)即算处理完毕;意见直接以**一条评论**进讨论流
+	 * (与驳回原因同一做法:复用评论流,不另造一张"意见"表)。
+	 *
+	 * 与 `actionRespond` 的差异:不区分 approve / reject、不碰任务状态(任务该锁还锁、该开还开)、
+	 * 不写 reason 强校验(空内容直接拒,不需要"必须驳回才填"的绕弯)。
+	 */
+	actionReply: protectedProcedure
+		.input(
+			z.object({
+				id: ID,
+				content: z.string().min(1, "回复内容不能为空").max(5000),
+				attachments: z.array(z.string().min(1).max(32)).max(20).optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			await db.transaction(async (tx) => {
+				const [action] = await tx.select().from(taskCloseAction).where(eq(taskCloseAction.id, input.id)).limit(1);
+				if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
+				if (action.handle_id !== me.id) {
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有被征询的人能回复" });
+				}
+				if (!(LIVE_ACTION_STATUS as readonly string[]).includes(action.status)) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: "这个征询已经回复过了" });
+				}
+				const content = input.content.trim();
+				if (!content) throw new TRPCError({ code: "BAD_REQUEST", message: "回复内容不能为空" });
+
+				const now = new Date();
+				const commentId = newId();
+				await tx
+					.update(taskCloseAction)
+					.set({ status: "done", updated_at: now })
+					.where(eq(taskCloseAction.id, action.id));
+				await tx.insert(taskCloseComment).values({
+					id: commentId,
+					task_id: action.task_id,
+					author_id: me.id,
+					content,
+					attachments: input.attachments?.length ? input.attachments : null,
+					created_at: now,
+					updated_at: now,
+				});
+				await logTaskEvent(tx, {
+					taskId: action.task_id,
+					event: "action.reply",
+					actor: me,
+					// target = **意见那条评论** —— 读取侧按它取摘要(excerpt),动态流直接渲染
+					targetId: commentId,
+					detail: {
+						consultOf: action.created_id, // 征询是谁发起的(展示:"对 甲 回复征询")
+						commentId,
+						attachments: input.attachments?.length ?? 0,
+					},
+					at: now,
+				});
+			});
+			return { ok: true };
+		}),
+
 	// ────────────────────────────── 评论 ──────────────────────────────
 
 	/** 评论流 —— 附件只存了 `sys_file.id`,这里回填文件名 / 大小;已删文件直接丢掉(不留空行) */
@@ -1379,6 +1446,8 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			await getTaskRow(input.taskId);
+			// zod 的 min(1) 拦不住 "   ":trim 后为空的评论等于没写,直接拒(与驳回原因同一口径)
+			if (!input.content.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "评论内容不能为空" });
 			const id = newId();
 			const now = new Date();
 			await db.transaction(async (tx) => {
@@ -1465,12 +1534,17 @@ export const taskCloseRouter = createTRPCRouter({
 			if (row.event === "action.create" || row.event === "action.respond") {
 				ids.push(typeof detail.handleId === "string" ? detail.handleId : "");
 			}
+			// 回复征询:展示名是**被回复的征询发起人**(「对 甲 回复征询」)
+			if (row.event === "action.reply") {
+				ids.push(typeof detail.consultOf === "string" ? detail.consultOf : "");
+			}
 			return ids.filter(Boolean);
 		});
 		const nameOf = await nameMapOf(personIds);
 
+		// `action.reply` 的 target 也是**一条评论**(意见本体),摘要与 comment.* 同源
 		const commentIds = rows
-			.filter((row) => row.event === "comment.create" || row.event === "comment.remove")
+			.filter((row) => row.event === "comment.create" || row.event === "comment.remove" || row.event === "action.reply")
 			.map((row) => row.target_id)
 			.filter((id): id is string => id !== null);
 		const comments =
@@ -1486,7 +1560,13 @@ export const taskCloseRouter = createTRPCRouter({
 			items: rows.map((row) => {
 				const detail = detailOf(row.detail);
 				const handleId = typeof detail.handleId === "string" ? detail.handleId : null;
-				const personId = row.event === "action.create" || row.event === "action.respond" ? handleId : row.target_id;
+				const replyOf = typeof detail.consultOf === "string" ? detail.consultOf : null;
+				const personId =
+					row.event === "action.create" || row.event === "action.respond"
+						? handleId
+						: row.event === "action.reply"
+							? replyOf
+							: row.target_id;
 				const content = row.target_id ? contentOf.get(row.target_id) : undefined;
 				return {
 					id: row.id,

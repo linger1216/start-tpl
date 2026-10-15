@@ -173,9 +173,7 @@ export function TabsContent({ className, ...props }: React.ComponentProps<typeof
 	);
 }
 
-export { TabVariantContext };
-
-/** 四种形态的中文名 —— 展示页与文档共用一份,不要在页面里另写 */
+/** 四种形态的中文名 —— 展示页(画廊)用;业务侧的 variant 都是随形写的,不要在页面里另写 */
 export const TAB_VARIANT_META: Record<TabVariant, { label: string; hint: string }> = {
 	underline: { label: "下划线", hint: "页面主分区(默认)" },
 	segmented: { label: "分段控件", hint: "同一份数据切视图口径" },
