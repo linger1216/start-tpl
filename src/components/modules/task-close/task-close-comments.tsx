@@ -134,7 +134,7 @@ export function TaskCloseComments({
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
 				<Avatar initials={(meName ?? "我").slice(0, 1)} />
 				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
-				<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
+				<div className="rounded-lg border border-border bg-card">
 					<textarea
 						ref={textRef}
 						rows={3}
@@ -216,13 +216,15 @@ export function TaskCloseComments({
 				</div>
 			</div>
 
-			{/* thread —— 评论流(原型的 thread + thread__item) */}
+			{/* thread —— 评论流(原型的 thread + thread__item)。
+			    外包一层 `bg-card` + 圆角 + 描边,与上半部「评论输入」Card 视觉一致;
+			    缺了它下半部会透出 PageFrame 的画布色,看起来「上半有框、下半没框」割裂。 */}
 			{items.length === 0 ? (
-				<p className="py-1 pl-[48px] text-xs text-muted-foreground">
+				<p className="rounded-lg border border-border bg-card py-3 pl-12 text-xs text-muted-foreground">
 					{listQuery.isPending ? "加载中…" : "还没有评论。"}
 				</p>
 			) : (
-				<ul className="grid gap-[18px]">
+				<ul className="grid gap-4.5 rounded-lg bg-card p-4">
 					{items.map((item) => (
 						<li key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3 group">
 							<Avatar initials={(item.authorName ?? "?").slice(0, 1)} />

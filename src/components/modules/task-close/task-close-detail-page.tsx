@@ -338,27 +338,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			.map((row) => `${row.fromStatus}->${row.toStatus}`),
 	);
 
-	/** 记录头的状态章:圆章 = 通过 / 关闭 / 归档(墨绿或墨),方章 = 待审批 / 驳回(印泥红)。
-	 *  盖章动效只在状态**变化**的那一次播(检测在上面的 hooks 区),首次进入 / 刷新不播。 */
-	const prevStatus = prevStatusRef.current ?? task.status; // 懒初始化:首次数据到达不算"变化"
-	const sealStamped = prevStatus !== task.status;
-	const detailSeal = (() => {
-		const status = task.status;
-		if (status === "pending") {
-			return { shape: "rect" as const, tone: "red" as const, label: "待审批" };
-		}
-		if (status === "done") {
-			return { shape: "circle" as const, tone: "green" as const, label: "通过" };
-		}
-		if (status === "closed") {
-			return { shape: "circle" as const, tone: "ink" as const, label: "关闭" };
-		}
-		if (status === "archived") {
-			return { shape: "circle" as const, tone: "ink" as const, label: "归档" };
-		}
-		return { shape: "rect" as const, tone: "ink" as const, label: statusLabelOf(statuses, status).slice(0, 2) };
-	})();
-
 	/**
 	 * 「发起审批」的候选状态 —— **由服务端算好**(`permissions.actionTargets`,只含模板里当前状态出发、
 	 * 且我有权发起的 `via=action` 边)。前端不自己解释 `who` / `edges`(见 doc/task-close.md「按钮级授权」)。
@@ -458,7 +437,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	};
 
 	return (
-		<PageFrame className="mx-auto w-full">
+		<div className="mx-auto flex w-full flex-col bg-card">
 			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
 			<header className="border-b border-dashed border-border bg-card">
 				<div className="px-8 pt-4 pb-5">
@@ -575,7 +554,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									<DropdownMenuContent align="end">
 										{can.transfer ? (
 											<DropdownMenuItem
-												onSelect={() => {
+												onClick={() => {
 													setTransferTo("");
 													setTransferOpen(true);
 												}}
@@ -585,7 +564,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										) : null}
 										{canSetStatus && canApprove ? (
 											<DropdownMenuItem
-												onSelect={() => {
+												onClick={() => {
 													setStatusTo(statusOptions[0]?.value ?? "");
 													setStatusOpen(true);
 												}}
@@ -596,9 +575,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										{(can.transfer || (canSetStatus && canApprove)) && (can.edit || can.remove) ? (
 											<DropdownMenuSeparator />
 										) : null}
-										{can.edit ? <DropdownMenuItem onSelect={() => setEditOpen(true)}>编辑</DropdownMenuItem> : null}
+										{can.edit ? <DropdownMenuItem onClick={() => setEditOpen(true)}>编辑</DropdownMenuItem> : null}
 										{can.remove ? (
-											<DropdownMenuItem variant="destructive" onSelect={() => setRemoveOpen(true)}>
+											<DropdownMenuItem variant="destructive" onClick={() => setRemoveOpen(true)}>
 												删除
 											</DropdownMenuItem>
 										) : null}
@@ -612,7 +591,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</div>
 
 					{task.description ? (
-						<p className="mt-3 p-3 min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground wrap-break-word">
+						<p className="mt-3 p-4 min-w-0 flex-1 text-base leading-relaxed text-muted-foreground wrap-break-word">
 							{task.description}
 						</p>
 					) : null}
@@ -655,7 +634,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			) : null}
 
 			{/* ─── main:左 画布(内容 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
-			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
 				{/* 左 main */}
 				<section className="grid gap-6 min-w-0">
 					{/* 任务内容 block —— 文本 / 表格 / 引用 / 外链,按注册表渲染(未知块降级成占位,不崩) */}
@@ -709,7 +688,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</section>
 
 				{/* 右 检查器 —— 两块合成**一张面板**:内部用 inset 细线分组,不再每块各画一条虚线 */}
-				<aside className="sticky top-[72px] self-start">
+				<aside className="sticky top-18 self-start">
 					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
 						{/* 参与人员 */}
 						<section className="grid gap-2 p-3.5">
@@ -1036,7 +1015,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					if (!next) setPreviewAttachment(null);
 				}}
 			/>
-		</PageFrame>
+		</div>
 	);
 }
 
