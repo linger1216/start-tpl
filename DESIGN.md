@@ -311,6 +311,27 @@ card = **每个页签都带边框**的纸白文件夹页,选中的那张遮住�
   **右 = 保存 → 还原 → 删除(最右)** —— **保存下面不排任何东西**
   (菜单页曾把新增行排在保存下面、部门页保存在右下而菜单在左下、时间行三页三个位置,已统一)。
 
+### 5.8 ⌘K 快速跳转面板 —— 跳转台(2026-10 手调定稿)
+
+派生被抄走的是这份用户手调后的最终口径,**别按直觉改回小圆角/窄面板**:
+
+- **浮面板本身档位最高**:`sm:max-w-3xl` 宽、`bg-popover/85`(轻透,底下能看见画布)、
+  **`rounded-2xl`(16px)—— 全世界唯一超出 Radius 阶(lg 6 / xl 10)的大圆角**,只此一处(用户拍板);
+  `shadow-raise-3` 纸叠层级;列表区 `max-h-120`。
+- **头部 = 召唤章**:26px 印泥红圆章(`⌘`,宋体,章位右旋 -6°)+ 无边框输入框。
+  盖章动效在**打开这一次**触发 —— §6「弹窗打开不播」的**唯一例外**(面板被召唤即落定时刻)。
+- 行 = 菜单图标(`NAV_ICON_MAP`,与侧栏同源,`Layers` 兜底,3.5px 主色)+ 名称 `text-sm` +
+  path `font-mono` 靠右 + ⌘N **章方角小印块**(2px 圆角 + `bg-secondary/60`,3 条内显示)。
+- **选中行 = 描边 + 淡面板**,不画左缘墨标:`rounded-md`(6px)+ `border-primary/40` + `bg-primary/8`;
+  hover 才出 `hue-blue-line` 描边。
+  —— 与树选中行(§5.7 左缘墨标)刻意区分:**墨标只属于常驻页面的选中件,浮面板只用描边+面板**。
+- 分组头 = 版记小条:`sticky` 钉顶 + 细线下界(`border-border/20`)+ 0.08em 字距,
+  **常规字重**(不 semibold)、灰 fore;底下 backdrop-blur。
+- 底部 = 版记行(`MetaRow` + `DocDot` 圆点):↑↓ 选择 · Enter 跳转 · ⌘1-9 跳第 N 条 · 右端
+  「N 条结果」tabular;kbd 全走章方角小印块。
+- 空档 = 灰「空」章(26→32px 圆章形态,-6° 旋,tone gray)+ 一句恢复话术
+  「没搜到相关页面 —— 换个关键词试试」(`tracking-wider`)。
+
 ---
 
 ## 6. 动效
@@ -322,7 +343,8 @@ card = **每个页签都带边框**的纸白文件夹页,选中的那张遮住�
 `from { opacity:0; transform:scale(1.5) rotate(-14deg) }` →
 `60% { opacity:.95; transform:scale(0.96) rotate(-6deg) }` →
 `to { opacity:.92; transform:scale(1) rotate(-6deg) }`,**180ms ease-out,播一次**。
-只在状态**最终落定**时播(respond / transit 成功的那次重渲染);弹窗打开、翻页、轮询刷新**不播**。
+只在状态**最终落定**时播(面板被召唤 / respond / transit 成功的那次重渲染);翻页、轮询刷新**不播**,
+**其余弹窗照旧不播**(⌘K 召唤章是唯一例外,→ §5.8 头部)。
 - hover:只换 `--af-raise-*` 档,不做位移。
 - 现成动效原语表继续有效:`.page-enter` / `.route-progress-bar` / `.stagger` / `.collapse-grid` /
 `.pulse-dot` / `.attention-dot` / `.icon-swap`(全部已处理 `prefers-reduced-motion`)。
