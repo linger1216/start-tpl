@@ -307,7 +307,7 @@ const MAX_FILES = 20;
 const Avatar = ({ initials }: { initials: string }) => (
 	<span
 		aria-hidden
-		className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-heading font-bold leading-none text-paper"
+		className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/85 text-[13px] font-heading font-bold leading-none text-paper"
 	>
 		{initials}
 	</span>

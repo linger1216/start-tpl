@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
-import { Seal } from "#/components/ui/seal";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
@@ -63,10 +62,11 @@ export function TaskFlowSpine({
 							{isCurrent && locked ? (
 								<Lock className="size-3 shrink-0" aria-hidden />
 							) : isVisited ? (
-								/* 脊档小方章:走过的节点 = 这一站已经"盖过章" */
-								<span aria-hidden>
-									<Seal size="spine" tone="green" label="" />
-								</span>
+								/* 走过的节点 = 这一站已经"盖过章":一枚内部小圆点,不请 Seal 组件(它只有圆章两档) */
+								<span
+									aria-hidden
+									className="inline-block size-2.5 shrink-0 rounded-full border-[1.5px] border-success/55 bg-success-soft/60"
+								/>
 							) : (
 								<span
 									aria-hidden

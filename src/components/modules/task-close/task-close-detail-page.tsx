@@ -479,8 +479,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<div className="flex items-start gap-3">
 								<PageTitle>{task.name}</PageTitle>
 								<Seal
-									size="detail"
-									shape={detailSeal.shape}
+									size="default"
 									tone={detailSeal.tone}
 									label={detailSeal.label}
 									ring={`任务闭环 · ${formatLocalDate(task.updatedAt ?? task.createdAt)}`}
@@ -491,7 +490,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</div>
 							{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
 							<MetaRow className="mt-2">
-								{task.priority ? <Tag variant="secondary">{priorityLabelOf(task.priority)}</Tag> : null}
+								{task.priority ? <Tag variant="random">{priorityLabelOf(task.priority)}</Tag> : null}
 								<span>
 									截止
 									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
@@ -623,7 +622,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</div>
 
 					{task.description ? (
-						<p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-muted-foreground wrap-break-word">
+						<p className="mt-3 p-3 min-w-0 flex-1 text-sm leading-relaxed text-muted-foreground wrap-break-word">
 							{task.description}
 						</p>
 					) : null}
@@ -1116,7 +1115,7 @@ function PeopleRow({
 				{/* 圆牌:墨底反白首字(与评论头像同款,就地内联 —— badge 合流层已拆) */}
 				<span
 					aria-hidden
-					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-ink text-[10px] font-heading font-bold leading-none text-paper"
+					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/85 text-[10px] font-heading font-bold leading-none text-paper"
 				>
 					{name.slice(0, 1)}
 				</span>
