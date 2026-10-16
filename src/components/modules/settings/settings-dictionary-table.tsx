@@ -55,14 +55,14 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 			),
 		}),
 		columnHelper.accessor("items", {
-			header: "字典项(label = value)",
+			header: "字典项",
 			size: 300,
 			cell: (ctx) => {
 				const items = ctx.getValue();
 				return (
 					<div className="flex flex-wrap items-center gap-1">
 						{items.slice(0, 4).map((item) => (
-							<Tag key={item.value} variant="outline" className="gap-1 text-xs">
+							<Tag key={item.value} variant="secondary" className="gap-1 text-xs">
 								{item.label}
 								<span translate="no" className="font-mono text-xs text-muted-foreground">
 									{item.value}

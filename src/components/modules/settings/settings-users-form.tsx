@@ -212,7 +212,7 @@ export function SettingsUsersForm({
 									<DetailRow label="头像">
 										<div className="flex items-start gap-3">
 											{/* 预览:有地址就出图,没有就是姓名首字 —— 与列表 / 详情用的是同一个 Avatar */}
-											<Avatar className="size-10 shrink-0">
+											<Avatar className="size-26 shrink-0">
 												{image ? <AvatarImage src={image} alt={name || "头像"} /> : null}
 												<AvatarFallback className="text-sm">{(name || "?").slice(0, 1)}</AvatarFallback>
 											</Avatar>

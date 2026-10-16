@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { Save, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
@@ -10,6 +10,7 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
+import { Tag } from "#/components/ui/tag.tsx";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType, MENU_TYPE_META, MENU_TYPES, type MenuType } from "#/lib/menu-spec";
 
@@ -95,7 +96,6 @@ export function SettingsMenusForm({
 			<div className="flex items-center justify-between gap-2">
 				<div className="min-w-0">
 					<div className="truncate text-sm font-medium text-foreground">{node.name}</div>
-					<div className="truncate font-mono text-xs text-muted-foreground">{node.id}</div>
 				</div>
 				{dirty ? <span className="shrink-0 text-xs text-warn-fg">未保存</span> : null}
 			</div>
@@ -126,7 +126,7 @@ export function SettingsMenusForm({
 						))}
 					</SelectContent>
 				</Select>
-				<p className="text-xs text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
+				<p className="text-xs mt-2 text-muted-foreground">{MENU_TYPE_META[values.type].hint}</p>
 			</DetailRow>
 
 			<DetailRow label="权限标识">
@@ -137,7 +137,7 @@ export function SettingsMenusForm({
 					className="h-8 font-mono text-xs"
 					onChange={(event) => onChange({ ...values, perm: event.target.value })}
 				/>
-				<p className="text-xs text-muted-foreground">
+				<p className="text-xs mt-2 text-muted-foreground">
 					前端 <code className="font-mono">useHasPerm()</code> 认它;按钮必须有,目录 / 菜单可空。
 				</p>
 			</DetailRow>
@@ -158,7 +158,7 @@ export function SettingsMenusForm({
 					className="h-8 font-mono text-xs"
 					onChange={(event) => onChange({ ...values, path: event.target.value })}
 				/>
-				<p className="text-xs text-muted-foreground">路径全局唯一(重了会让两个菜单指向同一个页面)。</p>
+				<p className="text-xs mt-2 text-muted-foreground">路径全局唯一(重了会让两个菜单指向同一个页面)。</p>
 			</DetailRow>
 
 			<DetailRow label="图标">
@@ -173,29 +173,19 @@ export function SettingsMenusForm({
 				/>
 			</DetailRow>
 
-			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
+			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime , id: node.id}} /> : null}
 
 			{/* 动作行(三棵树统一):左 = 新增类,右 = 保存 / 还原 / 删除 —— 保存下面不再有别的东西 */}
-			<div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-				<div className="flex flex-wrap items-center gap-2">
-					<ActionButton disabled={pending} onClick={onAddSibling}>
-						新增同级
-					</ActionButton>
-					<ActionButton disabled={pending} onClick={onAddChild}>
-						新增子菜单
-					</ActionButton>
-				</div>
+			<div className="flex flex-wrap items-center justify-end gap-2 pt-1">
 				<div className="flex flex-wrap items-center gap-2">
 					<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
 						<Save className="size-3.5" />
 						{pending ? "保存中…" : "保存"}
 					</Button>
-					<ActionButton disabled={pending || !dirty} onClick={onReset}>
+					<Button variant="outline" size="sm" disabled={pending || !dirty} onClick={onReset}>
+						<Undo2 className="size-3.5" />
 						还原
-					</ActionButton>
-					<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
-						删除
-					</ActionButton>
+					</Button>
 				</div>
 			</div>
 		</div>

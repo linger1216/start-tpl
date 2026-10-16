@@ -29,6 +29,7 @@ import { cn } from "#/lib/utils";
 export type DetailMetaInfo = {
 	createdAt?: string | null;
 	updatedAt?: string | null;
+	id: string | null;
 };
 
 /**
@@ -41,9 +42,11 @@ export function DetailMeta({ meta, className }: { meta?: DetailMetaInfo | null; 
 	if (!meta) return null;
 	const created = meta.createdAt ? formatLocalMinute(meta.createdAt) : null;
 	const updated = meta.updatedAt ? formatLocalMinute(meta.updatedAt) : null;
-	if (!created && !updated) return null;
+	const id = meta.id;
+	if (!created && !updated && !id) return null;
 	return (
 		<div className={cn("flex flex-wrap items-center flex-1 gap-x-4 text-xs", className)}>
+			{id ? <span>ID: {id}</span> : null}
 			{created ? <span>创建于 {created}</span> : null}
 			{created && updated ? <span aria-hidden>·</span> : null}
 			{updated ? <span>更新于 {updated}</span> : null}
@@ -91,8 +94,9 @@ export function DetailDialog({
 					{description ? <DialogDescription>{description}</DialogDescription> : null}
 				</DialogHeader>
 				<DialogBody className="space-y-4 pr-1">{children}</DialogBody>
-				{meta ? <DetailMeta meta={meta} /> : null}
+
 				<DialogFooter className="gap-2">
+					{meta ? <DetailMeta meta={meta} /> : null}
 					<Button variant="ghost" onClick={() => onOpenChange(false)}>
 						关闭
 					</Button>

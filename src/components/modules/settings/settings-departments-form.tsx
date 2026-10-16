@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { Save, Undo2 } from "lucide-react";
 
 import type { DeptTreeNode } from "#/components/modules/settings/settings-departments-tree";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
@@ -9,6 +9,7 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
 
 /** 详情表单的值(`parentId` 不在这里改,但保存时要原样带回去 —— 接口是整行覆盖) */
@@ -98,9 +99,8 @@ export function SettingsDepartmentsForm({
 		<div className="flex h-full min-h-0 flex-col gap-4">
 			{/* 标题:这一行只说明"现在改的是哪个部门",不放任何动作 */}
 			<div className="flex items-center justify-between gap-2">
-				<div className="min-w-0">
+				<div className="min-w-0 gap-1">
 					<div className="truncate text-sm font-medium text-foreground">{node.name}</div>
-					<div className="truncate font-mono text-xs text-muted-foreground">{node.id}</div>
 				</div>
 				{dirty ? <span className="shrink-0 text-xs text-warn-fg">未保存</span> : null}
 			</div>
@@ -147,7 +147,7 @@ export function SettingsDepartmentsForm({
 						</div>
 
 						{/* 时间行:与菜单 / 标签详情同序 —— 字段 → 时间 → 动作行 */}
-						{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
+						{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime , id: node.id}} /> : null}
 					</div>
 
 					{/* 动作行(三棵树统一):保存 / 还原在右,删除这种"记录级"危险动作推到最右、离保存远一点 */}
@@ -156,12 +156,11 @@ export function SettingsDepartmentsForm({
 							<Save className="size-3.5" />
 							{pending ? "保存中…" : "保存"}
 						</Button>
-						<ActionButton disabled={pending || !dirty} onClick={onReset}>
+
+						<Button variant="outline" size="sm" disabled={pending || !dirty} onClick={onReset}>
+							<Undo2 className="size-3.5" />
 							还原
-						</ActionButton>
-						<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
-							删除
-						</ActionButton>
+						</Button>
 					</div>
 				</TabsContent>
 

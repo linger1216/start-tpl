@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { Save, Undo2 } from "lucide-react";
 
 import type { TagNode } from "#/components/modules/settings/settings-tags-tree";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
@@ -6,6 +6,7 @@ import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
+import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
 
 /**
@@ -74,7 +75,6 @@ export function SettingsTagsForm({
 			<div className="flex items-center justify-between gap-2">
 				<div className="min-w-0">
 					<div className="truncate text-sm font-medium text-foreground">{node.label}</div>
-					<div className="truncate font-mono text-xs text-muted-foreground">{node.id}</div>
 				</div>
 				{dirty ? <span className="shrink-0 text-xs text-warn-fg">未保存</span> : null}
 			</div>
@@ -110,7 +110,7 @@ export function SettingsTagsForm({
 				/>
 			</DetailRow>
 
-			<DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} />
+			<DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime, id: node.id }} />
 
 			{/* 动作行(三棵树统一):左 = 新增类,右 = 保存 / 还原 / 删除 —— 保存下面不再有别的东西 */}
 			<div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -124,12 +124,10 @@ export function SettingsTagsForm({
 						<Save className="size-3.5" />
 						{pending ? "保存中…" : "保存"}
 					</Button>
-					<ActionButton disabled={pending || !dirty} onClick={onReset}>
+					<Button variant="outline" size="sm" disabled={pending || !dirty} onClick={onReset}>
+						<Undo2 className="size-3.5" />
 						还原
-					</ActionButton>
-					<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
-						删除
-					</ActionButton>
+					</Button>
 				</div>
 			</div>
 		</div>
