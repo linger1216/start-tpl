@@ -119,15 +119,19 @@ $RECYCLE.BIN/
 
 # macOS 垃圾文件
 .DS_Store
+# xlsx 一律不入库,例外:demo 种子的对账数据源(scripts/seed-demo.ts 硬依赖)是业务提供的长期夹具
 *.xlsx
+!doc/测试数据/*.xlsx
 *.html
-doc/archive
 
 # ─── AI / 编辑器工具的本地状态 ──────────────────────────
 # ⚠️ 这两个目录**此前已有文件入库**(.commandcode/taste/taste.md、.workbuddy/memory/*.md):
 #    要不要一并 `git rm --cached` 由你决定 —— 规则只保证**以后新增的**不会再进来。
 .commandcode
 .workbuddy
+# 设计评审工具(impeccable)的本地状态:hooks 配置与机器生成的 critique 快照,不入库
+.claude
+.impeccable/critique/
 # .serena 是 agent(Serena MCP)的本地索引状态:**不是**项目内容,派生新项目时不该被带走
 # (new-project.sh 按 .gitignore 派生)。不忽略它,`--strict` 还会被这条工具状态**永久**判成脏。
 .serena/

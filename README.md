@@ -1,6 +1,6 @@
 # start-tpl —— TanStack Start 后台模板
 
-一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、41 个 UI 原语、16 个跨域展示件、台账页面骨架,以及 tRPC + Drizzle + Better Auth + RBAC(页面级拦截 + 菜单/按钮授权)的完整接线。
+一个人自用的**后台管理系统模板**:React 19 + TanStack Start,自带后台外壳、44 个 UI 原语、17 个跨域展示件、台账页面骨架,以及 tRPC + Drizzle + Better Auth + RBAC(页面级拦截 + 菜单/按钮授权)的完整接线。
 
 模板里**只保留一个真实业务模块**(系统设置,十二个页面),其余业务代码已清空 —— 剩下的每一块都是"可以直接搬进新项目"的能力。所有组件都有**活文档**:工作台 `/` 的 UI 示例逐个给出真实渲染的例子(受控的都给好了 useState),改了组件页面立刻反映,文档不会过期。
 
@@ -34,7 +34,7 @@ pnpm dev                       # http://localhost:3000
 | 入口 | 内容 |
 | --- | --- |
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
-| **UI 组件示例** | ★ 就在工作台 `/` 页里:41 个原语的最小可用例子 + 台账表格实战示例 |
+| **UI 组件示例** | ★ 就在工作台 `/` 页里:44 个原语的最小可用例子 + 台账表格实战示例 |
 | **框架能力** `/demo/*` | 6 个能力样例(数据请求 / 表单 / 表格 / 数据库 / 登录认证 / 全局状态)+ 2 个演示业务页(「业务首页」+「网格履职」) |
 | **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,**十二个页面**,全部读写真库(见下文「系统设置模块」) |
 
@@ -59,9 +59,9 @@ src/
 │   ├── api.trpc.$.tsx            # tRPC 请求入口 /api/trpc/*
 │   └── api/auth/$.ts             # Better Auth 请求入口 /api/auth/*
 ├── components/
-│   ├── ui/                       # 41 个叶子原语(shadcn 风格 + 自研组合控件)
+│   ├── ui/                       # 44 个叶子原语(shadcn 风格 + 自研组合控件)
 │   ├── layout/                   # 后台外壳:sidebar / topbar / 面包屑 / 页头 / 空态 / 占位页 + nav-config / nav-menu / nav-data
-│   ├── modules/shared/           # 16 个领域无关展示件(表格套件 / 工具栏 / 详情 / 树 / 标签 / 权限树 / Excel…)
+│   ├── modules/shared/           # 17 个领域无关展示件(表格套件 / 工具栏 / 详情 / 树 / 标签 / 权限树 / Excel…)
 │   ├── modules/workbench/        # 工作台 + UI 示例(ui-gallery)
 │   ├── modules/task-close/       # 任务闭环的三页与配套件
 │   ├── modules/settings/         # 系统设置十二页的页面 / 表格 / 表单 / 详情件(52 个文件)
@@ -93,7 +93,7 @@ src/
 └── styles.css                    # Tailwind v4 入口 + 设计 token
 ```
 
-`lib/` 的 47 个文件、`ui/` 的 41 个原语、`shared/` 的 16 个展示件(口径:`ls src/lib/**/*.ts` / `src/components/ui/*` / `src/components/modules/shared/*.tsx`),当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只剩一组:Excel 链(`lib/excel.ts` + `shared/ledger-excel.ts` + `shared/excel-import.tsx`,导出面已接入四页,导入是重依赖按需加载),理由见下文「随模板分发、当前没有调用方的件」。
+`lib/` 的 47 个文件、`ui/` 的 44 个原语、`shared/` 的 17 个展示件(口径:`ls src/lib/**/*.ts` / `src/components/ui/*` / `src/components/modules/shared/*.tsx`),当前**没有一个是没有调用方的死件**:要么有真实页面在用,要么在工作台 `/` 的 UI 示例里有一个实例。刻意留着、业务页还没接的只剩一组:Excel 链(`lib/excel.ts` + `shared/ledger-excel.ts` + `shared/excel-import.tsx`,导出面已接入五页,导入是重依赖按需加载),理由见下文「随模板分发、当前没有调用方的件」。
 
 ---
 
@@ -101,7 +101,7 @@ src/
 
 | 层 | 位置 | 放什么 | 判断标准 |
 | --- | --- | --- | --- |
-| **叶子原语** | `components/ui/` | Button / Card / Table / SearchSelect / BadgeList… | 接口里**不含任何业务概念**,能直接搬进任何新项目 |
+| **叶子原语** | `components/ui/` | Button / Card / Table / SearchSelect / TagList… | 接口里**不含任何业务概念**,能直接搬进任何新项目 |
 | **跨域展示件** | `components/modules/shared/` | DataTable / LedgerToolbar / FilterChipBar / StatCards / PaginationControl / ColumnToggle / DetailDialog / SortableTree / PermissionTree / MultiSelect / MemberZone / IconPicker / ExcelImportDialog… | 有**版式或行为约定**,但字段声明与数据订阅仍由调用方给 |
 | **组合块与业务** | `components/modules/<域>/` | 详情页组装、导入向导、页面专属件 | 离开这个业务就没有意义 |
 
@@ -162,9 +162,9 @@ src/
 > 加色相改三处(`:root` / `.dark` / `@theme inline`)—— 漏了第三步工具类不会生成,且不会报错。
 > **Tailwind 只扫描字面量类名**,不能写 `bg-hue-${tone}-soft` —— 所有按色相取类名的地方必须查那张表。
 
-`BadgeList`(表格多值单元格与标签的统一渲染件)的配色同理:默认 `color="brand"`,色板全部取自语义 token;
+`TagList`(表格多值单元格与标签的统一渲染件)的配色同理:默认 `color="brand"``,色板全部取自语义 token;
 `rainbow` / `ocean` / `forest` / `sunset` / `lavender` / `stone` 是**分类色板**,
-定义在 `ui/badge-list.tsx` 的 `BADGE_THEMES` —— 已换成上面的点缀色 token(原先用 Tailwind 默认的
+定义在 `ui/tag-list.tsx` 的 `TAG_THEMES` —— 已换成上面的点缀色 token(原先用 Tailwind 默认的
 `*-100 / *-700`,彩度 25%–40%,铺一屏标签会显得"亮、吵")。**改那一处 = 全站标签 / 筛选 / 徽章配色一次性统一。**
 另有 `color="stable"`:按值稳定哈希选色,同一份数据永远同一套颜色(也避免了 `Math.random()` 造成的 SSR 水合不一致)。
 
@@ -423,7 +423,7 @@ function UsersPage() {
 
 ## 刻意留着、但业务页还没接的件
 
-实测:仓里**没有无调用方的死件**。`lib/` 47 个文件、`ui/` 41 个原语、`shared/` 16 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-tree`(角色授权弹窗)、`formatCode`(业务编号)也都有真实调用方。
+实测:仓里**没有无调用方的死件**。`lib/` 47 个文件、`ui/` 44 个原语、`shared/` 17 个展示件,要么有页面在用,要么在工作台 `/` 的 UI 示例里有实例;`permission-select`(角色授权弹窗)、`formatCode`(业务编号)也都有真实调用方。
 
 刻意保留、业务页尚未接的是下面一组(其余件都有调用方):
 
@@ -583,7 +583,7 @@ pnpm check
 | 类别 | 发现 | 处理 |
 | --- | --- | --- |
 | **被抽出来但没人用的件** | `file-dropzone` / `table-resize-handle` 抽完就没了调用方,也没进展示页 | 补进展示页(当时叫 `/showcase/*`,现在就是工作台 `/`;看不见 = 不存在) |
-| **重复实现** | 三个授权弹窗各自手写「标题 + 计数 + 搜索 + 全选/清空 + 权限树」;而 `PermissionPicker` 早就是这块的封装 | 三处改用 `PermissionPicker`,顺手去掉 `keyword` state 与 `visibleIds` 派生 |
+| **重复实现** | 三个授权弹窗各自手写「标题 + 计数 + 搜索 + 全选/清空 + 权限树」;而 `PermissionSelect` 早就是这块的封装 | 三处改用 `PermissionSelect`,顺手去掉 `keyword` state 与 `visibleIds` 派生 |
 | **重复实现** | `lib/time.ts`(0 引用)与 `lib/format.ts` 各有一套日期格式化 | 日期函数只留 `lib/time.ts`,`format.ts` 只管值 / JSON 归一 |
 | **正面冲突的 ui 原语** | `ui/sidebar`(与 `layout/sidebar` + `SidebarProvider` 同名冲突)、`ui/pagination`(与 `shared/pagination-control` 重复)、`hooks/use-mobile`(只服务前者) | 三件一起删;其余通用原语在工作台的 UI 示例里点名 |
 | **死导出** | `NAV_PERMISSION_POINTS` / `NAV_PERMISSION_IDS` / `findNavTrail` / `findNavNode` / `flattenNavNodes` / `TruncateCell` / `moveWithinSiblings` / `countMultiValueHits` / `SHEET_DROPZONE_PROPS` / `UI_PRIMITIVE_COUNT` | 删除;另有 `visiblePermissionIds*` / `menuIconOf` / `trpcClient` 等只在本文件内用到的,收回模块内部 |
@@ -621,7 +621,7 @@ pnpm check
 | --- | --- |
 | **重复实现审计 + 收敛重构** | 删掉通用 CRUD 套件(`lib/crud/*`)、查询参数 store、`lib/validators/common.ts` 等"配置式"封装 —— 字段一多,配置对象开始打架,读代码还得两处跳。UI 组件**一件没删**(有调用方或在工作台有实例),Excel 那一组刻意留着 |
 | **权限拦两层** | ① 页面级:`(main)/route.tsx` 的 `beforeLoad` 服务端读会话 + 判页面权限,**没权限返回 404 不是 403**(详情见 `doc/已知陷阱.md`);② 接口级:每个写接口进 `lib/rbac.ts` 的 `PERM_BY_PATH`,读接口三选一登记,`write` 才放行 |
-| **日志 100% 覆盖** | 每个 procedure 一条 `trpc.start` / `trpc.ok` / `trpc.err`,失败在 `trpc.err` 带错误码;附 28 条事件的**日志字典**(`doc/审计日志.md` §七),30 分钟清理测试残留 |
+| **日志 100% 覆盖** | 每个 procedure 一条 `trpc.start` / `trpc.ok` / `trpc.err`,失败在 `trpc.err` 带错误码;附 38 条事件的**日志字典**(`doc/审计日志.md` §七),30 分钟清理测试残留 |
 | **两份化石文档重写** | `README.md`(本文)与 `doc/后端接口约定.md`:前者还写着 47 个原语 / 7 个占位页 / 未接认证,后者整篇是已删业务(`lib/fusion-lane.ts` / `entity.*` / `source.*`)与不存在的脚本 |
 
 清空业务后的基线:`pnpm typecheck` 0 · `pnpm check` 0 error / 4 warning / 1 info · `pnpm build` 通过 · `pnpm test` **158 / 158**(15 个测试文件)。

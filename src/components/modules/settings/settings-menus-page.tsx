@@ -257,9 +257,7 @@ export function SettingsMenusPage() {
 				}}
 				title="删除菜单"
 				description={`确认删除「${selected?.name ?? ""}」?删除后侧边栏立即不再显示它;如果它下面还有子菜单,会先被拒绝 —— 请先删子级。`}
-				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
-				pendingText="删除中…"
 				onConfirm={() => {
 					if (selected) deleteMutation.mutate({ id: selected.id });
 				}}

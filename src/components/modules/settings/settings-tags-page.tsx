@@ -277,7 +277,6 @@ export function SettingsTagsPage() {
 						: ""
 				}
 				isPending={deleteMutation.isPending}
-				pendingText="删除中…"
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ id: pendingDelete.id })}
 			/>
 		</PageFrame>

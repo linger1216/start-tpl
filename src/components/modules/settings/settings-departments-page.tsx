@@ -229,9 +229,7 @@ export function SettingsDepartmentsPage() {
 				}}
 				title="删除部门"
 				description={`确认删除「${selected?.name ?? ""}」?如果它下面还有子部门、或部门里还有人,会先被拒绝 —— 请先处理完再来。`}
-				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
-				pendingText="删除中…"
 				onConfirm={() => {
 					if (selected) deleteMutation.mutate({ id: selected.id });
 				}}

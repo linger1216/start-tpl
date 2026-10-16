@@ -26,7 +26,7 @@ import { cn } from "#/lib/utils";
  * 那样每遇到"这个字段要特殊渲染"(部门/角色要徽章、长文本要 pre)就得给封装加参数,
  * 加到最后反而比内联难读。
  */
-export type DetailMetaInfo = {
+type DetailMetaInfo = {
 	createdAt?: string | null;
 	updatedAt?: string | null;
 	id: string | null;

@@ -142,7 +142,7 @@ importers:
         specifier: 2.4.5
         version: 2.4.5
       '@tanstack/devtools-vite':
-        specifier: latest
+        specifier: ^0.8.5
         version: 0.8.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13))
       '@tanstack/router-cli':
         specifier: ^1.132.0

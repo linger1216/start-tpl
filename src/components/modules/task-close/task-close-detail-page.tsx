@@ -21,15 +21,6 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
-import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -50,6 +41,7 @@ import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
+import { TaskActionDialog } from "./task-action-dialog";
 
 /**
  * 任务详情 —— 闭环页(按 `assets/ui/任务详情.html` 原型重画)。
@@ -817,7 +809,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				title="删除任务"
 				description={`「${task.name}」会被软删,动作与评论一并不可见。`}
 				isPending={removeMutation.isPending}
-				confirmText="删除"
 				onConfirm={() => removeMutation.mutate({ id: task.id })}
 			/>
 
@@ -842,272 +833,213 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			/>
 
 			{/* 改状态(创建者 / 管理员)—— 直接跳到模板里的任意状态 */}
-			<Dialog open={statusOpen} onOpenChange={setStatusOpen}>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>改状态</DialogTitle>
-						<DialogDescription>直接把任务改到流程模板里的任意状态,不建审批动作、也不要求走模板的边。</DialogDescription>
-					</DialogHeader>
-					<DialogBody className="space-y-1 py-1">
-						<DetailRow label="目标状态" align="center">
-							<Select
-								items={statusOptions}
-								value={statusTo}
-								onValueChange={(next) => setStatusTo(next ? String(next) : "")}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue placeholder="选一个状态" />
-								</SelectTrigger>
-								<SelectContent>
-									{statusOptions.map((item) => (
-										<SelectItem key={item.value} value={item.value}>
-											{item.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</DetailRow>
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setStatusOpen(false)} disabled={transitMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={transitMutation.isPending || !statusTo}
-							onClick={() => transitMutation.mutate({ id: task.id, to: statusTo })}
-						>
-							{transitMutation.isPending ? "保存中…" : "保存"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TaskActionDialog
+				open={statusOpen}
+				onOpenChange={setStatusOpen}
+				title="改状态"
+				description="直接把任务改到流程模板里的任意状态,不建审批动作、也不要求走模板的边。"
+				pending={transitMutation.isPending}
+				confirmDisabled={!statusTo}
+				confirmText="保存"
+				pendingText="保存中…"
+				onConfirm={() => transitMutation.mutate({ id: task.id, to: statusTo })}
+			>
+				<DetailRow label="目标状态" align="center">
+					<Select
+						items={statusOptions}
+						value={statusTo}
+						onValueChange={(next) => setStatusTo(next ? String(next) : "")}
+					>
+						<SelectTrigger className="w-full">
+							<SelectValue placeholder="选一个状态" />
+						</SelectTrigger>
+						<SelectContent>
+							{statusOptions.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</DetailRow>
+			</TaskActionDialog>
 
 			{/* 转交执行人 —— 选一位参与人员,原执行人自动降为参与者 */}
-			<Dialog open={transferOpen} onOpenChange={setTransferOpen}>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>转交执行人</DialogTitle>
-						<DialogDescription>把执行人身份交给同为参与人员的另一个人;原执行人会改为参与者。</DialogDescription>
-					</DialogHeader>
-					<DialogBody className="space-y-1 py-1">
-						<DetailRow label="交给谁" align="center">
-							<SearchSelect
-								value={transferTo}
-								onValueChange={setTransferTo}
-								options={transferOptions}
-								placeholder="从参与人员里选一个"
-							/>
-						</DetailRow>
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setTransferOpen(false)} disabled={transferMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={transferMutation.isPending || !transferTo}
-							onClick={() => transferMutation.mutate({ taskId: task.id, userId: transferTo })}
-						>
-							{transferMutation.isPending ? "转交中…" : "转交"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TaskActionDialog
+				open={transferOpen}
+				onOpenChange={setTransferOpen}
+				title="转交执行人"
+				description="把执行人身份交给同为参与人员的另一个人;原执行人会改为参与者。"
+				pending={transferMutation.isPending}
+				confirmDisabled={!transferTo}
+				confirmText="转交"
+				pendingText="转交中…"
+				onConfirm={() => transferMutation.mutate({ taskId: task.id, userId: transferTo })}
+			>
+				<DetailRow label="交给谁" align="center">
+					<SearchSelect
+						value={transferTo}
+						onValueChange={setTransferTo}
+						options={transferOptions}
+						placeholder="从参与人员里选一个"
+					/>
+				</DetailRow>
+			</TaskActionDialog>
 
 			{/* 发起审批 / 发起征询 —— 同一个弹窗:审批多一步选目标状态 */}
-			<Dialog
+			<TaskActionDialog
 				open={actionMode !== null}
 				onOpenChange={(next) => {
 					if (!next) setActionMode(null);
 				}}
+				title={actionMode === "approve" ? "发起审批" : "发起征询"}
+				description={
+					actionMode === "approve"
+						? "目标状态只能从流程模板里、当前状态出发的「审批」边里选;发起后任务锁定,等对方答复。"
+						: "征询不改状态、也不锁任务,只是请对方给个意见。"
+				}
+				pending={actionMutation.isPending}
+				confirmDisabled={!actionHandle || (actionMode === "approve" && !actionTo)}
+				confirmText="发起"
+				pendingText="发起中…"
+				onConfirm={() =>
+					actionMutation.mutate({
+						taskId: task.id,
+						toStatus: actionMode === "approve" ? actionTo : null,
+						handleId: actionHandle,
+					})
+				}
 			>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>{actionMode === "approve" ? "发起审批" : "发起征询"}</DialogTitle>
-						<DialogDescription>
-							{actionMode === "approve"
-								? "目标状态只能从流程模板里、当前状态出发的「审批」边里选;发起后任务锁定,等对方答复。"
-								: "征询不改状态、也不锁任务,只是请对方给个意见。"}
-						</DialogDescription>
-					</DialogHeader>
-					<DialogBody className="space-y-1 py-1">
-						{actionMode === "approve" ? (
-							/* 目标状态:多个候选时让人在弹窗里选(入口在右上角,不像之前那样点节点即定) */
-							<DetailRow label="目标状态" align="center">
-								<Select
-									items={actionTargetOptions}
-									value={actionTo}
-									onValueChange={(next) => setActionTo(next ? String(next) : "")}
-								>
-									<SelectTrigger className="w-full">
-										<SelectValue placeholder="选一个目标状态" />
-									</SelectTrigger>
-									<SelectContent>
-										{actionTargetOptions.map((item) => (
-											<SelectItem key={item.value} value={item.value}>
-												{item.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</DetailRow>
-						) : null}
-						<DetailRow label="交给谁" align="center">
-							<SearchSelect
-								value={actionHandle}
-								onValueChange={setActionHandle}
-								options={peopleOptions}
-								placeholder="从参与人员里选一个"
-							/>
-						</DetailRow>
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setActionMode(null)} disabled={actionMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={actionMutation.isPending || !actionHandle || (actionMode === "approve" && !actionTo)}
-							onClick={() =>
-								actionMutation.mutate({
-									taskId: task.id,
-									toStatus: actionMode === "approve" ? actionTo : null,
-									handleId: actionHandle,
-								})
-							}
+				{actionMode === "approve" ? (
+					/* 目标状态:多个候选时让人在弹窗里选(入口在右上角,不像之前那样点节点即定) */
+					<DetailRow label="目标状态" align="center">
+						<Select
+							items={actionTargetOptions}
+							value={actionTo}
+							onValueChange={(next) => setActionTo(next ? String(next) : "")}
 						>
-							{actionMutation.isPending ? "发起中…" : "发起"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+							<SelectTrigger className="w-full">
+								<SelectValue placeholder="选一个目标状态" />
+							</SelectTrigger>
+							<SelectContent>
+								{actionTargetOptions.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</DetailRow>
+				) : null}
+				<DetailRow label="交给谁" align="center">
+					<SearchSelect
+						value={actionHandle}
+						onValueChange={setActionHandle}
+						options={peopleOptions}
+						placeholder="从参与人员里选一个"
+					/>
+				</DetailRow>
+			</TaskActionDialog>
 
-			<Dialog open={memberOpen} onOpenChange={setMemberOpen}>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>加入成员</DialogTitle>
-					</DialogHeader>
-					<div className="space-y-1 py-1">
-						<DetailRow label="人员" align="center">
-							<SearchSelect
-								value={newMemberId}
-								onValueChange={setNewMemberId}
-								options={userOptions}
-								placeholder="选一个人"
-							/>
-						</DetailRow>
-						<DetailRow label="角色" align="center">
-							<Select
-								items={ROLE_OPTIONS}
-								value={newMemberRole}
-								onValueChange={(next) => setNewMemberRole(next ? String(next) : "participant")}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{ROLE_OPTIONS.map((item) => (
-										<SelectItem key={item.value} value={item.value}>
-											{item.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</DetailRow>
-					</div>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setMemberOpen(false)} disabled={memberAddMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={memberAddMutation.isPending || !newMemberId}
-							onClick={() =>
-								memberAddMutation.mutate({
-									taskId: task.id,
-									userId: newMemberId,
-									role: newMemberRole as "participant" | "executor",
-									isPrimary: newMemberRole === "executor",
-								})
-							}
-						>
-							{memberAddMutation.isPending ? "加入中…" : "加入"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TaskActionDialog
+				open={memberOpen}
+				onOpenChange={setMemberOpen}
+				title="加入成员"
+				pending={memberAddMutation.isPending}
+				confirmDisabled={!newMemberId}
+				confirmText="加入"
+				pendingText="加入中…"
+				onConfirm={() =>
+					memberAddMutation.mutate({
+						taskId: task.id,
+						userId: newMemberId,
+						role: newMemberRole as "participant" | "executor",
+						isPrimary: newMemberRole === "executor",
+					})
+				}
+			>
+				<DetailRow label="人员" align="center">
+					<SearchSelect
+						value={newMemberId}
+						onValueChange={setNewMemberId}
+						options={userOptions}
+						placeholder="选一个人"
+					/>
+				</DetailRow>
+				<DetailRow label="角色" align="center">
+					<Select
+						items={ROLE_OPTIONS}
+						value={newMemberRole}
+						onValueChange={(next) => setNewMemberRole(next ? String(next) : "participant")}
+					>
+						<SelectTrigger className="w-full">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{ROLE_OPTIONS.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</DetailRow>
+			</TaskActionDialog>
 
 			{/* 新增附件 —— 创建人专用:选完即传,保存只改 `payload.attachments`(复用任务编辑的附件 picker) */}
-			<Dialog open={attachOpen} onOpenChange={setAttachOpen}>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>附件</DialogTitle>
-						<DialogDescription>选完即传;保存后随任务一起可见。</DialogDescription>
-					</DialogHeader>
-					<DialogBody>
-						<TaskAttachmentPicker
-							value={draftAttachments}
-							onChange={setDraftAttachments}
-							disabled={attachMutation.isPending}
-						/>
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setAttachOpen(false)} disabled={attachMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={attachMutation.isPending}
-							onClick={() =>
-								attachMutation.mutate({
-									id: task.id,
-									name: task.name,
-									description: task.description,
-									dueAt: task.dueAt,
-									priority: task.priority,
-									payload: { content, attachments: draftAttachments.map((file) => file.id) },
-								})
-							}
-						>
-							{attachMutation.isPending ? "保存中…" : "保存"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			<TaskActionDialog
+				open={attachOpen}
+				onOpenChange={setAttachOpen}
+				title="附件"
+				description="选完即传;保存后随任务一起可见。"
+				pending={attachMutation.isPending}
+				confirmDisabled={false}
+				confirmText="保存"
+				pendingText="保存中…"
+				bodyClassName=""
+				onConfirm={() =>
+					attachMutation.mutate({
+						id: task.id,
+						name: task.name,
+						description: task.description,
+						dueAt: task.dueAt,
+						priority: task.priority,
+						payload: { content, attachments: draftAttachments.map((file) => file.id) },
+					})
+				}
+			>
+				<TaskAttachmentPicker
+					value={draftAttachments}
+					onChange={setDraftAttachments}
+					disabled={attachMutation.isPending}
+				/>
+			</TaskActionDialog>
 
 			{/* 驳回 —— 必须写原因;原因会以一条评论留档(服务端同一口径) */}
-			<Dialog
+			<TaskActionDialog
 				open={rejectId !== null}
 				onOpenChange={(next) => {
 					if (!next) setRejectId(null);
 				}}
+				title="驳回"
+				description="驳回要填写原因,会作为一条评论留档,和相关人一起看。"
+				pending={respondMutation.isPending}
+				confirmDisabled={rejectReason.trim().length === 0}
+				confirmText="驳回"
+				pendingText="驳回中…"
+				onConfirm={() =>
+					rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
+				}
 			>
-				<DialogContent className="sm:max-w-lg">
-					<DialogHeader>
-						<DialogTitle>驳回</DialogTitle>
-						<DialogDescription>驳回要填写原因,会作为一条评论留档,和相关人一起看。</DialogDescription>
-					</DialogHeader>
-					<DialogBody>
-						<DetailRow label="原因" align="center">
-							<Textarea
-								rows={3}
-								value={rejectReason}
-								placeholder="说明为什么驳回…"
-								onChange={(event) => setRejectReason(event.target.value)}
-							/>
-						</DetailRow>
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setRejectId(null)} disabled={respondMutation.isPending}>
-							取消
-						</Button>
-						<Button
-							disabled={respondMutation.isPending || rejectReason.trim().length === 0}
-							onClick={() =>
-								rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
-							}
-						>
-							{respondMutation.isPending ? "驳回中…" : "驳回"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+				<DetailRow label="原因" align="center">
+					<Textarea
+						rows={3}
+						value={rejectReason}
+						placeholder="说明为什么驳回…"
+						onChange={(event) => setRejectReason(event.target.value)}
+					/>
+				</DetailRow>
+			</TaskActionDialog>
 
 			<TaskAttachmentPreview
 				taskId={task.id}

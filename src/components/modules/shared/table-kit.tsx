@@ -224,7 +224,7 @@ export function TextCell({ value, truncate = false }: { value: unknown; truncate
 }
 
 /** 时间单元格:统一 `formatLocalMinute` 口径 + 等宽数字 + 次级色(空值走 `TextCell` 的 `—`) */
-export function TimeCell({ value }: { value: unknown }) {
+function TimeCell({ value }: { value: unknown }) {
 	return (
 		<span className="tabular-nums text-xs text-muted-foreground">
 			<TextCell value={formatLocalMinute(value as Date | string | number | null | undefined)} />

@@ -255,7 +255,6 @@ export function SettingsParametersPage() {
 				title="删除参数"
 				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值;界面新建的参数会被删除(记录保留为「已删除」,同一个参数名还能再建)。`}
 				isPending={deleteMutation.isPending}
-				pendingText="删除中…"
 				onConfirm={() => pendingDelete && deleteMutation.mutate({ keys: [pendingDelete.key] })}
 			/>
 		</PageFrame>

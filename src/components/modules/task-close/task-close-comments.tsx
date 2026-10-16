@@ -279,7 +279,6 @@ export function TaskCloseComments({
 				title="删除评论"
 				description={`删除「${pendingRemove?.authorName ?? "—"}」的这条评论?删除后讨论流里不再显示。`}
 				isPending={removeMutation.isPending}
-				confirmText="删除"
 				onConfirm={() => {
 					if (!pendingRemove) return;
 					removeMutation.mutate({ id: pendingRemove.id }, { onSuccess: () => setPendingRemove(null) });

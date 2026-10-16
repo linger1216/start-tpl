@@ -49,7 +49,7 @@ function countNodes<T extends SortableTreeNode>(list: T[]): number {
 }
 
 /** 树节点至少要有这些字段 —— 业务侧自己拼树(depth 从 0 开始) */
-export type SortableTreeNode = {
+type SortableTreeNode = {
 	id: string;
 	parentId: string | null;
 	depth: number;

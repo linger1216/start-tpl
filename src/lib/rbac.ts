@@ -178,7 +178,7 @@ async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 /**
  * **tRPC 路径 → 权限码**的映射(服务端强制的唯一真源)。
  *
- * 设计取舍:与其在 65 个 procedure 上各写一次 `permProcedure("…")`(漏写一个就**静默放开**),
+ * 设计取舍:与其在 107 个 procedure 上各写一次 `permProcedure("…")`(漏写一个就**静默放开**),
  * 不如把映射收在这一张表里、由中间件按 `path` **结构性**查 —— 与"日志天然全覆盖"同一个思路。
  *
  * **值可以是数组**(命中任一即放行):读接口常被多个页面共用(如 `role.list` 在角色/用户/部门

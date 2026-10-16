@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -94,8 +93,6 @@ export function SettingsTagsCreateDialog({
 					</DetailRow>
 				</div>
 
-				{/* 新建没有时间,DetailMeta 不渲染 —— 传 null 兜底,跟原行为一致 */}
-				<DetailMeta meta={null} />
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消

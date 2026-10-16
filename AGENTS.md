@@ -30,6 +30,7 @@ Before editing files for a substantial task:
 | 鉴权(登录 / 权限)、审计日志 | **`doc/审计日志.md`** |
 | **改任何东西之前** | **`doc/已知陷阱.md`**(每条都真实踩过) + **`doc/数据库与认证.md`**(含数据库陷阱一节) |
 | 视觉规范 / 动效 / 色板 | **`DESIGN.md`**(token 在 `src/styles.css`) |
+| 产品定义 / 设计评审前置事实 | **`PRODUCT.md`**(`impeccable` 技能的 durable context,init 时生成) |
 
 ## 常用命令
 
@@ -96,6 +97,6 @@ pnpm test
 
 改了 `src/routes/` 下的文件,别忘了 `pnpm generate-routes`。
 
-**已知基线:`pnpm check` = 0 error / 4 warning**(另有 1 条 info),只有两个文件、一类规则:
-`src/components/ui/badge-list.tsx`(3 处 `noNonNullAssertion`)、`src/components/modules/shared/icons-list.ts`(1 处)。
+**已知基线:`pnpm check` = 0 error / 2 warning**(另有 1 条 info),只有两个文件、一类规则:
+`src/components/ui/tag-list.tsx`(1 处 `noNonNullAssertion`)、`src/components/modules/shared/icons-list.ts`(1 处)。
 `src/db/dm/translate.ts` 另有 1 条 `useTemplate` —— 三者都在「不要顺手修」范围内。**新代码不要新增 warning。**

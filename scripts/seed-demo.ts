@@ -11,6 +11,7 @@
  * 两段都只碰演示数据,不涉及任何初始化必需的表结构 / 权限。
  * 判重一律只看**活着的行**(`deleted_at is null`):软删的用户 / 部门 / 网格都不该再被拿来当锚点。
  */
+import { existsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import * as XLSXNS from "xlsx";
 import { sysDemoGrid, sysDept, sysNotice, sysUser } from "../src/db/data-base-schema.ts";
@@ -75,6 +76,14 @@ const GRID_FILE = "doc/测试数据/综合网格履职情况列表.xlsx";
 const text = (v: unknown) => String(v ?? "").trim();
 
 async function seedDemoGrid(): Promise<void> {
+	// 夹具是 gitignore 例外才入库的长数据源(.gitignore 里 `!doc/测试数据/*.xlsx`)。
+	// 缺了不炸:给一句能行动的提示(手工补文件即可),后面的明细账种子照常执行。
+	if (!existsSync(GRID_FILE)) {
+		console.warn(
+			`⚠ 演示网格跳过:找不到 ${GRID_FILE}(网格对账数据源没入库或没拷贝)。把它放到该路径后重跑即可,其它种子不受影响。`,
+		);
+		return;
+	}
 	const book = XLSX.readFile(GRID_FILE);
 	const sheet = book.Sheets[book.SheetNames[0] as string];
 	const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });

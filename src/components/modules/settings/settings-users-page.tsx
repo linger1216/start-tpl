@@ -259,9 +259,7 @@ export function SettingsUsersPage() {
 				}}
 				title="删除账号"
 				description={`确认删除「${pendingDelete?.email ?? ""}」?会同时清掉它的登录会话、密码记录、部门成员关系与角色分配(账号行保留为「已删除」,审计留痕)。`}
-				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
-				pendingText="删除中…"
 				onConfirm={() => {
 					if (pendingDelete) deleteMutation.mutate({ ids: [pendingDelete.id] });
 				}}

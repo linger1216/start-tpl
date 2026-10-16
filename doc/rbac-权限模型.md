@@ -32,7 +32,7 @@ sys_casbin_rule:p(role, menu)                      角色能看见哪些菜单 /
   所以单测可以直接喂一个 id,不必造 HTTP 会话。
 - **菜单与按钮同一张表**:`sys_menu.type` = 1 目录 / 2 菜单 / 3 按钮,`perm` 是权限标识(如 `sys:role:write`)。
   按钮**不进侧边栏**(`buildNavTree` 会过滤),但作为叶子出现在角色授权树里
-  (`PermissionPicker` 给它一个「操作」徽章);授权后它的 `perm` 进入用户的权限集合 ——
+  (`PermissionSelect` 给它一个「操作」徽章);授权后它的 `perm` 进入用户的权限集合 ——
   前端 `useHasPerm(code)` 认它。**按钮行的 `path` 用不指向路由的占位值**
   (沿用"纯分组也给占位 path"的既有约定,`path` 保持 not null + 唯一)。
 - **勾子节点要自动补全祖先**:侧边栏是按 `parentId` 拼树的,只授权一个深层子菜单会让那一枝无处安放
