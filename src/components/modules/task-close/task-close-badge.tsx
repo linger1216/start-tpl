@@ -48,6 +48,28 @@ function DotBadge({ dot, label, className }: { dot: string; label: string; class
 	);
 }
 
+/**
+ * **姓名签** —— 「公文·印鉴」世界里"人"的视觉身份:墨底方章 + 反白首字 + 宋体 + -3° 微旋。
+ *
+ * 评论流(`size="md"`,36px)与成员列表(`size="sm"`,22px)两处原本各写了一份同构 span ——
+ * 合到这里之后,**同一个人在每一处都是同一枚章**(taste:实体视觉身份跨屏一致);
+ * 底色 `var(--ink)` / 文字 `var(--paper-raised)` 跟随主题翻转,深色模式下墨=暖纸、字=夜墨。
+ */
+export function NameSeal({ name, size = "md", className }: { name: string; size?: "sm" | "md"; className?: string }) {
+	const initials = (name || "?").slice(0, 1);
+	return (
+		<span
+			className={cn(
+				"flex shrink-0 -rotate-3 items-center justify-center rounded-[3px] bg-ink font-heading font-bold text-paper outline-1 outline-offset-2 outline-border",
+				size === "md" ? "size-9 text-sm" : "size-5.5 text-xs",
+				className,
+			)}
+		>
+			{initials}
+		</span>
+	);
+}
+
 /** `tc_task.priority` 徽章 —— `priority` 为 null / 未知数字 → 「未设置」,不抛错 */
 export function PriorityBadge({
 	priority,

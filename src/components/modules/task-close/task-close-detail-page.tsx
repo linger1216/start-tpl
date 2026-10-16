@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
-import { PriorityBadge } from "#/components/modules/task-close/task-close-badge";
+import { NameSeal, PriorityBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
@@ -1180,20 +1180,12 @@ function PeopleRow({
 	onRemove?: () => void;
 	removing?: boolean;
 }) {
-	const initials = (name || "?").slice(0, 1);
 	return (
 		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
 			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
 			<div className="flex min-w-0 flex-1 items-center gap-1.5">
-				<span
-					className={cn(
-						// 姓名签 = **方章式**(墨底反白首字,3px 方角)—— 与「公文·印鉴」世界的评论头像同形族
-						"flex size-5.5 shrink-0 -rotate-3 items-center justify-center rounded-[3px] bg-ink text-xs font-bold text-paper",
-						"font-heading outline-1 outline-offset-2 outline-border",
-					)}
-				>
-					{initials}
-				</span>
+				{/* 姓名签 = NameSeal(task-close-badge)—— 与评论流的"人"的章同形族 */}
+				<NameSeal name={name} size="sm" />
 				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemove ? (

@@ -4,6 +4,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
+import { NameSeal } from "#/components/modules/task-close/task-close-badge";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { ActionIconButton } from "#/components/ui/action-button";
@@ -301,22 +302,8 @@ export function TaskCloseComments({
 const MAX_FILES = 20;
 
 /**
- * 评论流里的姓名签 —— **方章式**(墨底反白首字、3px 方角、-3° 微旋)。
- *
- * 「公文·印鉴」世界里,评论/回复的头像是**一枚小章**:墨底 + 反白首字 + 宋体,
- * 与成员列表的姓名签、列表档状态章同形族(圆形蓝头像是旧世界的异物,已换)。
- * 底色用 `var(--ink)` / 文字用 `var(--paper-raised)`,深色模式下自动翻转(墨=暖纸、字=夜墨)。
- * 微旋只是 -3°,列表里 36px 的小尺寸下看得出"手盖"的味道,又不至于歪斜。
+ * 评论流里的姓名签 —— 已合流到 `NameSeal`(task-close-badge.tsx):墨底方章 + 反白首字 + 宋体。
+ * 「公文·印鉴」世界里,评论/回复的头像是**一枚小章**,与成员列表的姓名签、状态章同形族
+ * (圆形蓝头像是旧世界的异物,已换);同一人在两处长得一样。
  */
-function Avatar({ initials }: { initials: string }) {
-	return (
-		<span
-			className={cn(
-				"flex size-9 shrink-0 -rotate-3 items-center justify-center rounded-[3px] bg-ink font-heading text-sm font-bold text-paper",
-				"outline-1 outline-offset-2 outline-border",
-			)}
-		>
-			{initials}
-		</span>
-	);
-}
+const Avatar = ({ initials }: { initials: string }) => <NameSeal name={initials} size="md" />;

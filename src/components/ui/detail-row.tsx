@@ -26,17 +26,11 @@ export function DetailRow({
 	align?: "start" | "center";
 }) {
 	return (
-		<div
-			className={
-				align === "center"
-					? "grid grid-cols-[100px_1fr] items-center gap-3 py-2"
-					: "grid grid-cols-[100px_1fr] items-start gap-3 py-2"
-			}
-		>
-			<Label htmlFor={htmlFor} className="text-xs font-normal text-muted-foreground">
+		<div className={`flex gap-3 py-2 ${align === "center" ? "items-center" : "items-start"}`}>
+			<Label htmlFor={htmlFor} className="w-25 shrink-0 text-xs font-normal leading-5 text-muted-foreground">
 				{label}
 			</Label>
-			<div className="min-w-0 wrap-break-word text-sm text-foreground">{children}</div>
+			<div className="min-w-0 flex-1 text-sm leading-5 wrap-break-word text-foreground">{children}</div>
 		</div>
 	);
 }

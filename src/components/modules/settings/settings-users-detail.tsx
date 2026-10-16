@@ -55,7 +55,6 @@ export function SettingsUsersDetail({
 								{row.image ? <AvatarImage src={row.image} alt={row.name} /> : null}
 								<AvatarFallback className="text-xs">{(row.name || "?").slice(0, 1)}</AvatarFallback>
 							</Avatar>
-							<span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{row.image ?? "—"}</span>
 						</div>
 					</DetailRow>
 					<DetailRow label="部门">

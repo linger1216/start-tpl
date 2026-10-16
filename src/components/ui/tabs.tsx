@@ -141,11 +141,11 @@ export function TabsTrigger({
 				<>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-border opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-[active]/tabs-trigger:opacity-0"
+						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-border opacity-100 transition-[background-color,opacity,transform] duration-200 ease-out group-data-active/tabs-trigger:opacity-0"
 					/>
 					<span
 						aria-hidden
-						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-[active]/tabs-trigger:bg-hue-blue group-data-[active]/tabs-trigger:opacity-100 group-data-[active]/tabs-trigger:shadow-(--shadow-glow)"
+						className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-transparent opacity-0 transition-[background-color,opacity,box-shadow] duration-200 ease-out group-data-active/tabs-trigger:bg-hue-blue group-data-active/tabs-trigger:opacity-100 group-data-active/tabs-trigger:shadow-(--shadow-glow)"
 					/>
 				</>
 			) : null}
@@ -154,7 +154,7 @@ export function TabsTrigger({
 			{variant === "card" ? (
 				<span
 					aria-hidden
-					className="pointer-events-none absolute inset-x-0 -bottom-px hidden h-px bg-background group-data-[active]/tabs-trigger:block"
+					className="pointer-events-none absolute inset-x-0 -bottom-px hidden h-px bg-background group-data-active/tabs-trigger:block"
 				/>
 			) : null}
 		</TabsPrimitive.Tab>
