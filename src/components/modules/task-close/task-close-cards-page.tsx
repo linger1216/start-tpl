@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
-import { PriorityBadge, StatusBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -14,11 +13,12 @@ import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
+import { Tag } from "#/components/ui/tag.tsx";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { PAGE_SIZES } from "#/lib/constants";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import { priorityLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
 
 /**
@@ -77,6 +77,7 @@ export function TaskCloseCardsPage() {
 		return map;
 	}, [workflowsQuery.data]);
 	const labelOf = (value: string) => statusLabels.get(value) ?? value;
+
 	const statusOptions = useMemo(
 		() => [{ value: "all", label: "全部状态" }, ...[...statusLabels].map(([value, label]) => ({ value, label }))],
 		[statusLabels],
@@ -182,16 +183,16 @@ export function TaskCloseCardsPage() {
 							params={{ taskId: item.id }}
 							className="block w-full max-w-sm rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25"
 						>
-							<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-background p-5 transition-[border-color] hover:border-primary/50">
+							<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
 								{/* 顶行:图标块(左) + 状态徽章(右) —— 与「流程模板」卡片同形 */}
 								<div className="mb-4 flex items-start justify-between gap-2">
 									<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
-										<ClipboardList className="size-[18px]" />
+										<ClipboardList className="size-4.5" />
 									</div>
 									{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}
 									<div className="flex flex-wrap items-center justify-end gap-1.5">
-										{item.priority ? <PriorityBadge priority={item.priority} /> : null}
-										<StatusBadge status={item.status} label={labelOf(item.status)} />
+										<Tag variant="secondary">{priorityLabelOf(item.priority)}</Tag>
+										<Tag variant="outline">{labelOf(item.status)}</Tag>
 									</div>
 								</div>
 								<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{item.name}</h3>

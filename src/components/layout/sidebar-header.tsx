@@ -43,8 +43,7 @@ export function SidebarHeader({
 	const tile = (
 		<span
 			className={cn(
-				// 28px 章形 logo:印泥红方章 + 反白首字(DESIGN.md「公文·印鉴」§5.1 七),微旋 -3°
-				"flex size-7 shrink-0 -rotate-3 items-center justify-center rounded-[4px] border-[1.5px] border-seal/70 bg-seal/10 font-heading text-[13px] font-bold text-seal-fg",
+				"flex size-7 shrink-0 items-center justify-center rounded-full border-[1.5px] border-seal/70 bg-seal/10 font-heading text-[13px] font-bold text-seal-fg",
 			)}
 		>
 			{icon ?? (typeof title === "string" ? title.slice(0, 1) : null) ?? <LayoutDashboard />}

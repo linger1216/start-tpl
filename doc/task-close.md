@@ -501,8 +501,9 @@ action 的目标状态,「发起审批」弹窗的候选项)/ `canInitiateStatus
 | `/task-close/workflows` | `task-close-workflows-page.tsx` | 流程模板:卡片视图 + 增删改查(卡上「详情 / 编辑 / 删除」)|
 
 配套件:`task-close-flow-spine.tsx`(**流程脊** —— 模板状态链 + 走过的 / 当前 / 未到 + 到达时刻,
-外加「轮到你」动作条;它**不放动作**,状态类按钮在记录头右上角,见「按钮去向」)、`task-close-badge.tsx`
-(状态 / 优先级**徽章对** —— 两枚同构圆点徽章合流于此,名字均由模板 label 或 `priorityLabelOf` 给)、`task-close-form.tsx`(新建 / 编辑弹窗)、
+外加「轮到你」动作条;它**不放动作**,状态类按钮在记录头右上角,见「按钮去向」)、
+`task-action-dialog.tsx`(详情页 6 个表单型弹窗的**外壳**:Header / Body / Footer + 取消守卫收口,评论头像 / 成员圆牌就地内联)、
+`task-close-form.tsx`(新建 / 编辑弹窗)、
 `task-close-comments.tsx`(评论,附件走 `useFileUpload` 传进 `sys_file`)、
 `task-close-workflow-form.tsx`(结构化编辑器:状态行(value + label)+ 初始态 + 边的行表格)、`task-close-workflow-detail.tsx`(只读详情)、
 `task-content-blocks.tsx` / `task-content-editor.tsx`(内容块只读 / 编辑注册表)、`task-content-attachments.tsx`(附件选择 / 列表)、

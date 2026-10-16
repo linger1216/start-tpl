@@ -259,7 +259,7 @@ export function TaskCloseWorkflowsPage() {
  * 一张模板卡片 —— 版式对齐「资源卡」:图标 + 状态/动作在同一行、标题 + 一行说明、
  * 一块浅底预览(状态集合)、底部 meta 胶囊。**整卡可点开详情**,行内动作 `stopPropagation`。
  *
- * 白底(`bg-background`)+ flex 纵向;`max-w-sm` 限宽、预览区 `max-h-24` 限高,配合外层 `flex flex-wrap` 换行。
+ * 白底(`bg-card`,与表格 / dialog 同一档纸白)+ flex 纵向;`max-w-sm` 限宽、预览区 `max-h-24` 限高,配合外层 `flex flex-wrap` 换行。
  */
 function WorkflowCard({
 	item,
@@ -289,7 +289,7 @@ function WorkflowCard({
 					onView();
 				}
 			}}
-			className="group flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-background p-5 outline-none transition-[border-color] hover:border-primary/50 focus-visible:ring-1 focus-visible:ring-ring/25"
+			className="group flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-card p-5 outline-none transition-[border-color] hover:border-primary/50 focus-visible:ring-1 focus-visible:ring-ring/25"
 		>
 			{/* 顶行:图标块(左) + 状态徽章 / 行内动作(右) */}
 			<div className="mb-4 flex items-start justify-between gap-2">

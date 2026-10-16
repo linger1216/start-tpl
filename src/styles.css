@@ -365,9 +365,14 @@
   /* 动效曲线进 @theme,npm 侧可直接用 `ease-brand` 工具类 */
   --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
 
-  /* 印章(DESIGN.md §4.4):红=驳回/待批,墨绿=通过;动效类见「动效层」 */
+  /* 印章(DESIGN.md §4.4):红=驳回/待批,墨绿=通过;动效类见「动效层 */
   --color-seal: var(--seal);
   --color-seal-fg: var(--seal-fg);
+
+  /* 墨 / 纸原语(§1.1)进 Tailwind:NameSeal(bg-ink/text-paper)、Seal/Alert 的 ink 描边都用它;
+     深色模式下 --ink 自动翻到暖纸,圆牌 / 墨章照文档反相 */
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);

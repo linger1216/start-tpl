@@ -4,7 +4,6 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
-import { NameSeal } from "#/components/modules/task-close/task-close-badge";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { ActionIconButton } from "#/components/ui/action-button";
@@ -301,8 +300,15 @@ export function TaskCloseComments({
 const MAX_FILES = 20;
 
 /**
- * 评论流里的姓名签 —— 已合流到 `NameSeal`(task-close-badge.tsx):墨底方章 + 反白首字 + 宋体。
- * 「公文·印鉴」世界里,评论/回复的头像是**一枚小章**,与成员列表的姓名签、状态章同形族
- * (圆形蓝头像是旧世界的异物,已换);同一人在两处长得一样。
+ * 评论流里的头像 —— **墨底正圆 + 反白首字 + 宋体**(36px,模块内联,无共享文件)。
+ * 2026-10:task-close-badge 受章层整体拆掉后,这里的"人"只剩这一个格子:内联小圆牌即可,
+ * 不再为此保留跨页共享件(成员列表同款圆牌就地内联,同一人两处同形)。
  */
-const Avatar = ({ initials }: { initials: string }) => <NameSeal name={initials} size="md" />;
+const Avatar = ({ initials }: { initials: string }) => (
+	<span
+		aria-hidden
+		className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-heading font-bold leading-none text-paper"
+	>
+		{initials}
+	</span>
+);

@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
-import { NameSeal, PriorityBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
@@ -31,6 +30,7 @@ import { RefreshButton } from "#/components/ui/refresh-button";
 import { Seal } from "#/components/ui/seal";
 import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
@@ -491,9 +491,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</div>
 							{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
 							<MetaRow className="mt-2">
-								{task.priority ? (
-									<PriorityBadge priority={task.priority} label={priorityLabelOf(task.priority)} />
-								) : null}
+								{task.priority ? <Tag variant="secondary">{priorityLabelOf(task.priority)}</Tag> : null}
 								<span>
 									截止
 									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
@@ -1114,9 +1112,14 @@ function PeopleRow({
 	return (
 		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
 			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
-			<div className="flex min-w-0 flex-1 items-center gap-1.5">
-				{/* 姓名签 = NameSeal(task-close-badge)—— 与评论流的"人"的章同形族 */}
-				<NameSeal name={name} size="sm" />
+			<div className="flex min-w-0 flex-1 items-center gap-2">
+				{/* 圆牌:墨底反白首字(与评论头像同款,就地内联 —— badge 合流层已拆) */}
+				<span
+					aria-hidden
+					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-ink text-[10px] font-heading font-bold leading-none text-paper"
+				>
+					{name.slice(0, 1)}
+				</span>
 				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemove ? (
