@@ -1,8 +1,9 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
+import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
-import { PARA_TYPE_META } from "#/lib/para-spec";
+import { PARA_TYPE, PARA_TYPE_META } from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
 /**
@@ -62,13 +63,21 @@ export function SettingsParametersDetail({
 					</div>
 					<div className="space-y-1.5">
 						<div className="text-xs font-medium text-muted-foreground">当前值</div>
-						{/* 完整值:不截断、不折行丢字,长 JSON 也能整段看完并复制 */}
-						<pre
-							translate="no"
-							className="code-block max-h-72 rounded-lg bg-muted p-3 leading-relaxed break-all text-foreground"
-						>
-							{row.value === "" ? "(空)" : row.value}
-						</pre>
+						{/* 完整值:不截断、不折行丢字。JSON 类型格式化成树看(缩进呈现结构),其余原样展示 */}
+						{row.type === PARA_TYPE.JSON ? (
+							row.value === "" ? (
+								<p className="text-sm text-muted-foreground">(空)</p>
+							) : (
+								<JsonBlock value={row.value} className="max-h-72 break-all" />
+							)
+						) : (
+							<pre
+								translate="no"
+								className="code-block max-h-72 rounded-lg bg-muted p-3 leading-relaxed break-all text-foreground"
+							>
+								{row.value === "" ? "(空)" : row.value}
+							</pre>
+						)}
 					</div>
 				</>
 			) : null}

@@ -292,7 +292,7 @@ export function SettingsUsersForm({
 				{/* 页脚只放时间行;**没有时间可显示就整条不渲染**(新建时它是空的,白占 70px) */}
 				{user ? (
 					<DialogFooter className="mt-0">
-						<DetailMeta meta={{ createdAt: user.createdAt, updatedAt: user.updatedAt }} />
+						<DetailMeta meta={{ id: user.id, createdAt: user.createdAt, updatedAt: user.updatedAt }} />
 					</DialogFooter>
 				) : null}
 			</DialogContent>

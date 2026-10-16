@@ -40,7 +40,7 @@ export function SettingsFilesDetail({
 	return (
 		<DetailDialog
 			open={open}
-			meta={row ? { createdAt: row.createTime, updatedAt: row.updateTime } : null}
+			meta={row ? { id: row.id, createdAt: row.createTime, updatedAt: row.updateTime } : null}
 			onOpenChange={onOpenChange}
 			title={`文件详情 · ${row?.originName ?? ""}`}
 			tag={

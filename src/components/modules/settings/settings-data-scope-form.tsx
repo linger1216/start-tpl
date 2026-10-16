@@ -366,7 +366,9 @@ export function SettingsDataScopeForm({
 				{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
 
 				<DialogFooter>
-					{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
+					{creating ? null : (
+						<DetailMeta meta={row ? { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } : null} />
+					)}
 					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
 						取消
 					</Button>

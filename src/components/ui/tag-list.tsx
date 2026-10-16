@@ -17,8 +17,9 @@ import { cn } from "#/lib/utils";
  * color:
  *  - "none"            → 不上色(只用 Tag 自带的描边)
  *  - "brand"(默认)     → 规范内的中性/品牌色板,默认就符合 DESIGN.md
- *  - "stable"          → 由 values 稳定哈希选一套下列彩色主题:同一份数据永远是同一套颜色
- *                        注:名字保留历史值 "random",但实现是稳定哈希 —— 不再每次渲染随机
+ *  - "stable"          → 由 values 稳定哈希选**一套**彩色主题:同一份数据永远是同一套颜色(列表内按 i % len 轮转)
+ *  - "random"          → **每一项**按其取值稳定哈希从 6 色相里取色:同一值永远同一色(看起来随机)
+ *                        注:实现是按值哈希而不是 Math.random() —— 后者会 SSR 水合不一致 + 重渲染跳色
  *  - 预制彩色主题(规范外,与 chart-1..5 同属分类色板;DESIGN.md §2 只定义 7 个品牌色):
  *      "rainbow" / "ocean" / "forest" / "sunset" / "lavender" / "stone"
  *  - string[]          → 自定义色板,按 i % len 取色,每项 Tailwind 类(如 "bg-primary/10 text-primary")
@@ -100,8 +101,10 @@ type TagThemeName = keyof typeof TAG_THEMES;
 /** 彩色主题(规范外分类色板)—— "stable" 模式从这里选 */
 const COLORFUL_THEMES = (Object.keys(TAG_THEMES) as TagThemeName[]).filter((n) => n !== "brand");
 
-/** "random" 是历史名,保留为 "stable" 的别名(行为已改为稳定哈希,不再随机) */
-export type TagColor = "none" | TagThemeName | "stable" | "random" | readonly string[] | string[];
+/** 6 色相池 —— "random" 模式按值逐项取色用(即 rainbow 主题的色板) */
+const RAINBOW_PALETTE = TAG_THEMES.rainbow;
+
+export type TagColor = "none" | keyof typeof TAG_THEMES | "stable" | "random" | readonly string[] | string[];
 
 /**
  * 稳定哈希选色。
@@ -136,19 +139,21 @@ export function TagList({
 		return <span className="text-muted-foreground truncate text-xs">{emptyPlaceholder ?? PLACEHOLDER_EMPTY}</span>;
 	}
 
-	// "stable"(旧名 "random"):按 values 稳定哈希选一套彩色主题,色板内按 i % len 循环。
-	// 同一份数据 → 同一套颜色;不再用 Math.random(),因此 SSR 水合一致、重渲染也不跳色。
+	// "stable":按 values 稳定哈希选一套彩色主题,色板内按 i % len 循环。
+	// 同一份数据 → 同一套颜色;不用 Math.random(),因此 SSR 水合一致、重渲染也不跳色。
 	const stablePalette =
-		color === "stable" || color === "random"
+		color === "stable"
 			? stablePick(
 					COLORFUL_THEMES.map((n) => TAG_THEMES[n]),
 					values.join("\u0000"),
 				)
-			: undefined;
+			: [];
 
-	const resolveColor = (i: number): string | undefined => {
+	const resolveColor = (i: number, value: string): string | undefined => {
 		if (color === "none") return undefined;
-		if (color === "stable" || color === "random") return stablePalette![i % stablePalette!.length];
+		// "random":每一项按**取值**哈希从 6 色相里取色 —— 同一值永远同一色,不同值看起来随机分布
+		if (color === "random") return stablePick(RAINBOW_PALETTE, value);
+		if (color === "stable") return stablePalette[i % stablePalette.length];
 		if (typeof color === "string" && color in TAG_THEMES) {
 			const palette = TAG_THEMES[color as TagThemeName];
 			return palette[i % palette.length];
@@ -158,7 +163,7 @@ export function TagList({
 	};
 
 	const badges = values.map((value, i) => (
-		<Tag key={`${value}-${i}`} className={cn("p-2.5 gap-1", resolveColor(i))} variant="outline">
+		<Tag key={`${value}-${i}`} className={cn("p-2.5 gap-1", resolveColor(i, value))} variant="outline">
 			<span>{value}</span>
 			{onRemove && (
 				<button

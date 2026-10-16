@@ -36,7 +36,7 @@ export function SettingsUsersDetail({
 					</Tag>
 				) : null
 			}
-			meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }}
+			meta={row ? { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (

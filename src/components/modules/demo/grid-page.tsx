@@ -315,7 +315,7 @@ export function GridPage() {
 				}}
 				title={viewing?.name ?? "网格详情"}
 				description={viewing?.townName ?? undefined}
-				meta={{ updatedAt: viewing?.updateTime ?? null, createdAt: viewing?.createTime ?? null }}
+				meta={viewing ? { id: viewing.id, createdAt: viewing.createTime, updatedAt: viewing.updateTime } : null}
 			>
 				{viewing ? (
 					<>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import type { PluginRow } from "#/components/modules/settings/settings-data-plugins-table";
 import { PolicyContextBlock } from "#/components/modules/shared/policy-context-block";
 import { Button } from "#/components/ui/button";
@@ -11,9 +12,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
-import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { cn } from "#/lib/utils.ts";
 
 /**
  * 「预览值域」弹窗 —— 拿**当前登录人**真算一次,把取到的值原样列出来。
@@ -104,8 +105,17 @@ export function SettingsDataPluginsPreviewDialog({
 					</div>
 				</div>
 				<DialogFooter>
-					<RefreshButton busy={testQuery.isFetching} onClick={() => void testQuery.refetch()} />
-					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+					<Button
+						type="button"
+						variant="outline"
+						disabled={testQuery.isFetching}
+						aria-label="刷新"
+						title="刷新"
+						onClick={() => void testQuery.refetch()}
+					>
+						<RefreshCw className={cn(testQuery.isFetching && "animate-spin")} />
+					</Button>
+					<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
 						关闭
 					</Button>
 				</DialogFooter>

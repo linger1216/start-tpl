@@ -6,7 +6,6 @@ import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
-import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
 
 /**
@@ -128,6 +127,10 @@ export function SettingsTagsForm({
 						<Undo2 className="size-3.5" />
 						还原
 					</Button>
+					{/* 删除这种"记录级"危险动作推到最右、离保存远一点 */}
+					<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
+						删除
+					</ActionButton>
 				</div>
 			</div>
 		</div>

@@ -100,7 +100,8 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
 		<SelectPrimitive.Item
 			data-slot="select-item"
 			className={cn(
-				"relative flex w-full cursor-pointer items-center gap-2.5 rounded-md py-2 pr-10 pl-2.5 text-sm outline-hidden select-none transition-colors focus:not-data-[selected=true]:bg-muted/50 focus:not-data-[selected=true]:text-foreground data-highlighted:not-data-[selected=true]:bg-muted/50 data-highlighted:not-data-[selected=true]:text-foreground data-selected:bg-muted/70 data-selected:font-medium data-selected:text-foreground not-data-[variant=destructive]:data-selected:**:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+				// 候选 hover:用整档 muted(不打折),比默认浅底明显一档 —— 鼠标扫过时清晰可辨
+				"relative flex w-full cursor-pointer items-center gap-2.5 rounded-md py-2 pr-10 pl-2.5 text-sm outline-hidden select-none transition-colors focus:not-data-[selected=true]:bg-muted focus:not-data-[selected=true]:text-foreground data-highlighted:not-data-[selected=true]:bg-muted data-highlighted:not-data-[selected=true]:text-foreground data-selected:bg-muted/70 data-selected:font-medium data-selected:text-foreground not-data-[variant=destructive]:data-selected:**:text-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
 				className,
 			)}
 			{...props}

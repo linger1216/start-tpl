@@ -11,16 +11,16 @@
  *  4. **不带记忆/搜索历史**:模板不需要;派生新项目再加(常见做法是 localStorage 缓存最近 10 条)。
  */
 import { useNavigate } from "@tanstack/react-router";
-import { Command } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-import { Button } from "#/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import type { NavNode } from "./nav-config";
+import { DocDot, MetaRow } from "#/components/ui/typography";
+import { cn } from "#/lib/utils.ts";
+import { NAV_ICON_MAP, type NavNode } from "./nav-config";
 import { useNavNodes } from "./nav-data";
 
-type Item = { id: string; name: string; path: string; group: string; description?: string };
+type Item = { id: string; name: string; path: string; icon: string; group: string; description?: string };
 type FlatRow = { item: Item; flatIndex: number }; // flatIndex = 在扁平列表里的序号(键盘跳第 N 条要用)
 
 /** 扁平化导航树为一条「可跳转」列表。父菜单(无 path 但有 children)只用作分组。 */
@@ -33,6 +33,7 @@ function flattenNav(nodes: NavNode[]): Item[] {
 					id: `${group}::${node.path}`,
 					name: node.name,
 					path: node.path,
+					icon: node.icon,
 					group,
 					description: node.description,
 				});
@@ -154,10 +155,21 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-xl gap-0 p-0 overflow-hidden" aria-describedby={undefined}>
+			<DialogContent
+				className="sm:max-w-3xl gap-3 bg-popover/85 p-0 shadow-raise-3 overflow-hidden rounded-2xl"
+				aria-describedby={undefined}
+			>
 				<DialogTitle className="sr-only">快捷键面板</DialogTitle>
-				<div className="flex items-center gap-2 border-b border-border px-3 py-2">
-					<Command className="size-4 text-muted-foreground" aria-hidden />
+				{/* ── 召唤章:印泥红圆章 + ⌘,打开这一眼播一次盖章动效(重挂载触发,→ Seal 的 stamped 同款) ── */}
+				<div className="flex items-center gap-2.5 border-b border-border px-3 py-2">
+					<span key={String(open)} aria-hidden>
+						<span
+							className={`inline-grid size-7 shrink-0 place-items-center rounded-full border-2 border-seal/65 bg-seal/5 text-seal-fg opacity-92 ${open ? "seal-stamp" : ""}`}
+							style={{ ["--seal-stamp" as string]: "-6deg" }}
+						>
+							<span className="font-heading text-xs leading-none font-bold">⌘</span>
+						</span>
+					</span>
 					<Input
 						ref={inputRef}
 						value={query}
@@ -167,48 +179,63 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 						}}
 						onKeyDown={handleKey}
 						placeholder="搜页面或菜单(空格分多关键词;⌘1-9 跳第 N 条)..."
-						className="border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 h-8"
+						className="h-8 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
 					/>
-					<kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 text-xs text-muted-foreground">
-						ESC
-					</kbd>
 				</div>
-				<ul ref={listRef} className="max-h-80 overflow-auto" aria-label="可跳转菜单项">
+				<ul ref={listRef} className="max-h-120 overflow-auto py-1" aria-label="可跳转菜单项">
 					{grouped.rows.length === 0 ? (
-						<li className="px-4 py-8 text-center text-sm text-muted-foreground">没搜到相关页面</li>
+						<li className="flex flex-col items-center gap-2 px-4 py-10">
+							<span
+								aria-hidden
+								className="inline-grid size-8 place-items-center rounded-full border-2 border-muted-foreground/35 bg-muted/50 text-muted-foreground/60 opacity-92"
+								style={{ transform: "rotate(-6deg)" }}
+							>
+								<span className="font-heading text-[10px] leading-none font-bold">空</span>
+							</span>
+							<span className="text-xs tracking-wider text-muted-foreground">没搜到相关页面 —— 换个关键词试试</span>
+						</li>
 					) : (
 						grouped.order.map((groupName) => {
 							const list = grouped.map.get(groupName) ?? [];
 							return (
 								<li key={groupName}>
-									<div className="sticky top-0 z-10 bg-popover px-4 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-										{groupName}
+									{/* 分组头 = 版记行:细线上界 + 加宽字距,钉在滚动区顶 */}
+									<div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border/20 px-4 py-1.5 backdrop-blur-sm">
+										<span className="text-xs tracking-[0.08em] text-muted-foreground">{groupName}</span>
 									</div>
 									<ul>
 										{list.map((item) => {
 											const flatIndex = grouped.rows.findIndex((r) => r.item.id === item.id);
 											const isHighlight = flatIndex === highlight;
+											const Icon = NAV_ICON_MAP[item.icon as keyof typeof NAV_ICON_MAP] ?? Layers;
 											return (
 												<li
 													key={item.id}
 													ref={(el) => {
 														itemRefs.current[flatIndex] = el;
 													}}
+													className="mx-2 my-0.5 first:mt-1.5"
 												>
-													<Button
-														variant="ghost"
-														className={`w-full justify-start gap-3 rounded-none px-4 py-2 h-auto ${isHighlight ? "bg-accent text-accent-foreground" : ""}`}
-														onClick={() => choose(flatIndex)}
+													<button
+														type="button"
 														onMouseEnter={() => setHighlight(flatIndex)}
+														onClick={() => choose(flatIndex)}
+														className={`relative flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors outline-none focus-visible:ring-1 focus-visible:ring-primary/15 ${
+															isHighlight
+																? // 选中行 = 树选中行同款:左缘 3px 墨标 + 淡蓝面板 + 主色描边(排序树 is-selected 的原样)
+																	"border-primary/40 bg-primary/8 "
+																: "border-transparent hover:border-hue-blue-line hover:bg-hover"
+														}`}
 													>
-														<span className="font-medium flex-1 text-left">{item.name}</span>
-														<span className="text-xs text-muted-foreground font-mono">{item.path}</span>
+														<Icon className={cn("size-3.5 shrink-0 transition-colors duration-150", "text-primary")} />
+														<span className="flex-1 text-sm">{item.name}</span>
+														<span className="font-mono text-xs text-muted-foreground">{item.path}</span>
 														{flatIndex < 9 ? (
-															<kbd className="ml-1 hidden sm:inline-flex items-center rounded border border-border px-1 text-xs text-muted-foreground">
+															<kbd className="hidden rounded-[2px] border border-border bg-secondary/60 px-1 text-[10px] text-muted-foreground sm:inline-flex">
 																⌘{flatIndex + 1}
 															</kbd>
 														) : null}
-													</Button>
+													</button>
 												</li>
 											);
 										})}
@@ -218,22 +245,26 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 						})
 					)}
 				</ul>
-				<div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
-					<span className="flex gap-3">
-						<span>
-							<kbd className="rounded border border-border px-1 mr-1">↑↓</kbd>
-							选择
+				<div className="border-t border-border px-4 py-2">
+					<MetaRow className="justify-between">
+						<span className="flex items-center gap-3">
+							<span className="flex items-center gap-1.5">
+								<kbd className="rounded-[2px] border border-border bg-secondary/60 px-1 text-[10px]">↑↓</kbd>
+								选择
+							</span>
+							<DocDot />
+							<span className="flex items-center gap-1.5">
+								<kbd className="rounded-[2px] border border-border bg-secondary/60 px-1 text-[10px]">Enter</kbd>
+								跳转
+							</span>
+							<DocDot />
+							<span className="flex items-center gap-1.5">
+								<kbd className="rounded-[2px] border border-border bg-secondary/60 px-1 text-[10px]">⌘1-9</kbd>
+								跳第 N 条
+							</span>
 						</span>
-						<span>
-							<kbd className="rounded border border-border px-1 mr-1">Enter</kbd>
-							跳转
-						</span>
-						<span>
-							<kbd className="rounded border border-border px-1 mr-1">⌘1-9</kbd>
-							跳第 N 条
-						</span>
-					</span>
-					<span>{grouped.rows.length} 条结果</span>
+						<span className="tabular-nums">{grouped.rows.length} 条结果</span>
+					</MetaRow>
 				</div>
 			</DialogContent>
 		</Dialog>

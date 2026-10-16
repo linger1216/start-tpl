@@ -1,7 +1,18 @@
 import type { LogRow } from "#/components/modules/settings/settings-logs-table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
+import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
+
+/** 入参快照是 JSON 文本 —— 能解析就格式化渲染;解析不了的(脏数据/空)退回原样展示 */
+export function tryParseJson(input: string | null): unknown {
+	if (!input) return null;
+	try {
+		return JSON.parse(input);
+	} catch {
+		return null;
+	}
+}
 
 /**
  * 审计日志详情 —— 只读。
@@ -31,7 +42,7 @@ export function SettingsLogsDetail({
 					<Tag variant={row.status === 1 ? "secondary" : "destructive"}>{row.status === 1 ? "成功" : "失败"}</Tag>
 				) : null
 			}
-			meta={{ createdAt: row?.createTime ?? null }}
+			meta={row ? { id: row.id, createdAt: row.createTime } : null}
 		>
 			{row ? (
 				<>
@@ -69,7 +80,16 @@ export function SettingsLogsDetail({
 					) : null}
 					<div className="space-y-1 py-2">
 						<div className="text-xs font-medium text-muted-foreground">入参快照(写入前已脱敏)</div>
-						<pre className="code-block max-h-64 rounded-lg bg-muted/40 p-2.5 break-all">{row.input ?? "(无入参)"}</pre>
+						{(() => {
+							if (!row.input) return <p className="text-xs text-muted-foreground">(无入参)</p>;
+							const parsed = tryParseJson(row.input);
+							// JSON 请求体格式化成树看;纯文本 / 解析不了的原样展示
+							return parsed !== null ? (
+								<JsonBlock value={parsed} className="max-h-64 bg-muted/60 break-all" />
+							) : (
+								<pre className="code-block max-h-64 rounded-lg bg-muted/40 p-2.5 break-all">{row.input}</pre>
+							);
+						})()}
 					</div>
 				</>
 			) : null}

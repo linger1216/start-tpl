@@ -53,7 +53,7 @@ export function TaskCloseWorkflowDetail({
 			title={detail?.name ?? "流程模板"}
 			tag={detail?.builtin ? <Tag variant="secondary">内置</Tag> : undefined}
 			onEdit={onEdit}
-			meta={{ createdAt: detail?.createdAt, updatedAt: detail?.updatedAt }}
+			meta={detail ? { id: detail.id, createdAt: detail.createdAt, updatedAt: detail.updatedAt } : null}
 		>
 			{isPending || !detail ? (
 				<p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>

@@ -89,6 +89,7 @@ export function SettingsParametersForm({
 	}, [open, creating, row]);
 
 	const effectiveType = creating ? type : (row?.type ?? PARA_TYPE.STRING);
+	const effectiveRowId = row?.id ?? null;
 	const problem = validateParaValue(effectiveType, value);
 	const isJsonLike = effectiveType === PARA_TYPE.JSON;
 
@@ -153,7 +154,15 @@ export function SettingsParametersForm({
 								<Select
 									items={typeItems}
 									value={String(type)}
-									onValueChange={(next) => setType(Number(next) as ParaType)}
+									// 换类型时给一个该类型合法的默认值(如 bool → "true"、int → "1"),
+									// 否则旧值直接挂在新的校验上,保存键就会一直灰着
+									onValueChange={(next) => {
+										const nextType = Number(next) as ParaType;
+										setType(nextType);
+										if (validateParaValue(nextType, value) !== null) {
+											setValue(nextType === PARA_TYPE.BOOL ? "true" : nextType === PARA_TYPE.INT ? "1" : "");
+										}
+									}}
 								>
 									<SelectTrigger id="cfg-type" size="sm" className="w-full">
 										<SelectValue />
@@ -171,7 +180,28 @@ export function SettingsParametersForm({
 					) : null}
 
 					<DetailRow label="参数值" htmlFor="cfg-value">
-						{isJsonLike ? (
+						{effectiveType === PARA_TYPE.BOOL ? (
+							// 布尔参数:开关,不是打字 —— 要改的只有 true / false 两个可能
+							<Switch
+								aria-label="参数值(布尔)"
+								checked={value === "true"}
+								onCheckedChange={(checked) => setValue(checked ? "true" : "false")}
+							/>
+						) : effectiveType === PARA_TYPE.INT ? (
+							// 整数参数:数字输入 —— 键盘上/下步进 + 浏览器只收数字
+							<Input
+								id="cfg-value"
+								type="number"
+								inputMode="numeric"
+								min={0}
+								step={1}
+								value={value}
+								translate="no"
+								spellCheck={false}
+								className={`font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
+								onChange={(event) => setValue(event.target.value)}
+							/>
+						) : isJsonLike ? (
 							<Textarea
 								id="cfg-value"
 								value={value}
@@ -230,7 +260,9 @@ export function SettingsParametersForm({
 				</DialogBody>
 
 				<DialogFooter className="gap-2">
-					{row ? <DetailMeta meta={{ createdAt: row.createdAt, updatedAt: row.updatedAt }} /> : null}
+					<DetailMeta
+						meta={{ id: effectiveRowId, createdAt: row?.createdAt ?? null, updatedAt: row?.updatedAt ?? null }}
+					/>
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消
 					</Button>

@@ -24,7 +24,7 @@ export function SettingsDictionaryDetail({
 	return (
 		<DetailDialog
 			open={open}
-			meta={{ createdAt: row?.createTime ?? null, updatedAt: row?.updateTime ?? null }}
+			meta={row ? { id: row.id, createdAt: row.createTime, updatedAt: row.updateTime } : null}
 			onOpenChange={onOpenChange}
 			title={`字典详情 · ${row?.name ?? ""}`}
 			description={<span className="font-mono">{row?.code ?? ""}</span>}

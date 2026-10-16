@@ -152,7 +152,7 @@ export function SearchSelect<T extends string = string>({
 									onMouseEnter={() => setHighlight(i)}
 									className={cn(
 										"flex w-full items-center gap-1 rounded-lg px-1.5 py-1.5 text-left text-sm text-foreground transition-colors",
-										highlighted && "bg-muted/60",
+										highlighted && "bg-muted",
 										active && "font-medium",
 									)}
 								>

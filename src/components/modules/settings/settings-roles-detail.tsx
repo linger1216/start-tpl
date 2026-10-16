@@ -24,7 +24,7 @@ export function SettingsRolesDetail({
 	return (
 		<DetailDialog
 			open={open}
-			meta={{ createdAt: row?.createTime ?? null, updatedAt: row?.updateTime ?? null }}
+			meta={row ? { id: row.id, createdAt: row.createTime, updatedAt: row.updateTime } : null}
 			onOpenChange={onOpenChange}
 			title={`角色详情 · ${row?.name ?? ""}`}
 			description={row?.remark || "全局定义的角色 —— 谁有它记在「用户 → 角色」上"}

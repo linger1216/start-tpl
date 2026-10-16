@@ -187,7 +187,7 @@ function NavItem({
 		return (
 			<div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
 				<span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{node.name}</span>
-				<span className="h-px flex-1 bg-gradient-to-r from-border to-transparent" />
+				<span className="h-px flex-1 bg-linear-to-r from-border to-transparent" />
 			</div>
 		);
 	}

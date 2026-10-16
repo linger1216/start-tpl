@@ -10,7 +10,6 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
-import { Tag } from "#/components/ui/tag.tsx";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { asMenuType, MENU_TYPE_META, MENU_TYPES, type MenuType } from "#/lib/menu-spec";
 
@@ -173,10 +172,18 @@ export function SettingsMenusForm({
 				/>
 			</DetailRow>
 
-			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime , id: node.id}} /> : null}
+			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime, id: node.id }} /> : null}
 
 			{/* 动作行(三棵树统一):左 = 新增类,右 = 保存 / 还原 / 删除 —— 保存下面不再有别的东西 */}
-			<div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+			<div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+				<div className="flex flex-wrap items-center gap-2">
+					<ActionButton disabled={pending} onClick={onAddSibling}>
+						新增同级
+					</ActionButton>
+					<ActionButton disabled={pending} onClick={onAddChild}>
+						新增子节点
+					</ActionButton>
+				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
 						<Save className="size-3.5" />
@@ -186,6 +193,10 @@ export function SettingsMenusForm({
 						<Undo2 className="size-3.5" />
 						还原
 					</Button>
+					{/* 删除这种"记录级"危险动作推到最右、离保存远一点 */}
+					<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
+						删除
+					</ActionButton>
 				</div>
 			</div>
 		</div>

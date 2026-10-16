@@ -705,7 +705,7 @@ function ModuleGallery() {
 						</>
 					}
 					onEdit={() => setDetailDemo(false)}
-					meta={{ createdAt: "2026-09-21T09:12:00", updatedAt: "2026-09-23T14:05:00" }}
+					meta={{ id: "g-0001", createdAt: "2026-09-21T09:12:00", updatedAt: "2026-09-23T14:05:00" }}
 				>
 					{/* 字段**内联**写(不用 fields 数组封装):哪一行要特殊渲染就地决定 ——
 					    需要 form context / 重依赖的件才给签名卡,这里两种情况都没有,所以真跑 */}

@@ -1,3 +1,6 @@
+import { GripVertical } from "lucide-react";
+import { useState } from "react";
+
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { ActionButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
@@ -17,6 +20,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { useStableKeys } from "#/hooks/use-stable-keys";
+import { cn } from "#/lib/utils";
 import type { SettingsDictRow } from "./settings-dictionary-table";
 
 /** 编辑弹窗的表单值 */
@@ -47,7 +51,7 @@ export function dictToForm(row: SettingsDictRow): DictFormValues {
  * 字典编辑弹窗 —— 字典本身(名称 / 编码 / 说明 / 启停)+ **字典项表**。
  *
  * 字典项就是 `items = [{label, value}]`:label 是给人看的中文,value 是落库/程序里用的取值。
- * 数组顺序即下拉顺序,所以给了上移/下移(小字典,不用拖拽)。
+ * 数组顺序即下拉顺序,所以字典项列表行首有拖拽把手 —— **按住把手拖动行**来调整顺序。
  */
 export function SettingsDictionaryForm({
 	open,
@@ -78,14 +82,17 @@ export function SettingsDictionaryForm({
 		onChange({ ...values, items });
 	}
 
-	function move(index: number, delta: number) {
-		const target = index + delta;
-		if (target < 0 || target >= values.items.length) return;
+	function reorder(from: number, to: number) {
+		if (from === to || from < 0 || to < 0 || from >= values.items.length || to >= values.items.length) return;
 		const items = [...values.items];
-		const [moved] = items.splice(index, 1);
-		if (moved) items.splice(target, 0, moved);
+		const [moved] = items.splice(from, 1);
+		if (moved) items.splice(to, 0, moved);
 		onChange({ ...values, items });
 	}
+
+	// 拖拽排序(HTML5 DnD,列设置面板同款):整行 draggable,拖过谁谁高亮,松手落在那一行
+	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const [overIndex, setOverIndex] = useState<number | null>(null);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,7 +166,35 @@ export function SettingsDictionaryForm({
 						</div>
 						<div className="space-y-1.5">
 							{values.items.map((item, index) => (
-								<div key={rowKeys[index]} className="flex flex-wrap items-center gap-1.5">
+								// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手、两个输入框与删除按钮
+								<div
+									key={rowKeys[index]}
+									draggable
+									onDragStart={() => setDragIndex(index)}
+									onDragEnd={() => {
+										setDragIndex(null);
+										setOverIndex(null);
+									}}
+									onDragOver={(event) => {
+										event.preventDefault();
+										setOverIndex(index);
+									}}
+									onDrop={(event) => {
+										event.preventDefault();
+										if (dragIndex !== null) reorder(dragIndex, index);
+										setDragIndex(null);
+										setOverIndex(null);
+									}}
+									className={cn(
+										"flex flex-wrap items-center gap-1.5 rounded-md px-1.5 py-0.5",
+										dragIndex === index && "opacity-50",
+										// 拖过的目标行高亮一次(column-toggle 面板同款)
+										overIndex === index && dragIndex !== null && dragIndex !== index
+											? "bg-brand-faint ring-1 ring-primary/40"
+											: "",
+									)}
+								>
+									<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
 									<Input
 										value={item.label}
 										aria-label={`第 ${index + 1} 项的显示名`}
@@ -179,20 +214,6 @@ export function SettingsDictionaryForm({
 										className="h-8 w-44 font-mono text-xs"
 										onChange={(event) => setItem(index, { value: event.target.value })}
 									/>
-									<ActionButton
-										aria-label={`第 ${index + 1} 项上移`}
-										disabled={index === 0}
-										onClick={() => move(index, -1)}
-									>
-										上移
-									</ActionButton>
-									<ActionButton
-										aria-label={`第 ${index + 1} 项下移`}
-										disabled={index === values.items.length - 1}
-										onClick={() => move(index, 1)}
-									>
-										下移
-									</ActionButton>
 									<ActionButton
 										aria-label={`删除第 ${index + 1} 项`}
 										tone="danger"
@@ -218,7 +239,9 @@ export function SettingsDictionaryForm({
 				) : null}
 
 				<DialogFooter className="shrink-0 gap-2">
-					{editing ? <DetailMeta meta={{ createdAt: editing.createTime, updatedAt: editing.updateTime }} /> : null}
+					{editing ? (
+						<DetailMeta meta={{ id: editing.id, createdAt: editing.createTime, updatedAt: editing.updateTime }} />
+					) : null}
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消
 					</Button>

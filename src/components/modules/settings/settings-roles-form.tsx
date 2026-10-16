@@ -318,7 +318,7 @@ export function SettingsRolesForm({
 				{/* 页脚只放时间行;**没有时间可显示就整条不渲染** */}
 				{role ? (
 					<DialogFooter className="mt-0">
-						<DetailMeta meta={{ createdAt: role.createTime, updatedAt: role.updateTime }} />
+						<DetailMeta meta={{ id: role.id, createdAt: role.createTime, updatedAt: role.updateTime }} />
 					</DialogFooter>
 				) : null}
 			</DialogContent>
