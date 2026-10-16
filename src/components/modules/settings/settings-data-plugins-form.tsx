@@ -132,7 +132,13 @@ export function SettingsDataPluginsForm({
 	}
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
+		<Dialog
+			open={open}
+			onOpenChange={(next) => {
+				if (pending) return;
+				onOpenChange(next);
+			}}
+		>
 			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{creating ? "新增值域插件" : "修改值域插件"}</DialogTitle>
@@ -261,14 +267,14 @@ export function SettingsDataPluginsForm({
 				</DialogBody>
 
 				{submitProblem ? <p className="text-xs text-destructive">{submitProblem}</p> : null}
-				{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
 
 				<DialogFooter>
+					{creating ? null : <DetailMeta meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }} />}
 					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
 						取消
 					</Button>
 					<Button type="button" disabled={Boolean(submitProblem) || pending} onClick={handleSubmit}>
-						{pending ? "保存中…" : creating ? "新增" : "保存"}
+						{pending ? "保存中…" : creating ? "创建" : "保存"}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

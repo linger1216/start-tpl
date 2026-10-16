@@ -1,7 +1,7 @@
 import { actionsColumn, timeColumn } from "#/components/modules/shared/table-kit";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
+import { Tag } from "#/components/ui/tag";
+import { TagList } from "#/components/ui/tag-list";
 import { createAppColumnHelper } from "#/lib/table";
 
 /**
@@ -65,10 +65,10 @@ export function userColumns({
 			size: 200,
 			cell: (ctx) => {
 				const list = ctx.getValue();
-				// 多值一律走 BadgeList —— 别自己拿 span 拼一个"长得像徽章"的东西:
+				// 多值一律走 TagList —— 别自己拿 span 拼一个"长得像徽章"的东西:
 				// 那样字号 / 圆角 / 配色会各写各的,和详情页 / 别处的徽章对不上。
 				if (list.length === 0) return <span className="text-xs text-muted-foreground">未加入部门</span>;
-				return <BadgeList values={list} layout="wrap" color="stable" />;
+				return <TagList values={list} layout="wrap" color="stable" />;
 			},
 		}),
 		columnHelper.accessor("roleNames", {
@@ -77,16 +77,16 @@ export function userColumns({
 			cell: (ctx) => {
 				const list = ctx.getValue();
 				if (list.length === 0) return <span className="text-xs text-warn-fg">未分配(看不到任何菜单)</span>;
-				return <BadgeList values={list} layout="wrap" color="stable" />;
+				return <TagList values={list} layout="wrap" color="stable" />;
 			},
 		}),
 		columnHelper.accessor("emailVerified", {
 			header: "邮箱已验证",
 			size: 100,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
+				<Tag variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
 					{ctx.getValue() ? "已验证" : "未验证"}
-				</Badge>
+				</Tag>
 			),
 		}),
 		columnHelper.accessor("image", {

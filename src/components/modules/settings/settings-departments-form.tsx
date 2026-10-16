@@ -146,8 +146,11 @@ export function SettingsDepartmentsForm({
 							</DetailRow>
 						</div>
 
-						{/* 字段区的动作:保存 / 还原在左,删除这种"记录级"危险动作推到最右、离保存远一点 */}
+						{/* 时间行:与菜单 / 标签详情同序 —— 字段 → 时间 → 动作行 */}
+						{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
 					</div>
+
+					{/* 动作行(三棵树统一):保存 / 还原在右,删除这种"记录级"危险动作推到最右、离保存远一点 */}
 					<div className="flex shrink-0 items-center justify-end gap-2 pt-3">
 						<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
 							<Save className="size-3.5" />
@@ -180,11 +183,6 @@ export function SettingsDepartmentsForm({
 					</div>
 				</TabsContent>
 			</Tabs>
-
-			{/* 页脚只放时间行(每个 tab 自己的动作在 tab 底部) */}
-			<div className="shrink-0">
-				{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
-			</div>
 		</div>
 	);
 }

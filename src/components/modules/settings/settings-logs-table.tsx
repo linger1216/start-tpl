@@ -1,5 +1,5 @@
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 与 `trpc.log.list` 的出参一一对应(`sys_log` 的列,一个不少) */
@@ -60,7 +60,7 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 			header: "结果",
 			size: 90,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() === 1 ? "secondary" : "destructive"}>{statusText(ctx.getValue())}</Badge>
+				<Tag variant={ctx.getValue() === 1 ? "secondary" : "destructive"}>{statusText(ctx.getValue())}</Tag>
 			),
 		}),
 		columnHelper.accessor("target", {

@@ -50,21 +50,26 @@ function StatCell({
 	Icon: LucideIcon;
 	tone: string;
 }) {
+	/* tone 是标准化的 "bg-hue-X-soft text-hue-X-fg" —— 从中取出色相名,
+	   派生 DESIGN.md §5.3 规定的「左缘 3px hue 标记条」(低饱和,不新增颜色)。 */
+	const hue = /hue-(\w+)-soft/.exec(tone)?.[1];
+
 	return (
 		<div
 			className={cn(
-				"flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5",
+				"flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5",
 				"transition-colors duration-200 ease-brand",
 				// 悬浮:这条 1px 边框刷成亮蓝 —— 与 `ui/card.tsx` 完全一致
 				"hover:border-primary",
 			)}
+			style={hue ? { borderLeft: `3px solid var(--hue-${hue})` } : undefined}
 		>
-			<div className={cn("flex size-7 shrink-0 items-center justify-center rounded-lg", tone)}>
-				<Icon className="size-3.5" />
+			<div className={cn("flex size-9 shrink-0 items-center justify-center rounded-md", tone)}>
+				<Icon className="size-4" />
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-px">
 				<div className="flex items-baseline gap-1">
-					<span className="font-heading text-xl leading-none font-medium tracking-tight tabular-nums text-foreground">
+					<span className="font-heading text-[28px] leading-none font-bold tracking-tight tabular-nums text-foreground">
 						{typeof value === "number" ? value.toLocaleString() : value}
 					</span>
 					{unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}

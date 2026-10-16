@@ -185,7 +185,7 @@ export function TaskCloseCardsPage() {
 							<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-background p-5 transition-[border-color] hover:border-primary/50">
 								{/* 顶行:图标块(左) + 状态徽章(右) —— 与「流程模板」卡片同形 */}
 								<div className="mb-4 flex items-start justify-between gap-2">
-									<div className="flex size-9 items-center justify-center rounded-sm bg-primary/10 text-primary">
+									<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
 										<ClipboardList className="size-[18px]" />
 									</div>
 									{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}

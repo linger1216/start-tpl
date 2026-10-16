@@ -6,11 +6,11 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
+import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
@@ -175,15 +175,15 @@ export function SettingsProfilePage() {
 							<DetailRow label="邮箱">
 								<span className="mr-2">{profile.email}</span>
 								{profile.emailVerified ? (
-									<Badge variant="secondary" className="gap-1">
+									<Tag variant="secondary" className="gap-1">
 										<BadgeCheck className="size-3" />
 										已验证
-									</Badge>
+									</Tag>
 								) : (
-									<Badge variant="outline" className="gap-1 text-muted-foreground">
+									<Tag variant="outline" className="gap-1 text-muted-foreground">
 										<MailWarning className="size-3" />
 										未验证
-									</Badge>
+									</Tag>
 								)}
 							</DetailRow>
 							<DetailRow label="角色">

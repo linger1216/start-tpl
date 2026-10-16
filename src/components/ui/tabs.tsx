@@ -1,7 +1,7 @@
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { createContext, useContext } from "react";
 
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { cn } from "#/lib/utils";
 
 /**
@@ -38,7 +38,7 @@ const LIST_STYLE: Record<TabVariant, string> = {
 	// 底部 1px 浅灰基线:所有 tab 共享的视觉基线
 	underline: "inline-flex max-w-full flex-wrap items-stretch gap-0 border-b border-border",
 	// 浅灰底轨道 + 内边距,选中项浮在轨道上(圆角一律 6px 阶,与全站控件统一)
-	segmented: "inline-flex max-w-full items-center gap-0.5 rounded-md bg-muted p-0.5",
+	segmented: "inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md bg-muted p-0.5",
 	// 与内容区相接的文件夹页签(页签间只留 2px 缝,整排读作一条基线上的同一组)
 	card: "inline-flex max-w-full flex-wrap items-end gap-0.5 border-b border-border",
 };
@@ -117,8 +117,8 @@ export function TabsTrigger({
 		>
 			{children}
 			{typeof count === "number" ? (
-				// 计数是显示值 → 用 Badge(尺寸 / 配色照旧靠 className 覆盖)
-				<Badge
+				// 计数是显示值 → 用 Tag(尺寸 / 配色照旧靠 className 覆盖)
+				<Tag
 					variant="secondary"
 					className={cn(
 						"h-4.5 min-w-5 rounded-full bg-muted px-1.5 text-xs font-semibold text-muted-foreground tabular-nums transition-colors duration-200",
@@ -126,7 +126,7 @@ export function TabsTrigger({
 					)}
 				>
 					{count}
-				</Badge>
+				</Tag>
 			) : null}
 
 			{/* 下划线形态专属:双层 2px 下划线(浅灰 hover 提示线 + 蓝色选中线) */}

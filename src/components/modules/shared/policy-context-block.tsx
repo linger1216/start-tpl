@@ -17,7 +17,7 @@
  */
 import { Building2, ChevronRight, User } from "lucide-react";
 
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { cn } from "#/lib/utils";
 
 type PolicyContextBlockProps = {
@@ -70,15 +70,15 @@ export function PolicyContextBlock({
 				<span className="text-foreground">{userName || "—"}</span>
 			</Row>
 
-			<Row icon={<Badge className="bg-hue-teal-soft text-hue-teal-fg text-xs">角色</Badge>} label={`${roleCount} 个`}>
+			<Row icon={<Tag className="bg-hue-teal-soft text-hue-teal-fg text-xs">角色</Tag>} label={`${roleCount} 个`}>
 				{roleCount === 0 ? (
 					<span className="text-muted-foreground">—</span>
 				) : (
 					<div className="flex flex-wrap gap-1.5">
 						{roles.map((name) => (
-							<Badge key={name} variant="secondary" className="text-xs">
+							<Tag key={name} variant="secondary" className="text-xs">
 								{name}
-							</Badge>
+							</Tag>
 						))}
 					</div>
 				)}
@@ -93,10 +93,10 @@ export function PolicyContextBlock({
 							<span key={`anc-${dept.name}`} className="inline-flex items-center gap-1">
 								{index > 0 ? <ChevronRight className="size-3 text-muted-foreground/60" /> : null}
 								{dept.mine ? (
-									<Badge className="bg-hue-amber-soft text-hue-amber-fg border-hue-amber-border text-xs font-medium">
+									<Tag className="bg-hue-amber-soft text-hue-amber-fg border-hue-amber-border text-xs font-medium">
 										{dept.name}
 										<span className="ml-1 text-xs font-normal opacity-80">我所属</span>
-									</Badge>
+									</Tag>
 								) : (
 									<span className="text-foreground/80">{dept.name}</span>
 								)}
@@ -112,7 +112,7 @@ export function PolicyContextBlock({
 				) : (
 					<div className="flex flex-wrap gap-1.5">
 						{departmentChildren.map((dept) => (
-							<Badge
+							<Tag
 								key={`${dept.name}-${dept.mine ? "mine" : "sub"}`}
 								className={cn(
 									"text-xs font-medium",
@@ -123,7 +123,7 @@ export function PolicyContextBlock({
 							>
 								{dept.name}
 								{dept.mine ? <span className="ml-1 text-xs font-normal opacity-80">我所属</span> : null}
-							</Badge>
+							</Tag>
 						))}
 					</div>
 				)}

@@ -1,6 +1,6 @@
-import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
 
 /**
@@ -52,9 +52,9 @@ export function pluginColumns({
 					<div className="flex items-center gap-1.5">
 						<span className="truncate text-xs font-medium text-foreground">{ctx.getValue()}</span>
 						{ctx.row.original.kind === "builtin" ? (
-							<Badge variant="outline" className="text-xs">
+							<Tag variant="outline" className="text-xs">
 								内置
-							</Badge>
+							</Tag>
 						) : null}
 					</div>
 					<span translate="no" className="truncate font-mono text-xs text-muted-foreground">
@@ -80,11 +80,11 @@ export function pluginColumns({
 			size: 84,
 			cell: (ctx) =>
 				ctx.row.original.kind === "builtin" ? (
-					<Badge variant="secondary" className="text-xs">
+					<Tag variant="secondary" className="text-xs">
 						随代码
-					</Badge>
+					</Tag>
 				) : (
-					<EnabledBadge status={ctx.getValue()} />
+					<EnabledTag status={ctx.getValue()} />
 				),
 		}),
 		columnHelper.accessor("remark", {

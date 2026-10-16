@@ -26,11 +26,10 @@ import { useQuery } from "@tanstack/react-query";
 import { UserCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
+import { Tag } from "#/components/ui/tag";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -138,9 +137,9 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 	return (
 		<div className="flex items-center gap-1">
 			{from ? (
-				<Badge variant="outline" title={`原本身份:${from.name}`}>
+				<Tag variant="outline" title={`原本身份:${from.name}`}>
 					切换身份中
-				</Badge>
+				</Tag>
 			) : null}
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger
@@ -181,7 +180,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 												className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 hover:bg-hover disabled:cursor-default disabled:opacity-60"
 											>
 												<span className="min-w-0 flex-1 truncate text-sm">{user.name || user.email}</span>
-												{isSelf ? <Badge variant="outline">当前</Badge> : null}
+												{isSelf ? <Tag variant="outline">当前</Tag> : null}
 												{/* 姓名 + 角色,同一行;不要邮箱 */}
 												<span className="shrink-0 truncate text-xs text-muted-foreground">
 													{user.roleNames.join(" / ") || "未分配角色"}

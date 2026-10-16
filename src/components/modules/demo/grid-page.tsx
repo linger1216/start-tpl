@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Grid3x3, MapPin, UserRoundCheck } from "lucide-react";
+import { CheckCheck, Grid3x3, MapPin, Plus, UserRoundCheck } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -197,7 +197,7 @@ export function GridPage() {
 						<RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
 						{canAdd ? (
 							<Button size="sm" onClick={() => setCreating(true)}>
-								<Grid3x3 className="size-3.5" />
+								<Plus className="size-3.5" />
 								新增网格
 							</Button>
 						) : null}

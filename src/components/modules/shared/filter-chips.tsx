@@ -2,24 +2,24 @@ import type { LucideIcon } from "lucide-react";
 import { Check, Filter, X } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Badge } from "#/components/ui/badge";
-import { BADGE_THEMES } from "#/components/ui/badge-list";
+import { Tag } from "#/components/ui/tag";
+import { TAG_THEMES } from "#/components/ui/tag-list";
 import { cn } from "#/lib/utils";
 
 /**
  * 列表页快速筛选条 —— **展示件**(见 `doc/界面约定.md` 备选表);当前唯一调用方是工作台的完整业务页骨架示例。
  *
  * 为什么单独封装:此前每个页面都手写"一排圆角小按钮",既像 badge 又没有选中态、配色也只有一种。
- * 这里把它收成一个受控组件:配色统一取自项目既有的分类色板 `BADGE_THEMES`
+ * 这里把它收成一个受控组件:配色统一取自项目既有的分类色板 `TAG_THEMES`
  * (见 `components/ui/badge-list.tsx`,不新造颜色字面量),组内选项按调色板轮转上色。
  *
  * 用法(受控,状态留在编排壳):
  *   <FilterChipBar groups={GROUPS} active={active} onSelect={handleSelect} onClearAll={clearAll} />
  */
 
-type FilterChipTone = keyof typeof BADGE_THEMES;
+type FilterChipTone = keyof typeof TAG_THEMES;
 
-/** 组图标的着色:与 `BADGE_THEMES` 同一色系(走点缀色 token,不再是高饱和的 `*-600`) */
+/** 组图标的着色:与 `TAG_THEMES` 同一色系(走点缀色 token,不再是高饱和的 `*-600`) */
 const GROUP_ICON_TONE: Record<FilterChipTone, string> = {
 	brand: "text-primary",
 	rainbow: "text-hue-violet-fg",
@@ -41,14 +41,14 @@ type FilterChipGroup = {
 	key: string;
 	label: string;
 	Icon?: LucideIcon;
-	/** 调色板:组内选项按 `BADGE_THEMES[tone]` 轮转取色 */
+	/** 调色板:组内选项按 `TAG_THEMES[tone]` 轮转取色 */
 	tone: FilterChipTone;
 	options: readonly FilterChipOption[];
 };
 
 /** 组内第 i 个选项的"选中态"配色 */
 const activeChipClass = (tone: FilterChipTone, index: number) => {
-	const palette = BADGE_THEMES[tone];
+	const palette = TAG_THEMES[tone];
 	return palette[index % palette.length];
 };
 
@@ -124,8 +124,8 @@ export function FilterChipBar({
 											{on ? <Check className="size-3" /> : null}
 											{option.value}
 											{typeof option.count === "number" ? (
-												// 计数也是显示值 → 用 Badge,别手拼小药丸(两态配色靠 className 覆盖)
-												<Badge
+												// 计数也是显示值 → 用 Tag,别手拼小药丸(两态配色靠 className 覆盖)
+												<Tag
 													variant="secondary"
 													className={cn(
 														"ml-0.5 h-4 px-1.5 text-xs tabular-nums",
@@ -133,7 +133,7 @@ export function FilterChipBar({
 													)}
 												>
 													{option.count}
-												</Badge>
+												</Tag>
 											) : null}
 										</button>
 									);
@@ -180,7 +180,7 @@ export function ActiveFilterPills({
 					key={item.key}
 					className={cn(
 						"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-						BADGE_THEMES[item.tone][0],
+						TAG_THEMES[item.tone][0],
 					)}
 				>
 					<span className="opacity-70">{item.groupLabel}</span>

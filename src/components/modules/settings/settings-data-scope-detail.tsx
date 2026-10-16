@@ -1,21 +1,20 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 import { policyStatusMeta } from "#/lib/data-scope-spec";
-import { formatLocalMinute } from "#/lib/time";
 import { type DataScopeRow, ruleShapeText } from "./settings-data-scope-table";
 
 /**
  * 三态徽章 —— 数据范围规则的状态是三态(0/2/1 = 停用/启用/上线),与「启用 / 停用」两态徽章
- * (`EnabledBadge`)不是一回事;共用会**把「上线」错标成「启用」、「启用」错标成「停用」**。
+ * (`EnabledTag`)不是一回事;共用会**把「上线」错标成「启用」、「启用」错标成「停用」**。
  * 与表格列用同一份 `policyStatusMeta()`,标签与色调都从这一处拿。
  */
 function StatusBadge({ status }: { status: number }) {
 	const meta = policyStatusMeta(status);
 	return (
-		<Badge className={`text-xs ${meta.tone}`} title={meta.hint}>
+		<Tag className={`text-xs ${meta.tone}`} title={meta.hint}>
 			{meta.label}
-		</Badge>
+		</Tag>
 	);
 }
 
@@ -42,7 +41,7 @@ export function SettingsDataScopeDetail({
 			meta={row}
 			onOpenChange={onOpenChange}
 			title={`规则详情 · ${row?.subjectLabel ?? ""}`}
-			badge={row ? <StatusBadge status={row.status} /> : null}
+			tag={row ? <StatusBadge status={row.status} /> : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (
@@ -55,17 +54,17 @@ export function SettingsDataScopeDetail({
 					<DetailRow label="主体">
 						<div className="flex flex-wrap items-center gap-1.5">
 							<span className="text-sm">{row.subjectLabel}</span>
-							<Badge translate="no" variant="outline" className="font-mono text-xs">
+							<Tag translate="no" variant="outline" className="font-mono text-xs">
 								{row.subject}
-							</Badge>
+							</Tag>
 						</div>
 					</DetailRow>
 					<DetailRow label="资源表">
 						<div className="flex flex-wrap items-center gap-1.5">
 							<span className="text-sm">{row.resourceLabel}</span>
-							<Badge translate="no" variant="outline" className="font-mono text-xs">
+							<Tag translate="no" variant="outline" className="font-mono text-xs">
 								{row.resource}
-							</Badge>
+							</Tag>
 						</div>
 					</DetailRow>
 					<DetailRow label="判据">
@@ -77,9 +76,9 @@ export function SettingsDataScopeDetail({
 						{row.column ? (
 							<div className="flex flex-wrap items-center gap-1.5">
 								<span className="text-sm">{row.columnLabel}</span>
-								<Badge translate="no" variant="outline" className="font-mono text-xs">
+								<Tag translate="no" variant="outline" className="font-mono text-xs">
 									{row.column}
-								</Badge>
+								</Tag>
 							</div>
 						) : (
 							<span className="text-sm text-muted-foreground">
@@ -91,9 +90,9 @@ export function SettingsDataScopeDetail({
 						{row.pluginKey ? (
 							<div className="flex flex-wrap items-center gap-1.5">
 								<span className="text-sm">{row.pluginLabel}</span>
-								<Badge translate="no" variant="outline" className="font-mono text-xs">
+								<Tag translate="no" variant="outline" className="font-mono text-xs">
 									{row.pluginKey}
-								</Badge>
+								</Tag>
 							</div>
 						) : (
 							<span className="text-sm text-muted-foreground">不用插件</span>
@@ -102,8 +101,7 @@ export function SettingsDataScopeDetail({
 					<DetailRow label="说明">
 						<span className="text-sm">{row.remark || "—"}</span>
 					</DetailRow>
-					<DetailRow label="创建时间">{formatLocalMinute(row.createdAt) || "—"}</DetailRow>
-					<DetailRow label="更新时间">{formatLocalMinute(row.updatedAt) || "—"}</DetailRow>
+					{/* 创建 / 更新时间由 DetailDialog 的 meta 统一渲染 —— 别在这里重复(files-detail 同款坑) */}
 				</div>
 			) : null}
 		</DetailDialog>

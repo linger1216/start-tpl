@@ -1,5 +1,5 @@
-import { Badge } from "#/components/ui/badge";
 import { Seal } from "#/components/ui/seal";
+import { Tag } from "#/components/ui/tag";
 import { priorityLabelOf, type TaskPriority } from "#/lib/task-close-spec";
 import { cn } from "#/lib/utils";
 
@@ -41,10 +41,10 @@ const PRIORITY_DOT: Record<TaskPriority, string> = {
 /** 描边胶囊 + 圆点(优先级沿用) */
 function DotBadge({ dot, label, className }: { dot: string; label: string; className?: string }) {
 	return (
-		<Badge variant="outline" className={cn("gap-1.5 text-muted-foreground", className)}>
+		<Tag variant="outline" className={cn("gap-1.5 text-muted-foreground", className)}>
 			<span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", dot)} />
 			{label}
-		</Badge>
+		</Tag>
 	);
 }
 

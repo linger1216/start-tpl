@@ -1,8 +1,7 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledBadge } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
-import { formatLocalMinute } from "#/lib/time";
+import { Tag } from "#/components/ui/tag";
 import type { PluginRow } from "./settings-data-plugins-table";
 
 /**
@@ -29,14 +28,14 @@ export function SettingsDataPluginsDetail({
 			meta={row}
 			onOpenChange={onOpenChange}
 			title={`插件详情 · ${row?.label ?? ""}`}
-			badge={
+			tag={
 				row ? (
 					row.kind === "builtin" ? (
-						<Badge variant="outline" className="text-xs">
+						<Tag variant="outline" className="text-xs">
 							内置
-						</Badge>
+						</Tag>
 					) : (
-						<EnabledBadge status={row.status} />
+						<EnabledTag status={row.status} />
 					)
 				) : null
 			}
@@ -54,8 +53,7 @@ export function SettingsDataPluginsDetail({
 					<DetailRow label="说明">
 						<span className="text-sm">{row.remark || "—"}</span>
 					</DetailRow>
-					<DetailRow label="创建时间">{formatLocalMinute(row.createdAt) || "—"}</DetailRow>
-					<DetailRow label="更新时间">{formatLocalMinute(row.updatedAt) || "—"}</DetailRow>
+					{/* 创建 / 更新时间由 DetailDialog 的 meta 统一渲染 —— 别在这里重复(files-detail 同款坑) */}
 					{row.kind === "custom" ? (
 						<div className="space-y-1.5 pt-2">
 							<div className="text-xs font-medium text-muted-foreground">输出值({row.outputValues.length} 行)</div>

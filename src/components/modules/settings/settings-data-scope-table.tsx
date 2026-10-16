@@ -1,6 +1,6 @@
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
 import { createAppColumnHelper } from "#/lib/table";
 
@@ -86,9 +86,9 @@ export function dataScopeColumns({
 				return (
 					<div className="flex min-w-0 flex-col gap-0.5 whitespace-normal break-words">
 						<span className="text-xs font-medium text-foreground">{ctx.getValue()}</span>
-						<Badge className={`w-fit text-xs ${SUBJECT_TONE[kind] ?? ""}`} translate="no">
+						<Tag className={`w-fit text-xs ${SUBJECT_TONE[kind] ?? ""}`} translate="no">
 							{ctx.row.original.subject}
-						</Badge>
+						</Tag>
 					</div>
 				);
 			},
@@ -123,9 +123,9 @@ export function dataScopeColumns({
 				const row = ctx.row.original;
 				if (!row.pluginKey) {
 					return (
-						<Badge variant="outline" className="text-xs">
+						<Tag variant="outline" className="text-xs">
 							不用插件
-						</Badge>
+						</Tag>
 					);
 				}
 				return (
@@ -144,9 +144,9 @@ export function dataScopeColumns({
 			cell: (ctx) => {
 				const meta = policyStatusMeta(Number(ctx.getValue()));
 				return (
-					<Badge className={`text-xs ${meta.tone}`} title={meta.hint}>
+					<Tag className={`text-xs ${meta.tone}`} title={meta.hint}>
 						{meta.label}
-					</Badge>
+					</Tag>
 				);
 			},
 		}),

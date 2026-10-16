@@ -8,6 +8,7 @@ import { NameSeal } from "#/components/modules/task-close/task-close-badge";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { ActionIconButton } from "#/components/ui/action-button";
+import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useFileUpload } from "#/hooks/use-file-upload";
@@ -249,12 +250,11 @@ export function TaskCloseComments({
 										</ActionIconButton>
 									) : null}
 								</div>
-								{/* 驳回原因走「批注」皮(左红竖线 + 批注小标);普通评论是正文 */}
+								{/* 驳回原因走「批注」Alert(左红竖线 + 批注小标);普通评论是正文 */}
 								{item.content.startsWith("驳回原因:") ? (
-									<div className="mt-1 border-l-2 border-seal/60 pl-2.5">
-										<span className="text-[10px] font-medium tracking-[0.05em] text-seal-fg">批注</span>
-										<p className="mt-0.5 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
-									</div>
+									<Alert variant="danger" title="批注" className="mt-1">
+										{item.content}
+									</Alert>
 								) : (
 									<p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
 								)}

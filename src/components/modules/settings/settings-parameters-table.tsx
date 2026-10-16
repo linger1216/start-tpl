@@ -1,5 +1,5 @@
-import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { Tag } from "#/components/ui/tag";
 import { PARA_TYPE, PARA_TYPE_META, type ParaType } from "#/lib/para-spec";
 import { createAppColumnHelper } from "#/lib/table";
 
@@ -81,9 +81,9 @@ export function parameterColumns({
 			sortFn: "text",
 			size: 130,
 			cell: (ctx) => (
-				<Badge variant="secondary" className="text-xs">
+				<Tag variant="secondary" className="text-xs">
 					{ctx.getValue()}
-				</Badge>
+				</Tag>
 			),
 		}),
 		columnHelper.accessor("value", {
@@ -99,21 +99,21 @@ export function parameterColumns({
 			header: "类型",
 			size: 100,
 			cell: (ctx) => (
-				<Badge className={`text-xs ${TYPE_TONE[ctx.getValue()]}`}>{PARA_TYPE_META[ctx.getValue()].label}</Badge>
+				<Tag className={`text-xs ${TYPE_TONE[ctx.getValue()]}`}>{PARA_TYPE_META[ctx.getValue()].label}</Tag>
 			),
 		}),
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
+			cell: (ctx) => <EnabledTag status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("editable", {
 			header: "可编辑",
 			size: 96,
 			cell: (ctx) => (
-				<Badge variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
+				<Tag variant={ctx.getValue() ? "secondary" : "outline"} className="text-xs">
 					{ctx.getValue() ? "可改" : "内置只读"}
-				</Badge>
+				</Tag>
 			),
 		}),
 		columnHelper.accessor("remark", {

@@ -105,7 +105,7 @@ export function SettingsDataPluginsPreviewDialog({
 				</div>
 				<DialogFooter>
 					<RefreshButton busy={testQuery.isFetching} onClick={() => void testQuery.refetch()} />
-					<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+					<Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
 						关闭
 					</Button>
 				</DialogFooter>

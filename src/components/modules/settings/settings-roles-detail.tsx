@@ -1,7 +1,7 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledBadge } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 import type { RoleRow } from "./settings-roles-table";
 
 /**
@@ -28,7 +28,7 @@ export function SettingsRolesDetail({
 			onOpenChange={onOpenChange}
 			title={`角色详情 · ${row?.name ?? ""}`}
 			description={row?.remark || "全局定义的角色 —— 谁有它记在「用户 → 角色」上"}
-			badge={row ? <EnabledBadge status={row.status} /> : null}
+			tag={row ? <EnabledTag status={row.status} /> : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (
@@ -44,9 +44,9 @@ export function SettingsRolesDetail({
 					</DetailRow>
 					{/* 派生值(不是表里的列):用胶囊形状区分,别和真实字段混成一样 */}
 					<DetailRow label="分配用户数">
-						<Badge variant="secondary" className="text-xs tabular-nums">
+						<Tag variant="secondary" className="text-xs tabular-nums">
 							{row.memberCount} 人
-						</Badge>
+						</Tag>
 					</DetailRow>
 					<DetailRow label="说明">
 						<span className="text-sm">{row.remark || "—"}</span>

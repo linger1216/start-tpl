@@ -4,7 +4,7 @@ import { NAV_ICON_MAP } from "#/components/layout/nav-config";
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { useTreePrefs } from "#/hooks/use-para-prefs";
 import { recordIdFromMenuDetailPath } from "#/lib/menu-detail-path";
 import { MENU_TYPE } from "#/lib/menu-spec";
@@ -61,23 +61,23 @@ export function SettingsMenusTree({
 						{Icon ? <Icon className="size-3.5 shrink-0 text-muted-foreground" /> : null}
 						<span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
 						{Number(node.type) !== MENU_TYPE.BUTTON && recordIdFromMenuDetailPath(node.path) ? (
-							<Badge variant="outline" className="px-1.5 text-xs text-primary">
+							<Tag variant="outline" className="px-1.5 text-xs text-primary">
 								参数化
-							</Badge>
+							</Tag>
 						) : null}
 						{Number(node.type) === MENU_TYPE.BUTTON ? (
-							<Badge variant="outline" className="px-1.5 text-xs text-hue-violet-fg">
+							<Tag variant="outline" className="px-1.5 text-xs text-hue-violet-fg">
 								按钮
-							</Badge>
+							</Tag>
 						) : null}
 						{Number(node.type) === MENU_TYPE.BUTTON && node.perm ? (
 							<span className="max-w-40 truncate font-mono text-xs text-muted-foreground/70">{node.perm}</span>
 						) : null}
 						{node.visible === 0 ? (
-							<Badge variant="outline" className="gap-1 px-1.5 text-xs text-muted-foreground">
+							<Tag variant="outline" className="gap-1 px-1.5 text-xs text-muted-foreground">
 								<EyeOff className="size-3" />
 								隐藏
-							</Badge>
+							</Tag>
 						) : null}
 						{/*
 						  ⚠️ 按钮行**不显示 `path`**:按钮的 `path` 是 `#perm/<权限码>` —— 那只是为了让

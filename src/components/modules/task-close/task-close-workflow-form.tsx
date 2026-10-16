@@ -390,7 +390,7 @@ export function TaskCloseWorkflowForm({
 					</div>
 				</DialogBody>
 				<DialogFooter>
-					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
 						取消
 					</Button>
 					<Button

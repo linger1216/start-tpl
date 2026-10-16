@@ -2,9 +2,9 @@ import { KeyRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
+import { Tag } from "#/components/ui/tag";
 
 /**
  * 权限树(分组 + 复选框)—— 角色授权 / 用户授权 / 用户组授权三处共用。
@@ -78,9 +78,9 @@ function PermissionTreeNode({
 					{hit}/{ids.length}
 				</span>
 				{node.kind === "操作" ? (
-					<Badge variant="outline" className="text-xs">
+					<Tag variant="outline" className="text-xs">
 						操作
-					</Badge>
+					</Tag>
 				) : null}
 			</div>
 			{children.length > 0 ? (
@@ -133,7 +133,7 @@ function PermissionTree({
  * 三处授权弹窗此前各抄了一遍这一整块(标题计数文案略有出入,行为一致),
  * 现在只有这一个实现;弹窗自己的头部信息(角色名 / 用户清单)由调用方在外部渲染。
  */
-export function PermissionPicker({
+export function PermissionSelect({
 	nodes,
 	selected,
 	onToggle,

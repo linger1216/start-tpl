@@ -3,8 +3,7 @@ import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { RoleRow } from "#/components/modules/settings/settings-roles-table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
-import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
-import { BadgeList } from "#/components/ui/badge-list";
+import { type PermissionNode, PermissionSelect } from "#/components/modules/shared/permission-select";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -20,6 +19,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { TagList } from "#/components/ui/tag-list";
 import { Textarea } from "#/components/ui/textarea";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -265,7 +265,7 @@ export function SettingsRolesForm({
 								) : (
 									/** 已选区:一行胶囊,「姓名 · 部门」作 chip,点 × 走 `onRemoveMember`。
 									 * 与 `MultiSelect` 内部已选 chip 同款(用户管理里部门 / 角色 tab 即此形)。 */
-									<BadgeList
+									<TagList
 										values={members.map(memberChip)}
 										layout="wrap"
 										justify="start"
@@ -288,7 +288,7 @@ export function SettingsRolesForm({
 									勾中的菜单会出现在侧边栏;勾中的「按钮」决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
 									保存时服务端会自动补全上级菜单。
 								</p>
-								<PermissionPicker
+								<PermissionSelect
 									nodes={permTree}
 									selected={effectiveMenuIds}
 									title="菜单与按钮"

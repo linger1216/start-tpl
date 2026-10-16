@@ -31,7 +31,7 @@
 
 :root {
   /* ── 品牌原色:纸、墨、印泥(DESIGN.md「公文·印鉴」§1,不要在这里之外新增品牌色字面量) ── */
-  --paper: #faf9f6;             /* 画布:暖纸白 */
+  --paper: #f7f5f0;             /* 画布:暖纸白(bolder:纸/卡对比拉满,"纸叠纸"一眼可读) */
   --paper-raised: #ffffff;      /* 卡面:比画布白一档(纸叠纸) */
   --paper-panel: #f4f2ee;       /* 面板:侧栏 / 表头 / 次级区 */
   --ink: #1a1a18;               /* 墨:正文与主按钮 */
@@ -355,7 +355,12 @@
   --color-hue-emerald-on: var(--hue-emerald-on);
 
   /* 圆角(DESIGN.md §5 新阶):方角语言统一对位 ——
-     lg 6px(卡片/弹窗/菜单)/ 其余默认阶;按钮与输入的 2px 在各自组件里用 rounded-xs。 */
+     控件/卡片/弹窗/菜单 6px,大面板 10px,小章 2px;覆盖后全站 rounded-* 一起落进新阶。 */
+  --radius-sm: 0.125rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.75rem;
 
   /* 动效曲线进 @theme,npm 侧可直接用 `ease-brand` 工具类 */
   --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
@@ -1064,12 +1069,13 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   }
   .kpi-value {
     font-family: var(--font-heading);
-    font-size: 22px;
-    font-weight: 500;
-    line-height: 1.15;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.1;
     margin-top: 4px;
     color: var(--foreground);
     letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
   }
   .kpi-value .unit {
     font-family: var(--font-sans);
@@ -1251,8 +1257,8 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   }
   .page-title {
     font-family: var(--font-heading);
-    font-size: 22px;
-    font-weight: 500;
+    font-size: 24px;
+    font-weight: 700;
     line-height: 1.25;
     letter-spacing: -0.015em;
     color: var(--foreground);

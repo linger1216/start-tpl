@@ -1,4 +1,4 @@
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
 
@@ -11,7 +11,7 @@ function scoreClassName(n: number): string {
 
 /**
  * 标准化评分徽章(0-10,一位小数)。
- * null/空/非数字 → 占位符;否则按分数档位着色渲染为 Badge。
+ * null/空/非数字 → 占位符;否则按分数档位着色渲染为 Tag。
  */
 export function ScoreText({ value, className }: { value: unknown; className?: string }) {
 	if (value === null || value === undefined || value === "") {
@@ -21,5 +21,5 @@ export function ScoreText({ value, className }: { value: unknown; className?: st
 	if (Number.isNaN(n)) {
 		return <span className={cn("font-mono text-xs text-muted-foreground", className)}>{PLACEHOLDER_EMPTY}</span>;
 	}
-	return <Badge className={cn(scoreClassName(n), className)}>{n.toFixed(1)}</Badge>;
+	return <Tag className={cn(scoreClassName(n), className)}>{n.toFixed(1)}</Tag>;
 }

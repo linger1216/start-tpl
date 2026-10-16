@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { SettingsFilePreview } from "#/components/modules/settings/settings-file-preview";
 import { type FileRow, STATUS_META } from "#/components/modules/settings/settings-files-table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
 import { formatBytes } from "#/lib/format";
 
@@ -43,15 +43,15 @@ export function SettingsFilesDetail({
 			meta={row ? { createdAt: row.createTime, updatedAt: row.updateTime } : null}
 			onOpenChange={onOpenChange}
 			title={`文件详情 · ${row?.originName ?? ""}`}
-			badge={
+			tag={
 				row ? (
 					<>
-						<Badge variant="outline" className="font-mono text-xs">
+						<Tag variant="outline" className="font-mono text-xs">
 							{row.ext || "无后缀"}
-						</Badge>
-						<Badge variant={status.variant} className="text-xs">
+						</Tag>
+						<Tag variant={status.variant} className="text-xs">
 							{status.label}
-						</Badge>
+						</Tag>
 					</>
 				) : null
 			}

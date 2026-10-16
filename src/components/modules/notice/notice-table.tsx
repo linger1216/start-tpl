@@ -1,5 +1,5 @@
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { NOTICE_LEVEL_SHORT_LABEL } from "#/lib/notice-levels";
 import { createAppColumnHelper } from "#/lib/table";
 
@@ -27,14 +27,12 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 		columnHelper.accessor("read", {
 			header: "状态",
 			size: 90,
-			cell: (ctx) => (
-				<Badge variant={ctx.getValue() ? "outline" : "secondary"}>{ctx.getValue() ? "已读" : "未读"}</Badge>
-			),
+			cell: (ctx) => <Tag variant={ctx.getValue() ? "outline" : "secondary"}>{ctx.getValue() ? "已读" : "未读"}</Tag>,
 		}),
 		columnHelper.accessor("level", {
 			header: "类型",
 			size: 90,
-			cell: (ctx) => <Badge variant="outline">{NOTICE_LEVEL_SHORT_LABEL[ctx.getValue()] ?? ctx.getValue()}</Badge>,
+			cell: (ctx) => <Tag variant="outline">{NOTICE_LEVEL_SHORT_LABEL[ctx.getValue()] ?? ctx.getValue()}</Tag>,
 		}),
 		columnHelper.accessor("title", {
 			header: "标题",
@@ -61,6 +59,7 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 		actionsColumn<NoticeRow>({
 			size: 90,
 			onView: onOpen,
+			viewLabel: "打开",
 			disabled: (row) => !row.path,
 		}),
 	]);

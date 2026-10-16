@@ -235,7 +235,7 @@ export function ExcelImportDialog({
 				</div>
 
 				<DialogFooter>
-					<Button variant="outline" onClick={() => onOpenChange(false)}>
+					<Button variant="ghost" onClick={() => onOpenChange(false)}>
 						取消
 					</Button>
 					<Button onClick={handleImport} disabled={!parsed || parsed.rows.length === 0 || isPending}>

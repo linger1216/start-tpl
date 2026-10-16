@@ -1,5 +1,5 @@
 import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 与 `trpc.demoGrid.list` 的出参一一对应(见 doc/测试数据/README.md 的字段对应) */
@@ -71,7 +71,7 @@ export function gridColumns({
 			cell: (ctx) => {
 				const owner = ownerNameOf(ctx.getValue());
 				return owner ? (
-					<Badge variant="secondary">{owner}</Badge>
+					<Tag variant="secondary">{owner}</Tag>
 				) : (
 					<span className="text-xs text-muted-foreground/60">未指派</span>
 				);

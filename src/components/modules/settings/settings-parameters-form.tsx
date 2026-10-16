@@ -3,7 +3,9 @@ import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
@@ -116,7 +118,7 @@ export function SettingsParametersForm({
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader>
 					<DialogTitle>{creating ? "新增参数" : "修改参数"}</DialogTitle>
 					<DialogDescription translate="no" className="min-w-0 font-mono text-xs">
@@ -124,7 +126,7 @@ export function SettingsParametersForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="min-w-0 space-y-3">
+				<DialogBody>
 					{!creating ? (
 						// 只展示表里真有的东西:说明(remark)+ 类型码(para_type)。
 						// 「默认值」是代码内置值、不是表里的列,已从这里去掉(见 data-base-schema.ts)。
@@ -225,10 +227,10 @@ export function SettingsParametersForm({
 							<Switch aria-label="允许修改" checked={editable} onCheckedChange={setEditable} />
 						</DetailRow>
 					</div>
-				</div>
+				</DialogBody>
 
-				{row ? <DetailMeta meta={{ createdAt: row.createdAt, updatedAt: row.updatedAt }} /> : null}
 				<DialogFooter className="gap-2">
+					{row ? <DetailMeta meta={{ createdAt: row.createdAt, updatedAt: row.updatedAt }} /> : null}
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消
 					</Button>

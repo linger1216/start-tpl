@@ -1,5 +1,6 @@
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { ActionButton } from "#/components/ui/action-button";
+import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -211,20 +212,21 @@ export function SettingsDictionaryForm({
 				</DialogBody>
 
 				{error ? (
-					<p
-						role="alert"
-						className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-					>
+					<Alert variant="danger" title="保存失败" className="mx-1">
 						{error}
-					</p>
+					</Alert>
 				) : null}
 
-				{editing ? <DetailMeta meta={{ createdAt: editing.createTime, updatedAt: editing.updateTime }} /> : null}
 				<DialogFooter className="shrink-0 gap-2">
+					{editing ? <DetailMeta meta={{ createdAt: editing.createTime, updatedAt: editing.updateTime }} /> : null}
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消
 					</Button>
-					<Button disabled={pending} onClick={onSubmit}>
+					{/* 必填:名称 / 编码为空不能发出请求(与其余台账表单同口径) */}
+					<Button
+						disabled={pending || values.name.trim().length === 0 || values.code.trim().length === 0}
+						onClick={onSubmit}
+					>
 						{pending ? "保存中…" : editing ? "保存" : "创建"}
 					</Button>
 				</DialogFooter>

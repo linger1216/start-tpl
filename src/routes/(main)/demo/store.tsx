@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useStore } from "@tanstack/react-store";
 
 import { PageHeader } from "#/components/layout/page-header";
-import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import { Tag } from "#/components/ui/tag";
 import { selectFullName, store } from "#/lib/demo-store";
 
 export const Route = createFileRoute("/(main)/demo/store")({
@@ -22,7 +22,7 @@ function DemoStore() {
 			<PageHeader
 				title="TanStack Store"
 				description="全局 store 的最小用法:useStore 订阅字段,setState 更新。"
-				actions={<Badge variant="secondary">@tanstack/store</Badge>}
+				actions={<Tag variant="secondary">@tanstack/store</Tag>}
 			/>
 
 			<Card>

@@ -1,7 +1,7 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledBadge } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 import type { SettingsDictRow } from "./settings-dictionary-table";
 
 /**
@@ -28,7 +28,7 @@ export function SettingsDictionaryDetail({
 			onOpenChange={onOpenChange}
 			title={`字典详情 · ${row?.name ?? ""}`}
 			description={<span className="font-mono">{row?.code ?? ""}</span>}
-			badge={row ? <EnabledBadge status={row.status} /> : null}
+			tag={row ? <EnabledTag status={row.status} /> : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (
@@ -45,9 +45,9 @@ export function SettingsDictionaryDetail({
 						</DetailRow>
 						{/* 项数是派生值:用「N 项」胶囊,和下面那份真实清单对得上 */}
 						<DetailRow label="项数">
-							<Badge variant="secondary" className="tabular-nums text-xs">
+							<Tag variant="secondary" className="tabular-nums text-xs">
 								{row.items.length} 项
-							</Badge>
+							</Tag>
 						</DetailRow>
 						<DetailRow label="说明">
 							<span className="text-sm">{row.remark || "—"}</span>

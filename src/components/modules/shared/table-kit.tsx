@@ -1,10 +1,10 @@
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
 import { Checkbox } from "#/components/ui/checkbox";
-import { Skeleton, TableSkeleton } from "#/components/ui/skeleton";
+import { Skeleton, SkeletonTable } from "#/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { Tag } from "#/components/ui/tag";
 import type { MockRow } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
@@ -17,7 +17,7 @@ import { cn } from "#/lib/utils";
  *   · `selectColumn`       多选列(表头全选本页 + 行勾选),选中集合由编排壳持有;
  *   · `actionsColumn`      行操作列(详情 / 编辑 / 删除),回调由编排壳闭包注入;
  *   · `timeColumn`         时间列(表头 + 等宽时间单元格);
- *   · `EnabledBadge`       启停两态徽章(1 = 启用);
+ *   · `EnabledTag`       启停两态徽章(1 = 启用);
  *   · `TextCell`  单元格渲染口径(长文本传 `truncate`);
  *   · `TimeCell`  时间单元格(统一 `formatLocalMinute` 口径 + 等宽数字);
  *   · `TableLoadingShell`  请求中的加载壳(不换内容、只叠指示器)。
@@ -167,6 +167,7 @@ export function selectColumn<TRow extends MockRow>({
 export function actionsColumn<TRow extends MockRow>({
 	extra,
 	onView,
+	viewLabel = "详情",
 	onEdit,
 	onDelete,
 	disabled,
@@ -175,6 +176,8 @@ export function actionsColumn<TRow extends MockRow>({
 	/** 页面特有的额外动作(渲染在 详情/编辑/删除 **之前**),如角色的「菜单权限」、用户的「授权」 */
 	extra?: (row: TRow) => ReactNode;
 	onView?: (row: TRow) => void;
+	/** 查看按钮文案 —— 通知页的语义是「打开」,默认「详情」 */
+	viewLabel?: string;
 	onEdit?: (row: TRow) => void;
 	onDelete?: (row: TRow) => void;
 	/**
@@ -193,7 +196,7 @@ export function actionsColumn<TRow extends MockRow>({
 		cell: ({ row }) => (
 			<div className="flex items-center gap-3">
 				{extra?.(row.original)}
-				{onView ? <ActionButton onClick={() => onView(row.original)}>详情</ActionButton> : null}
+				{onView ? <ActionButton onClick={() => onView(row.original)}>{viewLabel}</ActionButton> : null}
 				{onEdit ? (
 					<ActionButton disabled={disabled?.(row.original)} onClick={() => onEdit(row.original)}>
 						编辑
@@ -255,12 +258,12 @@ export function timeColumn<TRow extends MockRow>(
  * 只服务**启停开关**这种两态;文件状态(待确认 / 正常 / 已删除)、数据范围(停用 / 上线 / 启用)
  * 这些各自有专用 spec,不要往这里塞。
  */
-export function EnabledBadge({ status }: { status: unknown }) {
+export function EnabledTag({ status }: { status: unknown }) {
 	const on = Number(status) === 1;
 	return (
-		<Badge variant={on ? "secondary" : "outline"} className="text-xs">
+		<Tag variant={on ? "secondary" : "outline"} className="text-xs">
 			{on ? "启用" : "停用"}
-		</Badge>
+		</Tag>
 	);
 }
 
@@ -309,7 +312,7 @@ export function TableLoadingShell({
 					fill &&
 						"min-h-0 flex-1 overflow-hidden [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:overflow-y-auto",
 					/*
-					 * 首次加载(busy=true 且 showSkeleton=true)完全不渲染 children,改由下方的 `TableSkeleton` 接管;
+					 * 首次加载(busy=true 且 showSkeleton=true)完全不渲染 children,改由下方的 `SkeletonTable` 接管;
 					 * 此时不再加 opacity-60(没有旧数据要模糊)。
 					 */
 					busy && !showSkeleton && "opacity-60",
@@ -321,7 +324,7 @@ export function TableLoadingShell({
 							<Skeleton className="h-3 w-24" />
 							<Skeleton className="h-7 w-32" />
 						</div>
-						<TableSkeleton />
+						<SkeletonTable />
 					</div>
 				) : (
 					children
@@ -329,13 +332,13 @@ export function TableLoadingShell({
 			</div>
 			{busy && !showSkeleton ? (
 				<div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-					<Badge
+					<Tag
 						variant="outline"
 						className="h-7 gap-1.5 bg-background/95 px-2.5 text-xs text-muted-foreground shadow-sm"
 					>
 						<Loader2 className="size-3.5 animate-spin" />
 						{label}
-					</Badge>
+					</Tag>
 				</div>
 			) : null}
 		</div>

@@ -2,7 +2,7 @@ import { Building2, Plus, Trash2 } from "lucide-react";
 
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { ActionIconButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { useTreePrefs } from "#/hooks/use-para-prefs";
 import type { TreeNode } from "#/lib/tree";
 
@@ -70,9 +70,9 @@ export function SettingsDepartmentsTree({
 				<>
 					<span className="min-w-0 flex-1 truncate text-sm">{node.name}</span>
 					{node.status === 0 ? (
-						<Badge variant="outline" className="px-1.5 text-xs text-muted-foreground">
+						<Tag variant="outline" className="px-1.5 text-xs text-muted-foreground">
 							已停用
-						</Badge>
+						</Tag>
 					) : null}
 				</>
 			)}

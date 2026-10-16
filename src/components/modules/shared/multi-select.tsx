@@ -2,9 +2,9 @@ import { ListChecks } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ActionButton } from "#/components/ui/action-button";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
+import { TagList } from "#/components/ui/tag-list";
 import { cn } from "#/lib/utils";
 
 /**
@@ -14,7 +14,7 @@ import { cn } from "#/lib/utils";
  * 关键约定 —— **勾选不会改变列表次序**:选中项不会跳到第一条,列表永远是 `options` 给的顺序。
  * 想确认"我选了哪些"看上面那排就够了;下面那排只管勾 / 取消勾。
  *
- * **为什么不用现成的两个**:`PermissionPicker` 与任何"下拉多选"都是**把选项全渲染出来**,
+ * **为什么不用现成的两个**:`PermissionSelect` 与任何"下拉多选"都是**把选项全渲染出来**,
  * 而部门有 3691 个 —— 全渲染会把 DOM 撑到几万个节点(同类教训实测过:2908ms / 83,526 DOM)。
  * 所以这里是**搜索优先**:不输关键词时最多渲染 `maxRender` 条,并明确告诉使用者"还有多少条没显示"。
  *
@@ -116,7 +116,7 @@ export function MultiSelect({
 
 			{chips.length > 0 ? (
 				<div className="mt-2">
-					<BadgeList
+					<TagList
 						values={chips.map((chip) => chip.label)}
 						layout="wrap"
 						justify="start"

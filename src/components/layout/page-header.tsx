@@ -1,5 +1,5 @@
 import { Info } from "lucide-react";
-
+import { PageTitle } from "#/components/ui/typography";
 import { cn } from "#/lib/utils";
 
 /**
@@ -34,7 +34,7 @@ export function PageHeader({
 				<div className="flex min-w-0 items-start gap-2.5">
 					{/* 标题 = 宋体(.page-title 走 --font-heading);不做色相强调条(公文页头是版记,不是海报) */}
 					<div className="page-title-group">
-						{title && <h1 className="page-title">{title}</h1>}
+						{title && <PageTitle>{title}</PageTitle>}
 						{hasDescription && !descriptionInline ? (
 							<button
 								type="button"

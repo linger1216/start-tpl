@@ -2,7 +2,7 @@ import { FileText, ImageIcon } from "lucide-react";
 import { useState } from "react";
 import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { filePreviewKind } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
 import { createAppColumnHelper } from "#/lib/table";
@@ -123,9 +123,9 @@ export function fileColumns({
 			header: "后缀",
 			size: 80,
 			cell: (ctx) => (
-				<Badge variant="outline" className="font-mono text-xs">
+				<Tag variant="outline" className="font-mono text-xs">
 					{ctx.getValue() || "—"}
-				</Badge>
+				</Tag>
 			),
 		}),
 		columnHelper.accessor("contentType", {
@@ -148,9 +148,9 @@ export function fileColumns({
 			cell: (ctx) => {
 				const meta = STATUS_META[ctx.getValue()] ?? STATUS_META[0];
 				return (
-					<Badge variant={meta.variant} className="text-xs">
+					<Tag variant={meta.variant} className="text-xs">
 						{meta.label}
-					</Badge>
+					</Tag>
 				);
 			},
 		}),

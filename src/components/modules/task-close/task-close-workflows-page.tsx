@@ -15,11 +15,11 @@ import {
 	type WorkflowEditing,
 	type WorkflowFormPayload,
 } from "#/components/modules/task-close/task-close-workflow-form";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { Tag } from "#/components/ui/tag";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -293,15 +293,15 @@ function WorkflowCard({
 		>
 			{/* 顶行:图标块(左) + 状态徽章 / 行内动作(右) */}
 			<div className="mb-4 flex items-start justify-between gap-2">
-				<div className="flex size-9 items-center justify-center rounded-sm bg-primary/10 text-primary">
+				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
 					<Workflow className="size-[18px]" />
 				</div>
 				<div className="flex items-center gap-1.5">
 					{item.builtin ? (
-						<Badge variant="secondary" className="h-7 gap-1 px-2 text-xs">
+						<Tag variant="secondary" className="h-7 gap-1 px-2 text-xs">
 							<span aria-hidden className="size-1.5 rounded-full bg-hue-emerald" />
 							内置
-						</Badge>
+						</Tag>
 					) : (
 						<span className="flex h-7 items-center px-2 text-xs text-muted-foreground">自建</span>
 					)}

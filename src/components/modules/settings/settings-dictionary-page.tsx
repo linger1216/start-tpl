@@ -295,8 +295,8 @@ export function SettingsDictionaryPage() {
 				onOpenChange={(next) => {
 					if (!next) setPendingDelete(null);
 				}}
-				title={`删除字典「${pendingDelete?.name ?? ""}」?`}
-				description="删掉后用到它的地方会取不到候选;已经有功能在用它时会被拒绝。"
+				title="删除字典"
+				description={`确认删除「${pendingDelete?.name ?? ""}」?删掉后用到它的地方会取不到候选;已经有功能在用它时会被拒绝。`}
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

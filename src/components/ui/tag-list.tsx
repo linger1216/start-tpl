@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
 
@@ -12,10 +12,10 @@ import { cn } from "#/lib/utils";
  *  - values 为空   → 显示 emptyPlaceholder(默认 PLACEHOLDER_EMPTY)
  *  - layout=stack  → 纵向堆叠、整体居中(原 AddressCell 多行形态)
  *  - layout=wrap   → 横向自动换行、按 justify 对齐(原 AliasCell / 所属区划 / TagInput 形态)
- *  - 传 onRemove   → 每个 Badge 末尾加 × 删除按钮(可编辑场景)
+ *  - 传 onRemove   → 每个 Tag 末尾加 × 删除按钮(可编辑场景)
  *
  * color:
- *  - "none"            → 不上色(只用 Badge 自带的描边)
+ *  - "none"            → 不上色(只用 Tag 自带的描边)
  *  - "brand"(默认)     → 规范内的中性/品牌色板,默认就符合 DESIGN.md
  *  - "stable"          → 由 values 稳定哈希选一套下列彩色主题:同一份数据永远是同一套颜色
  *                        注:名字保留历史值 "random",但实现是稳定哈希 —— 不再每次渲染随机
@@ -39,7 +39,7 @@ import { cn } from "#/lib/utils";
  *  各主题的区别在**色相轮转顺序**(每页从不同的色相起手),而不是"用不同的色板" ——
  *  色相就那 6 个,靠顺序 + 起手色制造区分度,同时保证同一屏里不会出现撞色。
  */
-export const BADGE_THEMES = {
+export const TAG_THEMES = {
 	/** 默认:全部取自语义 token,天然符合 DESIGN.md 的配色规范 */
 	brand: [
 		"bg-primary/10 text-primary",
@@ -95,13 +95,13 @@ export const BADGE_THEMES = {
 	],
 } as const satisfies Record<string, readonly string[]>;
 
-type BadgeThemeName = keyof typeof BADGE_THEMES;
+type TagThemeName = keyof typeof TAG_THEMES;
 
 /** 彩色主题(规范外分类色板)—— "stable" 模式从这里选 */
-const COLORFUL_THEMES = (Object.keys(BADGE_THEMES) as BadgeThemeName[]).filter((n) => n !== "brand");
+const COLORFUL_THEMES = (Object.keys(TAG_THEMES) as TagThemeName[]).filter((n) => n !== "brand");
 
 /** "random" 是历史名,保留为 "stable" 的别名(行为已改为稳定哈希,不再随机) */
-export type BadgeColor = "none" | BadgeThemeName | "stable" | "random" | readonly string[] | string[];
+export type TagColor = "none" | TagThemeName | "stable" | "random" | readonly string[] | string[];
 
 /**
  * 稳定哈希选色。
@@ -117,7 +117,7 @@ function stablePick<T>(items: readonly T[], key: string): T {
 	return items[Math.abs(h) % items.length]!;
 }
 
-export function BadgeList({
+export function TagList({
 	values,
 	layout = "stack",
 	justify = "start",
@@ -130,7 +130,7 @@ export function BadgeList({
 	justify?: "center" | "start";
 	onRemove?: (index: number) => void;
 	emptyPlaceholder?: ReactNode;
-	color?: BadgeColor;
+	color?: TagColor;
 }) {
 	if (values.length === 0) {
 		return <span className="text-muted-foreground truncate text-xs">{emptyPlaceholder ?? PLACEHOLDER_EMPTY}</span>;
@@ -141,7 +141,7 @@ export function BadgeList({
 	const stablePalette =
 		color === "stable" || color === "random"
 			? stablePick(
-					COLORFUL_THEMES.map((n) => BADGE_THEMES[n]),
+					COLORFUL_THEMES.map((n) => TAG_THEMES[n]),
 					values.join("\u0000"),
 				)
 			: undefined;
@@ -149,8 +149,8 @@ export function BadgeList({
 	const resolveColor = (i: number): string | undefined => {
 		if (color === "none") return undefined;
 		if (color === "stable" || color === "random") return stablePalette![i % stablePalette!.length];
-		if (typeof color === "string" && color in BADGE_THEMES) {
-			const palette = BADGE_THEMES[color as BadgeThemeName];
+		if (typeof color === "string" && color in TAG_THEMES) {
+			const palette = TAG_THEMES[color as TagThemeName];
 			return palette[i % palette.length];
 		}
 		const arr = color as readonly string[];
@@ -158,7 +158,7 @@ export function BadgeList({
 	};
 
 	const badges = values.map((value, i) => (
-		<Badge key={`${value}-${i}`} className={cn("p-2.5 gap-1", resolveColor(i))} variant="outline">
+		<Tag key={`${value}-${i}`} className={cn("p-2.5 gap-1", resolveColor(i))} variant="outline">
 			<span>{value}</span>
 			{onRemove && (
 				<button
@@ -171,7 +171,7 @@ export function BadgeList({
 					<X className="size-3" />
 				</button>
 			)}
-		</Badge>
+		</Tag>
 	));
 
 	if (layout === "stack") {

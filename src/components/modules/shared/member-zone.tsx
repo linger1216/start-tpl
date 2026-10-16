@@ -24,9 +24,9 @@ import { useMemo, useState } from "react";
 
 import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { ActionButton } from "#/components/ui/action-button";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import { TagList } from "#/components/ui/tag-list";
 
 /** 一行"人"至少要有这些（各域自己的业务字段由 `badgeValues` 提供） */
 type MemberZoneRow = {
@@ -148,12 +148,7 @@ export function MemberZone<T extends MemberZoneRow>({
 									<div className="min-w-0 flex flex-wrap flex-1 items-center gap-3">
 										<div className="truncate text-xs">{member.userName || member.userEmail}</div>
 										<span className="truncate text-xs text-muted-foreground">{member.userEmail}</span>
-										<BadgeList
-											values={badgeValues(member)}
-											layout="wrap"
-											color="stable"
-											emptyPlaceholder={badgeEmpty}
-										/>
+										<TagList values={badgeValues(member)} layout="wrap" color="stable" emptyPlaceholder={badgeEmpty} />
 									</div>
 									<ActionButton tone="danger" disabled={pending} onClick={() => onRemoveMember(member.userId)}>
 										移出

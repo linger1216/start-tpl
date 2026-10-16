@@ -1,4 +1,4 @@
-import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 角色表的一行(tRPC `role.list` 出参)—— **与 `sys_role` 的列一一对应** + 一个派生计数 */
@@ -49,7 +49,7 @@ export function roleColumns({
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
+			cell: (ctx) => <EnabledTag status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("sort", {
 			header: "排序",

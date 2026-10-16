@@ -230,7 +230,9 @@ export function SortableTree<T extends SortableTreeNode>({
 						}}
 						className={cn(
 							"group relative flex items-center gap-1.5 rounded-lg border border-transparent py-1.5 pr-1.5 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring/40",
-							selectedId === node.id ? "border-primary/40 bg-primary/5" : "hover:border-hue-blue-line hover:bg-hover",
+							selectedId === node.id
+								? "border-primary/40 bg-primary/8 after:absolute after:left-0 after:top-1 after:bottom-1 after:w-0.5 after:rounded-full after:bg-primary after:content-['']"
+								: "hover:border-hue-blue-line hover:bg-hover",
 							hint && !hint.allowed && "opacity-60",
 							// ⚠️ 整行**不再**用 `cursor-grab`:行尾按钮是 `cursor-pointer`,
 							//    整行 grab 会让鼠标在两者边界上一抖就 grab ⇄ 手型来回换 ——

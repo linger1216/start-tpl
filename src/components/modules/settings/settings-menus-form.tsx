@@ -175,26 +175,28 @@ export function SettingsMenusForm({
 
 			{node ? <DetailMeta meta={{ createdAt: node.createTime, updatedAt: node.updateTime }} /> : null}
 
-			<div className="flex flex-wrap items-center gap-2 pt-1">
-				<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
-					<Save className="size-3.5" />
-					{pending ? "保存中…" : "保存"}
-				</Button>
-				<ActionButton disabled={pending || !dirty} onClick={onReset}>
-					还原
-				</ActionButton>
-			</div>
-
-			<div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-				<ActionButton disabled={pending} onClick={onAddSibling}>
-					新增同级
-				</ActionButton>
-				<ActionButton disabled={pending} onClick={onAddChild}>
-					新增子菜单
-				</ActionButton>
-				<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
-					删除
-				</ActionButton>
+			{/* 动作行(三棵树统一):左 = 新增类,右 = 保存 / 还原 / 删除 —— 保存下面不再有别的东西 */}
+			<div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+				<div className="flex flex-wrap items-center gap-2">
+					<ActionButton disabled={pending} onClick={onAddSibling}>
+						新增同级
+					</ActionButton>
+					<ActionButton disabled={pending} onClick={onAddChild}>
+						新增子菜单
+					</ActionButton>
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					<Button size="sm" disabled={pending || !dirty} onClick={onSave}>
+						<Save className="size-3.5" />
+						{pending ? "保存中…" : "保存"}
+					</Button>
+					<ActionButton disabled={pending || !dirty} onClick={onReset}>
+						还原
+					</ActionButton>
+					<ActionButton tone="danger" disabled={pending} onClick={onDelete}>
+						删除
+					</ActionButton>
+				</div>
 			</div>
 		</div>
 	);

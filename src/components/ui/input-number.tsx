@@ -5,7 +5,7 @@ import { Input } from "#/components/ui/input";
  */
 import { cn } from "#/lib/utils";
 
-export function NumField({
+export function InputNumber({
 	value,
 	onChange,
 	min,

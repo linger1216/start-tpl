@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { PageHeader } from "#/components/layout/page-header";
-import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { JsonBlock } from "#/components/ui/json-block";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Spinner } from "#/components/ui/spinner";
+import { Tag } from "#/components/ui/tag";
 import { formatLocalDateTime } from "#/lib/time";
 
 export const Route = createFileRoute("/(main)/demo/tanstack-query")({
@@ -45,7 +45,7 @@ function TanStackQueryDemo() {
 				</CardHeader>
 				<CardContent className="space-y-4">
 					<div className="flex flex-wrap items-center gap-2">
-						<Badge variant={status === "success" ? "default" : "secondary"}>{status}</Badge>
+						<Tag variant={status === "success" ? "default" : "secondary"}>{status}</Tag>
 						{dataUpdatedAt > 0 && (
 							<span className="text-sm text-muted-foreground">更新于 {formatLocalDateTime(dataUpdatedAt)}</span>
 						)}

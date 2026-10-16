@@ -1,10 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { type DataScopeRow, ruleShapeText } from "#/components/modules/settings/settings-data-scope-table";
-import { Badge } from "#/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { Tag } from "#/components/ui/tag";
 import { useStableKeys } from "#/hooks/use-stable-keys";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -241,7 +241,7 @@ export function SettingsDataScopePreviewDialog({
 								</span>
 								{mine && effect ? (
 									<div className="mt-1 flex flex-wrap items-center gap-2">
-										<Badge className={`text-xs ${effect.tone}`}>{effect.label}</Badge>
+										<Tag className={`text-xs ${effect.tone}`}>{effect.label}</Tag>
 										<span className="text-xs text-foreground">{mine.detail}</span>
 									</div>
 								) : null}

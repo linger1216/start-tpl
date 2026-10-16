@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
+import { Tag } from "#/components/ui/tag";
 import type { MockRow, useAppTable } from "#/lib/table";
 
 /**
@@ -54,9 +54,9 @@ export function LedgerCard<TRow extends MockRow>({
 					<Icon className="size-4 text-muted-foreground" />
 					{title}
 				</CardTitle>
-				<Badge variant="outline" className="tabular-nums">
+				<Tag variant="outline" className="tabular-nums">
 					匹配 {count} 条
-				</Badge>
+				</Tag>
 			</CardHeader>
 			<CardContent className="flex min-h-0 flex-1 flex-col gap-3">
 				{children}

@@ -1,7 +1,7 @@
 import type { LogRow } from "#/components/modules/settings/settings-logs-table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { Badge } from "#/components/ui/badge";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 
 /**
  * 审计日志详情 —— 只读。
@@ -26,9 +26,9 @@ export function SettingsLogsDetail({
 			onOpenChange={onOpenChange}
 			title={row?.label ?? row?.path ?? "审计详情"}
 			description={row?.path}
-			badge={
+			tag={
 				row ? (
-					<Badge variant={row.status === 1 ? "secondary" : "destructive"}>{row.status === 1 ? "成功" : "失败"}</Badge>
+					<Tag variant={row.status === 1 ? "secondary" : "destructive"}>{row.status === 1 ? "成功" : "失败"}</Tag>
 				) : null
 			}
 			meta={{ createdAt: row?.createTime ?? null }}

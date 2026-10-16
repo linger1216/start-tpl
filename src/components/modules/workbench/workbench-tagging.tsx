@@ -2,11 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Tag as TagIcon, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Tag } from "#/components/ui/tag";
+import { TagList } from "#/components/ui/tag-list";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 
@@ -151,8 +151,8 @@ export function WorkbenchTagging() {
 							) : current.length === 0 ? (
 								<p className="text-xs text-muted-foreground">还没贴标签 —— 从下面选一个加进来。</p>
 							) : (
-								// 可删除的标签也走 BadgeList(onRemove 自带 ×):不要用 span + 手写 button 拼一个"像徽章"的东西
-								<BadgeList
+								// 可删除的标签也走 TagList(onRemove 自带 ×):不要用 span + 手写 button 拼一个"像徽章"的东西
+								<TagList
 									values={current.map((item) => item.label)}
 									layout="wrap"
 									color={["bg-hue-teal-soft text-hue-teal-fg"]}
@@ -224,9 +224,9 @@ export function WorkbenchTagging() {
 							) : objectsOfTagQuery.data && objectsOfTagQuery.data.length > 0 ? (
 								<div className="flex flex-wrap gap-1.5">
 									{objectsOfTagQuery.data.map((id) => (
-										<Badge key={id} variant="outline" className="font-mono text-xs">
+										<Tag key={id} variant="outline" className="font-mono text-xs">
 											{id}
-										</Badge>
+										</Tag>
 									))}
 								</div>
 							) : (

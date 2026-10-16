@@ -1,7 +1,7 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledBadge } from "#/components/modules/shared/table-kit";
-import { Badge } from "#/components/ui/badge";
+import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
 import { PARA_TYPE_META } from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
@@ -30,13 +30,13 @@ export function SettingsParametersDetail({
 			meta={row}
 			onOpenChange={onOpenChange}
 			title={`参数详情 · ${row?.key ?? ""}`}
-			badge={
+			tag={
 				row ? (
 					<>
-						<Badge variant="secondary" className="font-mono text-xs">
+						<Tag variant="secondary" className="font-mono text-xs">
 							{PARA_TYPE_META[row.type].label}
-						</Badge>
-						<EnabledBadge status={row.status} />
+						</Tag>
+						<EnabledTag status={row.status} />
 					</>
 				) : null
 			}

@@ -8,7 +8,7 @@
  *  - 输入后回车 / 失焦 / 点 + → 加入列表(去空 / 去重),清空输入框
  *  - 草稿展开:`a,b,c` 一次添加 3 条、`["x","y"]` 一次添加 2 条
  *    (逗号分隔 / JSON 数组字符串自动展开;细节见 parseTagDraft)
- *  - 已添加的 Badge 上有 × 按钮,点击删除单个条目
+ *  - 已添加的 Tag 上有 × 按钮,点击删除单个条目
  *  - 输入框自身始终保持空白(条目存到列表)
  *  - 达到 max 后禁用添加;展开后超过 max 会被截断
  *
@@ -17,10 +17,9 @@
 
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import { TagList } from "#/components/ui/tag-list";
 
 /** 标签条目(通用形态:仅一个 value 字段) */
 type TagEntry = { value: string };
@@ -128,7 +127,7 @@ export function TagInput({
 					<Plus className="size-4" />
 				</Button>
 			</div>
-			<BadgeList
+			<TagList
 				values={value.map((e) => e.value)}
 				layout="wrap"
 				justify="start"

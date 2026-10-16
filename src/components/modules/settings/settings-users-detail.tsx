@@ -1,8 +1,8 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Tag } from "#/components/ui/tag";
+import { TagList } from "#/components/ui/tag-list";
 
 import type { UserRow } from "./settings-users-table";
 
@@ -29,11 +29,11 @@ export function SettingsUsersDetail({
 			onOpenChange={onOpenChange}
 			title={`用户详情 · ${row?.name ?? ""}`}
 			description={row?.email ?? ""}
-			badge={
+			tag={
 				row ? (
-					<Badge variant={row.emailVerified ? "secondary" : "outline"} className="text-xs">
+					<Tag variant={row.emailVerified ? "secondary" : "outline"} className="text-xs">
 						{row.emailVerified ? "邮箱已验证" : "邮箱未验证"}
-					</Badge>
+					</Tag>
 				) : null
 			}
 			meta={{ createdAt: row?.createdAt, updatedAt: row?.updatedAt }}
@@ -58,10 +58,10 @@ export function SettingsUsersDetail({
 						</div>
 					</DetailRow>
 					<DetailRow label="部门">
-						<BadgeList values={row.departmentNames} layout="wrap" color="stable" emptyPlaceholder="未加入部门" />
+						<TagList values={row.departmentNames} layout="wrap" color="stable" emptyPlaceholder="未加入部门" />
 					</DetailRow>
 					<DetailRow label="角色">
-						<BadgeList values={row.roleNames} layout="wrap" color="stable" emptyPlaceholder="未分配(看不到任何菜单)" />
+						<TagList values={row.roleNames} layout="wrap" color="stable" emptyPlaceholder="未分配(看不到任何菜单)" />
 					</DetailRow>
 				</div>
 			) : null}

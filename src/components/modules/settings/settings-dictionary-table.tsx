@@ -1,6 +1,6 @@
-import { actionsColumn, EnabledBadge, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
 
 /**
@@ -62,12 +62,12 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 				return (
 					<div className="flex flex-wrap items-center gap-1">
 						{items.slice(0, 4).map((item) => (
-							<Badge key={item.value} variant="outline" className="gap-1 text-xs">
+							<Tag key={item.value} variant="outline" className="gap-1 text-xs">
 								{item.label}
 								<span translate="no" className="font-mono text-xs text-muted-foreground">
 									{item.value}
 								</span>
-							</Badge>
+							</Tag>
 						))}
 						{items.length > 4 ? <span className="text-xs text-muted-foreground">等 {items.length} 项</span> : null}
 						{items.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : null}
@@ -88,7 +88,7 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => <EnabledBadge status={ctx.getValue()} />,
+			cell: (ctx) => <EnabledTag status={ctx.getValue()} />,
 		}),
 		columnHelper.accessor("remark", {
 			header: "说明",

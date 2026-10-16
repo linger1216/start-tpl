@@ -42,6 +42,7 @@ import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
@@ -484,9 +485,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						{/* 主信息:记录头 —— 宋体标题 + 一行中性元信息(章 + 日期) */}
 						<div className="min-w-0">
 							<div className="flex items-start gap-3">
-								<h1 className="font-heading text-[22px] font-bold leading-snug tracking-[-0.01em] text-foreground">
-									{task.name}
-								</h1>
+								<PageTitle>{task.name}</PageTitle>
 								<Seal
 									size="detail"
 									shape={detailSeal.shape}
@@ -498,8 +497,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									className="-ml-1"
 								/>
 							</div>
-							{/* 版记行(DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
-							<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs tracking-[0.05em] text-muted-foreground">
+							{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
+							<MetaRow className="mt-2">
 								{task.priority ? (
 									<PriorityBadge priority={task.priority} label={priorityLabelOf(task.priority)} />
 								) : null}
@@ -510,14 +509,14 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										{task.dueAt ? formatLocalDate(task.dueAt) : "未设置"}
 									</strong>
 								</span>
-								<span aria-hidden className="size-1 rounded-full bg-border" />
+								<DocDot />
 								<span>
 									创建于
 									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
 										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
 									</strong>
 								</span>
-							</div>
+							</MetaRow>
 						</div>
 
 						{/* 右上动作组(收敛到 4 组):ⓘ + 主动作(发起审批/改状态取一) + 发起征询 + 更多▾;刷新殿后 */}
@@ -870,7 +869,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</DetailRow>
 					</DialogBody>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setStatusOpen(false)} disabled={transitMutation.isPending}>
+						<Button variant="ghost" onClick={() => setStatusOpen(false)} disabled={transitMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -901,7 +900,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</DetailRow>
 					</DialogBody>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setTransferOpen(false)} disabled={transferMutation.isPending}>
+						<Button variant="ghost" onClick={() => setTransferOpen(false)} disabled={transferMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -962,7 +961,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</DetailRow>
 					</DialogBody>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setActionMode(null)} disabled={actionMutation.isPending}>
+						<Button variant="ghost" onClick={() => setActionMode(null)} disabled={actionMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -975,7 +974,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								})
 							}
 						>
-							{actionMutation.isPending ? "提交中…" : "发起"}
+							{actionMutation.isPending ? "发起中…" : "发起"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>
@@ -1015,7 +1014,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</DetailRow>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setMemberOpen(false)} disabled={memberAddMutation.isPending}>
+						<Button variant="ghost" onClick={() => setMemberOpen(false)} disabled={memberAddMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -1050,7 +1049,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						/>
 					</DialogBody>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setAttachOpen(false)} disabled={attachMutation.isPending}>
+						<Button variant="ghost" onClick={() => setAttachOpen(false)} disabled={attachMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -1095,7 +1094,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						</DetailRow>
 					</DialogBody>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setRejectId(null)} disabled={respondMutation.isPending}>
+						<Button variant="ghost" onClick={() => setRejectId(null)} disabled={respondMutation.isPending}>
 							取消
 						</Button>
 						<Button
@@ -1104,7 +1103,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
 							}
 						>
-							{respondMutation.isPending ? "提交中…" : "驳回"}
+							{respondMutation.isPending ? "驳回中…" : "驳回"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

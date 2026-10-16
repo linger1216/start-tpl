@@ -16,7 +16,7 @@ import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import type { PermissionNode } from "#/components/modules/shared/permission-tree";
+import type { PermissionNode } from "#/components/modules/shared/permission-select";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -308,8 +308,8 @@ export function SettingsRolesPage() {
 				onOpenChange={(next) => {
 					if (!next) setPendingDelete(null);
 				}}
-				title={`删除角色「${pendingDelete?.name ?? ""}」?`}
-				description="还有用户在用它时会被拒绝 —— 请先在「用户管理」里给他们换成别的角色。"
+				title="删除角色"
+				description={`确认删除「${pendingDelete?.name ?? ""}」?还有用户在用它时会被拒绝 —— 请先在「用户管理」里给他们换成别的角色。`}
 				confirmVariant="destructive"
 				isPending={deleteMutation.isPending}
 				pendingText="删除中…"

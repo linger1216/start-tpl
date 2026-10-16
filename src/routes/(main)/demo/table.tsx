@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
 
 import { PageHeader } from "#/components/layout/page-header";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper, useAppTable } from "#/lib/table";
 
 export const Route = createFileRoute("/(main)/demo/table")({
@@ -50,7 +50,7 @@ const columns = columnHelper.columns([
 	columnHelper.accessor("role", { header: "角色" }),
 	columnHelper.accessor("status", {
 		header: "状态",
-		cell: (ctx) => <Badge variant={STATUS_VARIANT[ctx.getValue()]}>{ctx.getValue()}</Badge>,
+		cell: (ctx) => <Tag variant={STATUS_VARIANT[ctx.getValue()]}>{ctx.getValue()}</Tag>,
 	}),
 ]);
 

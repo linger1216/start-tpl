@@ -3,7 +3,6 @@ import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -13,6 +12,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { Tag } from "#/components/ui/tag";
 import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
@@ -139,10 +139,10 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 									{c.label}
 								</Link>
 							) : (
-								<Badge className="gap-1.5 bg-brand-soft px-2 font-medium text-primary">
+								<Tag className="gap-1.5 bg-brand-soft px-2 font-medium text-primary">
 									<span aria-hidden className="size-1.5 rounded-full bg-primary" />
 									{c.label}
-								</Badge>
+								</Tag>
 							)}
 						</span>
 					))}

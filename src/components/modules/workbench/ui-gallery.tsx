@@ -22,14 +22,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
-import { type PermissionNode, PermissionPicker } from "#/components/modules/shared/permission-tree";
+import { type PermissionNode, PermissionSelect } from "#/components/modules/shared/permission-select";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { ActionButton } from "#/components/ui/action-button";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -68,9 +66,9 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { FileDropzone } from "#/components/ui/file-dropzone";
 import { Input } from "#/components/ui/input";
+import { InputNumber } from "#/components/ui/input-number";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Label } from "#/components/ui/label";
-import { NumField } from "#/components/ui/num-field";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Reveal } from "#/components/ui/reveal";
@@ -87,7 +85,7 @@ import {
 } from "#/components/ui/select";
 import { Separator } from "#/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "#/components/ui/sheet";
-import { Skeleton, StatCardsSkeleton, TableSkeleton } from "#/components/ui/skeleton";
+import { Skeleton, SkeletonCards, SkeletonTable } from "#/components/ui/skeleton";
 import { Slider } from "#/components/ui/slider";
 import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
@@ -102,7 +100,9 @@ import {
 	TabsTrigger,
 	type TabVariant,
 } from "#/components/ui/tabs";
+import { Tag } from "#/components/ui/tag";
 import { TagInput } from "#/components/ui/tag-input";
+import { TagList } from "#/components/ui/tag-list";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
@@ -264,8 +264,8 @@ export function UiGallery() {
 					/>
 					<span className="text-xs text-muted-foreground">{sliderVal}</span>
 				</Cell>
-				<Cell name="NumField" hint="数字输入(带 min/max)">
-					<NumField value={numVal} onChange={setNumVal} min={0} max={99} />
+				<Cell name="InputNumber" hint="数字输入(带 min/max)">
+					<InputNumber value={numVal} onChange={setNumVal} min={0} max={99} />
 				</Cell>
 				<Cell name="Select" hint="下拉选择(可分组)">
 					{/* ⚠️ 根上必须给 `items`:Base UI 不会从 <SelectItem> 收集 label,没有它就显示原始 value("b" 而不是"选项 B") */}
@@ -313,17 +313,17 @@ export function UiGallery() {
 			</Group>
 
 			<Group title="展示与反馈" desc="只读的展示类原语 —— 徽章 / 数值 / 加载态 / 头像。">
-				<Cell name="Badge" hint="徽章(4 个变体)">
-					<Badge>默认</Badge>
-					<Badge variant="secondary">次要</Badge>
-					<Badge variant="outline">描边</Badge>
-					<Badge variant="destructive">危险</Badge>
+				<Cell name="Tag" hint="徽章(4 个变体)">
+					<Tag>默认</Tag>
+					<Tag variant="secondary">次要</Tag>
+					<Tag variant="outline">描边</Tag>
+					<Tag variant="destructive">危险</Tag>
 				</Cell>
-				<Cell name="BadgeList" hint="徽章列表(可换配色主题)">
-					<BadgeList values={["紧急", "已核对", "跨区"]} />
+				<Cell name="TagList" hint="徽章列表(可换配色主题)">
+					<TagList values={["紧急", "已核对", "跨区"]} />
 				</Cell>
-				<Cell name="BadgeList" hint="按值稳定取色(同一值永远同色)">
-					<BadgeList values={["华东", "华北", "华南", "西南"]} color="stable" />
+				<Cell name="TagList" hint="按值稳定取色(同一值永远同色)">
+					<TagList values={["华东", "华北", "华南", "西南"]} color="stable" />
 				</Cell>
 				<Cell name="ScoreText" hint="数值着色">
 					<ScoreText value={88} />
@@ -359,11 +359,11 @@ export function UiGallery() {
 					</p>
 					<StatCards items={DEMO_STATS} />
 				</Cell>
-				<Cell name="StatCardsSkeleton" hint="指标卡骨架">
-					<StatCardsSkeleton />
+				<Cell name="SkeletonCards" hint="指标卡骨架">
+					<SkeletonCards />
 				</Cell>
-				<Cell name="TableSkeleton" hint="表格骨架">
-					<TableSkeleton />
+				<Cell name="SkeletonTable" hint="表格骨架">
+					<SkeletonTable />
 				</Cell>
 			</Group>
 
@@ -580,7 +580,7 @@ export function UiGallery() {
 				</Cell>
 				<Cell name="Reveal" hint="进场动画">
 					<Reveal>
-						<Badge variant="outline">淡入</Badge>
+						<Tag variant="outline">淡入</Tag>
 					</Reveal>
 				</Cell>
 				<Cell name="Separator" hint="分隔线">
@@ -698,10 +698,10 @@ function ModuleGallery() {
 					onOpenChange={setDetailDemo}
 					title="示例详情 · 参数管理"
 					description="file.max_size_mb"
-					badge={
+					tag={
 						<>
-							<Badge variant="secondary">整数</Badge>
-							<Badge variant="secondary">启用</Badge>
+							<Tag variant="secondary">整数</Tag>
+							<Tag variant="secondary">启用</Tag>
 						</>
 					}
 					onEdit={() => setDetailDemo(false)}
@@ -724,7 +724,7 @@ function ModuleGallery() {
 					{/* 多值字段(部门 / 角色那种)用徽章列表,别拼成一串顿号分隔的文本 */}
 					<div className="space-y-1.5">
 						<div className="text-xs font-medium text-muted-foreground">角色(全局)</div>
-						<BadgeList values={["系统管理员", "部门主管", "普通员工"]} layout="wrap" color="stable" />
+						<TagList values={["系统管理员", "部门主管", "普通员工"]} layout="wrap" color="stable" />
 					</div>
 				</DetailDialog>
 			</Cell>
@@ -785,9 +785,9 @@ function ModuleGallery() {
 					</p>
 				</Cell>
 
-				<Cell name="PermissionPicker" hint="权限点选择区:搜索 + 勾选(重建授权界面直接用,别另写一份)">
+				<Cell name="PermissionSelect" hint="权限点选择区:搜索 + 勾选(重建授权界面直接用,别另写一份)">
 					<div className="rounded-lg border border-border bg-card p-2">
-						<PermissionPicker
+						<PermissionSelect
 							nodes={DEMO_PERMISSIONS}
 							selected={permSelected}
 							onToggle={(ids, on) =>

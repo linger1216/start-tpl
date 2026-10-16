@@ -56,7 +56,7 @@ export function DetailDialog({
 	onOpenChange,
 	title,
 	description,
-	badge,
+	tag,
 	children,
 	onEdit,
 	editDisabled,
@@ -69,7 +69,7 @@ export function DetailDialog({
 	title: ReactNode;
 	description?: ReactNode;
 	/** 标题右侧的状态 / 类型徽章 */
-	badge?: ReactNode;
+	tag?: ReactNode;
 	children: ReactNode;
 	/** 给了就在底部渲染主操作(通常是「编辑」);不给就只有「关闭」 */
 	onEdit?: () => void;
@@ -86,7 +86,7 @@ export function DetailDialog({
 				<DialogHeader className="shrink-0">
 					<DialogTitle className="flex flex-wrap items-center gap-2">
 						{title}
-						{badge}
+						{tag}
 					</DialogTitle>
 					{description ? <DialogDescription>{description}</DialogDescription> : null}
 				</DialogHeader>

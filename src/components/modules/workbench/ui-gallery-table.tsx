@@ -8,11 +8,11 @@ import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { actionsColumn, selectColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
-import { Badge } from "#/components/ui/badge";
-import { BadgeList } from "#/components/ui/badge-list";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { Tag } from "#/components/ui/tag";
+import { TagList } from "#/components/ui/tag-list";
 import { createAppColumnHelper, useAppTable, useRowSelection } from "#/lib/table";
 
 /**
@@ -105,7 +105,7 @@ export function UiGalleryTable() {
 				columnHelper.accessor("tags", {
 					header: "分类标签",
 					size: 180,
-					cell: (ctx) => <BadgeList values={ctx.getValue()} layout="wrap" color="stable" />,
+					cell: (ctx) => <TagList values={ctx.getValue()} layout="wrap" color="stable" />,
 				}),
 				columnHelper.accessor("owner", { header: "负责人", size: 100 }),
 				columnHelper.accessor("amount", {
@@ -117,7 +117,7 @@ export function UiGalleryTable() {
 				columnHelper.accessor("status", {
 					header: "状态",
 					size: 100,
-					cell: (ctx) => <Badge variant={STATUS_VARIANT[ctx.getValue()]}>{ctx.getValue()}</Badge>,
+					cell: (ctx) => <Tag variant={STATUS_VARIANT[ctx.getValue()]}>{ctx.getValue()}</Tag>,
 				}),
 				columnHelper.accessor("updatedAt", {
 					header: "更新时间",
@@ -260,8 +260,8 @@ export function UiGalleryTable() {
 			<ConfirmDialog
 				open={pendingDelete}
 				onOpenChange={setPendingDelete}
-				title={`删除选中的 ${selected.size} 条?`}
-				description="示例页不会真的删除 —— 只清空选择,演示「批量动作 = 确认框 + 清空」的写法。"
+				title="批量删除"
+				description={`确认删除选中的 ${selected.size} 条?示例页不会真的删除 —— 只清空选择,演示「批量动作 = 确认框 + 清空」的写法。`}
 				onConfirm={() => {
 					clear();
 					setPendingDelete(false);
