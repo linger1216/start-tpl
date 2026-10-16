@@ -259,10 +259,11 @@
 
 左搜索(320px)右操作组、8px gap、主次操作 4px 分组;主按钮 = 墨黑方角,删除 = 描边红。
 
-### 5.5 Tab 四形态 —— 骨架不变
+### 5.5 Tab 三形态 —— 骨架不变
 
-underline / segmented / pill / card 全保留;选中态强调色:underline = **墨线下划**、
-segmented = 纸白浮起、pill = **墨底纸字**、card = 纸白与内容区相接。
+underline / segmented / card 全保留(药丸形态已删 —— 与 `Badge` 系的轻量切换调性重复,需求回归到 segmented / filter chips);
+选中态强调色:underline = **墨线下划**、segmented = 纸白浮起(轨道 2px 内衬、内片圆角随外缘收缩)、
+card = **每个页签都带边框**的纸白文件夹页,选中的那张遮住基线与内容区相接。
 计数胶囊、字面量类名、count 机制、vendored 警告全部照旧。
 
 ### 5.6 印章落位地图(哪一屏、哪一档)

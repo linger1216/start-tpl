@@ -5,16 +5,15 @@ import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 
 /**
- * 页签 —— 四种**分割形态**(`variant`),一套 API。
+ * 页签 —— 三种**分割形态**(`variant`),一套 API。
  *
  * | variant | 形态 | 用在哪 |
  * | --- | --- | --- |
  * | `underline`(默认) | 下划线页签(Linear / Vercel 风格) | 页面头部的主分区:台账页的「列表 / 已归档」 |
  * | `segmented` | 分段控件(iOS Segmented) | 同一份数据切**视图口径**(全部 / 我负责的 / 我参与的) |
- * | `pill` | 药丸子(选中 = 主色实底) | 卡片内的轻量切换、筛选预设 |
- * | `card` | 卡片式(浏览器页签,与内容区相接) | 抽屉 / 弹窗里的分区,或需要"文件夹"隐喻的地方 |
+ * | `card` | 卡片式(每个页签都是带边框的"文件夹页",选中那张与内容区相接) | 抽屉 / 弹窗里的分区,或需要"文件夹"隐喻的地方 |
  *
- * 共同纪律(四种都要守):
+ * 共同纪律(三种都要守):
  *  - 页签**不是**独立按钮:它属于某一组,所以组内几何统一、只有选中态承担强调色;
  *  - hover 只提示"这里可点",**不做**与选中态同强度的视觉(否则同时多个像选中);
  *  - 颜色/几何走 token(`--border` / `--muted` / `--primary` / `--hue-blue-*`);
@@ -29,7 +28,7 @@ import { cn } from "#/lib/utils";
  * `pnpm dlx shadcn@latest add tabs` 会覆盖本文件(而且会换回 Radix 口径),覆盖后请按本文件重做。
  */
 
-export const TABS_VARIANTS = ["underline", "segmented", "pill", "card"] as const;
+export const TABS_VARIANTS = ["underline", "segmented", "card"] as const;
 export type TabVariant = (typeof TABS_VARIANTS)[number];
 
 const TabVariantContext = createContext<TabVariant>("underline");
@@ -38,22 +37,19 @@ const TabVariantContext = createContext<TabVariant>("underline");
 const LIST_STYLE: Record<TabVariant, string> = {
 	// 底部 1px 浅灰基线:所有 tab 共享的视觉基线
 	underline: "inline-flex max-w-full flex-wrap items-stretch gap-0 border-b border-border",
-	// 浅灰底轨道 + 内边距,选中项浮在轨道上
-	segmented: "inline-flex max-w-full items-center gap-0.5 rounded-xl bg-muted p-1",
-	// 无容器,只有药丸之间的间隙
-	pill: "inline-flex max-w-full flex-wrap items-center gap-1.5",
-	// 与内容区相接的文件夹页签
-	card: "inline-flex max-w-full flex-wrap items-end gap-1 border-b border-border",
+	// 浅灰底轨道 + 内边距,选中项浮在轨道上(圆角一律 6px 阶,与全站控件统一)
+	segmented: "inline-flex max-w-full items-center gap-0.5 rounded-md bg-muted p-0.5",
+	// 与内容区相接的文件夹页签(页签间只留 2px 缝,整排读作一条基线上的同一组)
+	card: "inline-flex max-w-full flex-wrap items-end gap-0.5 border-b border-border",
 };
 
-/** 每种形态的未选中态(几何 + hover 提示) */
+/** 每种形态的未选中态(几何 + hover 提示)。⚠️ `group/tabs-trigger` 必须在:下划线高亮线与计数选中态都靠组名取 data-active */
 const TRIGGER_BASE: Record<TabVariant, string> = {
 	underline:
-		"relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"group/tabs-trigger relative inline-flex h-9 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 	segmented:
-		"relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border-0 bg-transparent px-3 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	pill: "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-	card: "relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-lg border border-b-0 border-transparent bg-transparent px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+		"group/tabs-trigger relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-sm border-0 bg-transparent px-3 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+	card: "group/tabs-trigger relative inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 border-border bg-muted/40 px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-200 ease-out hover:bg-muted/70 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/25 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
 };
 
 /** 每种形态的选中态 —— 全部写成带 `data-active:` 前缀的字面量(见文件头) */
@@ -61,16 +57,13 @@ const TRIGGER_ACTIVE: Record<TabVariant, string> = {
 	underline: "data-active:font-semibold data-active:text-foreground",
 	segmented:
 		"data-active:bg-background data-active:font-semibold data-active:text-foreground data-active:shadow-(--af-raise-1)",
-	pill: "data-active:border-primary data-active:bg-primary data-active:font-semibold data-active:text-primary-foreground data-active:shadow-(--shadow-glow)",
-	card: "data-active:border-border data-active:bg-background data-active:font-semibold data-active:text-foreground",
+	card: "data-active:bg-background data-active:font-semibold data-active:text-hue-blue-fg",
 };
 
 /** 计数胶囊的选中态(同样必须是字面量) */
 const COUNT_ACTIVE: Record<TabVariant, string> = {
 	underline: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
 	segmented: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
-	// 压在实心主色上:用反白前景的 20% 做底,不要在调用点硬编码 white
-	pill: "group-data-[active]/tabs-trigger:bg-primary-foreground/20 group-data-[active]/tabs-trigger:text-primary-foreground",
 	card: "group-data-[active]/tabs-trigger:bg-hue-blue-soft group-data-[active]/tabs-trigger:text-hue-blue-fg",
 };
 
@@ -173,10 +166,9 @@ export function TabsContent({ className, ...props }: React.ComponentProps<typeof
 	);
 }
 
-/** 四种形态的中文名 —— 展示页(画廊)用;业务侧的 variant 都是随形写的,不要在页面里另写 */
+/** 三种形态的中文名 —— 展示页(画廊)用;业务侧的 variant 都是随形写的,不要在页面里另写 */
 export const TAB_VARIANT_META: Record<TabVariant, { label: string; hint: string }> = {
 	underline: { label: "下划线", hint: "页面主分区(默认)" },
 	segmented: { label: "分段控件", hint: "同一份数据切视图口径" },
-	pill: { label: "药丸", hint: "卡片内的轻量切换" },
 	card: { label: "卡片式", hint: "弹窗 / 抽屉里的分区" },
 };

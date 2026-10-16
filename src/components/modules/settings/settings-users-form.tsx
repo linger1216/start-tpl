@@ -158,7 +158,7 @@ export function SettingsUsersForm({
 					</DialogDescription>
 				</DialogHeader>
 
-				<Tabs variant="segmented" value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+				<Tabs variant="card" value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
 					<TabsList className="shrink-0">
 						<TabsTrigger value="basic">基本信息</TabsTrigger>
 						{creating ? null : (
