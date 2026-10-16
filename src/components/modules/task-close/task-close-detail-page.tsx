@@ -27,7 +27,6 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { Seal } from "#/components/ui/seal";
 import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Tag } from "#/components/ui/tag.tsx";
@@ -461,7 +460,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	return (
 		<PageFrame className="mx-auto w-full">
 			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
-			<header className="border-b border-dashed border-border bg-background">
+			<header className="border-b border-dashed border-border bg-card">
 				<div className="px-8 pt-4 pb-5">
 					{/* 顶部左上:返回按钮(用户要求「顶部左上角」) */}
 					<div className="mb-1.5">
@@ -475,22 +474,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 					<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
 						{/* 主信息:记录头 —— 宋体标题 + 一行中性元信息(章 + 日期) */}
-						<div className="min-w-0">
-							<div className="flex items-start gap-3">
+						<div className="min-w-0 flex-1">
+							<div className="flex justify-between gap-3">
 								<PageTitle>{task.name}</PageTitle>
-								<Seal
-									size="default"
-									tone={detailSeal.tone}
-									label={detailSeal.label}
-									ring={`任务闭环 · ${formatLocalDate(task.updatedAt ?? task.createdAt)}`}
-									date={formatLocalDate(task.updatedAt ?? task.createdAt)}
-									stamped={sealStamped}
-									className="-ml-1"
-								/>
 							</div>
 							{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
 							<MetaRow className="mt-2">
-								{task.priority ? <Tag variant="random">{priorityLabelOf(task.priority)}</Tag> : null}
 								<span>
 									截止
 									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
@@ -505,6 +494,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
 									</strong>
 								</span>
+								<Tag variant="random">{priorityLabelOf(task.priority)}</Tag>
 							</MetaRow>
 						</div>
 
