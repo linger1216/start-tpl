@@ -43,12 +43,11 @@ export function SidebarHeader({
 	const tile = (
 		<span
 			className={cn(
-				// 28px 品牌方块:实心主色 + 反白图标(与 DESIGN.md 的 Primary Blue 一致)
-				"flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-glow",
-				"[&_svg]:size-4",
+				// 28px 章形 logo:印泥红方章 + 反白首字(DESIGN.md「公文·印鉴」§5.1 七),微旋 -3°
+				"flex size-7 shrink-0 -rotate-3 items-center justify-center rounded-[4px] border-[1.5px] border-seal/70 bg-seal/10 font-heading text-[13px] font-bold text-seal-fg",
 			)}
 		>
-			{icon ?? <LayoutDashboard />}
+			{icon ?? (typeof title === "string" ? title.slice(0, 1) : null) ?? <LayoutDashboard />}
 		</span>
 	);
 

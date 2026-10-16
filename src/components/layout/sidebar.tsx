@@ -208,7 +208,9 @@ function NavItem({
 					aria-expanded={open}
 					className={cn(
 						"group/nav relative flex w-full items-center gap-2.5 rounded-full px-2.5 py-1.5 text-left text-sm font-medium",
-						selfSelected ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
+						selfSelected
+							? "bg-primary/12 text-primary ring-1 ring-primary/15"
+							: "text-foreground hover:bg-hover hover:text-foreground",
 						"transition-[color,background-color] duration-150 ease-brand",
 					)}
 				>
@@ -262,7 +264,9 @@ function NavItem({
 				// 未选中 = 深色文字,hover 只换底色 —— hover **不**变蓝,蓝色只属于"被选中"。
 				"group/nav relative flex items-center gap-2.5 rounded-full px-2.5 py-1.5 text-sm font-medium",
 				"transition-[color,background-color] duration-150 ease-brand",
-				active ? "bg-brand-soft text-primary" : "text-foreground hover:bg-hover hover:text-foreground",
+				active
+					? "bg-primary/12 text-primary ring-1 ring-primary/15"
+					: "text-foreground hover:bg-hover hover:text-foreground",
 			)}
 		>
 			<Icon
@@ -364,7 +368,9 @@ function RailItem({
 				// 选中态与展开态**共用同一套底色**:浅蓝底 + 主色图标。
 				// 这里曾经是实心主色块(`bg-primary` + 反白 + glow)—— 一收起,整条栏的主色面积
 				// 就和展开态判若两物(展开态只有淡淡一层浅蓝)。用户要的正是"统一成不折叠的背景色"。
-				active ? "bg-brand-soft text-primary" : "text-muted-foreground hover:bg-hover hover:text-foreground",
+				active
+					? "bg-primary/12 text-primary ring-1 ring-primary/15"
+					: "text-muted-foreground hover:bg-hover hover:text-foreground",
 			)}
 		>
 			<Icon className="size-4" />

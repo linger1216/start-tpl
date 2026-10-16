@@ -180,7 +180,7 @@ export function TaskCloseCardsPage() {
 							key={item.id}
 							to="/task-close/$taskId"
 							params={{ taskId: item.id }}
-							className="block w-full max-w-sm rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+							className="block w-full max-w-sm rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25"
 						>
 							<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-background p-5 transition-[border-color] hover:border-primary/50">
 								{/* 顶行:图标块(左) + 状态徽章(右) —— 与「流程模板」卡片同形 */}

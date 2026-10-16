@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarClock, Clock, Info, Paperclip, Pencil, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
-import { PriorityBadge, StatusBadge } from "#/components/modules/task-close/task-close-badge";
+import { PriorityBadge } from "#/components/modules/task-close/task-close-badge";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
@@ -29,7 +29,15 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { Seal } from "#/components/ui/seal";
 import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
@@ -276,6 +284,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
 	const bouncedRef = useRef(false);
 
+	// 盖章动效的**状态变化**检测:ref 记住上一次的任务状态(必须在 early-return 之前)
+	const prevStatusRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (detailQuery.data) prevStatusRef.current = detailQuery.data.task.status;
+	}, [detailQuery.data]);
+
 	// 不存在的任务不留错误页:提示一声就回「我的任务」(replace —— 这条 URL 不该再进历史)
 	useEffect(() => {
 		if (!taskMissing || bouncedRef.current) return;
@@ -325,6 +339,34 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const workflow = task.workflow as { statuses?: WorkflowStatus[]; initial?: string } | null;
 	const statuses = workflow?.statuses ?? [];
 
+	/** 被驳回过的审批边(`from->to`)—— 流程脊在箭头上挂小红章,"这一步被批回过"一眼可见 */
+	const rejectedEdges = new Set(
+		detailQuery.data.actions
+			.filter((row) => row.status === "rejected" && row.fromStatus && row.toStatus)
+			.map((row) => `${row.fromStatus}->${row.toStatus}`),
+	);
+
+	/** 记录头的状态章:圆章 = 通过 / 关闭 / 归档(墨绿或墨),方章 = 待审批 / 驳回(印泥红)。
+	 *  盖章动效只在状态**变化**的那一次播(检测在上面的 hooks 区),首次进入 / 刷新不播。 */
+	const prevStatus = prevStatusRef.current ?? task.status; // 懒初始化:首次数据到达不算"变化"
+	const sealStamped = prevStatus !== task.status;
+	const detailSeal = (() => {
+		const status = task.status;
+		if (status === "pending") {
+			return { shape: "rect" as const, tone: "red" as const, label: "待审批" };
+		}
+		if (status === "done") {
+			return { shape: "circle" as const, tone: "green" as const, label: "通过" };
+		}
+		if (status === "closed") {
+			return { shape: "circle" as const, tone: "ink" as const, label: "关闭" };
+		}
+		if (status === "archived") {
+			return { shape: "circle" as const, tone: "ink" as const, label: "归档" };
+		}
+		return { shape: "rect" as const, tone: "ink" as const, label: statusLabelOf(statuses, status).slice(0, 2) };
+	})();
+
 	/**
 	 * 「发起审批」的候选状态 —— **由服务端算好**(`permissions.actionTargets`,只含模板里当前状态出发、
 	 * 且我有权发起的 `via=action` 边)。前端不自己解释 `who` / `edges`(见 doc/task-close.md「按钮级授权」)。
@@ -354,16 +396,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	 */
 	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
 	const canSetStatus = !permissions.locked && statusOptions.length > 0;
-
-	/**
-	 * 「本状态该做的那一步」—— 右上动作组里**只给一个主按钮**的份量(checkup P1:八个控件齐平、没有主次)。
-	 * 两个状态动作都在时以「发起审批」为主动作(它才是往前推的那一步);只剩一个时,那一个就是主。
-	 */
-	const primaryStatusAction: "approve" | "setStatus" | null = canApprove
-		? "approve"
-		: canSetStatus
-			? "setStatus"
-			: null;
+	/** 更多▾ 里有没有内容(转交 / 发起审批在场时降级的改状态 / 编辑 / 删除) */
+	const hasMoreActions = can.transfer || (canSetStatus && canApprove) || can.edit || can.remove;
 
 	/**
 	 * 走过的状态 + 首次到达时刻 —— 读活动日志里 `toStatus` 非空的行(与流程条同源)。
@@ -447,34 +481,46 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</div>
 
 					<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-						{/* 主信息:记录头 —— 标题 + 一行**中性**元信息(徽章 + 日期,不再有彩色胶囊) */}
+						{/* 主信息:记录头 —— 宋体标题 + 一行中性元信息(章 + 日期) */}
 						<div className="min-w-0">
-							<h1 className="text-xl font-semibold leading-snug tracking-[-0.01em] text-foreground">{task.name}</h1>
-							<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
-								<StatusBadge status={task.status} label={statusLabelOf(statuses, task.status)} />
+							<div className="flex items-start gap-3">
+								<h1 className="font-heading text-[22px] font-bold leading-snug tracking-[-0.01em] text-foreground">
+									{task.name}
+								</h1>
+								<Seal
+									size="detail"
+									shape={detailSeal.shape}
+									tone={detailSeal.tone}
+									label={detailSeal.label}
+									ring={`任务闭环 · ${formatLocalDate(task.updatedAt ?? task.createdAt)}`}
+									date={formatLocalDate(task.updatedAt ?? task.createdAt)}
+									stamped={sealStamped}
+									className="-ml-1"
+								/>
+							</div>
+							{/* 版记行(DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
+							<div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs tracking-[0.05em] text-muted-foreground">
 								{task.priority ? (
 									<PriorityBadge priority={task.priority} label={priorityLabelOf(task.priority)} />
 								) : null}
-								<span className="inline-flex items-center gap-1.5">
-									<CalendarClock className="size-3.5 shrink-0" />
+								<span>
 									截止
-									<strong className="font-medium tabular-nums text-foreground">
+									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
 										{/* 日期字段按**天**显示 —— 选择器本来就只取到天,`00:00` 是假精度 */}
 										{task.dueAt ? formatLocalDate(task.dueAt) : "未设置"}
 									</strong>
 								</span>
-								<span className="inline-flex items-center gap-1.5">
-									<Clock className="size-3.5 shrink-0" />
+								<span aria-hidden className="size-1 rounded-full bg-border" />
+								<span>
 									创建于
-									<strong className="font-medium tabular-nums text-foreground">
+									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
 										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
 									</strong>
 								</span>
 							</div>
 						</div>
 
-						{/* 右上动作组 —— **只放与状态无关的动作**(转交 / 征询 / 编辑 / 删除 / 刷新);
-						    改状态那类按钮搬进了流程脊的当前节点(见 `TaskFlowSpine`) */}
+						{/* 右上动作组(收敛到 4 组):ⓘ + 主动作(发起审批/改状态取一) + 发起征询 + 更多▾;刷新殿后 */}
 						<div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
 							{/* 「为什么有这些按钮」—— 悬停 / 聚焦展开:当前身份 + 事项流程给这个身份的边,方便复核 */}
 							<TooltipProvider>
@@ -496,18 +542,30 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									</TooltipContent>
 								</Tooltip>
 							</TooltipProvider>
-							{can.transfer ? (
+							{/* 主动作:发起审批优先;无审批边但有直改边时,改状态顶上 primary 位 */}
+							{canApprove ? (
 								<Button
-									variant="outline"
 									size="sm"
-									title="把执行人身份交给另一位参与人员"
-									disabled={transferOptions.length === 0}
+									title="发起审批;任务会锁定,等对方答复"
+									disabled={peopleOptions.length === 0}
 									onClick={() => {
-										setTransferTo("");
-										setTransferOpen(true);
+										setActionTo(actionTargetOptions[0]?.value ?? "");
+										setActionHandle("");
+										setActionMode("approve");
 									}}
 								>
-									转交
+									发起审批
+								</Button>
+							) : canSetStatus ? (
+								<Button
+									size="sm"
+									title={permissions.isAdmin ? "直接把任务改到任意状态(管理员)" : "按事项流程直接改状态"}
+									onClick={() => {
+										setStatusTo(statusOptions[0]?.value ?? "");
+										setStatusOpen(true);
+									}}
+								>
+									改状态
 								</Button>
 							) : null}
 							{can.consult ? (
@@ -525,44 +583,49 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									发起征询
 								</Button>
 							) : null}
-							{/* 「发起审批」/「改状态」—— 由事项流程派生,但入口按用户要求**留在右上角动作组** */}
-							{canApprove ? (
-								<Button
-									variant={primaryStatusAction === "approve" ? "default" : "outline"}
-									size="sm"
-									title="发起审批;任务会锁定,等对方答复"
-									disabled={peopleOptions.length === 0}
-									onClick={() => {
-										setActionTo(actionTargetOptions[0]?.value ?? "");
-										setActionHandle("");
-										setActionMode("approve");
-									}}
-								>
-									发起审批
-								</Button>
-							) : null}
-							{canSetStatus ? (
-								<Button
-									variant={primaryStatusAction === "setStatus" ? "default" : "outline"}
-									size="sm"
-									title={permissions.isAdmin ? "直接把任务改到任意状态(管理员)" : "按事项流程直接改状态"}
-									onClick={() => {
-										setStatusTo(statusOptions[0]?.value ?? "");
-										setStatusOpen(true);
-									}}
-								>
-									改状态
-								</Button>
-							) : null}
-							{can.edit ? (
-								<Button variant="outline" size="icon-sm" aria-label="编辑" onClick={() => setEditOpen(true)}>
-									<Pencil className="size-3.5" />
-								</Button>
-							) : null}
-							{can.remove ? (
-								<Button variant="outline" size="icon-sm" aria-label="删除" onClick={() => setRemoveOpen(true)}>
-									<Trash2 className="size-3.5" />
-								</Button>
+							{/* 更多▾:转交 / 改状态(发起审批在场时降级入菜单)/ 编辑 / 删除 */}
+							{hasMoreActions ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger
+										render={
+											<Button variant="outline" size="sm" aria-label="更多操作">
+												更多
+												<ChevronDown className="size-3.5" />
+											</Button>
+										}
+									/>
+									<DropdownMenuContent align="end">
+										{can.transfer ? (
+											<DropdownMenuItem
+												onSelect={() => {
+													setTransferTo("");
+													setTransferOpen(true);
+												}}
+											>
+												转交执行人
+											</DropdownMenuItem>
+										) : null}
+										{canSetStatus && canApprove ? (
+											<DropdownMenuItem
+												onSelect={() => {
+													setStatusTo(statusOptions[0]?.value ?? "");
+													setStatusOpen(true);
+												}}
+											>
+												改状态
+											</DropdownMenuItem>
+										) : null}
+										{(can.transfer || (canSetStatus && canApprove)) && (can.edit || can.remove) ? (
+											<DropdownMenuSeparator />
+										) : null}
+										{can.edit ? <DropdownMenuItem onSelect={() => setEditOpen(true)}>编辑</DropdownMenuItem> : null}
+										{can.remove ? (
+											<DropdownMenuItem variant="destructive" onSelect={() => setRemoveOpen(true)}>
+												删除
+											</DropdownMenuItem>
+										) : null}
+									</DropdownMenuContent>
+								</DropdownMenu>
 							) : null}
 							{can.refresh ? (
 								<RefreshButton busy={detailQuery.isFetching} onClick={() => detailQuery.refetch()} />
@@ -586,6 +649,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					current={task.status}
 					visited={new Set(reachedAt.keys())}
 					reachedAt={reachedAt}
+					rejectedEdges={rejectedEdges}
 					locked={permissions.locked}
 				/>
 			</section>
@@ -1123,9 +1187,9 @@ function PeopleRow({
 			<div className="flex min-w-0 flex-1 items-center gap-1.5">
 				<span
 					className={cn(
-						// 与「评论与回复」的头像**同色**:品牌蓝底 + 浅字 —— 同一个人在两处长得一样
-						"flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground",
-						"outline-1 outline-offset-2 outline-border",
+						// 姓名签 = **方章式**(墨底反白首字,3px 方角)—— 与「公文·印鉴」世界的评论头像同形族
+						"flex size-5.5 shrink-0 -rotate-3 items-center justify-center rounded-[3px] bg-ink text-xs font-bold text-paper",
+						"font-heading outline-1 outline-offset-2 outline-border",
 					)}
 				>
 					{initials}

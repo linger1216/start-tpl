@@ -9,13 +9,13 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
 			type={type}
 			data-slot="input"
 			className={cn(
-				"h-9 w-full min-w-0 rounded-lg border border-input bg-card px-3.5 py-1.5 text-sm text-foreground transition-colors outline-none " +
+				"h-9 w-full min-w-0 rounded-md border border-input bg-card px-3.5 py-1.5 text-sm text-foreground transition-colors outline-none hover:border-border-strong " +
 					"file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground " +
 					"placeholder:text-muted-foreground " +
-					// 悬停 / 焦点:边框刷主色 + 3px 蓝环(用户偏好,保留)
-					"hover:border-primary hover:ring-3 hover:ring-brand-ring focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-brand-ring " +
+					// 悬停:边框加深一档;焦点:1px 主题色细环(无阴影堆叠,DESIGN.md §4.3)
+					"focus:border-primary/60 focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/20 " +
 					"disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 " +
-					"aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
+					"aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20",
 				className,
 			)}
 			{...props}

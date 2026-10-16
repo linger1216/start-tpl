@@ -30,18 +30,19 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* ── 品牌原色(DESIGN.md §2,不要在这里之外新增品牌色字面量) ───────── */
-  --af-white: #ffffff;
-  --af-navy: #181d26;
-  --af-blue: #1b61c9;
-  --af-surface: #f8fafc;
-  --af-gray: #333333;
-  --af-border: #e0e2e6;
-  --af-green: #006400;
+  /* ── 品牌原色:纸、墨、印泥(DESIGN.md「公文·印鉴」§1,不要在这里之外新增品牌色字面量) ── */
+  --paper: #faf9f6;             /* 画布:暖纸白 */
+  --paper-raised: #ffffff;      /* 卡面:比画布白一档(纸叠纸) */
+  --paper-panel: #f4f2ee;       /* 面板:侧栏 / 表头 / 次级区 */
+  --ink: #1a1a18;               /* 墨:正文与主按钮 */
+  --ink-soft: #4a463f;          /* 墨的次级(次要文字) */
+  --line: #d9d5cd;              /* 纸线:1px 分隔与控件边 */
+  --seal: oklch(0.5 0.11 38);   /* 印泥红:仅 章 / 批注竖线 / 章形 logo */
+  --seal-fg: oklch(0.42 0.11 38); /* 印泥红小字(压深保 4.5:1) */
 
-  /* ── 功能色(规范未定义,见文件头说明) ────────────────────────────── */
+  /* ── 功能色(DESIGN.md §1.2:压暗一档,与"章"形态区分) ───────────── */
   --af-warn: #8a6100;
-  --af-danger: #b3261e;
+  --af-danger: oklch(0.47 0.13 20);
 
   /* ── 点缀色谱(6 色相 × 4 角色)─────────────────────────────────────
      为什么要有这一层:单一蓝强调色在长列表/大密度后台里「能看但不鲜活」。
@@ -59,28 +60,28 @@
        --hue-X-line   28% 描边(细边框 / 分隔)
 
      加新色相只改这一段 + 下面的 `.dark` 对偶 + `@theme inline` 的三行映射。 */
-  --hue-blue: var(--af-blue);
-  --hue-violet: oklch(0.525 0.132 293);
-  --hue-teal: oklch(0.548 0.086 197);
-  --hue-amber: oklch(0.632 0.108 72);
-  --hue-rose: oklch(0.57 0.128 14);
-  --hue-emerald: oklch(0.528 0.098 162);
+  --hue-blue: oklch(0.45 0.1 259);
+  --hue-violet: oklch(0.5 0.11 293);
+  --hue-teal: oklch(0.52 0.09 197);
+  --hue-amber: oklch(0.6 0.11 80);
+  --hue-rose: oklch(0.54 0.11 14);
+  --hue-emerald: oklch(0.5 0.1 162);
 
-  /* 文字态:实体色往深海军蓝压一档 —— 浅底上仍满足 4.5:1 */
-  --hue-blue-fg: color-mix(in oklab, var(--hue-blue) 88%, var(--af-navy));
-  --hue-violet-fg: color-mix(in oklab, var(--hue-violet) 86%, var(--af-navy));
-  --hue-teal-fg: color-mix(in oklab, var(--hue-teal) 84%, var(--af-navy));
-  --hue-amber-fg: color-mix(in oklab, var(--hue-amber) 78%, var(--af-navy));
-  --hue-rose-fg: color-mix(in oklab, var(--hue-rose) 86%, var(--af-navy));
-  --hue-emerald-fg: color-mix(in oklab, var(--hue-emerald) 84%, var(--af-navy));
+  /* 文字态:实体色往墨压一档 —— 纸面上仍满足 4.5:1 */
+  --hue-blue-fg: color-mix(in oklab, var(--hue-blue) 88%, var(--ink));
+  --hue-violet-fg: color-mix(in oklab, var(--hue-violet) 86%, var(--ink));
+  --hue-teal-fg: color-mix(in oklab, var(--hue-teal) 84%, var(--ink));
+  --hue-amber-fg: color-mix(in oklab, var(--hue-amber) 78%, var(--ink));
+  --hue-rose-fg: color-mix(in oklab, var(--hue-rose) 86%, var(--ink));
+  --hue-emerald-fg: color-mix(in oklab, var(--hue-emerald) 84%, var(--ink));
 
-  /* 软底 / 描边:统一从实体色与白底混出来,不写死第二组十六进制 */
-  --hue-blue-soft: color-mix(in oklab, var(--hue-blue) 10%, var(--af-white));
-  --hue-violet-soft: color-mix(in oklab, var(--hue-violet) 10%, var(--af-white));
-  --hue-teal-soft: color-mix(in oklab, var(--hue-teal) 11%, var(--af-white));
-  --hue-amber-soft: color-mix(in oklab, var(--hue-amber) 13%, var(--af-white));
-  --hue-rose-soft: color-mix(in oklab, var(--hue-rose) 10%, var(--af-white));
-  --hue-emerald-soft: color-mix(in oklab, var(--hue-emerald) 11%, var(--af-white));
+  /* 软底 / 描边:统一从实体色与纸面混出来,不写死第二组十六进制 */
+  --hue-blue-soft: color-mix(in oklab, var(--hue-blue) 10%, var(--paper-raised));
+  --hue-violet-soft: color-mix(in oklab, var(--hue-violet) 10%, var(--paper-raised));
+  --hue-teal-soft: color-mix(in oklab, var(--hue-teal) 11%, var(--paper-raised));
+  --hue-amber-soft: color-mix(in oklab, var(--hue-amber) 13%, var(--paper-raised));
+  --hue-rose-soft: color-mix(in oklab, var(--hue-rose) 10%, var(--paper-raised));
+  --hue-emerald-soft: color-mix(in oklab, var(--hue-emerald) 11%, var(--paper-raised));
 
   --hue-blue-line: color-mix(in oklab, var(--hue-blue) 28%, transparent);
   --hue-violet-line: color-mix(in oklab, var(--hue-violet) 28%, transparent);
@@ -89,58 +90,58 @@
   --hue-rose-line: color-mix(in oklab, var(--hue-rose) 28%, transparent);
   --hue-emerald-line: color-mix(in oklab, var(--hue-emerald) 30%, transparent);
 
-  /* 实心色块上的前景色。浅色模式 = 白;深色模式下实体色被提亮,白字会糊,
-     所以深色模式改成深海军蓝(--af-navy 在 `.dark` 里已定义,见下)。
-     组件用 `text-hue-X-on`,不要在调用点硬编码 `text-white`。 */
-  --hue-blue-on: var(--af-white);
-  --hue-violet-on: var(--af-white);
-  --hue-teal-on: var(--af-white);
-  --hue-amber-on: var(--af-white);
-  --hue-rose-on: var(--af-white);
-  --hue-emerald-on: var(--af-white);
+  /* 实心色块上的前景色。浅色模式 = 纸白;深色模式下实体色被提亮,
+     前景改用夜墨(见 .dark),组件用 `text-hue-X-on`,不要硬编码 `text-white`。 */
+  --hue-blue-on: var(--paper-raised);
+  --hue-violet-on: var(--paper-raised);
+  --hue-teal-on: var(--paper-raised);
+  --hue-amber-on: var(--paper-raised);
+  --hue-rose-on: var(--paper-raised);
+  --hue-emerald-on: var(--paper-raised);
 
   /* ── 氛围层(环境渐晕 / 高光边)──────────────────────────────────
      极低不透明度,只在**大面积**背景上铺一层极淡的色温差,让白底不"死白"。
      不做可见的装饰渐变 —— 目标是"说不上哪里不一样,但更耐看"。 */
-  --ambient-top: color-mix(in oklab, var(--af-blue) 5%, transparent);
-  --ambient-corner-a: color-mix(in oklab, var(--hue-violet) 6%, transparent);
-  --ambient-corner-b: color-mix(in oklab, var(--hue-teal) 6%, transparent);
-  /* 侧边栏顶部品牌区的一层色温 */
-  --sidebar-veil: color-mix(in oklab, var(--hue-blue) 4%, transparent);
+  --ambient-top: color-mix(in oklab, var(--hue-amber) 3%, transparent);
+  --ambient-corner-a: color-mix(in oklab, var(--hue-rose) 3%, transparent);
+  --ambient-corner-b: color-mix(in oklab, var(--hue-teal) 3%, transparent);
+  /* 侧边栏顶部品牌区的一层色温(墨色) */
+  --sidebar-veil: color-mix(in oklab, var(--ink) 3%, transparent);
   /* 细高光边:1px,用于卡片/控件顶部,模拟受光面 */
-  --hairline-light: color-mix(in oklab, var(--af-white) 70%, transparent);
+  --hairline-light: color-mix(in oklab, var(--paper-raised) 70%, transparent);
 
-  /* ── 语义 token:组件消费的就是这一层 ──────────────────────────────── */
-  --background: var(--af-white);
-  --foreground: var(--af-navy);
-  --card: var(--af-surface);
-  --card-foreground: var(--af-navy);
-  --popover: var(--af-white);
-  --popover-foreground: var(--af-navy);
-  --primary: var(--af-blue);
-  --primary-foreground: var(--af-white);
-  --secondary: var(--af-surface);
-  --secondary-foreground: var(--af-navy);
-  --muted: var(--af-surface);
-  --muted-foreground: var(--af-gray);
-  --accent: var(--af-surface);
-  --accent-foreground: var(--af-navy);
-  --border: var(--af-border);
-  --input: var(--af-border);
-  --ring: var(--af-blue);
+  /* ── 语义 token:组件消费的就是这一层(名不变,值指向新原色) ──────────
+     主题色 = 黛蓝(hue-blue 兼任):主按钮 / 链接 / 焦点环 / 选中态;墨只管文字。 */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--hue-blue);
+  --primary-foreground: var(--paper-raised);
+  --secondary: var(--paper-panel);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-panel);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--paper-panel);
+  --accent-foreground: var(--ink);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--hue-blue);
   --destructive: var(--af-danger);
-  --destructive-foreground: var(--af-white);
+  --destructive-foreground: var(--paper-raised);
 
   /* 状态色:soft 作底、fg 作字,配对使用(见 lib/constants.ts / score-text.tsx) */
-  --success: var(--af-green);
-  --success-fg: var(--af-green);
-  --success-soft: color-mix(in oklab, var(--af-green) 9%, var(--af-white));
+  --success: oklch(0.44 0.09 155);
+  --success-fg: var(--success);
+  --success-soft: color-mix(in oklab, var(--success) 9%, var(--paper-raised));
   --warn: var(--af-warn);
   --warn-fg: var(--af-warn);
-  --warn-soft: color-mix(in oklab, var(--af-warn) 10%, var(--af-white));
+  --warn-soft: color-mix(in oklab, var(--af-warn) 10%, var(--paper-raised));
   --danger: var(--af-danger);
   --danger-fg: var(--af-danger);
-  --danger-soft: color-mix(in oklab, var(--af-danger) 8%, var(--af-white));
+  --danger-soft: color-mix(in oklab, var(--af-danger) 8%, var(--paper-raised));
 
   /* 分类图表色(规范未定义) */
   --chart-1: oklch(0.646 0.222 41.116);
@@ -150,25 +151,25 @@
   --chart-5: oklch(0.769 0.188 70.08);
 
   /* ── 侧边栏(白底 + surface 悬停,不引入新色) ────────────────────── */
-  --sidebar: var(--af-white);
-  --sidebar-foreground: var(--af-navy);
-  --sidebar-primary: var(--af-blue);
-  --sidebar-primary-foreground: var(--af-white);
-  --sidebar-accent: var(--af-surface);
-  --sidebar-accent-foreground: var(--af-navy);
-  --sidebar-border: var(--af-border);
-  --sidebar-ring: var(--af-blue);
+  --sidebar: var(--paper-panel);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper-raised);
+  --sidebar-accent: var(--paper-raised);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--ink);
 
   /* ── 阴影(DESIGN.md §6:蓝调多层,永不用厚重纯黑) ─────────────────
    实现变量叫 --elev-*(不叫 --shadow-*):后者是 Tailwind 自己的命名空间,
    同名会被 @theme 覆盖;这里再由下面的 @theme inline 映射成标准工具类
    (`shadow-card` / `shadow-soft` / `shadow-glow` / `shadow-raise-1|2|3`)。 */
   --elev-card:
-    rgba(0, 0, 0, 0.32) 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 0px 2px,
-    rgba(45, 127, 249, 0.28) 0px 1px 3px, rgba(0, 0, 0, 0.06) 0px 0px 0px 0.5px inset;
-  --elev-soft: rgba(15, 48, 106, 0.05) 0px 0px 20px;
-  /* 按钮 hover 的蓝调光晕(DESIGN.md §7) */
-  --elev-glow: 0 4px 14px -4px color-mix(in srgb, var(--af-blue) 32%, transparent);
+    0 0 0 1px color-mix(in oklab, var(--ink) 6%, transparent),
+    0 1px 2px rgba(26, 22, 15, 0.05), 0 8px 24px -16px rgba(26, 22, 15, 0.12);
+  --elev-soft: 0 0 24px rgba(26, 22, 15, 0.04);
+  /* --elev-glow 已退役:等值保留避免 shadow-glow 工具类断掉(渐消) */
+  --elev-glow: var(--af-raise-2);
 
   /* ── 动效(DESIGN.md §7:统一曲线,160–200ms) ───────────────────── */
   --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
@@ -177,131 +178,97 @@
   --t-fast: 120ms;
   --t-base: 180ms;
   --t-slow: 260ms;
-  /* Airtable Blue 派生面 —— 选中态 / 弱背景 / focus ring 全部从这一档走 */
-  --af-blue-soft: color-mix(in oklab, var(--af-blue) 10%, var(--af-white));
-  --af-blue-faint: color-mix(in oklab, var(--af-blue) 6%, var(--af-surface));
-  --af-blue-ring: color-mix(in oklab, var(--af-blue) 24%, transparent);
-  /* hover 面 = 纯中性灰 —— 蓝色只属于"被选中"(af-blue-soft),hover 不变蓝 */
-  --af-hover: color-mix(in oklab, var(--af-surface) 60%, var(--af-border) 40%);
+  /* 选中态(黛蓝软底)/ 弱背景 / focus ring —— 主题色一,页面因此"有点颜色" */
+  --af-blue-soft: color-mix(in oklab, var(--hue-blue) 10%, var(--paper-raised));
+  --af-blue-faint: color-mix(in oklab, var(--hue-blue) 6%, var(--paper-panel));
+  --af-blue-ring: color-mix(in oklab, var(--hue-blue) 30%, transparent);
+  /* hover 面 = 纸面板加深 —— 选中才变色相,hover 不变蓝 */
+  --af-hover: color-mix(in oklab, var(--paper-panel) 60%, var(--line) 40%);
   --af-selected: var(--af-blue-soft);
-  --af-border-strong: color-mix(in oklch, var(--af-navy) 16%, var(--af-border));
+  --line-strong: color-mix(in oklch, var(--ink) 16%, var(--line));
   --af-card-shadow:
-    rgba(0, 0, 0, 0.32) 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 0px 2px,
-    rgba(45, 127, 249, 0.28) 0px 1px 3px, rgba(0, 0, 0, 0.06) 0px 0px 0px 0.5px inset;
+    0 0 0 1px color-mix(in oklab, var(--ink) 6%, transparent),
+    0 1px 2px rgba(26, 22, 15, 0.05), 0 8px 24px -16px rgba(26, 22, 15, 0.12);
   --af-soft-shadow:
-    0 1px 2px rgba(15, 48, 106, 0.04), 0 0 0 1px var(--af-border);
+    0 1px 2px rgba(26, 22, 15, 0.04), 0 0 0 1px var(--line);
   --af-pop-shadow:
-    0 12px 32px -8px rgba(15, 48, 106, 0.12), 0 2px 6px rgba(15, 48, 106, 0.06),
-    0 0 0 1px var(--af-border);
+    0 12px 32px -8px rgba(26, 22, 15, 0.12), 0 2px 6px rgba(26, 22, 15, 0.06),
+    0 0 0 1px var(--line);
 
   /* 抬升三档:静置 / 悬停 / 浮起。统一带 1px 描边,避免"纸片无边界";
      末尾那条 inset 是"受光边"(浅色模式下几乎不可见,深色模式下把卡片顶边点亮一档)。
      hover 只换这一档(**不做位移**),所以三档之间必须是同族颜色,切换才不跳。 */
   --af-raise-1:
-    0 1px 1px rgba(15, 48, 106, 0.03), 0 0 0 1px var(--af-border), inset 0 1px 0 var(--hairline-light);
+    0 1px 1px rgba(26, 22, 15, 0.03), 0 0 0 1px var(--line), inset 0 1px 0 var(--hairline-light);
   --af-raise-2:
-    0 1px 2px rgba(15, 48, 106, 0.05), 0 6px 16px -8px rgba(15, 48, 106, 0.1), 0 0 0 1px var(--af-border),
+    0 1px 2px rgba(26, 22, 15, 0.05), 0 6px 16px -8px rgba(26, 22, 15, 0.1), 0 0 0 1px var(--line),
     inset 0 1px 0 var(--hairline-light);
   --af-raise-3:
-    0 2px 4px rgba(15, 48, 106, 0.05), 0 14px 32px -12px rgba(15, 48, 106, 0.16), 0 0 0 1px var(--af-border),
+    0 2px 4px rgba(26, 22, 15, 0.05), 0 14px 32px -12px rgba(26, 22, 15, 0.16), 0 0 0 1px var(--line),
     inset 0 1px 0 var(--hairline-light);
 }
 
-/* 深色模式:DESIGN.md 只规定了浅色,这里用品牌色推导一套对偶值,
-   全部经 color-mix 从上面的品牌原色得到,不新增字面量。 */
+/* 深色模式 —— 夜墨(DESIGN.md §7):地面深墨、文字暖纸、主题色黛蓝提亮一档。
+   只覆盖原语与字面量阴影;语义层公式写在 :root 里,引用原色自动翻转。 */
 .dark {
-  --background: var(--af-navy);
-  --foreground: var(--af-surface);
-  --card: color-mix(in oklab, var(--af-navy) 92%, var(--af-white));
-  --card-foreground: var(--af-surface);
-  --popover: color-mix(in oklab, var(--af-navy) 88%, var(--af-white));
-  --popover-foreground: var(--af-surface);
-  --primary: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
-  --primary-foreground: var(--af-navy);
-  --secondary: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
-  --secondary-foreground: var(--af-surface);
-  --muted: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
-  --muted-foreground: color-mix(in oklab, var(--af-surface) 62%, var(--af-navy));
-  --accent: color-mix(in oklab, var(--af-navy) 90%, var(--af-white));
-  --accent-foreground: var(--af-surface);
-  --border: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
-  --input: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
-  --ring: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
-  --destructive: color-mix(in oklab, var(--af-danger) 62%, var(--af-white));
-  --destructive-foreground: var(--af-navy);
+  /* 原语覆盖 */
+  --paper: #191917;            /* 夜墨画布 */
+  --paper-raised: #211f1c;     /* 卡 / 弹窗 */
+  --paper-panel: #1f1e1b;      /* 面板 */
+  --ink: #ece9e2;              /* 文字 = 暖纸字 */
+  --ink-soft: #a39f96;
+  --line: #37342e;
+  --seal: oklch(0.62 0.1 38);  /* 章红提亮一档 */
+  --seal-fg: oklch(0.72 0.1 38);
 
-  --success-fg: color-mix(in oklab, var(--af-green) 52%, var(--af-white));
-  --success-soft: color-mix(in oklab, var(--af-green) 22%, var(--af-navy));
-  --warn-fg: color-mix(in oklab, var(--af-warn) 52%, var(--af-white));
-  --warn-soft: color-mix(in oklab, var(--af-warn) 22%, var(--af-navy));
-  --danger-fg: color-mix(in oklab, var(--af-danger) 62%, var(--af-white));
-  --danger-soft: color-mix(in oklab, var(--af-danger) 22%, var(--af-navy));
+  /* 主题色黛蓝提亮(主按钮 / 链接 / 焦点) */
+  --hue-blue: oklch(0.62 0.1 259);
+  --hue-violet: oklch(0.6 0.11 293);
+  --hue-teal: oklch(0.62 0.09 197);
+  --hue-amber: oklch(0.68 0.11 80);
+  --hue-rose: oklch(0.64 0.11 14);
+  --hue-emerald: oklch(0.6 0.1 162);
 
-  --sidebar: color-mix(in oklab, var(--af-navy) 94%, var(--af-white));
-  --sidebar-foreground: var(--af-surface);
-  --sidebar-primary: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
-  --sidebar-primary-foreground: var(--af-navy);
-  --sidebar-accent: color-mix(in oklab, var(--af-navy) 86%, var(--af-white));
-  --sidebar-accent-foreground: var(--af-surface);
-  --sidebar-border: color-mix(in oklab, var(--af-border) 20%, var(--af-navy));
-  --sidebar-ring: color-mix(in oklab, var(--af-blue) 72%, var(--af-white));
+  /* 状态字 / 软底:往夜墨压 */
+  --success-fg: color-mix(in oklab, var(--success) 55%, var(--ink));
+  --success-soft: color-mix(in oklab, var(--success) 22%, var(--paper));
+  --warn-fg: color-mix(in oklab, var(--af-warn) 55%, var(--ink));
+  --warn-soft: color-mix(in oklab, var(--af-warn) 22%, var(--paper));
+  --danger-fg: color-mix(in oklab, var(--af-danger) 60%, var(--ink));
+  --danger-soft: color-mix(in oklab, var(--af-danger) 22%, var(--paper));
 
-  /* 点缀色的深色对偶:实体色提亮一档(深底上要看得见),
-     软底改成"实体系色压进深色底",描边不变(透明混色本身自适应)。 */
-  --hue-blue: color-mix(in oklab, var(--af-blue) 74%, var(--af-white));
-  --hue-violet: color-mix(in oklab, oklch(0.525 0.132 293) 62%, var(--af-white));
-  --hue-teal: color-mix(in oklab, oklch(0.548 0.086 197) 64%, var(--af-white));
-  --hue-amber: color-mix(in oklab, oklch(0.632 0.108 72) 70%, var(--af-white));
-  --hue-rose: color-mix(in oklab, oklch(0.57 0.128 14) 64%, var(--af-white));
-  --hue-emerald: color-mix(in oklab, oklch(0.528 0.098 162) 62%, var(--af-white));
+  /* 实心色块上的前景 = 夜墨 */
+  --hue-blue-on: var(--paper);
+  --hue-violet-on: var(--paper);
+  --hue-teal-on: var(--paper);
+  --hue-amber-on: var(--paper);
+  --hue-rose-on: var(--paper);
+  --hue-emerald-on: var(--paper);
 
-  --hue-blue-fg: color-mix(in oklab, var(--hue-blue) 84%, var(--af-white));
-  --hue-violet-fg: color-mix(in oklab, var(--hue-violet) 84%, var(--af-white));
-  --hue-teal-fg: color-mix(in oklab, var(--hue-teal) 84%, var(--af-white));
-  --hue-amber-fg: color-mix(in oklab, var(--hue-amber) 86%, var(--af-white));
-  --hue-rose-fg: color-mix(in oklab, var(--hue-rose) 84%, var(--af-white));
-  --hue-emerald-fg: color-mix(in oklab, var(--hue-emerald) 84%, var(--af-white));
+  --ambient-top: color-mix(in oklab, var(--hue-amber) 4%, transparent);
+  --ambient-corner-a: color-mix(in oklab, var(--hue-rose) 4%, transparent);
+  --ambient-corner-b: color-mix(in oklab, var(--hue-teal) 4%, transparent);
+  --sidebar-veil: color-mix(in oklab, var(--paper-raised) 4%, transparent);
+  --hairline-light: color-mix(in oklab, var(--paper-raised) 10%, transparent);
 
-  --hue-blue-soft: color-mix(in oklab, var(--hue-blue) 20%, var(--af-navy));
-  --hue-violet-soft: color-mix(in oklab, var(--hue-violet) 20%, var(--af-navy));
-  --hue-teal-soft: color-mix(in oklab, var(--hue-teal) 20%, var(--af-navy));
-  --hue-amber-soft: color-mix(in oklab, var(--hue-amber) 20%, var(--af-navy));
-  --hue-rose-soft: color-mix(in oklab, var(--hue-rose) 20%, var(--af-navy));
-  --hue-emerald-soft: color-mix(in oklab, var(--hue-emerald) 20%, var(--af-navy));
-
-  /* 深色模式下实体色被提亮 → 实心块上的前景改用深底,不然白字压浅块读不出来 */
-  --hue-blue-on: var(--af-navy);
-  --hue-violet-on: var(--af-navy);
-  --hue-teal-on: var(--af-navy);
-  --hue-amber-on: var(--af-navy);
-  --hue-rose-on: var(--af-navy);
-  --hue-emerald-on: var(--af-navy);
-
-  --ambient-top: color-mix(in oklab, var(--af-blue) 8%, transparent);
-  --ambient-corner-a: color-mix(in oklab, oklch(0.525 0.132 293) 7%, transparent);
-  --ambient-corner-b: color-mix(in oklab, oklch(0.548 0.086 197) 7%, transparent);
-  --sidebar-veil: color-mix(in oklab, var(--af-blue) 7%, transparent);
-  --hairline-light: color-mix(in oklab, var(--af-white) 12%, transparent);
-
-  --af-raise-1: 0 1px 1px rgba(0, 0, 0, 0.24), 0 0 0 1px var(--af-border), inset 0 1px 0 var(--hairline-light);
+  --af-raise-1: 0 1px 1px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--line), inset 0 1px 0 var(--hairline-light);
   --af-raise-2:
-    0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--af-border),
+    0 1px 2px rgba(0, 0, 0, 0.45), 0 6px 16px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line),
     inset 0 1px 0 var(--hairline-light);
   --af-raise-3:
-    0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--af-border),
+    0 2px 4px rgba(0, 0, 0, 0.45), 0 14px 32px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--line),
     inset 0 1px 0 var(--hairline-light);
 
-  --elev-soft: rgba(0, 0, 0, 0.35) 0px 0px 20px;
+  --elev-soft: 0 0 24px rgba(0, 0, 0, 0.45);
 }
 
 @theme inline {
-  /* 字体(DESIGN.md §3)。Haas 是商用字体,加载不到时走系统栈 —— fallback 必须保留。
-     想换成自有字体:只改这两行。 */
+  /* 字体(DESIGN.md §3):宋体 Display / 黑体 UI(系统栈兜底,fallback 必须保留) */
   --font-sans:
-    Haas, -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', -apple-system,
+    system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-heading:
-    'Haas Groot Disp', Haas, -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, 'SimSun', Georgia, serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -351,7 +318,7 @@
   --color-brand-soft: var(--af-blue-soft);
   --color-brand-faint: var(--af-blue-faint);
   --color-brand-ring: var(--af-blue-ring);
-  --color-border-strong: var(--af-border-strong);
+  --color-border-strong: var(--line-strong);
 
   /* 点缀色进 @theme —— 于是 `bg-hue-violet-soft` / `text-hue-violet-fg` /
      `border-hue-violet-line` 这类工具类可直接用,调用方不必写 `bg-[color:var(--…)]`。
@@ -387,14 +354,15 @@
   --color-hue-emerald-line: var(--hue-emerald-line);
   --color-hue-emerald-on: var(--hue-emerald-on);
 
-  /* 圆角:刻意不覆盖 Tailwind 的 --radius-* 命名空间。
-     它的默认阶刚好就是 DESIGN.md §5 要的档位:
-       rounded-lg 8px(默认)/ rounded-xl 12px(按钮)/
-       rounded-2xl 16px(小卡片)/ rounded-3xl 24px(区块)
-     覆盖这四个会让所有组件的圆角一起漂移(shadcn 老模板就是这么埋坑的)。 */
+  /* 圆角(DESIGN.md §5 新阶):方角语言统一对位 ——
+     lg 6px(卡片/弹窗/菜单)/ 其余默认阶;按钮与输入的 2px 在各自组件里用 rounded-xs。 */
 
   /* 动效曲线进 @theme,npm 侧可直接用 `ease-brand` 工具类 */
   --ease-brand: cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* 印章(DESIGN.md §4.4):红=驳回/待批,墨绿=通过;动效类见「动效层」 */
+  --color-seal: var(--seal);
+  --color-seal-fg: var(--seal-fg);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -455,7 +423,7 @@ body,
   --captchakit-error: var(--danger);
   --captchakit-focus: var(--brand-ring);
   /* Tailwind `rounded-lg` 的实数值 —— 跟 Input / Button 对齐(组件本身用的是 6px) */
-  --captchakit-radius: 0.5rem;
+  --captchakit-radius: 0.375rem;
 
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -542,7 +510,7 @@ body,
 
 .captchakit.captchakit .captchakit-refresh:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--brand-ring);
+  box-shadow: 0 0 0 1px var(--brand-ring);
 }
 
 .captchakit.captchakit .captchakit-refresh-icon {
@@ -587,12 +555,12 @@ body,
 .captchakit.captchakit .captchakit-input:focus-visible {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--brand-ring);
+  box-shadow: 0 0 0 1px var(--brand-ring);
 }
 
 .captchakit.captchakit .captchakit-input[aria-invalid="true"] {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
 /* --- 7. 「验证」按钮已删(整个 .captchakit-actions 由上面的 `display: none` 摘掉) ---
@@ -672,8 +640,8 @@ body,
 .prose pre {
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--af-navy);
-  color: var(--af-surface);
+  background: var(--ink);
+  color: var(--paper-panel);
 }
 
 /* 动效:统一曲线与时长(DESIGN.md §7) */
@@ -936,6 +904,27 @@ a {
   }
 }
 
+/* ── 盖章(DESIGN.md §4.4):状态最终落定时播一次,180ms ──────────────
+   消费:`<Seal stamped>`(`key={status}` 重挂载触发)。进行中不播。 */
+.seal-stamp {
+  animation: seal-stamp var(--t-base) var(--ease-brand) both;
+}
+
+@keyframes seal-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(1.5) rotate(-14deg);
+  }
+  60% {
+    opacity: 0.95;
+    transform: scale(0.96) rotate(var(--seal-stamp));
+  }
+  100% {
+    opacity: 0.92;
+    transform: scale(1) rotate(var(--seal-stamp));
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Micro-interactions 层 —— 全站统一的"卡片级"动效。
    优先 transform / opacity,200ms ease-out,默认尊重 prefers-reduced-motion。
@@ -982,7 +971,7 @@ a {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--af-blue);
+  background: var(--primary);
   transform: scaleY(0);
   transform-origin: center;
   transition: transform var(--t-base) var(--ease-brand);
@@ -1032,11 +1021,11 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   th {
     letter-spacing: 0.02em;
   }
-  /* 全局聚焦环:边框 + 3px soft ring,蓝调,符合设计系统 */
+  /* 全局聚焦环:1px 细环 + 边框微染主题色(精致,不出粗黑边) */
   :where(button, a, input, select,  [role='button'], [role='switch']):focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px var(--af-blue-ring);
-    border-color: var(--af-blue);
+    box-shadow: 0 0 0 1px var(--af-blue-ring);
+    border-color: color-mix(in oklab, var(--hue-blue) 40%, var(--line));
   }
   /* 代码/时间统一走 tabular-nums,正负号对齐(原 .num / .mono 两个类无人使用,已摘掉) */
   :where(code, kbd, time) {
@@ -1063,8 +1052,8 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
       transform var(--t-base) var(--ease-brand);
   }
   .kpi:hover {
-    border-color: var(--af-blue);
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--af-blue) 18%, transparent);
+    border-color: color-mix(in oklab, var(--primary) 40%, var(--line));
+    box-shadow: var(--af-raise-1);
   }
   .kpi-label {
     font-size: 11px;
@@ -1107,12 +1096,12 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
       background var(--t-base) var(--ease-brand);
   }
   .chip:hover {
-    border-color: var(--af-border-strong);
+    border-color: var(--line-strong);
   }
   .chip.is-on {
     background: var(--af-selected);
-    border-color: color-mix(in oklch, var(--af-blue) 30%, var(--border));
-    color: var(--af-blue);
+    border-color: color-mix(in oklch, var(--primary) 30%, var(--border));
+    color: var(--primary);
   }
 
   .detail-row {
@@ -1163,14 +1152,14 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     height: 8px;
     border-radius: 50%;
     background: var(--background);
-    border: 2px solid var(--af-border-strong);
+    border: 2px solid var(--line-strong);
     margin: 4px 0 0 8px;
     z-index: 1;
   }
   .timeline li.is-current .t-dot {
-    background: var(--af-blue);
-    border-color: var(--af-blue);
-    box-shadow: 0 0 0 3px var(--af-blue-soft);
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 14%, transparent);
   }
   .timeline .t-title {
     font-size: 12px;
@@ -1203,10 +1192,10 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     padding: 10px 12px;
     /* 表头铺一层极淡的斜向色温,而不是一整块死灰面 ——
        与内容区顶部那层渐晕同源,让"表头"读起来是内容区的一部分而不是贴上去的条 */
-    background-color: var(--af-surface);
+    background-color: var(--paper-panel);
     background-image: linear-gradient(
       180deg,
-      color-mix(in oklab, var(--af-blue) 4%, transparent) 0%,
+      color-mix(in oklab, var(--primary) 4%, transparent) 0%,
       transparent 100%
     );
     color: var(--muted-foreground);
@@ -1306,7 +1295,7 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     position: relative;
     width: 32px;
     height: 18px;
-    background: var(--af-border-strong);
+    background: var(--line-strong);
     border-radius: 999px;
     transition: background var(--t-base) var(--ease-brand);
     cursor: pointer;
@@ -1325,7 +1314,7 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     transition: transform var(--t-base) var(--ease-brand);
   }
   .switch.on {
-    background: var(--af-blue);
+    background: var(--primary);
   }
   .switch.on::after {
     transform: translateX(14px);
@@ -1376,8 +1365,8 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
   }
   .info-trigger:hover,
   .info-trigger:focus-visible {
-    border-color: var(--af-blue);
-    color: var(--af-blue);
+    border-color: var(--primary);
+    color: var(--primary);
     background: var(--af-blue-soft);
     box-shadow: 0 0 0 3px var(--af-blue-ring);
   }
@@ -1391,8 +1380,8 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow:
-      0 12px 32px -8px rgba(15, 48, 106, 0.12),
-      0 2px 6px rgba(15, 48, 106, 0.06),
+      0 12px 32px -8px rgba(26, 22, 15, 0.12),
+      0 2px 6px rgba(26, 22, 15, 0.06),
       0 0 0 1px var(--border);
     font-size: 12.5px;
     line-height: 1.6;

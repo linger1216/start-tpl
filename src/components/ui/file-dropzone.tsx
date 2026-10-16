@@ -98,7 +98,7 @@ export function FileDropzone({
 					acceptFiles(event.dataTransfer.files);
 				}}
 				className={cn(
-					"flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-center transition-colors",
+					"flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed px-4 py-6 text-center transition-colors",
 					dragging ? "border-primary bg-primary/5" : "border-border hover:border-ring/60 hover:bg-secondary/50",
 					disabled && "cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent",
 				)}
@@ -128,7 +128,7 @@ export function FileDropzone({
 			/>
 
 			{fileName ? (
-				<div className="flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5 text-xs">
+				<div className="flex items-center gap-2 rounded-md bg-secondary px-2.5 py-1.5 text-xs">
 					<FileSpreadsheet className="size-3.5 shrink-0 text-muted-foreground" />
 					<span className="min-w-0 flex-1 truncate text-foreground">{fileName}</span>
 					{onClear ? (

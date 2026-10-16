@@ -97,7 +97,7 @@ export function SearchSelect<T extends string = string>({
 				aria-disabled={disabled}
 				className={cn(
 					// `w-full`:表单里它和 `Select` / `Input` 并排,三者都得占满字段列,否则宽度不一(实测踩过)
-					"flex h-8 w-full items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
+					"flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm hover:border-border-strong whitespace-nowrap transition-colors outline-none",
 					disabled ? "cursor-not-allowed opacity-50" : "hover:border-ring/60 hover:text-foreground",
 				)}
 			>
@@ -131,7 +131,7 @@ export function SearchSelect<T extends string = string>({
 						}}
 						onKeyDown={onInputKeyDown}
 						placeholder="搜索…"
-						className="h-7 w-full rounded-lg border border-input bg-background pr-2 pl-7 text-sm outline-none"
+						className="h-7 w-full rounded-md border border-input bg-background pr-2 pl-7 text-sm outline-none"
 					/>
 				</div>
 

@@ -31,7 +31,7 @@ function Card({
 			data-size={size}
 			style={tone ? ({ "--tone-color": tone } as React.CSSProperties) : undefined}
 			className={cn(
-				"relative flex flex-col gap-5 overflow-hidden rounded-xl border border-border bg-card text-card-foreground",
+				"relative flex flex-col gap-5 overflow-hidden rounded-lg border border-border bg-card text-card-foreground",
 				"transition-[border-color,box-shadow] duration-200 ease-brand",
 				// 悬浮:1px 边框 → 亮蓝(`--primary` = 品牌蓝 #1b61c9,亮色主题下最深的一抹蓝,就是它)
 				"hover:border-primary",

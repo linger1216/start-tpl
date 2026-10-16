@@ -131,3 +131,8 @@ doc/archive
 # .serena 是 agent(Serena MCP)的本地索引状态:**不是**项目内容,派生新项目时不该被带走
 # (new-project.sh 按 .gitignore 派生)。不忽略它,`--strict` 还会被这条工具状态**永久**判成脏。
 .serena/
+
+.codex
+.cursor
+.gemini
+.grok

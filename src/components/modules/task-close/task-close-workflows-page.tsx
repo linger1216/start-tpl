@@ -289,7 +289,7 @@ function WorkflowCard({
 					onView();
 				}
 			}}
-			className="group flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-background p-5 outline-none transition-[border-color] hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/40"
+			className="group flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-background p-5 outline-none transition-[border-color] hover:border-primary/50 focus-visible:ring-1 focus-visible:ring-ring/25"
 		>
 			{/* 顶行:图标块(左) + 状态徽章 / 行内动作(右) */}
 			<div className="mb-4 flex items-start justify-between gap-2">

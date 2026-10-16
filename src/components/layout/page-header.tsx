@@ -32,8 +32,7 @@ export function PageHeader({
 		<section className={cn("page-head", className)}>
 			<div className="page-head-row">
 				<div className="flex min-w-0 items-start gap-2.5">
-					{/* mt 对齐标题首行中线:标题 22px/1.25 ⇒ 首行高约 27.5px,18px 的条放在 4.5px 处居中 */}
-					<span aria-hidden className="mt-[5px] h-[18px] w-[3px] shrink-0 rounded-full bg-primary" />
+					{/* 标题 = 宋体(.page-title 走 --font-heading);不做色相强调条(公文页头是版记,不是海报) */}
 					<div className="page-title-group">
 						{title && <h1 className="page-title">{title}</h1>}
 						{hasDescription && !descriptionInline ? (

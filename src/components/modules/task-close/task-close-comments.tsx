@@ -248,7 +248,15 @@ export function TaskCloseComments({
 										</ActionIconButton>
 									) : null}
 								</div>
-								<p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
+								{/* 驳回原因走「批注」皮(左红竖线 + 批注小标);普通评论是正文 */}
+								{item.content.startsWith("驳回原因:") ? (
+									<div className="mt-1 border-l-2 border-seal/60 pl-2.5">
+										<span className="text-[10px] font-medium tracking-[0.05em] text-seal-fg">批注</span>
+										<p className="mt-0.5 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
+									</div>
+								) : (
+									<p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</p>
+								)}
 								{item.attachments.length > 0 ? (
 									<div className="mt-1.5">
 										{/* 复用任务附件的预览弹窗:chip 可点 → 预览 / 下载 */}
@@ -293,20 +301,18 @@ export function TaskCloseComments({
 const MAX_FILES = 20;
 
 /**
- * 评论流里的小头像 —— 圆形 + 品牌蓝底(`bg-primary`,即原型 `.avatar--md` 的 Airtable Blue)+ 白字。
+ * 评论流里的姓名签 —— **方章式**(墨底反白首字、3px 方角、-3° 微旋)。
  *
- * ⚠️ **不要用 `bg-accent`** —— 那在本项目是浅灰面 `#f8fafc`,白字压上去看不清(原型里的
- * `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。用 `text-primary-foreground`
- * 而非硬编码 `text-white`,深色模式下自动翻转。
- *
- * 双层 `shadow` 给头像加一圈「同底色外环 + 描边」,把头像从浅背景里"凸"出来 —— 两个色都用
- * `var(--color-background)` / `var(--color-border)` 跟随主题。原型 `.avatar--md` 36px,这里沿用。
+ * 「公文·印鉴」世界里,评论/回复的头像是**一枚小章**:墨底 + 反白首字 + 宋体,
+ * 与成员列表的姓名签、列表档状态章同形族(圆形蓝头像是旧世界的异物,已换)。
+ * 底色用 `var(--ink)` / 文字用 `var(--paper-raised)`,深色模式下自动翻转(墨=暖纸、字=夜墨)。
+ * 微旋只是 -3°,列表里 36px 的小尺寸下看得出"手盖"的味道,又不至于歪斜。
  */
 function Avatar({ initials }: { initials: string }) {
 	return (
 		<span
 			className={cn(
-				"flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground",
+				"flex size-9 shrink-0 -rotate-3 items-center justify-center rounded-[3px] bg-ink font-heading text-sm font-bold text-paper",
 				"outline-1 outline-offset-2 outline-border",
 			)}
 		>

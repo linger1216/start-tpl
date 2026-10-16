@@ -44,7 +44,7 @@ export function DatePicker({
 			<PopoverTrigger
 				id={id}
 				className={cn(
-					"flex h-8 items-center justify-between gap-2 rounded-xl border border-input bg-card px-3 text-sm whitespace-nowrap transition-colors outline-none",
+					"flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-card px-3 hover:border-border-strong text-sm whitespace-nowrap transition-colors outline-none",
 					"hover:border-ring/60",
 					className,
 				)}

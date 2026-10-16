@@ -1,9 +1,10 @@
-import { ArrowRight, Check, Lock, Paperclip, ReplyIcon, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Lock, Paperclip, ReplyIcon, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
+import { Seal } from "#/components/ui/seal";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
@@ -11,7 +12,8 @@ import { cn } from "#/lib/utils";
 
 /**
  * 流程脊 —— 这一页的**状态骨架**:把模板里的状态链横着铺开,标出「走过的 / 当前 / 未到」,
- * 走过的节点带首次到达时刻,当前节点在锁定期画成带锁的 `warn` 节点。
+ * 走过的节点带首次到达时刻(右下盖脊档小方章),被驳回过的边在箭头上方挂小红章,
+ * 当前节点在锁定期画成带锁的 `warn` 节点。
  *
  * ⚠️ **这里不放动作**。状态类按钮(发起审批 / 改状态)按用户要求留在**记录头右上角**的动作组里
  * (见 `task-close-detail-page.tsx` 与 `doc/task-close.md` 的「按钮去向」)—— 脊只回答「走到哪了」。
@@ -22,6 +24,7 @@ export function TaskFlowSpine({
 	current,
 	visited,
 	reachedAt,
+	rejectedEdges,
 	locked,
 }: {
 	statuses: WorkflowStatus[];
@@ -30,6 +33,8 @@ export function TaskFlowSpine({
 	visited: Set<string>;
 	/** 状态 value → 首次到达时刻(ISO);给走过的节点当注脚 */
 	reachedAt: Map<string, string>;
+	/** 被驳回过的边(`from->to`)—— 箭头上方挂小红章,"这一步被批回过"一眼可见 */
+	rejectedEdges: Set<string>;
 	/** 任务被未完成的审批动作锁住 —— 当前节点画成带锁的警示节点 */
 	locked: boolean;
 }) {
@@ -39,11 +44,13 @@ export function TaskFlowSpine({
 				const isCurrent = status.value === current;
 				const isVisited = !isCurrent && visited.has(status.value);
 				const at = reachedAt.get(status.value);
+				const nextStatus = statuses[index + 1];
+				const edgeRejected = nextStatus ? rejectedEdges.has(`${status.value}->${nextStatus.value}`) : false;
 				return (
 					<li key={status.value} className="flex items-start gap-x-2">
 						<span
 							className={cn(
-								"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm",
+								"inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-sm",
 								isCurrent
 									? locked
 										? "border-warn/40 bg-warn-soft font-semibold text-warn-fg"
@@ -56,18 +63,31 @@ export function TaskFlowSpine({
 							{isCurrent && locked ? (
 								<Lock className="size-3 shrink-0" aria-hidden />
 							) : isVisited ? (
-								<Check className="size-3 shrink-0" aria-hidden />
+								/* 脊档小方章:走过的节点 = 这一站已经"盖过章" */
+								<span aria-hidden>
+									<Seal size="spine" tone="green" label="" />
+								</span>
 							) : (
 								<span
 									aria-hidden
-									className={cn("size-1.5 shrink-0 rounded-full", isCurrent ? "bg-current" : "bg-border")}
+									className={cn("size-1.5 shrink-0 rounded-[2px]", isCurrent ? "bg-current" : "bg-border")}
 								/>
 							)}
 							{status.label}
 							{at ? <span className="text-xs tabular-nums text-muted-foreground">{formatLocalMinute(at)}</span> : null}
 						</span>
 						{index < statuses.length - 1 ? (
-							<ArrowRight className="mt-2 size-3.5 shrink-0 text-border" aria-hidden />
+							<span className="relative mt-2 inline-flex">
+								<ArrowRight className="size-3.5 shrink-0 text-border" aria-hidden />
+								{edgeRejected ? (
+									/* 被驳回过的边:小红章挂在箭头上方,一眼可见"这一步被批回过" */
+									<span
+										aria-hidden
+										title="这条流转被驳回过"
+										className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex size-2.5 rounded-[2px] border-[1.5px] border-seal/65 bg-seal/10"
+									/>
+								) : null}
+							</span>
 						) : null}
 					</li>
 				);
@@ -128,6 +148,28 @@ export function TaskTodoStrip({
 	const [uploading, setUploading] = useState(false);
 	// 选单状态挂在**回复行是否打开**上:切换待办/关闭时把 @词 的踪迹一并清掉
 	const mention = useMentionPicker(participants, setText, textRef);
+
+	/** 「通过」的**原位两段式确认**:第一击只进入待确认态(2 秒不确认自动还原),第二击才生效。
+	 *  通过 = 锁定推进的不可逆写操作,零摩擦单击是本页最大的防呆欠账 —— 但也不给熟手加弹窗。 */
+	const [confirmFor, setConfirmFor] = useState<string | null>(null);
+	const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	function askApprove(id: string) {
+		if (confirmFor === id) {
+			setConfirmFor(null);
+			if (confirmTimer.current) clearTimeout(confirmTimer.current);
+			onApprove(id);
+			return;
+		}
+		setConfirmFor(id);
+		if (confirmTimer.current) clearTimeout(confirmTimer.current);
+		confirmTimer.current = setTimeout(() => setConfirmFor(null), 2000);
+	}
+
+	function resetConfirm() {
+		setConfirmFor(null);
+		if (confirmTimer.current) clearTimeout(confirmTimer.current);
+	}
 
 	if (items.length === 0) return null;
 
@@ -191,10 +233,30 @@ export function TaskTodoStrip({
 							</span>
 							{item.actionable && !item.consult ? (
 								<span className="inline-flex items-center gap-2">
-									<Button size="sm" disabled={busy} onClick={() => onApprove(item.id)}>
-										通过
-									</Button>
-									<ActionButton tone="danger" disabled={busy} onClick={() => onReject(item.id)}>
+									{/* 两段式:第一击进待确认态(按钮变「确认通过」),第二击才生效;2s 自动还原 */}
+									{confirmFor === item.id ? (
+										<Button size="sm" disabled={busy} onClick={() => askApprove(item.id)}>
+											确认通过?
+										</Button>
+									) : (
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={busy}
+											onClick={() => askApprove(item.id)}
+											onBlur={resetConfirm}
+										>
+											通过
+										</Button>
+									)}
+									<ActionButton
+										tone="danger"
+										disabled={busy}
+										onClick={() => {
+											resetConfirm();
+											onReject(item.id);
+										}}
+									>
 										驳回
 									</ActionButton>
 								</span>

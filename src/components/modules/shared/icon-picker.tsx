@@ -75,7 +75,7 @@ export function IconPicker({
 			<div className={cn("relative", className)}>
 				<PopoverTrigger
 					className={cn(
-						"flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-input bg-background px-3 text-sm",
+						"flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 hover:border-border-strong text-sm",
 						"transition-colors hover:bg-accent/30",
 						value && "pr-12",
 					)}
