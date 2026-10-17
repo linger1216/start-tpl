@@ -2,7 +2,6 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Files, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { SettingsFilesDetail } from "#/components/modules/settings/settings-files-detail";
@@ -21,7 +20,7 @@ import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { formatBytes } from "#/lib/format";
 import { matchKeyword, useRowSelection } from "#/lib/table";
 
@@ -112,7 +111,7 @@ export function SettingsFilesPage() {
 				anchor.rel = "noreferrer";
 				anchor.click();
 			} catch (error) {
-				toast.error(toApiError(error).message);
+				toastApiError(error);
 			}
 		},
 		[queryClient, trpc],

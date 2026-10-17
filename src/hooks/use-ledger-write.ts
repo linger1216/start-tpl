@@ -1,6 +1,5 @@
 import { toast } from "sonner";
-
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 
 /**
  * 写接口（create / update / remove）的**统一收尾样板**。
@@ -24,7 +23,7 @@ import { toApiError } from "#/lib/api/error";
 
 /** 统一的错误吐司 —— 各页 onError 的唯一写法 */
 export function writeError(error: unknown): void {
-	toast.error(toApiError(error).message);
+	toastApiError(error);
 }
 
 type WriteSuccessOptions<T> = {

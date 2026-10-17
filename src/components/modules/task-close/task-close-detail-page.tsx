@@ -35,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/comp
 import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toApiError, toastApiError } from "#/lib/api/error";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
@@ -127,7 +127,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				setActionMode(null);
 				toast.success(variables.toStatus ? "已发起审批" : "已发起征询");
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -156,7 +156,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				setRejectReason("");
 				toast.success(variables.approved ? "已通过" : "已驳回");
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -191,7 +191,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				void queryClient.invalidateQueries({ ...trpc.taskClose.pathFilter(), refetchType: "none" });
 				void navigate({ to: "/task-close", replace: true });
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 

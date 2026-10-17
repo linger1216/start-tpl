@@ -22,7 +22,7 @@ import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { cn } from "#/lib/utils";
 
 /** `who` 协议的取值(与 `doc/task-close.md` 的 who 协议一致;`[]` 是系统自带,编辑器不产出) */
-export type WorkflowWho = "creator" | "participant" | "executor" | "any";
+type WorkflowWho = "creator" | "participant" | "executor" | "any";
 
 /** 一条状态转移边 —— 与 `tc_workflow.payload.edges` 同形(`who` 见 `doc/task-close.md` 的 who 协议) */
 export type WorkflowEdgeInput = { from: string; to: string; who: WorkflowWho[]; via: "direct" | "action" };

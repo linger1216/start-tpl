@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
 import { asMenuType, MENU_TYPE } from "#/lib/menu-spec";
 import { buildTree, bySortThenName } from "#/lib/tree";
@@ -73,7 +73,7 @@ export function SettingsMenusPage() {
 				setValues(menuFormValues({ ...(byId.get(row.id) as MenuTreeNode), ...row }));
 				toast.success(`已保存「${row.name}」`);
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -83,7 +83,7 @@ export function SettingsMenusPage() {
 				await invalidate();
 				if (outcome.updated > 0) toast.success("已调整顺序");
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -102,7 +102,7 @@ export function SettingsMenusPage() {
 				});
 				toast.success(`已新增「${row.name}」,改完记得保存`);
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -117,7 +117,7 @@ export function SettingsMenusPage() {
 			},
 			onError: (error) => {
 				setDeleteOpen(false);
-				toast.error(toApiError(error).message);
+				toastApiError(error);
 			},
 		}),
 	);

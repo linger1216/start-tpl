@@ -1,8 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DIALOG_FIT,
@@ -15,7 +13,7 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { filePreviewKind, TEXT_PREVIEW_MAX_BYTES } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
 import type { TaskAttachment } from "#/lib/task-content";
@@ -70,7 +68,7 @@ export function TaskAttachmentPreview({
 			anchor.rel = "noreferrer";
 			anchor.click();
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 		} finally {
 			setDownloading(false);
 		}

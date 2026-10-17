@@ -21,7 +21,7 @@ import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
 import { matchKeyword } from "#/lib/table";
 
@@ -77,7 +77,7 @@ export function SettingsDataScopePage() {
 				}
 				toast.success("已保存数据范围规则", { description: "缓存 30 秒内过期,之后按新规则筛行。" });
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -89,7 +89,7 @@ export function SettingsDataScopePage() {
 				const meta = policyStatusMeta(Number(data.status));
 				toast.success(`已${meta.label}这条规则`, { description: meta.hint });
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 

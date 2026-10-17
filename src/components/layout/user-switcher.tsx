@@ -25,14 +25,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { UserCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
 import { Tag } from "#/components/ui/tag";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
 import { ADMIN_ROLE_NAME, IMPERSONATE_PERM } from "#/lib/menu-spec";
 
@@ -129,7 +128,7 @@ export function UserSwitcher({ currentUser }: { currentUser: { id: string; name:
 			// 整页重载最稳:守卫、SSR loader、菜单可见性、所有缓存都会按新 cookie 重算
 			window.location.reload();
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 			setPending(false);
 		}
 	}

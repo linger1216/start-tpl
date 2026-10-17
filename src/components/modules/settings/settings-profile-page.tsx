@@ -3,7 +3,6 @@ import { useRouter } from "@tanstack/react-router";
 import { BadgeCheck, MailWarning } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { Button } from "#/components/ui/button";
@@ -12,7 +11,7 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
 import { formatLocalMinute } from "#/lib/time";
 
@@ -71,7 +70,7 @@ export function SettingsProfilePage() {
 			setName("");
 			toast.success("姓名已更新");
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 		} finally {
 			setSavingName(false);
 		}
@@ -103,7 +102,7 @@ export function SettingsProfilePage() {
 			setConfirmPassword("");
 			toast.success("密码已修改", { description: "其它设备上的登录已失效" });
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 		} finally {
 			setSavingPassword(false);
 		}
@@ -124,7 +123,7 @@ export function SettingsProfilePage() {
 			}
 			toast.success("验证邮件已发送", { description: "开发态请到运行 `pnpm dev` 的终端里取链接" });
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 		} finally {
 			setMailing(false);
 		}
@@ -149,7 +148,7 @@ export function SettingsProfilePage() {
 				description: `点开寄到 ${next} 的那封信里的链接,邮箱才会真的换掉`,
 			});
 		} catch (error) {
-			toast.error(toApiError(error).message);
+			toastApiError(error);
 		} finally {
 			setMailing(false);
 		}

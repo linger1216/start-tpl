@@ -27,7 +27,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toApiError, toastApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
@@ -87,7 +87,7 @@ export function SettingsDictionaryPage() {
 			},
 			onError: (error) => {
 				setPendingDelete(null);
-				toast.error(toApiError(error).message);
+				toastApiError(error);
 			},
 		}),
 	);

@@ -33,7 +33,7 @@ function SimpleForm() {
 			onSubmit: schema,
 		},
 		onSubmit: ({ value }) => {
-			console.log("form.simple submitted", value);
+			void value;
 			alert("Form submitted successfully!");
 		},
 	});

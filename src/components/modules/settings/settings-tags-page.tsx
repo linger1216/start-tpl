@@ -17,7 +17,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { buildTree, bySortThenLabel } from "#/lib/tree";
 
 /**
@@ -69,7 +69,7 @@ export function SettingsTagsPage() {
 				setValues(tagFormValues(row));
 				toast.success("已保存");
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -84,7 +84,7 @@ export function SettingsTagsPage() {
 				}
 				toast.success(`已删除 ${outcome.deleted} 个节点`);
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
@@ -93,7 +93,7 @@ export function SettingsTagsPage() {
 			onSuccess: async () => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
 			},
-			onError: (error) => toast.error(toApiError(error).message),
+			onError: (error) => toastApiError(error),
 		}),
 	);
 
