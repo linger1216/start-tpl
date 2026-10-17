@@ -1,22 +1,8 @@
+import { PolicyStatusTag } from "#/components/modules/settings/policy-status-tag";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
-import { policyStatusMeta } from "#/lib/data-scope-spec";
 import { type DataScopeRow, ruleShapeText } from "./settings-data-scope-table";
-
-/**
- * 三态徽章 —— 数据范围规则的状态是三态(0/2/1 = 停用/启用/上线),与「启用 / 停用」两态徽章
- * (`EnabledTag`)不是一回事;共用会**把「上线」错标成「启用」、「启用」错标成「停用」**。
- * 与表格列用同一份 `policyStatusMeta()`,标签与色调都从这一处拿。
- */
-function StatusBadge({ status }: { status: number }) {
-	const meta = policyStatusMeta(status);
-	return (
-		<Tag className={`text-xs ${meta.tone}`} title={meta.hint}>
-			{meta.label}
-		</Tag>
-	);
-}
 
 /**
  * 数据范围规则详情(只读)。
@@ -41,7 +27,7 @@ export function SettingsDataScopeDetail({
 			meta={row}
 			onOpenChange={onOpenChange}
 			title={`规则详情 · ${row?.subjectLabel ?? ""}`}
-			tag={row ? <StatusBadge status={row.status} /> : null}
+			tag={row ? <PolicyStatusTag status={row.status} /> : null}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (

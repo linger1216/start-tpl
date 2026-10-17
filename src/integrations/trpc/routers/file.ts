@@ -87,13 +87,16 @@ const toFile = async (row: typeof sysFile.$inferSelect) => {
 };
 
 export const fileRouter = createTRPCRouter({
-	/** 列表(台账页;分页在客户端做,与参数/用户页口径一致) */
+	/** 列表(台账页;**服务端加上限**,前端在此之上做客户端分页)—— 全表无上限会把"一次请求"
+	 *  变成"全表扫描 + 每图片行一次签名",行数大到几千时是真实DoS自己;上限 500 覆盖模板场景,
+	 *  派生场景更大时改传 `limit` 或改成服务端分页 */
 	list: protectedProcedure
 		.input(
 			z
 				.object({
 					keyword: z.string().max(64).optional(),
 					status: z.number().int().min(0).max(2).optional(),
+					limit: z.number().int().min(1).max(1000).default(500),
 				})
 				.optional(),
 		)
@@ -110,7 +113,9 @@ export const fileRouter = createTRPCRouter({
 				.select()
 				.from(sysFile)
 				.where(conditions.length > 0 ? and(...conditions) : undefined)
-				.orderBy(desc(sysFile.created_at));
+				.orderBy(desc(sysFile.created_at))
+				.limit(input?.limit ?? 500);
+			// 图片行的预签名在这里**并发**发(Promise.all 同批),不是逐行 await —— 别改回串行
 			return await Promise.all(rows.map((row) => toFile(row)));
 		}),
 

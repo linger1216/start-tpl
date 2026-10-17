@@ -204,6 +204,25 @@ async function getTaskRow(id: string): Promise<TaskRow> {
 	return row;
 }
 
+/**
+ * 评论 / 征询回复里挂的附件 id **必须真存在**:文件 id 只能从 `file.presign`/`file.confirm` 拿到
+ * 是前端约定,不是权限边界 —— 不校验的话,`attachmentUrl` 的"挂在任务上才给 URL"守卫会被
+ * `commentCreate([任意fileId])` 绕过(先看 attachment-ownership 要不要捶自己)。
+ * 拿到不认识的 id 直接 BAD_REQUEST(不静默吞掉 —— 丢附件是用户自己发现的:) )。
+ */
+async function assertAttachments(tx: Tx, attachIds: readonly string[]): Promise<void> {
+	if (attachIds.length === 0) return;
+	const hits = await tx
+		.select({ id: sysFile.id })
+		.from(sysFile)
+		.where(and(inArray(sysFile.id, [...attachIds]), eq(sysFile.status, 1)));
+	const seen = new Set(hits.map((row) => row.id));
+	const missing = [...attachIds].filter((id) => !seen.has(id));
+	if (missing.length > 0) {
+		throw new TRPCError({ code: "BAD_REQUEST", message: `${missing.length} 个附件不存在或还没上传完成` });
+	}
+}
+
 /** 取任务并**锁行**(`for update`)—— 事务内改状态前必须走它,否则并发下会丢转移 */
 async function lockTask(tx: Tx, id: string): Promise<TaskRow> {
 	const [row] = await tx
@@ -619,7 +638,7 @@ export const taskCloseRouter = createTRPCRouter({
 				.select()
 				.from(taskCloseTask)
 				.where(where)
-				.orderBy(desc(taskCloseTask.created_at))
+				.orderBy(desc(taskCloseTask.created_at), desc(taskCloseTask.id))
 				.limit(pageSize)
 				.offset((page - 1) * pageSize);
 			const nameOf = await nameMapOf(rows.map((row) => row.creator_id));
@@ -735,8 +754,14 @@ export const taskCloseRouter = createTRPCRouter({
 			z.object({
 				name: z.string().min(1, "任务名称不能为空").max(255),
 				description: z.string().max(5000).nullish(),
-				/** ISO 字符串,例:`2026-10-09T18:00:00.000Z` */
-				dueAt: z.string().max(64).nullish(),
+				/** ISO 字符串,例:`2026-10-09T18:00:00.000Z`(必须能解析;log#list 同款口径) */
+				dueAt: z
+					.string()
+					.max(64)
+					.nullish()
+					.refine((value) => !value || !Number.isNaN(new Date(value).getTime()), {
+						message: "截止时间写成了一段没法解析的日期",
+					}),
 				/** `0` = P0 / `1` = P1 / `2` = P2;留空表示「未设置」 */
 				priority: z.number().int().min(0).max(2).nullish(),
 				workflowId: ID,
@@ -821,7 +846,14 @@ export const taskCloseRouter = createTRPCRouter({
 				id: ID,
 				name: z.string().min(1, "任务名称不能为空").max(255),
 				description: z.string().max(5000).nullish(),
-				dueAt: z.string().max(64).nullish(),
+				/** ISO 字符串;必须能解析(log#list 同款口径) */
+				dueAt: z
+					.string()
+					.max(64)
+					.nullish()
+					.refine((value) => !value || !Number.isNaN(new Date(value).getTime()), {
+						message: "截止时间写成了一段没法解析的日期",
+					}),
 				/** `undefined` = 不传(保旧值);`null` = 显式清空;`0|1|2` = 改值 */
 				priority: z.number().int().min(0).max(2).nullish(),
 				payload: taskPayloadSchema.nullish(),
@@ -1156,7 +1188,7 @@ export const taskCloseRouter = createTRPCRouter({
 			.select()
 			.from(taskCloseAction)
 			.where(where)
-			.orderBy(desc(taskCloseAction.created_at))
+			.orderBy(desc(taskCloseAction.created_at), desc(taskCloseAction.id))
 			.limit(pageSize)
 			.offset((page - 1) * pageSize);
 
@@ -1167,16 +1199,21 @@ export const taskCloseRouter = createTRPCRouter({
 				: await db
 						.select({ id: taskCloseTask.id, name: taskCloseTask.name, status: taskCloseTask.status })
 						.from(taskCloseTask)
-						.where(inArray(taskCloseTask.id, taskIds));
+						// 软删任务不进「待我处理」—— 否则已删任务的名字/状态从这里泄露给 handle 人
+						// (taskGet/logList/commentList 都是 alive 口径,这里补齐)
+						.where(and(inArray(taskCloseTask.id, taskIds), alive(taskCloseTask)));
 		const taskOf = new Map(tasks.map((task) => [task.id, task]));
 		const nameOf = await nameMapOf(rows.map((row) => row.created_id));
 
 		return {
-			items: rows.map((row) => ({
-				...toAction(row, nameOf),
-				taskName: taskOf.get(row.task_id)?.name ?? null,
-				taskStatus: taskOf.get(row.task_id)?.status ?? null,
-			})),
+			// 软删任务留下的 live 行不进清单(taskOf 查不到 = 拿不到名字/状态,一并过滤掉)
+			items: rows
+				.filter((row) => taskOf.has(row.task_id))
+				.map((row) => ({
+					...toAction(row, nameOf),
+					taskName: taskOf.get(row.task_id)?.name ?? null,
+					taskStatus: taskOf.get(row.task_id)?.status ?? null,
+				})),
 			total: Number(counted?.n ?? 0),
 		};
 	}),
@@ -1434,6 +1471,7 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 				const content = input.content.trim();
 				if (!content) throw new TRPCError({ code: "BAD_REQUEST", message: "回复内容不能为空" });
+				await assertAttachments(tx, input.attachments ?? []);
 				taskForNotice = await getTaskRow(action.task_id);
 
 				const now = new Date();
@@ -1512,8 +1550,8 @@ export const taskCloseRouter = createTRPCRouter({
 	/**
 	 * 发评论 —— **任何登录用户**,不限 `tc_member`(文档「权限矩阵」)。
 	 *
-	 * 附件 id 不校验存在性:它只能从 `file.presign` / `file.confirm` 拿到,
-	 * 校验等于替 `sys_file` 再做一遍状态机(读的时候已经会丢掉无效 id)。
+	 * 附件 id 在事务里先验存在(`assertAttachments`):attachmentUrl 的"挂在任务上才给 URL"
+	 * 归属守卫靠这里收口 —— 不校验的话 `commentCreate([任意fileId])` 能把守卫骗开。
 	 */
 	commentCreate: protectedProcedure
 		.input(
@@ -1531,6 +1569,8 @@ export const taskCloseRouter = createTRPCRouter({
 			const id = newId();
 			const now = new Date();
 			await db.transaction(async (tx) => {
+				// 附件 id 先验存在(见 assertAttachments):attachmentUrl 的归属守卫依赖这里收口
+				await assertAttachments(tx, input.attachments ?? []);
 				await tx.insert(taskCloseComment).values({
 					id,
 					task_id: input.taskId,

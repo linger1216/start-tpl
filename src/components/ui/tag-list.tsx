@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 import { cn } from "#/lib/utils";
 
 /**
@@ -101,23 +102,16 @@ type TagThemeName = keyof typeof TAG_THEMES;
 /** 彩色主题(规范外分类色板)—— "stable" 模式从这里选 */
 const COLORFUL_THEMES = (Object.keys(TAG_THEMES) as TagThemeName[]).filter((n) => n !== "brand");
 
-/** 6 色相池 —— "random" 模式按值逐项取色用(即 rainbow 主题的色板) */
-const RAINBOW_PALETTE = TAG_THEMES.rainbow;
+/** 6 色相池 —— "random" 模式按值逐项取色用(与 `lib/tag-color.ts` 的 `RANDOM_PALETTE` 同源) */
+// 色板/哈希统一出自 `lib/tag-color.ts`(RANDOM_PALETTE) —— 别名已删
 
 export type TagColor = "none" | keyof typeof TAG_THEMES | "stable" | "random" | readonly string[] | string[];
 
-/**
- * 稳定哈希选色。
- *
- * 之前这里用的是 `Math.random()`,有两个真实缺陷:
- *   1. SSR 时服务端与客户端各随机一次 → 水合不一致;
- *   2. 组件每次重渲染都会换色(状态一变,整行徽章颜色全跳)。
- * 改为按值哈希后,同一份数据永远得到同一套颜色。
- */
+/** 稳定哈希选色 —— 单一 key 取一项;`lib/tag-color.ts` 的 `stableIndex` 已经按 31 进制算好下标 */
 function stablePick<T>(items: readonly T[], key: string): T {
-	let h = 0;
-	for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-	return items[Math.abs(h) % items.length]!;
+	const picked = items.at(stableIndex(key, items.length));
+	// 长度 0 时调用方应已兜底;这里取首项兜底(原行为),不抛错
+	return (picked ?? items[0]) as T;
 }
 
 export function TagList({
@@ -152,7 +146,7 @@ export function TagList({
 	const resolveColor = (i: number, value: string): string | undefined => {
 		if (color === "none") return undefined;
 		// "random":每一项按**取值**哈希从 6 色相里取色 —— 同一值永远同一色,不同值看起来随机分布
-		if (color === "random") return stablePick(RAINBOW_PALETTE, value);
+		if (color === "random") return stablePick(RANDOM_PALETTE, value);
 		if (color === "stable") return stablePalette[i % stablePalette.length];
 		if (typeof color === "string" && color in TAG_THEMES) {
 			const palette = TAG_THEMES[color as TagThemeName];

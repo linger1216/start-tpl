@@ -276,12 +276,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
 	const bouncedRef = useRef(false);
 
-	// 盖章动效的**状态变化**检测:ref 记住上一次的任务状态(必须在 early-return 之前)
-	const prevStatusRef = useRef<string | null>(null);
-	useEffect(() => {
-		if (detailQuery.data) prevStatusRef.current = detailQuery.data.task.status;
-	}, [detailQuery.data]);
-
 	// 不存在的任务不留错误页:提示一声就回「我的任务」(replace —— 这条 URL 不该再进历史)
 	useEffect(() => {
 		if (!taskMissing || bouncedRef.current) return;
@@ -473,7 +467,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
 									</strong>
 								</span>
-								<Tag variant="random">{priorityLabelOf(task.priority)}</Tag>
+								<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
+									{priorityLabelOf(task.priority)}
+								</Tag>
 							</MetaRow>
 						</div>
 
@@ -816,7 +812,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						value={statusTo}
 						onValueChange={(next) => setStatusTo(next ? String(next) : "")}
 					>
-						<SelectTrigger className="w-full">
+						<SelectTrigger className="w-full" aria-label="目标状态">
 							<SelectValue placeholder="选一个状态" />
 						</SelectTrigger>
 						<SelectContent>
@@ -844,6 +840,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			>
 				<DetailRow label="交给谁" align="center">
 					<SearchSelect
+						aria-label="交给谁"
 						value={transferTo}
 						onValueChange={setTransferTo}
 						options={transferOptions}
@@ -884,7 +881,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							value={actionTo}
 							onValueChange={(next) => setActionTo(next ? String(next) : "")}
 						>
-							<SelectTrigger className="w-full">
+							<SelectTrigger className="w-full" aria-label="目标状态">
 								<SelectValue placeholder="选一个目标状态" />
 							</SelectTrigger>
 							<SelectContent>
@@ -899,6 +896,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				) : null}
 				<DetailRow label="交给谁" align="center">
 					<SearchSelect
+						aria-label="交给谁"
 						value={actionHandle}
 						onValueChange={setActionHandle}
 						options={peopleOptions}
@@ -926,6 +924,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			>
 				<DetailRow label="人员" align="center">
 					<SearchSelect
+						aria-label="人员"
 						value={newMemberId}
 						onValueChange={setNewMemberId}
 						options={userOptions}
@@ -938,7 +937,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						value={newMemberRole}
 						onValueChange={(next) => setNewMemberRole(next ? String(next) : "participant")}
 					>
-						<SelectTrigger className="w-full">
+						<SelectTrigger className="w-full" aria-label="角色">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -1057,7 +1056,7 @@ const ROLE_WHY: Record<string, string> = {
  * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
  * 「主执行」这个身份靠**角色标签**(页面上传的是 `主执行`)+ 名字加粗来区分,不靠颜色。
  *
- * 用 `bg-primary` / `text-primary-foreground` 这对**语义 token**(深色模式自动翻转);
+ * 用 `bg-primary/85` + `text-paper`(`--ink` 底、反白首字同族的墨底圆牌,深色模式自动翻转);
  * **不要写 `bg-accent`** —— 它在本项目是浅灰面 `#f8fafc`,白字压上去直接看不见
  * (原型里的 `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。
  *

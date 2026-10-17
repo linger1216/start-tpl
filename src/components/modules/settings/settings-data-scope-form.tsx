@@ -214,7 +214,13 @@ export function SettingsDataScopeForm({
 				</DialogHeader>
 
 				<DialogBody className="flex flex-col gap-3">
-					<DetailRow label="谁" htmlFor="scope-kind">
+					<DetailRow
+						label="谁"
+						htmlFor="scope-kind"
+						hint={
+							subjectKind === "all" ? "所有人 —— 这条规则对每个登录用户生效(通常用在「这张表全都能看」)。" : undefined
+						}
+					>
 						<div className="flex flex-col gap-2">
 							<Select
 								items={subjectItems}
@@ -235,11 +241,7 @@ export function SettingsDataScopeForm({
 									))}
 								</SelectContent>
 							</Select>
-							{subjectKind === "all" ? (
-								<p className="text-xs text-muted-foreground">
-									所有人 —— 这条规则对每个登录用户生效(通常用在"这张表全都能看")。
-								</p>
-							) : (
+							{subjectKind !== "all" ? (
 								<SearchSelect
 									value={subjectId || undefined}
 									onValueChange={setSubjectId}
@@ -247,11 +249,21 @@ export function SettingsDataScopeForm({
 									placeholder="搜名字或 ID"
 									loading={rolesQuery.isLoading || deptsQuery.isLoading || usersQuery.isLoading}
 								/>
-							)}
+							) : null}
 						</div>
 					</DetailRow>
 
-					<DetailRow label="资源表" htmlFor="scope-resource">
+					<DetailRow
+						label="资源表"
+						htmlFor="scope-resource"
+						hint={
+							meta ? (
+								<>
+									主键 <span className="font-mono">{meta.pk ?? "读不到"}</span> · {meta.columns.length} 个字段
+								</>
+							) : undefined
+						}
+					>
 						<div className="flex flex-col gap-1.5">
 							<Select
 								items={resourceItems}
@@ -272,15 +284,18 @@ export function SettingsDataScopeForm({
 									))}
 								</SelectContent>
 							</Select>
-							{meta ? (
-								<p className="text-xs text-muted-foreground">
-									主键 <span className="font-mono">{meta.pk ?? "读不到"}</span> · {meta.columns.length} 个字段
-								</p>
-							) : null}
 						</div>
 					</DetailRow>
 
-					<DetailRow label="值域插件" htmlFor="scope-plugin">
+					<DetailRow
+						label="值域插件"
+						htmlFor="scope-plugin"
+						hint={
+							!pluginKey
+								? "不筛行:这张表的全部行都对上面选的那个人可见。"
+								: "这个插件给的是「值」,下面还得选一列 + 一个 key 来接 —— v2 起清单在插件自己的页面里编辑。"
+						}
+					>
 						<div className="flex flex-col gap-1.5">
 							<Select
 								items={[{ value: NO_PLUGIN, label: "不用插件(整类可见)" }, ...pluginItems]}
@@ -331,7 +346,16 @@ export function SettingsDataScopeForm({
 					) : null}
 
 					{pluginKey && valueKeyItems.length > 0 ? (
-						<DetailRow label="值域的 key" htmlFor="scope-value-key">
+						<DetailRow
+							label="值域的 key"
+							htmlFor="scope-value-key"
+							hint={
+								<>
+									插件每行形如 <span className="font-mono">{"{key: value}"}</span>,这里选拿哪个 key 的值去和上面的列比
+									—— 一个清单可以放多类值,各配一条规则互不干扰。
+								</>
+							}
+						>
 							<div className="flex flex-col gap-1.5">
 								<Select items={valueKeyItems} value={valueKey} onValueChange={(next) => setValueKey(next ?? "")}>
 									<SelectTrigger id="scope-value-key" size="sm" className="w-full">
@@ -345,10 +369,6 @@ export function SettingsDataScopeForm({
 										))}
 									</SelectContent>
 								</Select>
-								<p className="text-xs text-muted-foreground">
-									插件每行形如 <span className="font-mono">{"{key: value}"}</span>,这里选拿哪个 key 的值去和上面的列比
-									—— 一个清单可以放多类值,各配一条规则互不干扰。
-								</p>
 							</div>
 						</DetailRow>
 					) : null}

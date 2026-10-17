@@ -18,6 +18,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -41,14 +42,13 @@ export function SettingsDataPluginsPage() {
 	const queryClient = useQueryClient();
 
 	const [keyword, setKeyword] = useState("");
-	const [editing, setEditing] = useState<PluginRow | null>(null);
-	const [viewing, setViewing] = useState<PluginRow | null>(null);
+	// 四态弹窗(dialogs.viewing / dialogs.createOpen / dialogs.editing / dialogs.pendingDelete)收进统一钩子
+	const dialogs = useLedgerDialogs<PluginRow>();
 	const [creating, setCreating] = useState(false);
-	const [pendingDelete, setPendingDelete] = useState<PluginRow | null>(null);
 	const [forceDelete, setForceDelete] = useState(false);
 	const [testing, setTesting] = useState<PluginRow | null>(null);
 
-	const formOpen = editing !== null || creating;
+	const formOpen = dialogs.formOpen || creating;
 
 	const listQuery = useQuery({ ...trpc.dataPlugin.list.queryOptions(), placeholderData: keepPreviousData });
 
@@ -94,7 +94,7 @@ export function SettingsDataPluginsPage() {
 	const updateMutation = useMutation(
 		trpc.dataPlugin.update.mutationOptions({
 			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataPlugin.pathFilter()), {
-				close: () => setEditing(null),
+				close: () => dialogs.setEditing(null),
 				message: (o) => `已保存插件 ${o.pluginKey}`,
 				description: () => "缓存 30 秒内过期,以后按新定义取数。",
 			}),
@@ -107,7 +107,7 @@ export function SettingsDataPluginsPage() {
 			onSuccess: async (outcome) => {
 				await queryClient.invalidateQueries(trpc.dataPlugin.pathFilter());
 				await queryClient.invalidateQueries(trpc.dataScope.pathFilter());
-				setPendingDelete(null);
+				dialogs.setPendingDelete(null);
 				setForceDelete(false);
 				toast.success(`已删除 ${outcome.removed} 个插件`);
 			},
@@ -123,9 +123,9 @@ export function SettingsDataPluginsPage() {
 	function handleSubmit(payload: PluginFormPayload) {
 		if (creating) {
 			createMutation.mutate(payload);
-		} else if (editing) {
+		} else if (dialogs.editing) {
 			updateMutation.mutate({
-				pluginKey: editing.pluginKey,
+				pluginKey: dialogs.editing.pluginKey,
 				label: payload.label,
 				outputValues: payload.outputValues,
 				remark: payload.remark ?? null,
@@ -142,20 +142,20 @@ export function SettingsDataPluginsPage() {
 	const columns = useMemo(
 		() =>
 			pluginColumns({
-				onView: setViewing,
+				onView: dialogs.setViewing,
 				onEdit: (row) => {
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				},
 				onDelete: (row) => {
 					setForceDelete(false);
-					setPendingDelete(row);
+					dialogs.setPendingDelete(row);
 				},
 				onTest: (row) => {
 					setTesting(row);
 				},
 			}),
-		[],
+		[dialogs],
 	);
 
 	const { table, persistColumns } = useLedgerTable({
@@ -200,7 +200,7 @@ export function SettingsDataPluginsPage() {
 						<Button
 							size="sm"
 							onClick={() => {
-								setEditing(null);
+								dialogs.setEditing(null);
 								setCreating(true);
 							}}
 						>
@@ -234,13 +234,13 @@ export function SettingsDataPluginsPage() {
 			/>
 
 			<SettingsDataPluginsForm
-				row={editing}
+				row={dialogs.editing}
 				creating={creating}
 				open={formOpen}
 				pending={createMutation.isPending || updateMutation.isPending}
 				onOpenChange={(next) => {
 					if (!next) {
-						setEditing(null);
+						dialogs.setEditing(null);
 						setCreating(false);
 					}
 				}}
@@ -248,15 +248,15 @@ export function SettingsDataPluginsPage() {
 			/>
 
 			<SettingsDataPluginsDetail
-				row={viewing}
-				open={viewing !== null}
+				row={dialogs.viewing}
+				open={dialogs.viewing !== null}
 				onOpenChange={(next) => {
-					if (!next) setViewing(null);
+					if (!next) dialogs.setViewing(null);
 				}}
 				onEdit={(row) => {
-					setViewing(null);
+					dialogs.setViewing(null);
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				}}
 			/>
 
@@ -269,10 +269,10 @@ export function SettingsDataPluginsPage() {
 			/>
 
 			<ConfirmDialog
-				open={pendingDelete !== null}
+				open={dialogs.pendingDelete !== null}
 				onOpenChange={(next) => {
 					if (!next) {
-						setPendingDelete(null);
+						dialogs.setPendingDelete(null);
 						setForceDelete(false);
 					}
 				}}
@@ -281,13 +281,13 @@ export function SettingsDataPluginsPage() {
 				isPending={removeMutation.isPending}
 				description={
 					forceDelete
-						? `「${pendingDelete?.label ?? ""}」还有启用中的规则在用。再确认一次就是**强制删除** —— 那些规则会变成「一行也看不到」(失败关闭,不是放行)。`
-						: `确认删除插件「${pendingDelete?.label ?? ""}」(${pendingDelete?.pluginKey ?? ""})?还有启用中的规则在用它时会被拒绝,并把条数告诉你。`
+						? `「${dialogs.pendingDelete?.label ?? ""}」还有启用中的规则在用。再确认一次就是**强制删除** —— 那些规则会变成「一行也看不到」(失败关闭,不是放行)。`
+						: `确认删除插件「${dialogs.pendingDelete?.label ?? ""}」(${dialogs.pendingDelete?.pluginKey ?? ""})?还有启用中的规则在用它时会被拒绝,并把条数告诉你。`
 				}
 				onConfirm={() =>
-					pendingDelete &&
+					dialogs.pendingDelete &&
 					removeMutation.mutate({
-						pluginKeys: [pendingDelete.pluginKey],
+						pluginKeys: [dialogs.pendingDelete.pluginKey],
 						force: forceDelete || undefined,
 					})
 				}

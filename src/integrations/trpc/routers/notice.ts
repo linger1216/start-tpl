@@ -1,10 +1,11 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-
 import { db } from "#/db";
-import { sysNotice } from "#/db/data-base-schema";
+import { sysNotice, sysUser } from "#/db/data-base-schema";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "#/integrations/trpc/init";
 import { notifyMany } from "#/lib/notice";
+import { alive } from "#/lib/soft-delete";
 
 /**
  * 站内通知(**只碰自己的**)。
@@ -76,6 +77,17 @@ export const noticeRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ input }) => {
+			// 收件人先验存在(活着的用户):手输 id / 传错错集合时,悄悄写成"sys_notice 里没主的通知"最难查
+			const [hit] = await db
+				.select({ n: count() })
+				.from(sysUser)
+				.where(and(inArray(sysUser.id, input.userIds), alive(sysUser)));
+			if (Number(hit?.n ?? 0) !== new Set(input.userIds).size) {
+				throw new TRPCError({
+					code: "PRECONDITION_FAILED",
+					message: "有收件人不存在(或已删除),别往不存在的人身上发通知",
+				});
+			}
 			await notifyMany(input.userIds, {
 				title: input.title,
 				body: input.body,

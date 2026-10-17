@@ -1032,7 +1032,7 @@ button:not(:disabled):active:not([role="switch"]):not([role="checkbox"]) {
     letter-spacing: 0.02em;
   }
   /* 全局聚焦环:1px 细环 + 边框微染主题色(精致,不出粗黑边) */
-  :where(button, a, input, select,  [role='button'], [role='switch']):focus-visible {
+  :where(button, a, input, select, textarea, [role='button'], [role='switch']):focus-visible {
     outline: none;
     box-shadow: 0 0 0 1px var(--af-blue-ring);
     border-color: color-mix(in oklab, var(--hue-blue) 40%, var(--line));

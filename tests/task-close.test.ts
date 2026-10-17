@@ -13,6 +13,7 @@ import { after, before, describe, it } from "node:test";
 import { and, eq, inArray, isNull, like } from "drizzle-orm";
 
 import {
+	sysFile,
 	sysNotice,
 	sysUser,
 	taskCloseAction,
@@ -52,6 +53,10 @@ const taskName = (label: string) => `${TEST_PREFIX}闭环-${label}-${suffix}`;
 let workflowId = "";
 /** 用例自建的流程模板 id —— `after` 里物理清(`tc_workflow` 没有 name 列,只能按 id 认领) */
 const createdWorkflowIds: string[] = [];
+/** 评论 / 征询用的**真实**附件夹具(status=1 的 sys_file 行;2026-10 起附件 id 要真实存在) */
+const ATTACH_FILE_ID = `file-cmnt-${suffix}`;
+/** 故意不存在的附件 id —— 锁「未知 id 必须被拒」这条新守卫 */
+const FAKE_ATTACH_ID = `file-nope-${suffix}`;
 
 before(async () => {
 	await db.insert(sysUser).values([
@@ -62,6 +67,15 @@ before(async () => {
 	const workflows = await asA().taskClose.workflowList();
 	assert.ok(workflows.length > 0, "要先跑 `pnpm db:seed:task-close` 才有模板");
 	workflowId = workflows[0].id;
+	// 附件夹具:status=1(已上传完成)的一行 sys_file
+	await db.insert(sysFile).values({
+		id: ATTACH_FILE_ID,
+		bucket: "private",
+		object_key: `${TEST_PREFIX}attach-${suffix}.txt`,
+		origin_name: "attachment.txt",
+		size: 8,
+		status: 1,
+	});
 });
 
 after(async () => {
@@ -83,6 +97,7 @@ after(async () => {
 	if (createdWorkflowIds.length > 0) {
 		await db.delete(taskCloseWorkflow).where(inArray(taskCloseWorkflow.id, createdWorkflowIds));
 	}
+	await db.delete(sysFile).where(inArray(sysFile.id, [ATTACH_FILE_ID, FAKE_ATTACH_ID]));
 	await db.delete(sysUser).where(inArray(sysUser.id, [A.id, B.id, C.id]));
 	await closeDb();
 });
@@ -287,19 +302,31 @@ describe("任务闭环", () => {
 		await assertRejects(() => asA().taskClose.taskGet({ id }), "任务不存在");
 	});
 
+	it("评论:附件 id 必须真实存在(未知的要拒)—— attachmentUrl 守卫的收口", async () => {
+		const id = await newTask("附件守卫");
+		await assertRejects(
+			() => asC().taskClose.commentCreate({ taskId: id, content: "带假附件", attachments: [FAKE_ATTACH_ID] }),
+			"1 个附件不存在",
+		);
+		// 没写下行的评论也不该落库(事务回滚)
+		const rows = await asA().taskClose.commentList({ taskId: id });
+		assert.equal(rows.length, 0, "先拒后回滚,不残半条评论");
+	});
+
 	it("评论:全员可发,附件回填,作者本人可删", async () => {
 		const id = await newTask("评论");
 		const { id: commentId } = await asC().taskClose.commentCreate({
 			taskId: id,
 			content: "  路过看一眼  ",
-			attachments: ["no-such-file"],
+			attachments: [ATTACH_FILE_ID],
 		});
 		const rows = await asA().taskClose.commentList({ taskId: id });
 		const mine = rows.find((row) => row.id === commentId);
 		assert.ok(mine);
 		assert.equal(mine.content, "路过看一眼", "内容要去首尾空格");
 		assert.equal(mine.authorName, C.name, "回填作者姓名");
-		assert.deepEqual(mine.attachments, [], "不存在的附件 id 直接丢掉,不留空行");
+		// 附件回填:真实存在的 sys_file 行 → 数组里有一条(未知 id 在写入侧就拒了)
+		assert.equal(mine.attachments?.length, 1, "附件回填 1 条真实夹具");
 
 		await assertRejects(() => asB().taskClose.commentRemove({ id: commentId }), "只能删除自己的评论");
 		await asC().taskClose.commentRemove({ id: commentId });
@@ -341,7 +368,7 @@ describe("任务闭环", () => {
 		await assertRejects(() => asB().taskClose.actionReply({ id: consultId, content: "   " }), "回复内容不能为空");
 
 		// 乙回复(带附件 id)—— 意见进评论流,动作亮灯,任务保持 open
-		await asB().taskClose.actionReply({ id: consultId, content: "意见:先补台账", attachments: ["fake-id"] });
+		await asB().taskClose.actionReply({ id: consultId, content: "意见:先补台账", attachments: [ATTACH_FILE_ID] });
 		const detail = await asA().taskClose.taskGet({ id });
 		assert.equal(detail.task.status, "open", "回复征询不推任务状态");
 		assert.equal(detail.actions.find((row) => row.id === consultId)?.status, "done", "回复即算处理完");
@@ -351,8 +378,8 @@ describe("任务闭环", () => {
 			comments.some((comment) => comment.content === "意见:先补台账"),
 			"意见要在评论区可见",
 		);
-		// 不存在的附件 id 同样直接丢掉(与 commentCreate 同口径)
-		assert.deepEqual(comments.find((comment) => comment.content === "意见:先补台账")?.attachments, []);
+		// 附件 id 现在写入侧就验存在 → 回填 1 条真实夹具(与 commentCreate 同口径)
+		assert.equal(comments.find((comment) => comment.content === "意见:先补台账")?.attachments?.length, 1);
 
 		// 动态:action.reply 一行,摘要取意见正文,展示名是征询发起人
 		const replyLog = (await asA().taskClose.logList({ taskId: id })).items.find((row) => row.event === "action.reply");

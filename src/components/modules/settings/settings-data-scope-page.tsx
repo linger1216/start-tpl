@@ -18,6 +18,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -42,13 +43,12 @@ export function SettingsDataScopePage() {
 	const queryClient = useQueryClient();
 
 	const [keyword, setKeyword] = useState("");
-	const [editing, setEditing] = useState<DataScopeRow | null>(null);
-	const [viewing, setViewing] = useState<DataScopeRow | null>(null);
+	// 四态弹窗(dialogs.viewing / dialogs.createOpen / dialogs.editing / dialogs.pendingDelete)收进统一钩子
+	const dialogs = useLedgerDialogs<DataScopeRow>();
 	const [creating, setCreating] = useState(false);
 	const [previewing, setPreviewing] = useState<DataScopeRow | null>(null);
-	const [pendingDelete, setPendingDelete] = useState<DataScopeRow | null>(null);
 
-	const formOpen = editing !== null || creating;
+	const formOpen = dialogs.formOpen || creating;
 
 	const listQuery = useQuery({ ...trpc.dataScope.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as DataScopeRow[];
@@ -68,7 +68,7 @@ export function SettingsDataScopePage() {
 		trpc.dataScope.update.mutationOptions({
 			onSuccess: async (data) => {
 				await queryClient.invalidateQueries(trpc.dataScope.pathFilter());
-				setEditing(null);
+				dialogs.setEditing(null);
 				if (data.demoted) {
 					toast.warning("形态改过了,规则退回「启用」", {
 						description: "改完的和预览过的已经不是一回事 —— 再点「预览」算一次,对了再上线。",
@@ -96,7 +96,7 @@ export function SettingsDataScopePage() {
 	const removeMutation = useMutation(
 		trpc.dataScope.remove.mutationOptions({
 			onSuccess: writeSuccess(() => queryClient.invalidateQueries(trpc.dataScope.pathFilter()), {
-				close: () => setPendingDelete(null),
+				close: () => dialogs.setPendingDelete(null),
 				message: () => "已删除数据范围规则",
 			}),
 			onError: writeError,
@@ -106,8 +106,8 @@ export function SettingsDataScopePage() {
 	function handleSubmit(payload: DataScopeFormPayload) {
 		if (creating) {
 			createMutation.mutate(payload);
-		} else if (editing) {
-			updateMutation.mutate({ id: editing.id, ...payload });
+		} else if (dialogs.editing) {
+			updateMutation.mutate({ id: dialogs.editing.id, ...payload });
 		}
 	}
 
@@ -125,15 +125,15 @@ export function SettingsDataScopePage() {
 	const callbacks = useMemo(
 		() => ({
 			onPreview: setPreviewing,
-			onView: setViewing,
+			onView: dialogs.setViewing,
 			onEdit: (row: DataScopeRow) => {
 				setCreating(false);
-				setEditing(row);
+				dialogs.setEditing(row);
 			},
-			onDelete: setPendingDelete,
+			onDelete: dialogs.setPendingDelete,
 			onStatus: (row: DataScopeRow, status: PolicyStatus) => statusMutation.mutate({ id: row.id, status }),
 		}),
-		[statusMutation],
+		[statusMutation, dialogs],
 	);
 
 	const columns = useMemo(
@@ -208,7 +208,7 @@ export function SettingsDataScopePage() {
 						<Button
 							size="sm"
 							onClick={() => {
-								setEditing(null);
+								dialogs.setEditing(null);
 								setCreating(true);
 							}}
 						>
@@ -241,13 +241,13 @@ export function SettingsDataScopePage() {
 			/>
 
 			<SettingsDataScopeForm
-				row={editing}
+				row={dialogs.editing}
 				creating={creating}
 				open={formOpen}
 				pending={createMutation.isPending || updateMutation.isPending}
 				onOpenChange={(next: boolean) => {
 					if (!next) {
-						setEditing(null);
+						dialogs.setEditing(null);
 						setCreating(false);
 					}
 				}}
@@ -255,15 +255,15 @@ export function SettingsDataScopePage() {
 			/>
 
 			<SettingsDataScopeDetail
-				row={viewing}
-				open={viewing !== null}
+				row={dialogs.viewing}
+				open={dialogs.viewing !== null}
 				onOpenChange={(next) => {
-					if (!next) setViewing(null);
+					if (!next) dialogs.setViewing(null);
 				}}
 				onEdit={(row) => {
-					setViewing(null);
+					dialogs.setViewing(null);
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				}}
 			/>
 
@@ -276,14 +276,14 @@ export function SettingsDataScopePage() {
 			/>
 
 			<ConfirmDialog
-				open={pendingDelete !== null}
+				open={dialogs.pendingDelete !== null}
 				onOpenChange={(next) => {
-					if (!next) setPendingDelete(null);
+					if (!next) dialogs.setPendingDelete(null);
 				}}
 				title="删除数据范围规则"
-				description={`确认删除「${pendingDelete?.subjectLabel ?? ""} · ${pendingDelete?.resourceLabel ?? ""}」这条规则?删掉之后这条范围就不再生效。`}
+				description={`确认删除「${dialogs.pendingDelete?.subjectLabel ?? ""} · ${dialogs.pendingDelete?.resourceLabel ?? ""}」这条规则?删掉之后这条范围就不再生效。`}
 				isPending={removeMutation.isPending}
-				onConfirm={() => pendingDelete && removeMutation.mutate({ ids: [pendingDelete.id] })}
+				onConfirm={() => dialogs.pendingDelete && removeMutation.mutate({ ids: [dialogs.pendingDelete.id] })}
 			/>
 		</PageFrame>
 	);

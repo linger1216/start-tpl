@@ -36,6 +36,7 @@ export function SearchSelect<T extends string = string>({
 	value,
 	onValueChange,
 	options,
+	label,
 	placeholder = "请选择",
 	emptyText = "无匹配选项",
 	align = "start",
@@ -45,6 +46,8 @@ export function SearchSelect<T extends string = string>({
 	value: T | undefined;
 	onValueChange: (v: T) => void;
 	options: SearchSelectOption<T>[];
+	/** 读屏下触发器的名字 —— 没有它,名字只能落到占位文本(a11y 评审 2026-10) */
+	label?: string;
 	placeholder?: string;
 	emptyText?: string;
 	align?: "start" | "end";
@@ -93,6 +96,7 @@ export function SearchSelect<T extends string = string>({
 			}}
 		>
 			<PopoverTrigger
+				aria-label={label}
 				disabled={disabled}
 				aria-disabled={disabled}
 				className={cn(

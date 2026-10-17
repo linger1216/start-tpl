@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogContent,
 	DialogDescription,
@@ -52,14 +53,13 @@ export function SettingsTagsCreateDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-md`}>
 				<DialogHeader>
 					<DialogTitle>新增标签节点</DialogTitle>
 					<DialogDescription>
 						{parentLabel ? `在「${parentLabel}」下新增一个子节点` : "新增一个顶层维度(标签分类)"}
 					</DialogDescription>
 				</DialogHeader>
-
 				<div className="space-y-3">
 					<DetailRow label="名称" htmlFor="tag-create-label">
 						<Input
@@ -92,7 +92,6 @@ export function SettingsTagsCreateDialog({
 						/>
 					</DetailRow>
 				</div>
-
 				<DialogFooter className="gap-2">
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消

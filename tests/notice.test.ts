@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
+import { after, before, describe, it } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-import { sysNotice } from "../src/db/data-base-schema.ts";
+import { sysNotice, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -17,7 +17,13 @@ const SUFFIX = uniqueSuffix();
 const OTHER = { id: `test-other-${SUFFIX}`, name: "另一个人", isSuper: true };
 const otherCaller = createCallerFactory(trpcRouter)({ user: OTHER });
 
+before(async () => {
+	// 收件人校验(2026-10 起)会查 sys_user —— OTHER 得是真行
+	await db.insert(sysUser).values({ id: OTHER.id, name: OTHER.name, email: `other-${SUFFIX}@test.local` });
+});
+
 after(async () => {
+	await db.delete(sysUser).where(eq(sysUser.id, OTHER.id));
 	await db.delete(sysNotice).where(inArray(sysNotice.user_id, [TEST_USER.id, OTHER.id]));
 	await closeDb();
 });

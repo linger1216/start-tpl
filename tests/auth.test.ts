@@ -97,6 +97,9 @@ describe("服务端鉴权", () => {
 	it("权限:有权限体系但这个账号没有该权限 ⇒ FORBIDDEN(不是只靠前端藏按钮)", async () => {
 		const menus = await db.select().from(sysMenu);
 		// 菜单表空 = 权限体系未启用 ⇒ 一律放行(与前端 useHasPerm 同口径),这条不适用
+		console.warn(
+			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
+		);
 		if (menus.length === 0) return;
 
 		// 不带 `isSuper` 的注入用户:库里没有任何角色授权 ⇒ 权限集是空集
@@ -120,6 +123,9 @@ describe("服务端鉴权", () => {
 		// 在真账号上根本没机会跑。修法是 `permMiddleware` 直接按 user.id 查「系统管理员」角色。
 		// 这里用一个真账号 + 真角色分配来验,**故意**不勾任何菜单 + ctx 不带 isSuper —— 模拟真 HTTP 请求。
 		const menus = await db.select().from(sysMenu);
+		console.warn(
+			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
+		);
 		if (menus.length === 0) return; // 未初始化时这条不适用
 
 		const role = await caller.role.create({
@@ -250,6 +256,9 @@ describe("服务端鉴权", () => {
 		const menus = await db.select().from(sysMenu);
 		const perms = new Set(menus.map((menu) => menu.perm).filter((perm): perm is string => Boolean(perm)));
 		// 空库(权限体系还没初始化)时这条不适用 —— 它防的是"配了码但忘了建按钮",不是"还没建表"
+		console.warn(
+			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
+		);
 		if (perms.size === 0) return;
 		/** `page:*:view` 是**合成码**(按可见菜单的路由算的),库里没有对应按钮,由下一条用例管 */
 		const codes = mappedCodes().filter((code) => !code.startsWith("page:"));
@@ -263,6 +272,9 @@ describe("服务端鉴权", () => {
 
 	it("合成的页面码必须对应真实的菜单路由(防页面路径拼错)", async () => {
 		const paths = await db.select({ path: sysMenu.path }).from(sysMenu);
+		console.warn(
+			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
+		);
 		if (paths.length === 0) return;
 		const known = new Set(paths.map((row) => pagePermOf(row.path)));
 		const orphan = mappedCodes().filter((code) => code.startsWith("page:") && !known.has(code));

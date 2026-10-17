@@ -21,6 +21,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -42,19 +43,17 @@ export function SettingsUsersPage() {
 	const users = (usersQuery.data ?? []) as UserRow[];
 
 	const [keyword, setKeyword] = useState("");
-	const [viewing, setViewing] = useState<UserRow | null>(null);
-	const [createOpen, setCreateOpen] = useState(false);
-	const [editing, setEditing] = useState<UserRow | null>(null);
-	const [pendingDelete, setPendingDelete] = useState<UserRow | null>(null);
+	// 四态弹窗(viewing / createOpen / editing / pendingDelete)收进统一钩子 —— 7 个台账页同一份样板
+	const dialogs = useLedgerDialogs<UserRow>();
 
 	// 部门 / 角色只在账号表单里用 —— 表单没开就不拉全量候选(与角色页、通知页同一写法)
 	const departmentsQuery = useQuery({
 		...trpc.department.tree.queryOptions(),
-		enabled: createOpen || editing !== null,
+		enabled: dialogs.formOpen,
 	});
 	const rolesQuery = useQuery({
 		...trpc.role.list.queryOptions(),
-		enabled: createOpen || editing !== null,
+		enabled: dialogs.formOpen,
 	});
 	const departmentRows = departmentsQuery.data ?? [];
 	const roles = (rolesQuery.data ?? []).map((row) => ({
@@ -77,14 +76,17 @@ export function SettingsUsersPage() {
 
 	const updateMutation = useMutation(
 		trpc.user.update.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: (u) => `已保存 ${u.name}` }),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => dialogs.setEditing(null),
+				message: (u) => `已保存 ${u.name}`,
+			}),
 			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.user.remove.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "账号已删除" }),
+			onSuccess: writeSuccess(invalidate, { close: () => dialogs.setPendingDelete(null), message: () => "账号已删除" }),
 			onError: writeError,
 		}),
 	);
@@ -92,7 +94,7 @@ export function SettingsUsersPage() {
 	const createMutation = useMutation(
 		trpc.user.create.mutationOptions({
 			onSuccess: writeSuccess(invalidate, {
-				close: () => setCreateOpen(false),
+				close: () => dialogs.setCreateOpen(false),
 				message: (created) => `已创建账号 ${created.email}`,
 				description: () => "还没有角色 —— 点「编辑」给他分配。",
 			}),
@@ -114,8 +116,8 @@ export function SettingsUsersPage() {
 	const excelRows = useMemo(() => userExcelRows(filtered), [filtered]);
 
 	const columns = useMemo(
-		() => userColumns({ onView: setViewing, onEdit: setEditing, onDelete: setPendingDelete }),
-		[],
+		() => userColumns({ onView: dialogs.setViewing, onEdit: dialogs.setEditing, onDelete: dialogs.setPendingDelete }),
+		[dialogs],
 	);
 	const { table, persistColumns } = useLedgerTable({
 		columns,
@@ -164,7 +166,7 @@ export function SettingsUsersPage() {
 				actions={
 					<div className="flex flex-wrap items-center gap-2">
 						<RefreshButton busy={usersQuery.isFetching} onClick={() => void usersQuery.refetch()} />
-						<Button size="sm" onClick={() => setCreateOpen(true)}>
+						<Button size="sm" onClick={() => dialogs.openCreate()}>
 							<Plus className="size-3.5" />
 							新增用户
 						</Button>
@@ -206,34 +208,33 @@ export function SettingsUsersPage() {
 			/>
 
 			<SettingsUsersDetail
-				row={viewing}
-				open={viewing !== null}
+				row={dialogs.viewing}
+				open={dialogs.viewingOpen}
 				onOpenChange={(next) => {
-					if (!next) setViewing(null);
+					if (!next) dialogs.setViewing(null);
 				}}
 				onEdit={(row) => {
-					setViewing(null);
-					setEditing(row);
+					dialogs.openEdit(row);
 				}}
 			/>
 
 			<SettingsUsersForm
-				user={editing}
-				creating={editing === null}
-				open={createOpen || editing !== null}
+				user={dialogs.editing}
+				creating={dialogs.editing === null}
+				open={dialogs.formOpen}
 				pending={createMutation.isPending || updateMutation.isPending}
 				roles={roles}
 				departments={departmentOptions}
 				onOpenChange={(next) => {
 					if (next) return;
-					setCreateOpen(false);
-					setEditing(null);
+					dialogs.setCreateOpen(false);
+					dialogs.setEditing(null);
 				}}
 				onSubmit={(payload: UserFormPayload) => {
-					if (editing) {
+					if (dialogs.editing) {
 						// 覆盖式:角色与部门传进去的就是最终状态
 						updateMutation.mutate({
-							id: editing.id,
+							id: dialogs.editing.id,
 							name: payload.name,
 							email: payload.email,
 							image: payload.image,
@@ -253,15 +254,13 @@ export function SettingsUsersPage() {
 			/>
 
 			<ConfirmDialog
-				open={pendingDelete !== null}
-				onOpenChange={(next) => {
-					if (!next) setPendingDelete(null);
-				}}
+				open={dialogs.confirmOpen}
+				onOpenChange={dialogs.closeConfirm}
 				title="删除账号"
-				description={`确认删除「${pendingDelete?.email ?? ""}」?会同时清掉它的登录会话、密码记录、部门成员关系与角色分配(账号行保留为「已删除」,审计留痕)。`}
+				description={`确认删除「${dialogs.pendingDelete?.email ?? ""}」?会同时清掉它的登录会话、密码记录、部门成员关系与角色分配(账号行保留为「已删除」,审计留痕)。`}
 				isPending={deleteMutation.isPending}
 				onConfirm={() => {
-					if (pendingDelete) deleteMutation.mutate({ ids: [pendingDelete.id] });
+					if (dialogs.pendingDelete) deleteMutation.mutate({ ids: [dialogs.pendingDelete.id] });
 				}}
 			/>
 		</PageFrame>

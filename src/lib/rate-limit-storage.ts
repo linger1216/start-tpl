@@ -22,8 +22,11 @@
  *  - 修复:**value text 列** 单独存字符串;`set/get/getAndDelete` 走它,`increment` 走 count 列;
  *    两套共用一行,靠 `expires_at` 共同 TTL。
  *
- * **DM 兼容**:用 Drizzle 的 `onDuplicateKeyUpdate` —— 它在 dm 那边会被 `src/db/dm/`
- * 改写成 MERGE INTO,跨方言安全。
+ * **DM 兼容(2026-10 必须知道的坑)**:早期版本用 Drizzle 的 `onDuplicateKeyUpdate`,并注释声称
+ * "dm 侧会改写成 MERGE INTO" —— **那是错的**:`src/db/dm/` 从来没有这个改写,DM 收到
+ * `ON DUPLICATE KEY UPDATE` 直接语法报错,限流/锁定的 upsert 在达梦线上**静默失效**。
+ * 现在改为**方言无关的「update → 0 行则 insert → 撞唯一键再 update」两步式**(下面两个 helper),
+ * MySQL / DM 都是一条 update 一条 insert 的普通语句,没有方言依赖。
  *
  * 模板基线:`pnpm start` / `pnpm dev` 单实例下,默认走 memory 路径(性能最好);BA 检测到
  * `secondaryStorage` 存在就自动切到 `"secondary-storage"`(`create-context.mjs:175`)。
@@ -49,22 +52,45 @@ function addSeconds(seconds: number): Date {
 }
 
 /**
- * `INSERT ... ON DUPLICATE KEY UPDATE` —— 窗口未过期则 +1,过期则重置为 1 并刷 ttl。
+ * 窗口未过期则 +1,过期则重置为 1 并刷 ttl —— upsert 的**方言安全**版本:
+ * 先 UPDATE 已存在的行(存活的行继续 +1 / 过期的行重置),0 行命中再 INSERT;
+ * 并发下两请求同时走到 INSERT 会撞 `uk_sys_rate_limit_key`,第二个请求回轮 update 分支(自旋两次兜底)。
  *
  * `count` 列是限流的真相来源;**`value` 列保持不变**(increment 不读 value,但也不该把它清掉 ——
  * 否则一个 key 上同时跑限流 + session cache 会互相覆盖)。
  */
+async function updateOnly(
+	key: string,
+	set: {
+		count?: number | ReturnType<typeof sql>;
+		value?: string | null;
+		expiresAt?: Date | null | ReturnType<typeof sql>;
+	},
+): Promise<boolean> {
+	const result = await db.update(sysRateLimit).set(set).where(eq(sysRateLimit.key, key));
+	const header = Array.isArray(result) ? result[0] : result;
+	return header.affectedRows > 0;
+}
+
 async function incrementImpl(key: string, ttlSec: number): Promise<number> {
 	const expiresAt = addSeconds(ttlSec);
-	await db
-		.insert(sysRateLimit)
-		.values({ key, count: 1, expiresAt })
-		.onDuplicateKeyUpdate({
-			set: {
-				count: sql`CASE WHEN ${sysRateLimit.expiresAt} IS NULL OR ${sysRateLimit.expiresAt} < ${now()} THEN 1 ELSE ${sysRateLimit.count} + 1 END`,
-				expiresAt: sql`CASE WHEN ${sysRateLimit.expiresAt} IS NULL OR ${sysRateLimit.expiresAt} < ${now()} THEN ${expiresAt} ELSE ${sysRateLimit.expiresAt} END`,
-			},
-		});
+	const atNow = now();
+	// 两个 CASE 必须用**同一个** atNow —— 内联两次 now() 会在毫秒边界上让"过期/未过期"打架
+	const bumpSet = {
+		count: sql`CASE WHEN ${sysRateLimit.expiresAt} IS NULL OR ${sysRateLimit.expiresAt} < ${atNow} THEN 1 ELSE ${sysRateLimit.count} + 1 END`,
+		expiresAt: sql`CASE WHEN ${sysRateLimit.expiresAt} IS NULL OR ${sysRateLimit.expiresAt} < ${atNow} THEN ${expiresAt} ELSE ${sysRateLimit.expiresAt} END`,
+	};
+	for (let attempt = 0; attempt < 2; attempt++) {
+		// ① 已有的行:存活 → +1 / 过期 → 重置(UPDATE 一个 CASE 就完成,不产生竞态读)
+		if (await updateOnly(key, bumpSet)) break;
+		// ② 没有行:插入计数 1;并发双方同时插入必有一个撞唯一键 → 回轮 ①(第二次 update 必命中)
+		try {
+			await db.insert(sysRateLimit).values({ key, count: 1, value: null, expiresAt });
+			break;
+		} catch {
+			// 撞键不是错误,是并发提示
+		}
+	}
 	const after = await db.select({ count: sysRateLimit.count }).from(sysRateLimit).where(eq(sysRateLimit.key, key));
 	const v = after[0]?.count;
 	const n = typeof v === "string" ? Number.parseInt(v, 10) : (v ?? 0);
@@ -93,10 +119,17 @@ export const rateLimitStorage = {
 
 	async set(key: string, value: string, ttl?: number): Promise<void> {
 		const expiresAt = ttl && ttl > 0 ? addSeconds(ttl) : null;
-		await db.insert(sysRateLimit).values({ key, count: 0, value, expiresAt }).onDuplicateKeyUpdate({
-			set: { value, expiresAt },
-		});
+		// 与 incrementImpl 同一个「update → 0 行则 insert → 撞键回轮」方言安全两步式(DM 线同样可用)。
 		// count=0 占位 —— 该行存在即代表 set;真要 increment 时再走 count 路径。
+		for (let attempt = 0; attempt < 2; attempt++) {
+			if (await updateOnly(key, { value, expiresAt })) break;
+			try {
+				await db.insert(sysRateLimit).values({ key, count: 0, value, expiresAt });
+				break;
+			} catch {
+				// 被并发抢先插入了 → 回轮 update 分支
+			}
+		}
 	},
 
 	async delete(key: string): Promise<void> {

@@ -117,7 +117,15 @@ export function SettingsDictionaryForm({
 								onChange={(event) => onChange({ ...values, name: event.target.value })}
 							/>
 						</DetailRow>
-						<DetailRow label="字典编码" htmlFor="dict-id">
+						<DetailRow
+							label="字典编码"
+							htmlFor="dict-id"
+							hint={
+								editing
+									? "编码是主键,也被别的功能引用,创建后不可改。"
+									: "小写字母/数字/下划线,以字母开头;创建后不可改。"
+							}
+						>
 							<Input
 								id="dict-id"
 								value={values.code}
@@ -133,11 +141,6 @@ export function SettingsDictionaryForm({
 								}
 								onChange={(event) => onChange({ ...values, code: event.target.value })}
 							/>
-							<p className="text-xs text-muted-foreground">
-								{editing
-									? "编码是主键,也被别的功能引用,创建后不可改。"
-									: "小写字母/数字/下划线,以字母开头;创建后不可改。"}
-							</p>
 						</DetailRow>
 						<DetailRow label="说明" htmlFor="dict-remark">
 							<Input
@@ -238,7 +241,7 @@ export function SettingsDictionaryForm({
 					</Alert>
 				) : null}
 
-				<DialogFooter className="shrink-0 gap-2">
+				<DialogFooter>
 					{editing ? (
 						<DetailMeta meta={{ id: editing.id, createdAt: editing.createTime, updatedAt: editing.updateTime }} />
 					) : null}

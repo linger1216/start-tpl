@@ -4,6 +4,7 @@ import type { FileRow } from "#/components/modules/settings/settings-files-table
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogContent,
 	DialogDescription,
@@ -44,7 +45,7 @@ export function SettingsFilesForm({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-lg`}>
 				<DialogHeader>
 					<DialogTitle>重命名文件</DialogTitle>
 					<DialogDescription>只改展示用文件名;对象键与桶里的对象保持不变。</DialogDescription>

@@ -100,18 +100,29 @@ export async function recordSignInFailure(
 	const willLock = next >= cfg.threshold;
 	const lockedUntil = willLock ? new Date(Date.now() + cfg.durationMs) : null;
 
-	// upsert
-	await db
-		.insert(sysAccountLockout)
-		.values({ email, failedAttempts: next, lockedUntil, lastFailedAt: now, lastFailedIp: ip ?? null })
-		.onDuplicateKeyUpdate({
-			set: {
+	// upsert 的**方言安全**两步式(rate-limit-storage 同款:update → 0 行则 insert → 撞键回轮):
+	// 注:DM 线没有 ON DUPLICATE KEY UPDATE,这里绝不能走 drizzle 的 onDuplicateKeyUpdate。
+	for (let attempt = 0; attempt < 2; attempt++) {
+		const result = await db
+			.update(sysAccountLockout)
+			.set({
 				failedAttempts: next,
 				lockedUntil,
 				lastFailedAt: now,
 				lastFailedIp: ip ?? null,
-			},
-		});
+			})
+			.where(eq(sysAccountLockout.email, email));
+		const header = Array.isArray(result) ? result[0] : result;
+		if (header.affectedRows > 0) break;
+		try {
+			await db
+				.insert(sysAccountLockout)
+				.values({ email, failedAttempts: next, lockedUntil, lastFailedAt: now, lastFailedIp: ip ?? null });
+			break;
+		} catch {
+			// 并发撞唯一键 → 回轮 update 分支
+		}
+	}
 
 	if (willLock) {
 		logger.warn("auth.lockout.triggered", {

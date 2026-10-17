@@ -3,6 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
 import {
+	DIALOG_FIT,
 	Dialog,
 	DialogContent,
 	DialogDescription,
@@ -147,7 +148,7 @@ export function SettingsFilesUpload({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className={`${DIALOG_FIT} sm:max-w-lg`}>
 				<DialogHeader>
 					<DialogTitle>上传文件</DialogTitle>
 					<DialogDescription>

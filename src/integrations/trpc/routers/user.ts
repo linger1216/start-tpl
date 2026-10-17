@@ -26,7 +26,14 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysAccount, sysDept, sysRole, sysSession, sysUser, sysUserDept } from "#/db/data-base-schema";
 import { auth } from "#/lib/auth";
-import { allUserRoles, isAdminUser, removeAllRolesOfUser, roleIdsOf, setUserRoles } from "#/lib/casbin";
+import {
+	allUserRoles,
+	clearCasbinCache,
+	isAdminUser,
+	removeAllRolesOfUser,
+	roleIdsOf,
+	setUserRoles,
+} from "#/lib/casbin";
 import { getCurrentUserId } from "#/lib/current-user";
 import type { ImportOutcome } from "#/lib/excel";
 import { newId } from "#/lib/ids";
@@ -304,19 +311,25 @@ export const userRouter = createTRPCRouter({
 				throw new TRPCError({ code: "NOT_FOUND", message: "有账号不存在(可能已被删除)" });
 			}
 
-			// ①~③ 登录凭据与组织关系**硬删**:凭证真没掉才算真的注销,join 表本身不参与软删口径
-			await db.delete(sysSession).where(inArray(sysSession.userId, input.ids));
-			await db.delete(sysAccount).where(inArray(sysAccount.userId, input.ids));
-			await db.delete(sysUserDept).where(inArray(sysUserDept.user_id, input.ids));
-			// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
-			for (const row of rows) await removeAllRolesOfUser(row.id);
-			// ⑤ 用户行**软删** + 邮箱墓碑(逐行:墓碑值里带 id,不能一条 SQL 批量写)
-			for (const row of rows) {
-				await db
-					.update(sysUser)
-					.set({ ...softDeleted(), email: tombstone(row.email, row.id, 255) })
-					.where(eq(sysUser.id, row.id));
-			}
+			// ①~⑤ **一个事务收口**:硬删凭据/组织关系 + 清角色 + 软删用户 + 邮箱墓碑 ——
+			// 任何一步失败整体回滚,绝不留"删了凭证没删角色"的半删状态(与 user.update 的事务口径同源)。
+			await db.transaction(async (tx) => {
+				// ①~③ 登录凭据与组织关系**硬删**:凭证真没掉才算真的注销,join 表本身不参与软删口径
+				await tx.delete(sysSession).where(inArray(sysSession.userId, input.ids));
+				await tx.delete(sysAccount).where(inArray(sysAccount.userId, input.ids));
+				await tx.delete(sysUserDept).where(inArray(sysUserDept.user_id, input.ids));
+				// 角色成员行也在策略表里(`g` 行)—— 清掉,否则库里会留下指向不存在用户的授权
+				for (const row of rows) await removeAllRolesOfUser(row.id, tx);
+				// ⑤ 用户行**软删** + 邮箱墓碑(逐行:墓碑值里带 id,不能一条 SQL 批量写)
+				for (const row of rows) {
+					await tx
+						.update(sysUser)
+						.set({ ...softDeleted(), email: tombstone(row.email, row.id, 255) })
+						.where(eq(sysUser.id, row.id));
+				}
+			});
+			// 事务已提交,清进程内 casbin 缓存(事务内清会被别的读回填,所以放事务外)
+			clearCasbinCache();
 			return { removed: rows.length };
 		}),
 

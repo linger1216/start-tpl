@@ -75,12 +75,14 @@ export function TaskFlowSpine({
 							)}
 							{status.label}
 							{at ? <span className="text-xs tabular-nums text-muted-foreground">{formatLocalMinute(at)}</span> : null}
+							{edgeRejected ? <span className="sr-only">这一步的流转被驳回过</span> : null}
 						</span>
 						{index < statuses.length - 1 ? (
 							<span className="relative mt-2 inline-flex">
 								<ArrowRight className="size-3.5 shrink-0 text-border" aria-hidden />
 								{edgeRejected ? (
-									/* 被驳回过的边:小红章挂在箭头上方,一眼可见"这一步被批回过" */
+									/* 被驳回过的边:小红章挂在箭头上方,一眼可见"这一步被批回过";
+										   视觉是 aria-hidden,读屏/触屏用户走 sr-only 文本(挂在 li 内,不靠 hover) */
 									<span
 										aria-hidden
 										title="这条流转被驳回过"

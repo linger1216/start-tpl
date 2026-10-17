@@ -359,8 +359,9 @@ export async function isAdminUser(userId: string, isSuper = false): Promise<bool
 }
 
 /** 这个角色底下有哪些人(裸 user id) */
-export async function userIdsOfRole(roleId: string): Promise<string[]> {
-	const rows = await db
+export async function userIdsOfRole(roleId: string, tx?: Pick<typeof db, "select">): Promise<string[]> {
+	const exec = tx ?? db;
+	const rows = await exec
 		.select({ v0: sysCasbinRule.v0 })
 		.from(sysCasbinRule)
 		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v1, `${ROLE_PREFIX}${roleId}`)));
@@ -426,16 +427,34 @@ async function insertIfAbsent(row: { ptype: string; v0: string; v1: string; v2?:
 		);
 	if (existing) return false;
 	const now = new Date();
-	await db.insert(sysCasbinRule).values({
-		id: newId(),
-		ptype: row.ptype,
-		v0: row.v0,
-		v1: row.v1,
-		v2: row.v2 ?? "",
-		created_at: now,
-		updated_at: now,
-	});
-	return true;
+	try {
+		await db.insert(sysCasbinRule).values({
+			id: newId(),
+			ptype: row.ptype,
+			v0: row.v0,
+			v1: row.v1,
+			v2: row.v2 ?? "",
+			created_at: now,
+			updated_at: now,
+		});
+		return true;
+	} catch (error) {
+		// 查-插两步之间被并发插入了同一行 —— `uk_sys_casbin_rule` 撞键。
+		// 语义上"已存在"等价于幂等成功;再去查一次,真在 → false(没插,不报错),不在 → 真错误照抛。
+		const [again] = await db
+			.select({ id: sysCasbinRule.id })
+			.from(sysCasbinRule)
+			.where(
+				and(
+					eq(sysCasbinRule.ptype, row.ptype),
+					eq(sysCasbinRule.v0, row.v0),
+					eq(sysCasbinRule.v1, row.v1),
+					eq(sysCasbinRule.v2, row.v2 ?? ""),
+				),
+			);
+		if (!again) throw error;
+		return false;
+	}
 }
 
 /** 重设一个角色的菜单勾选(**全量替换**)。`menuIds` 应由调用方先过 `withAncestorIds` 补全祖先 */
@@ -567,11 +586,14 @@ export async function setUserRoles(userId: string, roleIds: readonly string[], t
 }
 
 /** 清掉一个人的全部角色(删用户时用) */
-export async function removeAllRolesOfUser(userId: string): Promise<void> {
-	await db
-		.delete(sysCasbinRule)
-		.where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, `${USER_PREFIX}${userId}`)));
-	clearCasbinCache();
+export async function removeAllRolesOfUser(userId: string, tx?: Writer): Promise<void> {
+	const sub = `${USER_PREFIX}${userId}`;
+	// 已在事务里(用户删除包了 tx)就直接落在同一连接;单独调用时走默认连接
+	const exec = tx ?? db;
+	await exec.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, sub)));
+	// 注意:**不给事务内调用者做缓存清理** —— 事务提交后调用方自行 clearCasbinCache(),
+	// 事务里清了也会被别的并发读回填(缓存与库的窗口性可接受,30s TTL 兜底)。
+	if (!tx) clearCasbinCache();
 }
 
 /**
@@ -582,14 +604,21 @@ export async function removeAllRolesOfUser(userId: string): Promise<void> {
  * user role
  * role menu
  */
-export async function removeRoleEverywhere(roleId: string): Promise<void> {
+export async function removeRoleEverywhere(roleId: string, tx?: Writer): Promise<void> {
 	const sub = `${ROLE_PREFIX}${roleId}`;
-	await db.transaction(async (tx) => {
+	// caller 自带事务就落同一连接(整体回滚才有意义);单独调用保持自带小事务
+	if (tx) {
 		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
 		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, sub)));
 		await tx.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v1, sub)));
-	});
-	clearCasbinCache();
+	} else {
+		await db.transaction(async (inner) => {
+			await inner.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, POLICY_TYPE), eq(sysCasbinRule.v0, sub)));
+			await inner.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v0, sub)));
+			await inner.delete(sysCasbinRule).where(and(eq(sysCasbinRule.ptype, GROUP_TYPE), eq(sysCasbinRule.v1, sub)));
+		});
+		clearCasbinCache();
+	}
 }
 
 /**

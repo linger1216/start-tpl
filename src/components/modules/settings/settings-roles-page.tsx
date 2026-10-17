@@ -21,6 +21,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
@@ -65,17 +66,16 @@ export function SettingsRolesPage() {
 	const canRemove = useHasPerm("sys:role:remove");
 
 	const [keyword, setKeyword] = useState("");
-	const [editing, setEditing] = useState<RoleRow | null>(null);
+	// 四态弹窗(dialogs.viewing / dialogs.createOpen / dialogs.editing / dialogs.pendingDelete)收进统一钩子
+	const dialogs = useLedgerDialogs<RoleRow>();
 	const [creating, setCreating] = useState(false);
 	/** 打开编辑表单时落在哪个 tab:「菜单权限」入口直接落到 menus */
 	const [formTab, setFormTab] = useState<RoleFormTab>("basic");
-	const [pendingDelete, setPendingDelete] = useState<RoleRow | null>(null);
-	const [viewing, setViewing] = useState<RoleRow | null>(null);
 
 	// 权限树只在角色表单里用 —— 表单没开就不拉全量菜单(与下面的成员选择同一写法)
 	const menusQuery = useQuery({
 		...trpc.menu.list.queryOptions(),
-		enabled: creating || editing !== null,
+		enabled: creating || dialogs.editing !== null,
 	});
 	const permTree = useMemo(() => buildPermTree(menusQuery.data ?? []), [menusQuery.data]);
 
@@ -87,16 +87,16 @@ export function SettingsRolesPage() {
 	const columns = useMemo(
 		() =>
 			roleColumns({
-				onView: setViewing,
+				onView: dialogs.setViewing,
 				onEdit: (row) => {
 					setFormTab("basic");
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				},
 				// 没有「删除角色」权限就干脆不渲染那个按钮(隐藏 = 不可见)
-				onDelete: canRemove ? setPendingDelete : undefined,
+				onDelete: canRemove ? dialogs.setPendingDelete : undefined,
 			}),
-		[canRemove],
+		[canRemove, dialogs],
 	);
 
 	const { table, persistColumns } = useLedgerTable({
@@ -151,13 +151,13 @@ export function SettingsRolesPage() {
 
 	// 「谁有这个角色」—— 和部门面板的成员区同源,只是看的是另一张关联表
 	const roleUsersQuery = useQuery({
-		...trpc.role.users.queryOptions({ roleId: editing?.id ?? "" }),
-		enabled: Boolean(editing),
+		...trpc.role.users.queryOptions({ roleId: dialogs.editing?.id ?? "" }),
+		enabled: Boolean(dialogs.editing),
 	});
 	// 选择器的候选:只有打开表单时才需要,平时不拉全量用户
 	const usersQuery = useQuery({
 		...trpc.user.list.queryOptions(),
-		enabled: creating || editing !== null,
+		enabled: creating || dialogs.editing !== null,
 	});
 
 	const addUserMutation = useMutation(
@@ -189,20 +189,23 @@ export function SettingsRolesPage() {
 
 	const updateMutation = useMutation(
 		trpc.role.update.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: (row) => `已保存「${row.name}」` }),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => dialogs.setEditing(null),
+				message: (row) => `已保存「${row.name}」`,
+			}),
 			onError: writeError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.role.remove.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "已删除角色" }),
+			onSuccess: writeSuccess(invalidate, { close: () => dialogs.setPendingDelete(null), message: () => "已删除角色" }),
 			onError: writeError,
 		}),
 	);
 
 	function handleSubmit(payload: RoleFormPayload) {
-		if (editing) updateMutation.mutate({ id: editing.id, ...payload });
+		if (dialogs.editing) updateMutation.mutate({ id: dialogs.editing.id, ...payload });
 		else createMutation.mutate(payload);
 	}
 
@@ -218,7 +221,7 @@ export function SettingsRolesPage() {
 							<Button
 								size="sm"
 								onClick={() => {
-									setEditing(null);
+									dialogs.setEditing(null);
 									setCreating(true);
 								}}
 							>
@@ -264,23 +267,23 @@ export function SettingsRolesPage() {
 			/>
 
 			<SettingsRolesDetail
-				row={viewing}
-				open={viewing !== null}
+				row={dialogs.viewing}
+				open={dialogs.viewing !== null}
 				onOpenChange={(next) => {
-					if (!next) setViewing(null);
+					if (!next) dialogs.setViewing(null);
 				}}
 				onEdit={(row) => {
-					setViewing(null);
+					dialogs.setViewing(null);
 					setFormTab("basic");
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				}}
 			/>
 
 			<SettingsRolesForm
-				role={editing}
+				role={dialogs.editing}
 				creating={creating}
-				open={creating || editing !== null}
+				open={creating || dialogs.editing !== null}
 				pending={createMutation.isPending || updateMutation.isPending}
 				initialTab={formTab}
 				permTree={permTree}
@@ -289,29 +292,31 @@ export function SettingsRolesPage() {
 				membersLoading={roleUsersQuery.isFetching}
 				membersPending={addUserMutation.isPending || removeUserMutation.isPending}
 				onAddMembers={(userIds) => {
-					if (!editing) return;
+					if (!dialogs.editing) return;
 					// 逐条提交(接口按人幂等);一次选多人时它们会并发跑完
-					for (const userId of userIds) addUserMutation.mutate({ roleId: editing.id, userId });
+					for (const userId of userIds) addUserMutation.mutate({ roleId: dialogs.editing.id, userId });
 				}}
-				onRemoveMember={(userId) => editing && removeUserMutation.mutate({ roleId: editing.id, userId })}
+				onRemoveMember={(userId) =>
+					dialogs.editing && removeUserMutation.mutate({ roleId: dialogs.editing.id, userId })
+				}
 				onOpenChange={(next) => {
 					if (!next) {
 						setCreating(false);
-						setEditing(null);
+						dialogs.setEditing(null);
 					}
 				}}
 				onSubmit={handleSubmit}
 			/>
 
 			<ConfirmDialog
-				open={pendingDelete !== null}
+				open={dialogs.pendingDelete !== null}
 				onOpenChange={(next) => {
-					if (!next) setPendingDelete(null);
+					if (!next) dialogs.setPendingDelete(null);
 				}}
 				title="删除角色"
-				description={`确认删除「${pendingDelete?.name ?? ""}」?还有用户在用它时会被拒绝 —— 请先在「用户管理」里给他们换成别的角色。`}
+				description={`确认删除「${dialogs.pendingDelete?.name ?? ""}」?还有用户在用它时会被拒绝 —— 请先在「用户管理」里给他们换成别的角色。`}
 				isPending={deleteMutation.isPending}
-				onConfirm={() => pendingDelete && deleteMutation.mutate({ ids: [pendingDelete.id] })}
+				onConfirm={() => dialogs.pendingDelete && deleteMutation.mutate({ ids: [dialogs.pendingDelete.id] })}
 			/>
 		</PageFrame>
 	);

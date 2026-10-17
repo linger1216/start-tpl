@@ -11,7 +11,7 @@ import { cn } from "#/lib/utils";
  *
  * 为什么单独封装:此前每个页面都手写"一排圆角小按钮",既像 badge 又没有选中态、配色也只有一种。
  * 这里把它收成一个受控组件:配色统一取自项目既有的分类色板 `TAG_THEMES`
- * (见 `components/ui/badge-list.tsx`,不新造颜色字面量),组内选项按调色板轮转上色。
+ * (见 `components/ui/tag-list.tsx`,不新造颜色字面量),组内选项按调色板轮转上色。
  *
  * 用法(受控,状态留在编排壳):
  *   <FilterChipBar groups={GROUPS} active={active} onSelect={handleSelect} onClearAll={clearAll} />

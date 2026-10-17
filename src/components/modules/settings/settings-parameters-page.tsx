@@ -18,6 +18,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
 import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -37,12 +38,11 @@ export function SettingsParametersPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [keyword, setKeyword] = useState("");
-	const [editing, setEditing] = useState<ParameterRow | null>(null);
-	const [viewing, setViewing] = useState<ParameterRow | null>(null);
+	// 四态弹窗(dialogs.viewing / dialogs.createOpen / dialogs.editing / dialogs.pendingDelete)收进统一钩子
+	const dialogs = useLedgerDialogs<ParameterRow>();
 	const [creating, setCreating] = useState(false);
-	const [pendingDelete, setPendingDelete] = useState<ParameterRow | null>(null);
 
-	const formOpen = editing !== null || creating;
+	const formOpen = dialogs.formOpen || creating;
 
 	const listQuery = useQuery({ ...trpc.para.list.queryOptions(), placeholderData: keepPreviousData });
 	const rows = (listQuery.data ?? []) as ParameterRow[];
@@ -53,7 +53,7 @@ export function SettingsParametersPage() {
 	const updateMutation = useMutation(
 		trpc.para.update.mutationOptions({
 			onSuccess: writeSuccess(invalidate, {
-				close: () => setEditing(null),
+				close: () => dialogs.setEditing(null),
 				message: (o) => `已保存 ${o.key}`,
 				description: (o) => `新值:${o.value}`,
 			}),
@@ -71,7 +71,7 @@ export function SettingsParametersPage() {
 	const deleteMutation = useMutation(
 		trpc.para.remove.mutationOptions({
 			onSuccess: writeSuccess(invalidate, {
-				close: () => setPendingDelete(null),
+				close: () => dialogs.setPendingDelete(null),
 				message: (o) => `已删除 ${o.removed} 条参数`,
 			}),
 			onError: writeError,
@@ -120,14 +120,14 @@ export function SettingsParametersPage() {
 	const columns = useMemo(
 		() =>
 			parameterColumns({
-				onView: setViewing,
+				onView: dialogs.setViewing,
 				onEdit: (row) => {
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				},
-				onDelete: setPendingDelete,
+				onDelete: dialogs.setPendingDelete,
 			}),
-		[],
+		[dialogs],
 	);
 
 	// 导出的是**当前筛选结果**(与卡头「匹配 N 条」同源)
@@ -176,7 +176,7 @@ export function SettingsParametersPage() {
 						<Button
 							size="sm"
 							onClick={() => {
-								setEditing(null);
+								dialogs.setEditing(null);
 								setCreating(true);
 							}}
 						>
@@ -221,13 +221,13 @@ export function SettingsParametersPage() {
 			/>
 
 			<SettingsParametersForm
-				row={editing}
+				row={dialogs.editing}
 				creating={creating}
 				open={formOpen}
 				pending={updateMutation.isPending || createMutation.isPending}
 				onOpenChange={(next) => {
 					if (!next) {
-						setEditing(null);
+						dialogs.setEditing(null);
 						setCreating(false);
 					}
 				}}
@@ -235,27 +235,27 @@ export function SettingsParametersPage() {
 			/>
 
 			<SettingsParametersDetail
-				row={viewing}
-				open={viewing !== null}
+				row={dialogs.viewing}
+				open={dialogs.viewing !== null}
 				onOpenChange={(next) => {
-					if (!next) setViewing(null);
+					if (!next) dialogs.setViewing(null);
 				}}
 				onEdit={(row) => {
-					setViewing(null);
+					dialogs.setViewing(null);
 					setCreating(false);
-					setEditing(row);
+					dialogs.setEditing(row);
 				}}
 			/>
 
 			<ConfirmDialog
-				open={pendingDelete !== null}
+				open={dialogs.pendingDelete !== null}
 				onOpenChange={(next) => {
-					if (!next) setPendingDelete(null);
+					if (!next) dialogs.setPendingDelete(null);
 				}}
 				title="删除参数"
-				description={`确认删除参数「${pendingDelete?.key}」?代码内置的参数会回到默认值;界面新建的参数会被删除(记录保留为「已删除」,同一个参数名还能再建)。`}
+				description={`确认删除参数「${dialogs.pendingDelete?.key}」?代码内置的参数会回到默认值;界面新建的参数会被删除(记录保留为「已删除」,同一个参数名还能再建)。`}
 				isPending={deleteMutation.isPending}
-				onConfirm={() => pendingDelete && deleteMutation.mutate({ keys: [pendingDelete.key] })}
+				onConfirm={() => dialogs.pendingDelete && deleteMutation.mutate({ keys: [dialogs.pendingDelete.key] })}
 			/>
 		</PageFrame>
 	);

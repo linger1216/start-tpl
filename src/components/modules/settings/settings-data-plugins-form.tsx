@@ -149,24 +149,25 @@ export function SettingsDataPluginsForm({
 				</DialogHeader>
 
 				<DialogBody className="flex flex-col gap-3">
-					<DetailRow label="标识" htmlFor="plugin-key">
-						<div className="flex flex-col gap-1">
-							<Input
-								id="plugin-key"
-								value={pluginKey}
-								disabled={!creating}
-								translate="no"
-								spellCheck={false}
-								placeholder="如 my_towns"
-								className="font-mono text-xs"
-								onChange={(event) => setPluginKey(event.target.value)}
-							/>
-							<p className="text-xs text-muted-foreground">
-								{creating
-									? "只允许字母、数字、下划线,且不能以数字开头 —— 规则行是拿它引用插件的。"
-									: "标识建好之后不能改(改了已有规则会静默失效)。要换标识就删了重建。"}
-							</p>
-						</div>
+					<DetailRow
+						label="标识"
+						htmlFor="plugin-key"
+						hint={
+							creating
+								? "只允许字母、数字、下划线,且不能以数字开头 —— 规则行是拿它引用插件的。"
+								: "标识建好之后不能改(改了已有规则会静默失效)。要换标识就删了重建。"
+						}
+					>
+						<Input
+							id="plugin-key"
+							value={pluginKey}
+							disabled={!creating}
+							translate="no"
+							spellCheck={false}
+							placeholder="如 my_towns"
+							className="font-mono text-xs"
+							onChange={(event) => setPluginKey(event.target.value)}
+						/>
 					</DetailRow>
 
 					<DetailRow label="名字" htmlFor="plugin-label">
@@ -179,7 +180,17 @@ export function SettingsDataPluginsForm({
 						/>
 					</DetailRow>
 
-					<DetailRow label="输出值" htmlFor="plugin-output-values">
+					<DetailRow
+						label="输出值"
+						htmlFor="plugin-output-values"
+						hint={
+							<>
+								最常见的写法:key 填「列名」、value 填「真值」,规则端再按「列」取{" "}
+								<code className="font-mono text-[11px]">row[column]</code>。一行就是 SQL 里{" "}
+								<code className="font-mono text-[11px]">column in (…)</code> 的一项。
+							</>
+						}
+					>
 						<div className="flex flex-col gap-2">
 							<div className="flex flex-col gap-1.5 rounded-md border border-border/60">
 								<div className="grid grid-cols-[1fr_1fr_2.25rem] items-center gap-1.5 border-b border-border/60 bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
@@ -239,10 +250,6 @@ export function SettingsDataPluginsForm({
 									加一行
 								</Button>
 							</div>
-							<p className="text-xs text-muted-foreground">
-								最常见的写法:key 填「列名」、value 填「真值」,规则端再按「列」取 `row[column]`。一行就是 SQL 里 `column
-								in (…)` 的一项。
-							</p>
 						</div>
 					</DetailRow>
 

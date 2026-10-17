@@ -104,6 +104,26 @@ after(async () => {
 	await closeDb();
 });
 
+describe("审计词表守卫", () => {
+	it("每个 mutation 的 labelOf 都翻得出中文 —— 新 router/动词被加进来必须把词表补上", async () => {
+		const { labelOf } = await import("../src/lib/audit.ts");
+		const router = trpcRouter as unknown as {
+			_def?: { procedures?: Record<string, { _def?: { type?: string } }> };
+		};
+		const mutations = Object.entries(router._def?.procedures ?? {})
+			.filter(([, proc]) => proc._def?.type === "mutation")
+			.map(([path]) => path);
+		assert.ok(mutations.length > 0, "procedure 树取不到 —— `_def` 形状变了要修这里");
+		// 词表(`audit.ts` 的 RESOURCE / ACTION)漏词时,台账里会看到 "taskClose.taskCreate" 这类裸串
+		const untranslated = mutations.filter((path) => /[a-zA-Z]/.test(labelOf(path)));
+		assert.deepEqual(
+			untranslated,
+			[],
+			`这些写口的审计动作名翻不出来 —— 补 audit.ts 的 RESOURCE / ACTION 词表:${untranslated.join(", ")}`,
+		);
+	});
+});
+
 describe("日志覆盖率", () => {
 	it("每个 procedure 无身份调用都留下 `trpc.start` + `trpc.err`(同一 traceId)", async () => {
 		const procedures = proceduresOf();

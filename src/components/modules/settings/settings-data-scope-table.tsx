@@ -1,7 +1,8 @@
+import { PolicyStatusTag } from "#/components/modules/settings/policy-status-tag";
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";
-import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
+import { POLICY_STATUS, type PolicyStatus } from "#/lib/data-scope-spec";
 import { createAppColumnHelper } from "#/lib/table";
 
 /**
@@ -141,14 +142,7 @@ export function dataScopeColumns({
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 92,
-			cell: (ctx) => {
-				const meta = policyStatusMeta(Number(ctx.getValue()));
-				return (
-					<Tag className={`text-xs ${meta.tone}`} title={meta.hint}>
-						{meta.label}
-					</Tag>
-				);
-			},
+			cell: (ctx) => <PolicyStatusTag status={Number(ctx.getValue())} />,
 		}),
 		columnHelper.accessor("remark", {
 			header: "说明",

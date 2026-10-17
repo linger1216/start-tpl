@@ -313,11 +313,15 @@ export function UiGallery() {
 			</Group>
 
 			<Group title="展示与反馈" desc="只读的展示类原语 —— 徽章 / 数值 / 加载态 / 头像。">
-				<Cell name="Tag" hint="徽章(4 个变体)">
+				<Cell name="Tag" hint="徽章(default/secondary/outline/destructive/ghost/link,外加 random 随机取一色)">
 					<Tag>默认</Tag>
 					<Tag variant="secondary">次要</Tag>
 					<Tag variant="outline">描边</Tag>
 					<Tag variant="destructive">危险</Tag>
+					<Tag variant="random">随机</Tag>
+					<Tag variant="random" hashKey="p1">
+						随值
+					</Tag>
 				</Cell>
 				<Cell name="TagList" hint="徽章列表(可换配色主题)">
 					<TagList values={["紧急", "已核对", "跨区"]} />
@@ -1038,7 +1042,7 @@ function ModuleGallery() {
 							<code className="font-mono text-foreground">shared/filter-chips</code> ·{" "}
 							<code className="font-mono">table-kit</code> ——
 							这两件已经在上面那张「台账表格(完整业务页骨架)」里带着用了一遍,不重复放;
-							<code className="font-mono">stat-cards</code> 与 <code className="font-mono">badge-list</code>{" "}
+							<code className="font-mono">stat-cards</code> 与 <code className="font-mono">tag-list</code>{" "}
 							各有独立格子(见上面)。
 						</li>
 					</ul>

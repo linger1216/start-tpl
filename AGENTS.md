@@ -97,6 +97,6 @@ pnpm test
 
 改了 `src/routes/` 下的文件,别忘了 `pnpm generate-routes`。
 
-**已知基线:`pnpm check` = 0 error / 2 warning**(另有 1 条 info),只有两个文件、一类规则:
-`src/components/ui/tag-list.tsx`(1 处 `noNonNullAssertion`)、`src/components/modules/shared/icons-list.ts`(1 处)。
-`src/db/dm/translate.ts` 另有 1 条 `useTemplate` —— 三者都在「不要顺手修」范围内。**新代码不要新增 warning。**
+**已知基线:`pnpm check` = 0 error / 1 warning**(另有 1 条 info):
+`src/components/modules/shared/icons-list.ts`(1 处 `noNonNullAssertion`;tag-list 的同款已随 `lib/tag-color.ts` 收编消失)。
+`src/db/dm/translate.ts` 另有 1 条 `useTemplate` —— 两者都在「不要顺手修」范围内。**新代码不要新增 warning。**

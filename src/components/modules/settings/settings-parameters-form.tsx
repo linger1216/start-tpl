@@ -179,7 +179,7 @@ export function SettingsParametersForm({
 						</div>
 					) : null}
 
-					<DetailRow label="参数值" htmlFor="cfg-value">
+					<DetailRow label="参数值" htmlFor="cfg-value" hint={problem ? undefined : PARA_TYPE_META[effectiveType].hint}>
 						{effectiveType === PARA_TYPE.BOOL ? (
 							// 布尔参数:开关,不是打字 —— 要改的只有 true / false 两个可能
 							<Switch
@@ -222,11 +222,7 @@ export function SettingsParametersForm({
 								onChange={(event) => setValue(event.target.value)}
 							/>
 						)}
-						{problem ? (
-							<p className="text-xs text-destructive">{problem}</p>
-						) : (
-							<p className="text-xs text-muted-foreground">{PARA_TYPE_META[effectiveType].hint}</p>
-						)}
+						{problem ? <p className="text-xs text-destructive">{problem}</p> : null}
 					</DetailRow>
 
 					<DetailRow label="分组" htmlFor="cfg-group">
@@ -259,7 +255,7 @@ export function SettingsParametersForm({
 					</div>
 				</DialogBody>
 
-				<DialogFooter className="gap-2">
+				<DialogFooter>
 					<DetailMeta
 						meta={{ id: effectiveRowId, createdAt: row?.createdAt ?? null, updatedAt: row?.updatedAt ?? null }}
 					/>
