@@ -359,18 +359,22 @@ if (has("pick")) {
 	const interactive = !has("no-input") && process.stdin.isTTY;
 	const render = () => {
 		console.log("");
-		console.log("请选择新工程需要包含的业务模块(回车 = 推荐值; 输入编号切换 / all / none / minimal):");
+		console.log("选择要带进新项目的业务模块(想要哪些就给它们打 x):");
+		console.log("  · 输入编号切换勾选,可一次给多个(如 2 4,也认模块 id 如 task-close);回车 = 确认");
+		console.log("  · all 全要 / none 只要底座 minimal");
 		console.log("");
 		let index = 0;
 		for (const feature of manifest.features) {
 			index += 1;
-			const mark = chosen.has(feature.id) ? "x" : " ";
-			const deps = feature.requires?.length ? `  依赖 ${feature.requires.join("、")}` : "";
-			console.log(`  [${mark}] ${String(index).padStart(2)}  ${feature.name}${deps}`);
+			const mark = chosen.has(feature.id) ? "✓" : " ";
+			const star = feature.default === true ? "·默认" : "     ";
+			const deps = feature.requires?.length ? `  (依赖 ${feature.requires.join("、")})` : "";
+			console.log(`  [${mark}] ${String(index).padStart(2)}  ${star}  ${feature.name}${deps}`);
+			if (feature.description) console.log(`        ${feature.description}`);
 		}
 		if (manifest.pending?.length) {
 			console.log("");
-			console.log(`  底座核心(一律包含,不参与裁剪):${manifest.pending.map((p) => p.id).join("、")}`);
+			console.log(`  ⛩ 底座核心(一律包含,不参与选择)：${manifest.pending.map((p) => p.id).join("、")}`);
 		}
 		console.log("");
 	};
@@ -391,20 +395,22 @@ if (has("pick")) {
 			} else {
 				for (const piece of text.split(/[\s,]+/).filter(Boolean)) {
 					const n = Number(piece);
-					const feature = manifest.features[n - 1];
-					if (!feature) {
-						console.log(`  忽略无效编号:${piece}`);
+					const feature = Number.isInteger(n) && n > 0 ? manifest.features[n - 1] : undefined;
+					const byId = !feature && manifest.features.find((f) => f.id === piece);
+					const target = feature ?? byId;
+					if (!target) {
+						console.log(`  忽略无效编号/模块 id:${piece}`);
 						continue;
 					}
-					if (chosen.has(feature.id)) chosen.delete(feature.id);
-					else chosen.add(feature.id);
+					if (chosen.has(target.id)) chosen.delete(target.id);
+					else chosen.add(target.id);
 				}
 			}
 			render();
 		}
 	}
 	const order = manifest.features.filter((f) => chosen.has(f.id)).map((f) => f.id);
-	if (has("no-input")) console.log(`无交互(--no-input / 非 tty):按推荐值保留 ${order.length} 项`);
+	if (has("no-input")) console.log(`非交互环境(管道 / --no-input):按推荐值保留 ${order.length} 项(要挑模块,在真终端跑 new-project.sh 用编号勾选,或 --modules a,b)`);
 	process.stdout.write(`FEATURES=${order.join(",")}\n`);
 	process.exit(0);
 }
