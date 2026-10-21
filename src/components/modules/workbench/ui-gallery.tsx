@@ -17,6 +17,7 @@
  */
 
 import { useStore } from "@tanstack/react-store";
+import { Store } from "@tanstack/store";
 import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -106,7 +107,6 @@ import { TagList } from "#/components/ui/tag-list";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { store as demoStore, selectFullName } from "#/lib/demo-store";
 import { formatJson } from "#/lib/format";
 import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
 import { createMockTable } from "#/lib/mock-table";
@@ -672,6 +672,16 @@ const DEMO_PERMISSIONS: PermissionNode[] = [
 
 /** 假后端表:模块级建一次 → 切走再回来数据还在(与业务页用法一致;刷页面回种子) */
 const demoMockTable = createMockTable<MockRow>([{ id: "ENT-0001", title: "示例记录", status: "未读" }], "ENT");
+
+/** 全局 store 演示:模块级单例，组件内通过 useStore 订阅 */
+const demoStore = new Store({
+	firstName: "Jane",
+	lastName: "Smith",
+});
+
+function selectFullName(state: typeof demoStore.state): string {
+	return `${state.firstName} ${state.lastName}`;
+}
 
 function ModuleGallery() {
 	const [pickedIds, setPickedIds] = useState<string[]>(["d2", "d4"]);

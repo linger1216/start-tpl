@@ -362,48 +362,53 @@ if (has("list-excluded-paths")) {
 if (has("pick")) {
 	const chosen = new Set(manifest.features.filter((f) => f.default === true).map((f) => f.id));
 	const interactive = !has("no-input") && process.stdin.isTTY;
+	const logUi = (msg = "") => process.stderr.write(`${msg}\n`);
 	const render = () => {
-		console.log("");
-		console.log("===============================================================================");
-		console.log(" 请选择新工程要包含的业务模块 (回车确认; 输入编号切换; 默认仅保留必要通用件)");
-		console.log("===============================================================================");
-		console.log("");
+		logUi("");
+		logUi("===============================================================================");
+		logUi(" 请选择新工程要包含的业务模块 (回车确认; 输入编号切换; 输入 q 退出)");
+		logUi("===============================================================================");
+		logUi("");
 		const categories = [...new Set(manifest.features.map((f) => f.category || "其它模块"))];
 		for (const cat of categories) {
-			console.log(`【${cat}】`);
+			logUi(`【${cat}】`);
 			const items = manifest.features.filter((f) => (f.category || "其它模块") === cat);
 			for (const feature of items) {
 				const index = manifest.features.indexOf(feature) + 1;
 				const mark = chosen.has(feature.id) ? "✓" : " ";
 				const star = feature.default === true ? "·默认" : "     ";
 				const deps = feature.requires?.length ? `  (依赖: ${feature.requires.join("、")})` : "";
-				console.log(`  [${mark}] ${String(index).padStart(2)}  ${star}  ${feature.name} (${feature.id})${deps}`);
+				logUi(`  [${mark}] ${String(index).padStart(2)}  ${star}  ${feature.name} (${feature.id})${deps}`);
 				if (feature.description) {
-					console.log(`        说明: ${feature.description}`);
+					logUi(`        说明: ${feature.description}`);
 				}
 				if (feature.tip) {
-					console.log(`        建议: ${feature.tip}`);
+					logUi(`        建议: ${feature.tip}`);
 				}
 			}
-			console.log("");
+			logUi("");
 		}
 		if (manifest.pending?.length) {
-			console.log(`  ⛩ 底座核心(一律包含,不参与选择): ${manifest.pending.map((p) => p.id).join("、")}`);
-			console.log("");
+			logUi(`  ⛩ 底座核心(一律包含,不参与选择): ${manifest.pending.map((p) => p.id).join("、")}`);
+			logUi("");
 		}
 		const count = chosen.size;
-		console.log(`当前已选择 ${count} 项 / 共 ${manifest.features.length} 项`);
-		console.log("指令: 输入编号切换(如 1 4) | none/minimal (只要核心底座) | all (全选) | 回车 (确认并继续)");
-		console.log("");
+		logUi(`当前已选择 ${count} 项 / 共 ${manifest.features.length} 项`);
+		logUi("指令: 输入编号切换(如 1 4) | none/minimal (只要核心底座) | all (全选) | q (退出) | 回车 (确认并继续)");
+		logUi("");
 	};
 	if (interactive) {
 		render();
 		for (;;) {
-			process.stdout.write("> ");
+			process.stderr.write("> ");
 			const line = readLine();
 			if (line === null) break;
 			const text = line.trim();
 			if (text === "") break;
+			if (text === "q" || text === "quit" || text === "exit") {
+				logUi("已退出派生。");
+				process.exit(130);
+			}
 			if (text === "all") {
 				manifest.features.forEach((f) => {
 					chosen.add(f.id);
@@ -417,7 +422,7 @@ if (has("pick")) {
 					const byId = !feature && manifest.features.find((f) => f.id === piece);
 					const target = feature ?? byId;
 					if (!target) {
-						console.log(`  忽略无效编号/模块 id:${piece}`);
+						logUi(`  忽略无效编号/模块 id:${piece}`);
 						continue;
 					}
 					if (chosen.has(target.id)) chosen.delete(target.id);
@@ -429,7 +434,7 @@ if (has("pick")) {
 	}
 	const order = manifest.features.filter((f) => chosen.has(f.id)).map((f) => f.id);
 	if (has("no-input"))
-		console.log(
+		logUi(
 			`非交互环境(管道 / --no-input):按推荐值保留 ${order.length} 项(要挑模块,在真终端跑 new-project.sh 用编号勾选,或 --modules a,b)`,
 		);
 	process.stdout.write(`FEATURES=${order.join(",")}\n`);

@@ -143,11 +143,28 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- 交互式提示项目名(仅在 TTY 且未传参时) -----------------------------------
-if [ -z "$RAW" ] && [ -t 0 ] && [ "$NO_INPUT" -eq 0 ]; then
-  printf "请输入新项目名称 (如 my-app): "
-  read -r RAW || RAW=""
-  echo ""
+# --- 交互式引导项目名与存放目录(仅在 TTY 且未禁用交互时) ---------------------
+if [ -t 0 ] && [ "$NO_INPUT" -eq 0 ]; then
+  if [ -z "$RAW" ]; then
+    printf "请输入新项目名称 (如 my-app, 输入 q 退出): "
+    read -r RAW || RAW=""
+    echo ""
+    case "$RAW" in
+      q|quit|exit) echo "已退出派生。"; exit 0 ;;
+    esac
+  fi
+
+  if [ -z "$INTO" ]; then
+    DEFAULT_PARENT="$(dirname "$TEMPLATE_DIR")"
+    printf "请输入存放路径 [直接回车 = 默认同级目录 (%s), 输入 q 退出]: " "$DEFAULT_PARENT"
+    read -r USER_INTO || USER_INTO=""
+    echo ""
+    case "$USER_INTO" in
+      q|quit|exit) echo "已退出派生。"; exit 0 ;;
+      "") ;; # 回车使用默认
+      *) INTO="$USER_INTO" ;;
+    esac
+  fi
 fi
 
 if [ -z "$RAW" ]; then
