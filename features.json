@@ -40,7 +40,9 @@
         "tests/task-close.test.ts",
         "tests/task-close-log.test.ts",
         "tests/task-content.test.ts",
-        "doc/task-close.md"
+        "doc/task-close.md",
+        "doc/task-forms.md",
+        "doc/任务插件化设计.md"
       ],
       "tokens": [
         "taskCloseRouter",

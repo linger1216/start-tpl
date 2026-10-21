@@ -24,7 +24,10 @@ const TEMPLATE_ROOT = path.resolve(HERE, "..");
 const CODE_EXT = /\.(ts|tsx|mjs|js|json)$/;
 
 function arg(name, fallback = null) {
-	const i = process.argv.indexOf(`--${name}`);
+	let i = process.argv.indexOf(`--${name}`);
+	if (i < 0 && name === "features") {
+		i = process.argv.indexOf("--modules");
+	}
 	if (i < 0) return fallback;
 	const next = process.argv[i + 1];
 	// `--features ""`(= 一个功能都不留)是**合法输入**:空串不是"没给"
@@ -268,13 +271,19 @@ function applyFeature(target, feature) {
 		rows.push({ ok: false, kind, at: rule.file ?? `paths`, extra });
 	};
 	if (feature.paths?.length) {
-		// 先确认"清单里声明的路径都在"(在模板与目标上都成立),再删 —— 顺序反了就永远查不出清单过期
-		const missing = feature.paths.filter((rel) => !rel.includes("*") && !fs.existsSync(path.join(target, rel)));
-		if (missing.length > 0) {
-			fail("paths", { file: missing.join(", ") }, "路径不存在(清单过期?)");
+		if (selftest) {
+			// 先确认"清单里声明的路径都在模板中",防止清单过期
+			const missing = feature.paths.filter((rel) => !rel.includes("*") && !fs.existsSync(path.join(target, rel)));
+			if (missing.length > 0) {
+				fail("paths", { file: missing.join(", ") }, "模板路径不存在(清单过期?)");
+			} else {
+				const res = rules.paths(target, feature.paths);
+				rows.push({ ok: true, kind: "paths", at: `${feature.paths.length} 条`, extra: res.detail });
+			}
 		} else {
+			// 针对派生目标目录: 若拷贝阶段已按模块排除，未拷贝的文件直接视为已排除；若有残留则执行删除
 			const res = rules.paths(target, feature.paths);
-			rows.push({ ok: true, kind: "paths", at: `${feature.paths.length} 条`, extra: res.detail });
+			rows.push({ ok: true, kind: "paths", at: `${feature.paths.length} 条`, extra: res.detail || "已在拷贝时按模块排除" });
 		}
 	}
 	for (const rule of feature.rules ?? []) {
@@ -335,12 +344,22 @@ if (has("list-ids")) {
 	process.exit(0);
 }
 
+if (has("list-excluded-paths")) {
+	const raw = arg("features", "");
+	const { selected } = resolveSelection(raw);
+	const selectedSet = new Set(selected);
+	const unselected = manifest.features.filter((f) => !selectedSet.has(f.id));
+	const paths = unselected.flatMap((f) => f.paths ?? []);
+	process.stdout.write(`${paths.join("\n")}\n`);
+	process.exit(0);
+}
+
 if (has("pick")) {
 	const chosen = new Set(manifest.features.filter((f) => f.default === true).map((f) => f.id));
 	const interactive = !has("no-input") && process.stdin.isTTY;
 	const render = () => {
 		console.log("");
-		console.log("请选择要保留的功能(回车 = 用推荐值;输入编号切换 / all / none / minimal):");
+		console.log("请选择新工程需要包含的业务模块(回车 = 推荐值; 输入编号切换 / all / none / minimal):");
 		console.log("");
 		let index = 0;
 		for (const feature of manifest.features) {
@@ -351,7 +370,7 @@ if (has("pick")) {
 		}
 		if (manifest.pending?.length) {
 			console.log("");
-			console.log(`  未接线(一律保留,先不参与选择):${manifest.pending.map((p) => p.id).join("、")}`);
+			console.log(`  底座核心(一律包含,不参与裁剪):${manifest.pending.map((p) => p.id).join("、")}`);
 		}
 		console.log("");
 	};

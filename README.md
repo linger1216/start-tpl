@@ -15,7 +15,7 @@
 ```bash
 pnpm install
 cp .env.example .env.local     # 然后按需填写 DATABASE_URL 等
-pnpm db:create                 # 建 27 张系统表系统表(20 张 sys_* + demo_grid + 6 张 tc_*,幂等)
+pnpm db:create                 # 建 27 张系统表(20 张 sys_* + demo_grid + 6 张 tc_*, 幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
 pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是本机手工准备的,种子不建)
 pnpm dev                       # http://localhost:3000
@@ -29,14 +29,15 @@ pnpm dev                       # http://localhost:3000
 
 ---
 
-## 打开后先看这四块
+## 打开后先看这五块
 
 | 入口 | 内容 |
 | --- | --- |
 | **工作台** `/` | 模板入口页:上手四件事、目录职责速查、派生时删什么的清单 |
-| **UI 组件示例** | ★ 就在工作台 `/` 页里:44 个原语的最小可用例子 + 台账表格实战示例 |
-| **框架能力** `/demo/*` | 6 个能力样例(数据请求 / 表单 / 表格 / 数据库 / 登录认证 / 全局状态)+ 2 个演示业务页(「业务首页」+「网格履职」) |
-| **系统设置** `/settings/*` | ★ 唯一保留的真实业务模块,**十二个页面**,全部读写真库(见下文「系统设置模块」) |
+| **任务闭环** `/task-close/*` | ★ 状态机驱动的业务闭环示范:我的任务 / 流程模板 / 任务详情(审批流 + 待办流转 + 活动日志) |
+| **系统设置** `/settings/*` | ★ 核心后台模块,**十二个页面**,全部读写真库(用户/角色/部门/权限/数据范围/文件/日志…) |
+| **框架能力** `/demo/*` | 6 个基础能力样例(数据请求 / 表单 / 表格 / 数据库 / 登录认证 / 状态)+ 2 个演示页 |
+| **UI 组件示例** | 就在工作台 `/` 页内:44 个原语的最小可用例子 + 台账表格实战示例 |
 
 菜单树是**库 + 兜底**双源:`sys_menu` 表有数据时以表为准,为空则退回 `src/components/layout/nav-config.ts` 的 `NAV_NODES`。改 `NAV_NODES` 后侧边栏、面包屑、模块概览、工作台四处会一起变。
 
@@ -68,7 +69,8 @@ src/
 │   ├── modules/demo/             # 框架能力样例的页面件
 │   └── modules/notice/           # 通知中心件
 ├── lib/
-│   ├── api/error.ts              # ApiError / toApiError
+│   ├── api/error.ts              # ApiError / toApiError / toastApiError (统一错误吐司)
+│   ├── tag-color.ts              # 6 色相点缀色板 + 稳定哈希算法
 │   ├── table.ts                  # TanStack Table v9 的 app hook(useAppTable + useRowSelection)
 │   ├── excel.ts                  # Excel 列类型 + 唯一写盘点 writeSheet / cellText
 │   ├── rbac.ts                   # 权限码判定 + PERM_BY_PATH(接口 → 权限点的唯一字典)
@@ -414,7 +416,7 @@ function UsersPage() {
 3. **权限点** —— 每个写接口都要在 `src/lib/rbac.ts` 的 `PERM_BY_PATH` 里登记 `域:资源:动作`,否则 `tests/auth.test.ts` 直接拦(读接口三选一,见 `doc/后端接口约定.md`)
 4. **页面骨架** —— 复制 `settings-parameters-page.tsx` 的结构:`PageFrame` → `PageHeader`(actions 放 `RefreshButton` + 新增 `Button`)→ `StatCards` → `LedgerToolbar` + `ColumnToggle` → `Card` → `TableLoadingShell` → `DataTable` → `PaginationControl`;分页大小统一读 `usePageSize()`(`sys_para` 的 `page.size`),列偏好用 `useColumnPrefs("<页面键>", table)`
 5. **表格** —— `src/lib/table.ts` 的 `useAppTable` + `createAppColumnHelper`(排序 / 筛选 / 分页 / 分组 / 列宽 / 列固定 / 行选择都内置),配 `shared/table-kit` 的 `DataTable` / `selectColumn` / `actionsColumn` / `TextCell`
-6. **mutation** —— 每个动作单独一个 `useMutation(mutationOptions())`,成功后按需 `invalidateQueries`;删除走 `ConfirmDialog`;错误提示走 `lib/api/error.ts` 的 `toApiError`(取 `.message`)
+6. **mutation** —— 每个动作单独一个 `useMutation(mutationOptions())`,成功后按需 `invalidateQueries`;删除走 `ConfirmDialog`;错误提示统一调 `lib/api/error.ts` 的 `toastApiError(error)`(一行完成错误归一与弹窗)
 7. **详情 / Excel(可选)** —— 详情用 `shared/detail-dialog.tsx`(`DetailRow` 的 label 只给纯描述;时间放 `meta` 不放 fields);导入用 `shared/excel-import.tsx` 的 `ExcelImportDialog`,导出用 `shared/ledger-excel.ts`,写盘点只有 `lib/excel.ts` 一处
 
 可复用的展示件都在 `src/components/modules/shared/`:表格套件 / 工具栏 / 筛选 chip / 分页 / 指标卡 / 详情弹窗 / 可拖拽树 / 权限树 / 多选 / 成员区 / 图标选择 / 列切换 / Excel 导入导出。**先看工作台**,它就是拼装说明书。
@@ -463,6 +465,20 @@ function UsersPage() {
 
 ---
 
+## 任务闭环模块 (业务状态机示范)
+
+`/task-close/*` 是模板内置的**复杂工作流与状态机示范模块**,全闭环读写真库(6 张 `tc_*` 表):
+
+| 页面 | 路由 | 数据来源 | 说明 |
+| --- | --- | --- | --- |
+| 我的任务 | `/task-close` | `tc_task` + `tc_member` | 服务端分页卡片列表 + 状态/优先级多维筛选 + 新建任务向导 |
+| 任务详情 | `/task-close/$taskId` | `tc_task` + `tc_action` + `tc_log` + `tc_comment` | 核心闭环页:流程状态脊骨架 + 轮到你了待办条 + 评论讨论 + 活动日志时间轴 + 动态动作矩阵 |
+| 流程模板 | `/task-close/workflows` | `tc_workflow` | 流程状态机可视化编辑器:状态节点 + 转移边(直接改/审批动作)+ who 角色权限协议 |
+
+> 架构演进与插件化规划详见 [`doc/任务插件化设计.md`](doc/任务插件化设计.md)。
+
+---
+
 ## 派生新项目
 
 模板自带 `new-project.sh`(在仓库根目录),按下面的方式派生一个干净的新项目:
@@ -474,7 +490,7 @@ function UsersPage() {
 ./new-project.sh my-app --title '巡检系统'    # 中文标题 + ASCII 包名
 ./new-project.sh my-app --minimal            # 只要核心(登录 / 外壳 / 数据库 / 权限判定 / UI 原语)
 ./new-project.sh my-app --all                # 全要(等于以前的行为)
-./new-project.sh my-app --features task-close,notice
+./new-project.sh my-app --modules task-close,notice  # 按模块定制(仅拷贝所需模块文件)
 ./new-project.sh my-app --features -demo,-workbench   # 用推荐值,再关掉这两项
 ```
 
@@ -488,10 +504,9 @@ function UsersPage() {
 两者互不影响 —— 读法只有一处(`src/lib/app-meta.ts`),消费方是 `routes/__root.tsx` 的
 `head()`(标签页标题)与 `layout/sidebar.tsx` 的品牌标题区。改标题只改这一个字段。
 
-### 功能切分(按需派生)
+### 模块化按需拷贝与功能切分
 
-**不是每个项目都要所有功能**,所以派生时先选功能:选中的才落进新项目,其余功能的
-**文件、菜单、路由注册、权限点、建表语句、package.json 脚本一并物理删除**(不留死代码、不留运行时开关)。
+**不是每个项目都要所有功能模块**,所以派生时先选模块:复制阶段直接跳过未选模块的专属文件(按需拷贝),其余共享注册点(菜单、路由注册、权限点、建表语句、package.json 脚本)一并联动清理(物理删除,不留死代码)。
 
 - 清单在仓库根 **`features.json`**:每个功能的 `paths`(删哪些文件)/`rules`(注册点怎么改)/
   `requires`(依赖)/`procedures`(贡献几个接口)都写在那里;
@@ -808,6 +823,17 @@ pnpm check
 
 ---
 
+## 路线图与待办演进 (TODO)
+
+- **任务闭环插件化（暂未实现，留待后续迭代）**:
+  - **一体化任务插件**:解耦纯文本评论与业务作答，题面定义（`definition`）与现场作答（`submission`）合一，统一支持 `edit_definition` / `inspect_answer` / `view_report` 三态。
+  - **插件内聚流程模板**:插件自带贡献一套或多套工作流，选流程即选插件。
+  - **内核动态动作引擎**:内核基于有向图当前出边（Outgoing Edges）动态投影操作按钮（直转 / 审批 / 插件专属动作），绝不硬编码任何具体业务状态名。
+  - **安全检查场景**:逐项打勾（Y/N/NA）、不合格项唤起相机拍照直传 MinIO 取证、A4 报告排版与一键原生打印。
+  - 完整设计规范见 **`doc/任务插件化设计.md`**。
+
+---
+
 ## 延伸阅读
 
 项目内文档:
@@ -823,6 +849,7 @@ pnpm check
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
 - `doc/task-close.md` —— 任务闭环(唯一保留的业务示例模块):三页、六张 `tc_*` 表与 `who` 协议、状态机与活动日志
+- `doc/任务插件化设计.md` —— **任务闭环插件化设计规范（待实现 TODO）**:一体化任务插件（描述与作答合一）、插件内聚流程模板、内核动态动作推导引擎、企业安全检查工单实战
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)

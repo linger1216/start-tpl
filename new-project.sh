@@ -47,7 +47,8 @@ usage() {
   --title <名>  网页标题 + 侧边栏品牌名;可与包名不同(中文也行),默认用你输入的项目名
   --all         功能全要(= 以前的行为)
   --minimal     只要核心(登录 / 后台外壳 / 数据库 / 权限判定 / UI 原语)
-  --features a,b  按功能 id 选择(清单与说明见仓库根 features.json)
+  --features a,b  按模块 id 选择(清单与说明见仓库根 features.json)
+  --modules a,b   --features 的别名,按模块定制新工程
   --no-input    不交互:功能按 features.json 的推荐值
   -h, --help    显示本帮助
 
@@ -56,7 +57,7 @@ usage() {
   ./new-project.sh MyApp --strict
   ./new-project.sh my-app --into ~/work/projects
   ./new-project.sh my-app --title '巡检系统'          # 中文标题 + ASCII 包名
-  ./new-project.sh my-app --features task-close,notice
+  ./new-project.sh my-app --modules task-close,notice
   ./new-project.sh my-app --minimal
 
 说明:
@@ -101,9 +102,9 @@ while [ $# -gt 0 ]; do
       fi
       TITLE="$2"; shift 2
       ;;
-    --features)
+    --features|--modules|-m)
       if [ $# -lt 2 ]; then
-        echo "Error: --features 需要一个逗号分隔的列表(如 task-close,notice)。" >&2
+        echo "Error: $1 需要一个逗号分隔的模块列表(如 task-close,notice)。" >&2
         exit 1
       fi
       FEATURES="$2"; shift 2
@@ -291,9 +292,9 @@ echo "Scaffolding '$PROJECT_NAME' ..."
 echo "  from: $TEMPLATE_DIR"
 echo "  to:   $TARGET_DIR"
 if [ -n "$FEATURES_IDS" ]; then
-  echo "  功能: $FEATURES_IDS"
+  echo "  模块: $FEATURES_IDS"
 else
-  echo "  功能: (仅核心 —— 所有可裁功能都不带)"
+  echo "  模块: (仅核心 —— 所有可选模块都不带)"
 fi
 
 # --- 任何失败(含出错、显式中止、Ctrl-C)都清掉半成品 ---------------------------
@@ -353,11 +354,24 @@ if [ "$IS_GIT" -eq 1 ]; then
   fi
 fi
 
+# --- 根据所选模块计算排除路径 (未选模块在拷贝时直接跳过, 按需拷贝对应文件) ---
+MODULE_EXCLUDES=()
+if [ -f "$PRUNER" ] && [ -f "$FEATURES_JSON" ]; then
+  while IFS= read -r p; do
+    [ -n "$p" ] && MODULE_EXCLUDES+=( "$p" )
+  done < <(node "$PRUNER" --list-excluded-paths --features "$FEATURES_IDS" 2>/dev/null || true)
+fi
+
+if [ ${#MODULE_EXCLUDES[@]} -gt 0 ]; then
+  echo "  按模块过滤: 排除未选模块的 ${#MODULE_EXCLUDES[@]} 项路径, 仅拷贝所需模块文件"
+fi
+
 # --- copy, excluding build/git artifacts, caches, secrets and this script ---
 if command -v rsync >/dev/null 2>&1; then
   # Prefer rsync when available (fast, preserves modes, respects trailing-slash semantics).
   RSYNC_ARGS=( -a )
   for pattern in "${DENY[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
+  for pattern in "${MODULE_EXCLUDES[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
   # .env.example is the ONLY env file that ships — never copy real secrets.
   # ORDER MATTERS: rsync uses the first matching pattern, so the include must precede the exclude.
   RSYNC_ARGS+=( --include .env.example --exclude '.env*' )
@@ -377,6 +391,11 @@ elif [ "$IS_GIT" -eq 1 ]; then
         .env*) continue ;;
       esac
       case "$f" in new-project.sh|.serena|.serena/*) continue ;; esac
+      for ex in "${MODULE_EXCLUDES[@]}"; do
+        case "$f" in
+          "$ex"|"$ex"/*) continue 2 ;;
+        esac
+      done
       mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
     done
   )
@@ -397,6 +416,11 @@ else
           for pattern in "${FALLBACK_DENY[@]}"; do
             case "$(basename "$f")" in $pattern) skip=1; break ;; esac
             case "$f" in */"$pattern"|*/"$pattern"/*) skip=1; break ;; esac
+          done
+          for ex in "${MODULE_EXCLUDES[@]}"; do
+            case "${f#./}" in
+              "$ex"|"$ex"/*) skip=1; break ;;
+            esac
           done
           if [ "$skip" -eq 1 ]; then continue; fi
           mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
@@ -421,12 +445,11 @@ fi
 if [ "$IS_GIT" -eq 1 ]; then
   EXPECTED="$( ( cd "$TEMPLATE_DIR" && git ls-files --cached --others --exclude-standard ) | wc -l | tr -d ' ')"
   ACTUAL="$(find "$TARGET_DIR" -type f | wc -l | tr -d ' ')"
-  echo "  拷贝 $ACTUAL 个文件(模板 git 视角 $EXPECTED 个;差值就是被排除的:new-project.sh / .serena 等)"
+  echo "  拷贝 $ACTUAL 个文件(模板 git 视角 $EXPECTED 个;差值即未选模块与被排除项)"
 fi
 
-# --- 功能裁剪(物理删除 + 同步注册点;规则与依赖都在 features.json) -------------
-# 跑在复制之后:pruner 只做"删 + 定点编辑",不重新拷文件。
-# 任何规则未命中 / 有悬空引用 ⇒ 非零退出,由上面的 trap 把半成品目录一起清掉。
+# --- 模块联动清理与注册点同步(规则与依赖都在 features.json) -------------
+# 跑在按模块复制之后:由于未选模块的文件已在拷贝时跳过,此处主要执行跨文件联动规则(清理 router/nav/schema 引用与测试数字)
 if [ -f "$PRUNER" ] && [ -f "$FEATURES_JSON" ]; then
   node "$PRUNER" --root "$TARGET_DIR" --features "$FEATURES_IDS"
 fi
