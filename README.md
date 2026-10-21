@@ -484,14 +484,15 @@ function UsersPage() {
 模板自带 `new-project.sh`(在仓库根目录),按下面的方式派生一个干净的新项目:
 
 ```bash
-./new-project.sh my-app                      # 派生到 ../my-app(会逐项问你保留哪些功能)
+./new-project.sh                             # 全交互引导:自动询问项目名称并分组勾选所需模块
+./new-project.sh my-app                      # 派生到 ../my-app(交互选择模块)
 ./new-project.sh my-app --into ~/src         # 指定父目录
-./new-project.sh my-app --strict             # 模板有未提交改动时直接中止
 ./new-project.sh my-app --title '巡检系统'    # 中文标题 + ASCII 包名
+./new-project.sh my-app --port 3001          # 自定义本地开发端口(避免多项目冲突)
+./new-project.sh my-app -i                   # 派生完自动执行 pnpm install 与路由编译
 ./new-project.sh my-app --minimal            # 只要核心(登录 / 外壳 / 数据库 / 权限判定 / UI 原语)
-./new-project.sh my-app --all                # 全要(等于以前的行为)
-./new-project.sh my-app --modules task-close,notice  # 按模块定制(仅拷贝所需模块文件)
-./new-project.sh my-app --features -demo,-workbench   # 用推荐值,再关掉这两项
+./new-project.sh my-app --all                # 全要(包含所有业务与演示模块)
+./new-project.sh my-app --modules task-close,notice  # 按模块定制(仅按需拷贝对应文件)
 ```
 
 **项目标题**(网页标题 + 侧边栏品牌)的唯一真源是 `package.json` 的 `app` 字段:
@@ -504,9 +505,13 @@ function UsersPage() {
 两者互不影响 —— 读法只有一处(`src/lib/app-meta.ts`),消费方是 `routes/__root.tsx` 的
 `head()`(标签页标题)与 `layout/sidebar.tsx` 的品牌标题区。改标题只改这一个字段。
 
-### 模块化按需拷贝与功能切分
+### 模块化按需拷贝与交互式勾选
 
-**不是每个项目都要所有功能模块**,所以派生时先选模块:复制阶段直接跳过未选模块的专属文件(按需拷贝),其余共享注册点(菜单、路由注册、权限点、建表语句、package.json 脚本)一并联动清理(物理删除,不留死代码)。
+**不是每个项目都要所有功能模块**。派生脚本采用**正向按需勾选（Opt-in）**与按需文件拷贝：
+1. **交互式分组与建议**：终端按「业务流程」、「系统增强」、「演示示例」分组展示模块，附带明确的业务场景与选配建议（如明确提示何时不需要添加特定模块，保持新工程轻量纯净）；
+2. **复制阶段跳过未选文件**：仅拷贝所需模块的专属文件，不必要的文件物理排除；
+3. **共享注册点联动清理**：菜单、路由注册、权限点、建表语句、package.json 脚本同步清理，不留死代码；
+4. **端口与数据库天然隔离**：支持 `--port` 避免端口撞车，自动将 `.env.local` 默认库名替换为项目同名库。
 
 - 清单在仓库根 **`features.json`**:每个功能的 `paths`(删哪些文件)/`rules`(注册点怎么改)/
   `requires`(依赖)/`procedures`(贡献几个接口)都写在那里;

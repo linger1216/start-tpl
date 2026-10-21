@@ -39,25 +39,28 @@ TEMPLATE_DIR="$SCRIPT_DIR"
 
 usage() {
   cat <<'EOF'
-用法: new-project.sh <project-name> [选项]
+用法: new-project.sh [project-name] [选项]
 
 选项:
-  --into <dir>  新项目放在哪个目录下(默认:模板的同级目录)
-  --strict      模板目录存在未提交改动时直接中止(默认只警告并继续)
-  --title <名>  网页标题 + 侧边栏品牌名;可与包名不同(中文也行),默认用你输入的项目名
-  --all         功能全要(= 以前的行为)
-  --minimal     只要核心(登录 / 后台外壳 / 数据库 / 权限判定 / UI 原语)
+  --into <dir>    新项目放在哪个目录下(默认:模板的同级目录)
+  --strict        模板目录存在未提交改动时直接中止(默认只警告并继续)
+  --title <名>    网页标题 + 侧边栏品牌名;可与包名不同(中文也行),默认用你输入的项目名
+  --port <端口>   本地开发端口(写入 package.json,默认: 3000)
+  --install, -i   派生完成后自动安装依赖并生成路由
+  --all           功能全要(= 包含全部业务与演示模块)
+  --minimal       只要核心(登录 / 后台外壳 / 数据库 / 权限判定 / UI 原语)
   --features a,b  按模块 id 选择(清单与说明见仓库根 features.json)
   --modules a,b   --features 的别名,按模块定制新工程
-  --no-input    不交互:功能按 features.json 的推荐值
-  -h, --help    显示本帮助
+  --no-input      不交互:功能按 features.json 的推荐值
+  -h, --help      显示本帮助
 
 示例:
+  ./new-project.sh                                  # 交互式引导输入项目名并勾选模块
   ./new-project.sh my-cool-app
   ./new-project.sh MyApp --strict
   ./new-project.sh my-app --into ~/work/projects
-  ./new-project.sh my-app --title '巡检系统'          # 中文标题 + ASCII 包名
-  ./new-project.sh my-app --modules task-close,notice
+  ./new-project.sh my-app --title '巡检系统' --port 3001
+  ./new-project.sh my-app --modules task-close,notice -i
   ./new-project.sh my-app --minimal
 
 说明:
@@ -84,17 +87,30 @@ STRICT=0
 INTO=""
 # 功能选择:空 = 还没决定(交互式问);`__all__` / `__none__` 是 --all / --minimal 的哨兵
 FEATURES=""
+FEATURES_GIVEN=0
 NO_INPUT=0
 # 展示标题(网页标题 + 侧边栏品牌)。空 = 用你输入的项目名原样;中文标题走这个参数
 TITLE=""
+# 本地开发端口(写入 package.json scripts.dev)
+PORT=""
+# 自动安装依赖并构建路由
+INSTALL_DEPS=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --strict) STRICT=1; shift ;;
-    --all) FEATURES="__all__"; shift ;;
-    --minimal) FEATURES="__none__"; shift ;;
+    --all) FEATURES="__all__"; FEATURES_GIVEN=1; shift ;;
+    --minimal) FEATURES="__none__"; FEATURES_GIVEN=1; shift ;;
     --no-input) NO_INPUT=1; shift ;;
+    -i|--install) INSTALL_DEPS=1; shift ;;
+    --port|-p)
+      if [ $# -lt 2 ]; then
+        echo "Error: $1 需要一个端口号(如 3001)。" >&2
+        exit 1
+      fi
+      PORT="$2"; shift 2
+      ;;
     --title)
       if [ $# -lt 2 ]; then
         echo "Error: --title 需要一个显示名(可与包名不同,支持中文)。" >&2
@@ -107,7 +123,7 @@ while [ $# -gt 0 ]; do
         echo "Error: $1 需要一个逗号分隔的模块列表(如 task-close,notice)。" >&2
         exit 1
       fi
-      FEATURES="$2"; shift 2
+      FEATURES="$2"; FEATURES_GIVEN=1; shift 2
       ;;
     --into)
       if [ $# -lt 2 ]; then
@@ -127,6 +143,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# --- 交互式提示项目名(仅在 TTY 且未传参时) -----------------------------------
+if [ -z "$RAW" ] && [ -t 0 ] && [ "$NO_INPUT" -eq 0 ]; then
+  printf "请输入新项目名称 (如 my-app): "
+  read -r RAW || RAW=""
+  echo ""
+fi
+
 if [ -z "$RAW" ]; then
   echo "Error: 缺少项目名。" >&2
   echo >&2
@@ -139,6 +162,9 @@ command -v node >/dev/null 2>&1 || {
   echo "Error: 需要 node(用于校验与改写 package.json、生成密钥)。" >&2
   exit 1
 }
+
+# 校验 Node 版本 >= 20(TanStack Start 与 Drizzle 需要现代 Node 特性)
+node -e 'const [m] = process.versions.node.split("."); if (Number(m) < 20) { console.error("Error: 需要 Node.js >= 20 (当前 " + process.version + ")"); process.exit(1); }'
 
 # --- 模板自检(在拷贝之前,先确认源本身是好的) --------------------------------
 TEMPLATE_PKG="$TEMPLATE_DIR/package.json"
@@ -175,7 +201,7 @@ elif [ "$FEATURES" = "__all__" ]; then
   FEATURES_IDS="$(node "$PRUNER" --list-ids)"
 elif [ "$FEATURES" = "__none__" ]; then
   FEATURES_IDS=""
-elif [ -n "$FEATURES" ]; then
+elif [ "$FEATURES_GIVEN" -eq 1 ]; then
   FEATURES_IDS="$FEATURES"
 else
   # 交互式勾选;非 tty 或 --no-input 时用推荐值,不卡住脚本
@@ -308,7 +334,7 @@ cleanup_on_exit() {
   if [ -n "${IGNORES_FROM_GIT:-}" ]; then rm -f "$IGNORES_FROM_GIT"; fi
   return 0
 }
-trap cleanup_on_exit EXIT
+trap cleanup_on_exit EXIT INT TERM
 
 # --- 排除集:单一真源 ---------------------------------------------------------
 # 为什么不再手抄一份排除表:那和 `.gitignore` 是同一件事的两种写法,而手抄那份**已经漂移**
@@ -371,7 +397,12 @@ if command -v rsync >/dev/null 2>&1; then
   # Prefer rsync when available (fast, preserves modes, respects trailing-slash semantics).
   RSYNC_ARGS=( -a )
   for pattern in "${DENY[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
-  for pattern in "${MODULE_EXCLUDES[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
+  for pattern in "${MODULE_EXCLUDES[@]}"; do
+    case "$pattern" in
+      /*) RSYNC_ARGS+=( --exclude "$pattern" ) ;;
+      *) RSYNC_ARGS+=( --exclude "/$pattern" ) ;;
+    esac
+  done
   # .env.example is the ONLY env file that ships — never copy real secrets.
   # ORDER MATTERS: rsync uses the first matching pattern, so the include must precede the exclude.
   RSYNC_ARGS+=( --include .env.example --exclude '.env*' )
@@ -469,12 +500,15 @@ fi
 # 用 JSON 解析而不是正则替换:模板改过名、或 name 出现在别处都不会出错。
 node -e '
   const fs = require("fs");
-  const [p, name, title] = process.argv.slice(1);
+  const [p, name, title, port] = process.argv.slice(1);
   const j = JSON.parse(fs.readFileSync(p, "utf8"));
   j.name = name;
   // 展示标题用**你输入的原样**(中文 / 大小写都保留),包名必须是小写 ASCII —— 两者分开,
   // 见 src/lib/app-meta.ts:页面标题与侧边栏品牌都读 app.title。副标题留空,自己的品牌自己填。
   j.app = { ...(j.app ?? {}), title, subtitle: "" };
+  if (port && j.scripts && j.scripts.dev) {
+    j.scripts.dev = j.scripts.dev.replace(/--port\s+\d+/, "--port " + port);
+  }
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
   // 复核
   const back = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -482,8 +516,13 @@ node -e '
     console.error("Error: 写入后复核失败,name = " + back.name + ", app.title = " + back.app?.title);
     process.exit(1);
   }
-' "$PKG" "$PROJECT_NAME" "$TITLE"
-echo "  package.json name -> $PROJECT_NAME,app.title -> $TITLE(副标题留空,按需填)"
+' "$PKG" "$PROJECT_NAME" "$TITLE" "$PORT"
+
+if [ -n "$PORT" ]; then
+  echo "  package.json name -> $PROJECT_NAME, app.title -> $TITLE, dev 端口 -> $PORT"
+else
+  echo "  package.json name -> $PROJECT_NAME, app.title -> $TITLE(副标题留空,按需填)"
+fi
 
 # --- keep the TanStack CLI state file in sync --------------------------------
 CTA="$TARGET_DIR/.cta.json"
@@ -510,7 +549,7 @@ if [ -f "$ENV_EXAMPLE" ]; then
   SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))')"
   node -e '
     const fs = require("fs");
-    const [p, secret] = process.argv.slice(1);
+    const [p, secret, name] = process.argv.slice(1);
     let t = fs.readFileSync(p, "utf8");
     if (/^BETTER_AUTH_SECRET=/m.test(t)) {
       t = t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=" + secret);
@@ -518,16 +557,44 @@ if [ -f "$ENV_EXAMPLE" ]; then
       // .env.example 里没有这一项也要能用
       t = t.replace(/\s*$/, "") + "\n\n# Better Auth\nBETTER_AUTH_SECRET=" + secret + "\n";
     }
+    // 自动将默认数据库名 mydb 替换为项目同名库,隔离多项目开发
+    if (name) {
+      t = t.replace(/(mysql:\/\/[^/]+\/)mydb([?"\s]|$)/m, "$1" + name + "$2");
+    }
     fs.writeFileSync(p, t);
-  ' "$ENV_LOCAL" "$SECRET"
+  ' "$ENV_LOCAL" "$SECRET" "$PROJECT_NAME"
   # .env.local 含 BETTER_AUTH_SECRET(以及你之后填的 DATABASE_URL),收紧为仅属主可读写
   chmod 600 "$ENV_LOCAL" 2>/dev/null || true
-  echo "  .env.local 已生成(BETTER_AUTH_SECRET 随机填充,权限 600)"
+  echo "  .env.local 已生成(BETTER_AUTH_SECRET 随机填充, DATABASE_URL 库名 -> $PROJECT_NAME, 权限 600)"
 else
   echo "提示: 目标目录没有 .env.example,跳过 .env.local 生成。" >&2
 fi
 
 SCAFFOLD_OK=1
+
+# --- 自动安装依赖与构建路由 ---------------------------------------------------
+DID_INSTALL=0
+if [ "$INSTALL_DEPS" -eq 1 ]; then
+  DID_INSTALL=1
+elif [ -t 0 ] && [ "$NO_INPUT" -eq 0 ]; then
+  echo ""
+  printf "是否立即安装依赖并构建路由 (pnpm install && pnpm generate-routes)? [y/N]: "
+  read -r DO_INSTALL || DO_INSTALL=""
+  case "$DO_INSTALL" in
+    y*|Y*) DID_INSTALL=1 ;;
+  esac
+fi
+
+if [ "$DID_INSTALL" -eq 1 ]; then
+  echo ""
+  echo "正在安装依赖与生成路由表 (pnpm install && pnpm generate-routes) ..."
+  if command -v pnpm >/dev/null 2>&1; then
+    ( cd "$TARGET_DIR" && pnpm install && pnpm generate-routes )
+  else
+    echo "提示: 未找到 pnpm,跳过自动安装。请在目标目录下手动执行 pnpm install && pnpm generate-routes。" >&2
+    DID_INSTALL=0
+  fi
+fi
 
 echo ""
 echo "Done. 项目位置: $TARGET_DIR"
@@ -535,12 +602,19 @@ echo ""
 echo "Next steps:"
 echo "  cd $TARGET_DIR"
 echo "  git init -b main          # 新项目不含 git,按需自行初始化"
-echo "  pnpm install"
-echo "  pnpm generate-routes      # ★ 必跑:路由表是生成物,裁过功能(删过路由文件)必须重建"
-echo "  pnpm typecheck && pnpm check"
-echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
-echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
-echo "  pnpm dev                  # 种子按上面「建议先跑的种子」那几个跑"
+if [ "$DID_INSTALL" -eq 1 ]; then
+  echo "  pnpm typecheck && pnpm check"
+  echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
+  echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
+  echo "  pnpm dev                  # 启动开发服务器"
+else
+  echo "  pnpm install"
+  echo "  pnpm generate-routes      # ★ 必跑:路由表是生成物,裁过功能(删过路由文件)必须重建"
+  echo "  pnpm typecheck && pnpm check"
+  echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
+  echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
+  echo "  pnpm dev                  # 种子按上面「建议先跑的种子」那几个跑"
+fi
 echo ""
 echo "提示:agent 的文件沙箱以「会话工作区」为界,工作区外的路径只能读、不能写。"
 echo "      要在 agent 里改这个项目的代码,请让它的工作区包含:"

@@ -25,7 +25,9 @@
     {
       "id": "task-close",
       "name": "任务闭环",
+      "category": "业务流程",
       "description": "甲发任务给乙 → 处置 → 审批 → 关闭归档(含活动日志 tc_log)",
+      "tip": "工单/审批流业务选配；常规基础后台无流转需求可不选",
       "default": false,
       "requires": [],
       "procedures": 25,
@@ -114,7 +116,9 @@
     {
       "id": "demo",
       "name": "框架能力 + 演示页",
+      "category": "演示示例",
       "description": "6 个能力样例页 + 2 个演示业务页(业务首页 / 网格履职)+ demo_grid 表",
+      "tip": "综合网格履职演示业务与数据权限样例页；正式生产工程通常不需要",
       "default": false,
       "requires": [],
       "procedures": 5,
@@ -186,7 +190,9 @@
     {
       "id": "workbench",
       "name": "工作台 + UI 示例",
+      "category": "业务流程",
       "description": "落地页(上手清单 / 目录速查)+ 41 个原语与 16 个展示件的活文档(ui-gallery)",
+      "tip": "首页上手清单 + 41 个 UI 原语与展示件活文档；已有专有首页可不选",
       "default": true,
       "requires": [],
       "procedures": 0,
@@ -208,7 +214,9 @@
     {
       "id": "notice",
       "name": "通知中心",
+      "category": "系统增强",
       "description": "站内通知:列表 / 已读 / 铃铛 / SSE 实时推送 + sys_notice 表",
+      "tip": "站内信列表/已读/铃铛/SSE 实时推送；纯数据看板或无站内信系统可不选",
       "default": true,
       "requires": [],
       "procedures": 4,
@@ -248,6 +256,17 @@
           "file": "src/components/layout/topbar.tsx",
           "kind": "lines",
           "matches": ["<NotificationBell />"],
+          "min": 1
+        },
+        {
+          "file": "src/components/layout/sidebar.tsx",
+          "kind": "imports",
+          "from": ["#/lib/use-notice-sse"]
+        },
+        {
+          "file": "src/components/layout/sidebar.tsx",
+          "kind": "lines",
+          "matches": ["useNoticeSse();"],
           "min": 1
         },
         {
@@ -308,7 +327,9 @@
     {
       "id": "tests",
       "name": "测试套件",
+      "category": "开发测试",
       "description": "直连真库的 26 个集成测试 + 覆盖率脚本",
+      "tip": "直连真库的 26 个集成测试 + 覆盖率脚本；纯前端开发或快速原型可不选",
       "default": true,
       "requires": [],
       "procedures": 0,

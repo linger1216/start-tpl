@@ -41,8 +41,8 @@ const dryRun = has("dry-run") || selftest;
 const root = path.resolve(selftest ? TEMPLATE_ROOT : (arg("root") ?? ""));
 const manifestPath = path.resolve(arg("manifest") ?? path.join(TEMPLATE_ROOT, "features.json"));
 
-// `--list-ids` / `--pick` 只读清单,不需要目标目录;真正裁剪时才要求 --root
-if (!selftest && !has("list-ids") && !has("pick") && !arg("root")) {
+// `--list-ids` / `--pick` / `--list-excluded-paths` 只读清单,不需要目标目录;真正裁剪时才要求 --root
+if (!selftest && !has("list-ids") && !has("pick") && !has("list-excluded-paths") && !arg("root")) {
 	console.error("Error: 需要 --root <目录>(或 --selftest)");
 	process.exit(2);
 }
@@ -283,7 +283,12 @@ function applyFeature(target, feature) {
 		} else {
 			// 针对派生目标目录: 若拷贝阶段已按模块排除，未拷贝的文件直接视为已排除；若有残留则执行删除
 			const res = rules.paths(target, feature.paths);
-			rows.push({ ok: true, kind: "paths", at: `${feature.paths.length} 条`, extra: res.detail || "已在拷贝时按模块排除" });
+			rows.push({
+				ok: true,
+				kind: "paths",
+				at: `${feature.paths.length} 条`,
+				extra: res.hits > 0 ? res.detail : "已在拷贝时按模块排除",
+			});
 		}
 	}
 	for (const rule of feature.rules ?? []) {
@@ -359,23 +364,36 @@ if (has("pick")) {
 	const interactive = !has("no-input") && process.stdin.isTTY;
 	const render = () => {
 		console.log("");
-		console.log("选择要带进新项目的业务模块(想要哪些就给它们打 x):");
-		console.log("  · 输入编号切换勾选,可一次给多个(如 2 4,也认模块 id 如 task-close);回车 = 确认");
-		console.log("  · all 全要 / none 只要底座 minimal");
+		console.log("===============================================================================");
+		console.log(" 请选择新工程要包含的业务模块 (回车确认; 输入编号切换; 默认仅保留必要通用件)");
+		console.log("===============================================================================");
 		console.log("");
-		let index = 0;
-		for (const feature of manifest.features) {
-			index += 1;
-			const mark = chosen.has(feature.id) ? "✓" : " ";
-			const star = feature.default === true ? "·默认" : "     ";
-			const deps = feature.requires?.length ? `  (依赖 ${feature.requires.join("、")})` : "";
-			console.log(`  [${mark}] ${String(index).padStart(2)}  ${star}  ${feature.name}${deps}`);
-			if (feature.description) console.log(`        ${feature.description}`);
+		const categories = [...new Set(manifest.features.map((f) => f.category || "其它模块"))];
+		for (const cat of categories) {
+			console.log(`【${cat}】`);
+			const items = manifest.features.filter((f) => (f.category || "其它模块") === cat);
+			for (const feature of items) {
+				const index = manifest.features.indexOf(feature) + 1;
+				const mark = chosen.has(feature.id) ? "✓" : " ";
+				const star = feature.default === true ? "·默认" : "     ";
+				const deps = feature.requires?.length ? `  (依赖: ${feature.requires.join("、")})` : "";
+				console.log(`  [${mark}] ${String(index).padStart(2)}  ${star}  ${feature.name} (${feature.id})${deps}`);
+				if (feature.description) {
+					console.log(`        说明: ${feature.description}`);
+				}
+				if (feature.tip) {
+					console.log(`        建议: ${feature.tip}`);
+				}
+			}
+			console.log("");
 		}
 		if (manifest.pending?.length) {
+			console.log(`  ⛩ 底座核心(一律包含,不参与选择): ${manifest.pending.map((p) => p.id).join("、")}`);
 			console.log("");
-			console.log(`  ⛩ 底座核心(一律包含,不参与选择)：${manifest.pending.map((p) => p.id).join("、")}`);
 		}
+		const count = chosen.size;
+		console.log(`当前已选择 ${count} 项 / 共 ${manifest.features.length} 项`);
+		console.log("指令: 输入编号切换(如 1 4) | none/minimal (只要核心底座) | all (全选) | 回车 (确认并继续)");
 		console.log("");
 	};
 	if (interactive) {
@@ -410,7 +428,10 @@ if (has("pick")) {
 		}
 	}
 	const order = manifest.features.filter((f) => chosen.has(f.id)).map((f) => f.id);
-	if (has("no-input")) console.log(`非交互环境(管道 / --no-input):按推荐值保留 ${order.length} 项(要挑模块,在真终端跑 new-project.sh 用编号勾选,或 --modules a,b)`);
+	if (has("no-input"))
+		console.log(
+			`非交互环境(管道 / --no-input):按推荐值保留 ${order.length} 项(要挑模块,在真终端跑 new-project.sh 用编号勾选,或 --modules a,b)`,
+		);
 	process.stdout.write(`FEATURES=${order.join(",")}\n`);
 	process.exit(0);
 }

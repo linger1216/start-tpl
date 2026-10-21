@@ -53,7 +53,23 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 	// 新通知由 SSE 举旗 —— useNoticeSse 在收到 notice.new 时也会失效 taskClose 的查询缓存)
 	const trpc = useTRPC();
 	useNoticeSse();
-	const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });
+	const badgeOptions =
+		"taskClose" in trpc
+			? (
+					trpc as unknown as {
+						taskClose: {
+							menuBadge: {
+								queryOptions: () => { queryKey: readonly unknown[]; queryFn: () => Promise<{ count: number }> };
+							};
+						};
+					}
+				).taskClose.menuBadge.queryOptions()
+			: {
+					queryKey: ["__empty_task_badge__"] as const,
+					queryFn: () => Promise.resolve({ count: 0 }),
+					enabled: false,
+				};
+	const badgeQuery = useQuery({ ...badgeOptions, refetchInterval: 30_000 });
 	const taskDot = (badgeQuery.data?.count ?? 0) > 0;
 
 	// 当前路径命中的分组链 —— 决定初始展开哪些分支
