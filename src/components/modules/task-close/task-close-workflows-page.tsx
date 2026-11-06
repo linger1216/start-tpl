@@ -161,7 +161,6 @@ export function TaskCloseWorkflowsPage() {
 			<PageHeader
 				title="流程模板"
 				description="任务闭环的状态图模板：状态集合、初始态、状态转移边。建任务时按模板复制一份快照,之后改模板不影响已建任务。"
-				descriptionInline
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />

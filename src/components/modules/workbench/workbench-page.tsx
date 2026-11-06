@@ -72,7 +72,6 @@ export function WorkbenchPage() {
 			<PageHeader
 				title="工作台"
 				description="模板自带的入口页 —— 真实业务上手后会替换它。当前内容:UI 组件示例、新项目上手清单、模板的两条主线,以及「派生时删什么」。"
-				descriptionInline
 			/>
 
 			{/* UI 组件示例 —— 原来 7 个 /showcase/* 路由收敛到这里一块 */}

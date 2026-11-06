@@ -73,7 +73,6 @@ export function BusinessHomeDemo() {
 			<PageHeader
 				title="业务首页示范"
 				description="派生新项目后,把这一页搬到 routes/(main)/index.tsx,改 4 个 query 就是你的真首页。"
-				descriptionInline
 			/>
 
 			<StatCards items={stats} />

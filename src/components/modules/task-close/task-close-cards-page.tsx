@@ -114,7 +114,6 @@ export function TaskCloseCardsPage() {
 			<PageHeader
 				title="我的任务"
 				description="我发起、我参与的任务。点卡片进详情走闭环:改状态 / 征询 / 答复 / 评论。"
-				descriptionInline
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />
