@@ -29,8 +29,9 @@
 import "dotenv/config";
 
 import { and, asc, eq } from "drizzle-orm";
-import { sysMenu, sysRole, sysUser } from "../src/db/data-base-schema.ts";
+import { sysMenu, sysRole, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
+import { auth } from "../src/lib/auth.ts";
 import { ADMIN_ROLE_NAME, addUserRole, grantedMenuIdsOf, roleIdsOf, setRoleMenus } from "../src/lib/casbin.ts";
 import { newId } from "../src/lib/ids.ts";
 import { IMPERSONATE_PERM, MENU_TYPE } from "../src/lib/menu-spec.ts";
@@ -45,10 +46,40 @@ import { alive } from "../src/lib/soft-delete.ts";
  * **只清自己造的东西**(`__test__*` / `__probe__*`),其余只报告、别动手(见 AGENTS「已知陷阱」首条)。
  */
 
-/** 已经有账号的人 —— 没有被分配部门的账号,在权限启用后会看不到任何菜单 */
+/** 初始管理员账号;仅首次创建时需要配置密码。 */
 const ADMIN_EMAIL = "admin@example.com";
+const ADMIN_NAME = "系统管理员";
 
 const created = { dept: 0, role: 0, member: 0, assign: 0, grant: 0, menu: 0, user: 0 };
+
+async function ensureAdminUser(): Promise<string> {
+	const [existing] = await db
+		.select({ id: sysUser.id })
+		.from(sysUser)
+		.where(and(eq(sysUser.email, ADMIN_EMAIL), alive(sysUser)))
+		.limit(1);
+	if (existing) return existing.id;
+	const password = process.env.INITIAL_ADMIN_PASSWORD;
+	if (!password || password.length < 8 || password.length > 128) {
+		throw new Error("首次创建管理员需要在 .env.local 设置 INITIAL_ADMIN_PASSWORD(8 至 128 字符)");
+	}
+
+	try {
+		const result = await auth.api.signUpEmail({
+			body: { email: ADMIN_EMAIL, password, name: ADMIN_NAME },
+		});
+		if (result?.user) {
+			created.user += 1;
+			await db.update(sysUser).set({ emailVerified: true }).where(eq(sysUser.id, result.user.id));
+			await db.delete(sysSession).where(eq(sysSession.userId, result.user.id));
+			console.log(`  + 初始管理员账号 (${ADMIN_EMAIL})`);
+			return result.user.id;
+		}
+	} catch (error) {
+		console.warn(`  ! 创建管理员账号失败: ${(error as Error).message}`);
+	}
+	throw new Error(`无法创建或定位管理员账号: ${ADMIN_EMAIL}`);
+}
 
 // ── 角色 ──────────────────────────────────────────────────────────
 async function upsertRoleByName(name: string, sort: number, remark: string): Promise<string> {
@@ -158,6 +189,7 @@ async function assignRoleIfAbsent(userId: string, roleId: string, label: string)
 }
 
 async function main() {
+	const adminId = await ensureAdminUser();
 	const adminRoleId = await upsertRoleByName(ADMIN_ROLE_NAME, 1, "示例:能看见全部菜单与按钮");
 
 	console.log("── 按钮权限点(挂在「角色管理」下,type = 3)──");
@@ -260,6 +292,10 @@ async function main() {
 		await upsertButton(用户管理MenuId, "新增用户", "sys:user:add", 90);
 		await upsertButton(用户管理MenuId, "修改用户", "sys:user:edit", 91);
 		await upsertButton(用户管理MenuId, "删除用户", "sys:user:remove", 92);
+		// 访客管理 Tab 的三个按钮(toggle 复用「修改」点,见 lib/rbac.ts)
+		await upsertButton(用户管理MenuId, "新增访客令牌", "sys:shareToken:add", 93);
+		await upsertButton(用户管理MenuId, "修改访客令牌", "sys:shareToken:edit", 94);
+		await upsertButton(用户管理MenuId, "删除访客令牌", "sys:shareToken:remove", 95);
 	}
 	const 流程模板MenuId = byPath.get("/task-close/workflows")?.id;
 	if (流程模板MenuId) {
@@ -287,18 +323,11 @@ async function main() {
 	console.log(`  本次写入 ${created.grant} 条授权行(已配过的角色不动)`);
 
 	console.log("── 部门成员 + 全局角色 ──");
-	const [admin] = await db
-		.select({ id: sysUser.id })
-		.from(sysUser)
-		.where(and(eq(sysUser.email, ADMIN_EMAIL), alive(sysUser)))
-		.limit(1);
-	if (admin) {
-		await assignRoleIfAbsent(admin.id, adminRoleId, `${ADMIN_EMAIL} → ${ADMIN_ROLE_NAME}`);
-	}
+	await assignRoleIfAbsent(adminId, adminRoleId, `${ADMIN_EMAIL} → ${ADMIN_ROLE_NAME}`);
 
-	// ── 收尾:把两个账号的实际可见菜单算出来,一眼能看出"并集" ──
+	// ── 收尾:把账号的实际可见菜单算出来,一眼能看出"并集" ──
 	console.log("\n── 效果 ──");
-	for (const [email, id] of [[ADMIN_EMAIL, admin?.id]] as const) {
+	for (const [email, id] of [[ADMIN_EMAIL, adminId]] as const) {
 		if (!id) continue;
 		const effective = await effectiveMenusFor(id);
 		const names = effective.rows?.map((row) => row.name) ?? null;

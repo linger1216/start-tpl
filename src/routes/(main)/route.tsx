@@ -13,7 +13,13 @@ import type { ForbiddenData } from "../__root";
 export type SessionUser = { id: string; name: string; email: string };
 
 /** 路由守卫的结论:会话用户 + 这个页面能不能看(判定实现在 `lib/rbac.ts` 的 `canViewPath`) */
-type SessionGate = { user: SessionUser | null; allowed: boolean; pageName: string | null };
+type SessionGate = {
+	user: SessionUser | null;
+	allowed: boolean;
+	pageName: string | null;
+	/** 命中 URL 上的访客令牌:需要 307 回「摘掉 share 参数」的同一地址(见下面 beforeLoad) */
+	shareRedirect?: boolean;
+};
 
 /**
  * 读当前登录用户 + 判这个路径能不能进(**只在 server 跑**)。
@@ -29,17 +35,35 @@ type SessionGate = { user: SessionUser | null; allowed: boolean; pageName: strin
  * 判权限也放在同一次请求里(而不是客户端再问一次):**首屏直出的 HTML 就是结论**,
  * 没权限的页面不会先渲染出外壳骨架再闪走。
  * (为什么必须拦在服务端:侧边栏隐藏只是"看不见入口",记住 url 照样能进,读接口也会照答。)
+ *
+ * 会话为空时走**访客分支**(外链 share token,见 `lib/share-access.ts` 与 doc/外链分享.md):
+ * URL 令牌优先、其次访客 cookie;命中且页面在令牌允许清单里,则以访客身份放行。
+ * URL 令牌还要先种 cookie 再 307 回摘参地址 —— 同一次请求里页面的数据请求拿不到刚下发的
+ * cookie,必须让浏览器带着新 cookie 再来一次(顺带令牌从地址栏消失)。
  */
 const getSessionGate = createServerFn({ method: "GET" })
-	.validator((data: { path: string }) => data)
+	.validator((data: { path: string; share?: string | null }) => data)
 	.handler(async ({ data }): Promise<SessionGate> => {
-		const [{ auth }, { getRequestHeaders }, { canViewPath }] = await Promise.all([
+		const [{ auth }, { getRequestHeaders, setResponseHeader }, { canViewPath }, share] = await Promise.all([
 			import("#/lib/auth"),
 			import("@tanstack/react-start/server"),
 			import("#/lib/rbac"),
+			import("#/lib/share-access"),
 		]);
 		const session = await auth.api.getSession({ headers: getRequestHeaders() });
-		if (!session) return { user: null, allowed: false, pageName: null };
+		if (!session) {
+			const candidate = data.share ?? share.readShareTokenFromHeaders(getRequestHeaders());
+			const matched = candidate ? await share.matchShareToken(candidate) : null;
+			if (candidate && matched && share.guestMayView(matched.allowedPaths, data.path)) {
+				const user: SessionUser = { id: share.SHARE_GUEST.id, name: share.SHARE_GUEST.name, email: "" };
+				if (data.share) {
+					setResponseHeader("set-cookie", share.shareCookieHeader(data.share));
+					return { user, allowed: true, pageName: null, shareRedirect: true };
+				}
+				return { user, allowed: true, pageName: null };
+			}
+			return { user: null, allowed: false, pageName: null };
+		}
 		const user = { id: session.user.id, name: session.user.name, email: session.user.email };
 		const { allowed, pageName } = await canViewPath(user.id, data.path);
 		return { user, allowed, pageName };
@@ -62,14 +86,27 @@ export const Route = createFileRoute("/(main)")({
 	 * (也就不会去读一次自己没权限的数据)。
 	 */
 	beforeLoad: async ({ location }) => {
-		const { user, allowed, pageName } = await getSessionGate({ data: { path: location.pathname } });
-		if (!user) {
+		const url = new URL(location.href, "http://internal");
+		const gate = await getSessionGate({ data: { path: location.pathname, share: url.searchParams.get("share") } });
+		if (gate.shareRedirect && gate.user) {
+			// 首跳命中 URL 令牌:回「摘掉 share 参数」的同一地址 —— 后续数据请求(守卫 + tRPC)
+			// 靠刚种下的访客 cookie 认人,令牌也从此从地址栏消失。
+			// ⚠️ 必须用 `redirect({ to, search })`,**不能用 `redirect({ href: 相对路径 })`** ——
+			// 相对 href 会被当成外部跳转,实测直接 500(见 doc/外链分享.md)。
+			url.searchParams.delete("share");
+			const search: Record<string, string> = {};
+			url.searchParams.forEach((value, key) => {
+				search[key] = value;
+			});
+			throw redirect({ to: url.pathname, search });
+		}
+		if (!gate.user) {
 			throw redirect({ to: "/login", search: { redirect: location.href } });
 		}
-		if (!allowed) {
-			throw notFound({ data: { forbidden: true, pageName } satisfies ForbiddenData });
+		if (!gate.allowed) {
+			throw notFound({ data: { forbidden: true, pageName: gate.pageName } satisfies ForbiddenData });
 		}
-		return { user };
+		return { user: gate.user };
 	},
 
 	/**

@@ -91,7 +91,10 @@ export function pluginColumns({
 			header: "说明",
 			size: 280,
 			cell: (ctx) => (
-				<span className="line-clamp-2 text-xs text-muted-foreground">
+				<span
+					className="line-clamp-2 max-w-64 whitespace-normal break-words text-xs text-muted-foreground"
+					title={ctx.getValue() ?? ""}
+				>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),

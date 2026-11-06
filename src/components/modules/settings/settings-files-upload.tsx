@@ -246,7 +246,7 @@ export function SettingsFilesUpload({
 					<div className="flex flex-col gap-1.5">
 						<span className="text-xs font-medium text-muted-foreground">全部存到哪个桶</span>
 						<Select items={BUCKET_ITEMS} value={kind} onValueChange={(next) => setKind(next as "public" | "private")}>
-							<SelectTrigger id="file-bucket" size="sm" className="w-full">
+							<SelectTrigger id="file-bucket" size="form" className="w-full">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>

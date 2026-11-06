@@ -120,7 +120,10 @@ export function parameterColumns({
 			header: "说明",
 			size: 340,
 			cell: (ctx) => (
-				<span className="line-clamp-2 text-xs text-muted-foreground">
+				<span
+					className="line-clamp-2 max-w-80 whitespace-normal break-words text-xs text-muted-foreground"
+					title={ctx.getValue() ?? ""}
+				>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),
@@ -141,7 +144,7 @@ export function parameterColumns({
 			onView,
 			onEdit,
 			onDelete,
-			// 代码内置参数(editable = 0)只能看不能改
+			// 已锁定的参数只能看,不能修改或删除
 			disabled: (row) => !row.editable,
 		}),
 	]);

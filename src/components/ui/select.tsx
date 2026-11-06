@@ -21,14 +21,14 @@ function SelectTrigger({
 	children,
 	...props
 }: SelectPrimitive.Trigger.Props & {
-	size?: "sm" | "default";
+	size?: "sm" | "default" | "form";
 }) {
 	return (
 		<SelectPrimitive.Trigger
 			data-slot="select-trigger"
 			data-size={size}
 			className={cn(
-				"flex w-fit items-center justify-between gap-2 rounded-md border border-input bg-card py-2 pr-2.5 pl-3 text-sm min-w-32 whitespace-nowrap transition-[color,background-color,border-color,box-shadow] outline-none select-none hover:border-border-strong focus-visible:border-primary/45 focus-visible:ring-1 focus-visible:ring-primary/15 data-popup-open:border-primary/45 data-popup-open:ring-1 data-popup-open:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/40 dark:hover:bg-input/60 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+				"flex w-fit items-center justify-between gap-2 rounded-md border border-input bg-card py-2 pr-2.5 pl-3 text-sm min-w-32 whitespace-nowrap transition-[color,background-color,border-color,box-shadow] outline-none select-none hover:border-border-strong focus-visible:border-primary/45 focus-visible:ring-1 focus-visible:ring-primary/15 data-popup-open:border-primary/45 data-popup-open:ring-1 data-popup-open:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=form]:h-9 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 dark:bg-input/40 dark:hover:bg-input/60 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 				className,
 			)}
 			{...props}

@@ -18,7 +18,7 @@ import { db } from "../src/db/index.ts";
 import { PAGE_SIZE_KEY, parsePageSize } from "../src/hooks/use-para-prefs.ts";
 import { PAGE_SIZES } from "../src/lib/constants.ts";
 import { PARA_TYPE } from "../src/lib/para-spec.ts";
-import { PARA_DEFAULTS } from "../src/lib/sys-para.ts";
+import { getParaMap, PARA_DEFAULTS } from "../src/lib/sys-para.ts";
 import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
@@ -26,20 +26,72 @@ const KEY = `${TEST_PREFIX}parameters.${SUFFIX}`;
 const INT_KEY = `${TEST_PREFIX}parameters.int.${SUFFIX}`;
 const BOOL_KEY = `${TEST_PREFIX}parameters.bool.${SUFFIX}`;
 const UPSERT_KEY = `${TEST_PREFIX}parameters.upsert.${SUFFIX}`;
+const CREATE_FLAGS_KEY = `${TEST_PREFIX}parameters.createFlags.${SUFFIX}`;
+const UPSERT_FLAGS_KEY = `${TEST_PREFIX}parameters.upsertFlags.${SUFFIX}`;
 /** 导入用例自己的键(用例里自己建,不依赖别的用例的执行顺序) */
 const IMPORT_KEY = `${TEST_PREFIX}parameters.import.${SUFFIX}`;
 const IMPORT_INT_KEY = `${TEST_PREFIX}parameters.importInt.${SUFFIX}`;
 const LOCKED_KEY = `${TEST_PREFIX}parameters.locked.${SUFFIX}`;
+const deletedIds: string[] = [];
 
 after(async () => {
-	for (const key of [KEY, INT_KEY, BOOL_KEY, UPSERT_KEY, IMPORT_KEY, IMPORT_INT_KEY, LOCKED_KEY]) {
-		await caller.para.remove({ keys: [key] }).catch(() => undefined); // 有的用例没建过它,现在 delete 会 NOT_FOUND
+	const keys = [
+		KEY,
+		INT_KEY,
+		BOOL_KEY,
+		UPSERT_KEY,
+		CREATE_FLAGS_KEY,
+		UPSERT_FLAGS_KEY,
+		IMPORT_KEY,
+		IMPORT_INT_KEY,
+		LOCKED_KEY,
+	];
+	// 只删除本轮键及本轮主动软删的 ID,不能按公共前缀清理其他测试的数据。
+	await db.delete(sysPara).where(inArray(sysPara.para_key, keys));
+	if (deletedIds.length > 0) await db.delete(sysPara).where(inArray(sysPara.id, deletedIds));
+});
+
+test("新增和 upsert 插入时保存表单提供的状态与元数据", async () => {
+	await caller.para.create({ key: CREATE_FLAGS_KEY, value: "a", type: PARA_TYPE.STRING, status: 0, editable: 0 });
+	await caller.para.update({
+		key: UPSERT_FLAGS_KEY,
+		value: "b",
+		group: "测试分组",
+		remark: "测试说明",
+		status: 0,
+		editable: 0,
+	});
+	const rows = await db
+		.select()
+		.from(sysPara)
+		.where(inArray(sysPara.para_key, [CREATE_FLAGS_KEY, UPSERT_FLAGS_KEY]));
+	assert.equal(rows.length, 2);
+	for (const row of rows) {
+		assert.equal(Number(row.status), 0);
+		assert.equal(Number(row.editable), 0);
 	}
-	// 软删只写 deleted_at、行还在,而且主键 para_key 已被墓碑改掉 —— 按 key 查不到,只能扫全表认 `__test__` 前缀
-	const rows = await db.select({ id: sysPara.id, key: sysPara.para_key }).from(sysPara);
-	const ids = rows.filter((row) => row.key.includes(TEST_PREFIX)).map((row) => row.id);
-	if (ids.length > 0) {
-		await db.delete(sysPara).where(inArray(sysPara.id, ids));
+	const upsert = rows.find((row) => row.para_key === UPSERT_FLAGS_KEY);
+	assert.equal(upsert?.para_group, "测试分组");
+	assert.equal(upsert?.remark, "测试说明");
+	assert.equal((await caller.para.byKey({ key: CREATE_FLAGS_KEY })).value, "a");
+	assert.equal((await getParaMap(true)).get(CREATE_FLAGS_KEY), "a");
+});
+
+test("批量删除遇到锁定参数时整批拒绝", async () => {
+	const locked = `${TEST_PREFIX}parameters.deleteLocked.${SUFFIX}`;
+	const unlocked = `${TEST_PREFIX}parameters.deleteAllowed.${SUFFIX}`;
+	try {
+		await caller.para.create({ key: locked, value: "locked", type: PARA_TYPE.STRING, editable: 0 });
+		await caller.para.create({ key: unlocked, value: "normal", type: PARA_TYPE.STRING });
+		await assertRejects(() => caller.para.remove({ keys: [unlocked, locked] }), "已锁定");
+		const rows = await db
+			.select()
+			.from(sysPara)
+			.where(inArray(sysPara.para_key, [unlocked, locked]));
+		assert.equal(rows.length, 2);
+		assert.ok(rows.every((row) => row.deleted_at === null));
+	} finally {
+		await db.delete(sysPara).where(inArray(sysPara.para_key, [unlocked, locked]));
 	}
 });
 
@@ -113,6 +165,7 @@ test("布尔参数只接受 true / false", async () => {
 test("delete:软删(行保留、deleted_at 非空),byKey 回落代码默认值(空串)", async () => {
 	const [before] = await db.select().from(sysPara).where(eq(sysPara.para_key, KEY)).limit(1);
 	assert.ok(before, "删除前库里应有这一行");
+	deletedIds.push(before.id);
 	await caller.para.remove({ keys: [KEY] });
 	assert.equal((await caller.para.byKey({ key: KEY })).value, "");
 	// 软删:按 para_key 查不到了(主键已让位),但行还在 —— 只能按 id 找
@@ -226,7 +279,7 @@ test("导入:逐行校验 —— 缺参数名 / 类型非法 / 值类型不符 /
 	assert.equal(result.errors.length, 4);
 	assert.match(result.errors[0]?.message ?? "", /缺少/);
 	assert.match(result.errors[1]?.message ?? "", /整数/);
-	assert.match(result.errors[2]?.message ?? "", /代码内置/);
+	assert.match(result.errors[2]?.message ?? "", /已锁定/);
 	assert.match(result.errors[3]?.message ?? "", /类型/);
 	// 被拦下的行一个字都没落库
 	const stored = await db.select().from(sysPara).where(eq(sysPara.para_key, LOCKED_KEY));

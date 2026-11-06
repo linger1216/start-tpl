@@ -38,6 +38,8 @@ const createdLogIds: string[] = [];
 const createdUserIds: string[] = [];
 /** 用例里建过的角色 —— `role.remove` 现在是软删,行会留在库里,收尾必须按 id 物理清 */
 const createdRoleIds: string[] = [];
+/** admin 旁路回归创建的裸菜单 —— 菜单表不软删,收尾直接物理清 */
+const createdMenuIds: string[] = [];
 
 const def = (trpcRouter as unknown as { _def: { procedures: Record<string, { _def?: { type?: string } }> } })._def;
 const PROCEDURES = Object.keys(def.procedures ?? {});
@@ -76,6 +78,7 @@ after(async () => {
 		await db.delete(sysUser).where(eq(sysUser.id, id));
 	}
 	if (createdRoleIds.length > 0) await db.delete(sysRole).where(inArray(sysRole.id, createdRoleIds));
+	if (createdMenuIds.length > 0) await db.delete(sysMenu).where(inArray(sysMenu.id, createdMenuIds));
 	await closeDb();
 });
 
@@ -179,6 +182,33 @@ describe("服务端鉴权", () => {
 		createdUserIds.push(other.id);
 		const otherCaller = callerAs({ id: other.id, name: other.name, isSuper: false });
 		await assertRejects(() => otherCaller.role.list(), "没有权限");
+
+		// **已知坑回归(2026-10 修)**:刚手加的**纯页面菜单**(`perm` 空)——
+		// casbin 的通配展开只命中"带 perm 的菜单",这类菜单连系统管理员都看不见。
+		// 内核口径改成:admin 旁路 = 全量菜单 + 全量按钮码,不依赖 `sys_casbin_rule` 的授权行。
+		const freshMenu = await realAdmin.menu.create({
+			parentId: null,
+			name: `${TEST_PREFIX}裸页面菜单${SUFFIX}`,
+			path: `/admin-bypass-${SUFFIX}`,
+			icon: null,
+			type: 2,
+			visible: true,
+			perm: "",
+		});
+		createdMenuIds.push(freshMenu.id);
+		const { effectiveMenusFor } = await import("#/lib/rbac");
+		const menuAccess = await effectiveMenusFor(user.id);
+		assert.ok(menuAccess.rows, "admin 必须拿到非 null 的菜单清单");
+		assert.ok(
+			menuAccess.rows.some((row) => row.id === freshMenu.id),
+			"刚手加的裸页面菜单(没有任何授权行)系统管理员也必须看得见",
+		);
+		// 对照:非 admin 的普通账号(没有授权行)对同一个新菜单不可见
+		const otherMenuAccess = await effectiveMenusFor(other.id);
+		assert.ok(
+			!(otherMenuAccess.rows ?? []).some((row) => row.id === freshMenu.id),
+			"非 admin 账号没有授权行,就不该看见新菜单",
+		);
 	});
 
 	it("管理员旁路(dataScopeMiddleware):scope() 给 admin 直接返 undefined,不再走行级过滤", async () => {

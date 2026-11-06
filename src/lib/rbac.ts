@@ -21,7 +21,7 @@ import { asc } from "drizzle-orm";
 
 import { db } from "#/db";
 import { sysMenu } from "#/db/data-base-schema";
-import { implicitObjsOf, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbin";
+import { implicitObjsOf, isAdminUser, isPermissionConfigured, MENU_PREFIX } from "#/lib/casbin";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { pagePermOf } from "#/lib/perm-code";
 import { alive } from "#/lib/soft-delete";
@@ -146,6 +146,28 @@ async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 		return { rows: null, perms: [], pages };
 	}
 
+	if (await isAdminUser(userId)) {
+		/**
+		 * **系统管理员 = 全量可见 + 全量按钮**(2026-10 修的已知坑:seed-rbac / 任务闭环都踩过)。
+		 *
+		 * 为什么必须在此旁路:casbin **装载时的通配展开只命中"带 perm 的菜单"** ——
+		 * 纯页面菜单(`perm` 为空)展开不出 `menu:<id>`,于是"新加了个菜单,
+		 * 系统管理员却看不见"(`models/界面` 一层再怎么查授权行也查不到,因为授权行没生成)。
+		 * `seed-rbac` 里的 `ensureAdminGrants` 是**数据层**的兜底(跑 seed 才补),
+		 * 管不住"seed 之后手加的菜单";真正守得住的口径在内核 ——
+		 * **管理员 = 每个可见菜单 + 每个按钮码,不依赖 `sys_casbin_rule` 有没有那行记录**。
+		 * `perms` 给全量码,顺带让 `useHasPerm` 的按钮显示与页面判据(`canViewPath`)同口径放行。
+		 */
+		const rows = navigable(all);
+		const perms = [
+			...new Set([
+				...rows.flatMap((row) => (row.perm ? [row.perm] : [])),
+				...rows.flatMap((row) => (row.path?.startsWith("/") ? [pagePermOf(row.path)] : [])),
+			]),
+		];
+		return { rows, perms, pages };
+	}
+
 	/**
 	 * 判决策在 `lib/casbin.ts`(`implicitObjsOf`):它把"这个用户直接或经角色间接拿到的
 	 * 全部 obj"算完并**展开**好了 —— 每组授权三条 obj(`menu:<id>`、该菜单的 `perm`、
@@ -240,6 +262,11 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"user.remove": "sys:user:remove",
 	// 导入 = 批量新增,复用「新增」权限点(不造新码:登记新码还得先在 sys_menu 建按钮,见本文件头)
 	"user.import": "sys:user:add",
+	// 访客令牌(用户管理 ▸ 访客管理 Tab;启停 = 改,复用「修改」点,见 doc/外链分享.md)
+	"shareToken.create": "sys:shareToken:add",
+	"shareToken.update": "sys:shareToken:edit",
+	"shareToken.toggle": "sys:shareToken:edit",
+	"shareToken.remove": "sys:shareToken:remove",
 	/**
 	 * ===== 读接口 =====
 	 *
@@ -270,6 +297,8 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"menu.list": [pagePermOf("/settings/menus"), pagePermOf("/settings/roles")],
 	// 参数(参数页;`para.byKey` 是外壳偏好,见 UNMAPPED_QUERIES)
 	"para.list": pagePermOf("/settings/parameters"),
+	// 访客令牌(用户管理页的「访客管理」Tab —— 页面码沿用用户管理,不另造页面)
+	"shareToken.list": pagePermOf("/settings/users"),
 	// 文件(文件页 + 它的详情弹窗)
 	"file.list": pagePermOf("/settings/files"),
 	"file.url": pagePermOf("/settings/files"),
@@ -364,6 +393,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"dict.byCode",
 	"para.list",
 	"para.byKey",
+	// 类别 2:访客令牌清单 —— 「全系统一份」的配置,不看部门(见 doc/外链分享.md)
+	"shareToken.list",
 	// 类别 2:数据权限自己的配置 —— 规则 / 插件 / 资源元数据是"全系统一份",不存在"这一行归谁看"
 	"dataScope.list",
 	"dataScope.resources",

@@ -1,6 +1,6 @@
 /**
  * **系统表的建表脚本**(设置五张 + 认证六张 + 权限四张 + 数据权限两张 + `sys_file` / `sys_log` /
- * `sys_notice` + `demo_grid` = 21 张,外加任务闭环 `tc_*` 6 张)—— 幂等,可重复执行。
+ * `sys_notice` / `demo_grid` / `sys_share_token` = 22 张,外加任务闭环 `tc_*` 6 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -131,7 +131,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`deleted_at\` datetime default null,
 			primary key (\`id\`),
 			unique key \`uk_sys_user_email\` (\`email\`)
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
 		name: "sys_session",
@@ -148,7 +148,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			unique key \`uk_sys_session_token\` (\`token\`),
 			key \`idx_sys_session_user\` (\`user_id\`),
 			constraint \`fk_sys_session_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
 		name: "sys_account",
@@ -170,7 +170,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			unique key \`uk_sys_account_provider\` (\`provider_id\`, \`account_id\`),
 			key \`idx_sys_account_user\` (\`user_id\`),
 			constraint \`fk_sys_account_user\` foreign key (\`user_id\`) references \`sys_user\` (\`id\`) on delete cascade
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
 		name: "sys_verification",
@@ -183,7 +183,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`updated_at\` timestamp not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			key \`idx_sys_verification_identifier\` (\`identifier\`)
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	// ── 登录风控(失败计数 + 锁定;m23422 风格的连续失败 → 锁定表)────────────
 	// 见 src/lib/auth-lockout.ts 的阈值(默认 5 次失败锁 15 分钟)。
@@ -197,7 +197,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`last_failed_ip\` varchar(64) null,
 			primary key (\`email\`),
 			key \`idx_sys_account_lockout_until\` (\`locked_until\`)
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	// ── 限流计数(better-auth secondaryStorage 落地;A1)────────────────
 	// 配合 src/lib/rate-limit-storage.ts,实现跨进程 / 多副本的 IP 限流。
@@ -212,7 +212,24 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`expires_at\` timestamp null,
 			primary key (\`key\`),
 			key \`idx_sys_rate_limit_expires\` (\`expires_at\`)
-		)`,
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	// ── 外链访客令牌(用户管理 ▸ 访客管理;机制见 doc/外链分享.md)────────────
+	// 凭证表硬删(无 deleted_at,与 sys_rate_limit 同档,见 lib/soft-delete.ts 的运维表口径)。
+	{
+		name: "sys_share_token",
+		ddl: `create table if not exists \`sys_share_token\` (
+			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+			\`token\` varchar(64) collate utf8mb4_unicode_ci not null,
+			\`remark\` varchar(255) collate utf8mb4_unicode_ci not null default '',
+			\`allowed_paths\` text collate utf8mb4_unicode_ci not null,
+			\`expires_at\` datetime default null,
+			\`enabled\` tinyint not null default 1,
+			\`created_at\` datetime not null default current_timestamp,
+			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+			primary key (\`id\`),
+			unique key \`uk_sys_share_token\` (\`token\`)
+		) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外链访客令牌(用户管理 ▸ 访客管理;见 doc/外链分享.md)'`,
 	},
 	// ── 权限四表(部门 / 角色;形状与理由见 src/db/data-base-schema.ts)──────────
 	{
@@ -436,6 +453,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`due_at\` datetime default null,
+    \`priority\` tinyint default null,
     \`payload\` json default null,
     \`workflow\` json not null,
     \`deleted_at\` datetime default null,
@@ -580,6 +598,7 @@ for (const table of TABLES) {
  * 幂等:列已存在就跳过。
  */
 const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
+	{ table: "tc_task", column: "priority", ddl: "tinyint default null" },
 	{
 		table: "sys_menu",
 		column: "type",
@@ -661,6 +680,10 @@ for (const upgrade of COLUMN_UPGRADES) {
 			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = ${upgrade.table}`,
 		)
 	)[0] as unknown as Array<{ name: string }>;
+	if (cols.length === 0) {
+		console.log(`· ${upgrade.table} 表不存在,跳过补列`);
+		continue;
+	}
 	if (cols.some((row) => row.name === upgrade.column)) {
 		console.log(`· ${upgrade.table}.${upgrade.column} 已存在,跳过`);
 		continue;

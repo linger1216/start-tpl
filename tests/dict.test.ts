@@ -22,7 +22,7 @@ import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix
  */
 const CODE = `t${TEST_PREFIX}dict_${uniqueSuffix()}`.toLowerCase();
 
-/** 导入用例另起一个编码(前面的用例会把 CODE 删掉);名称带 `__test__` 前缀,好被兜底清扫认出 */
+/** 导入用例另起一个编码(前面的用例会把 CODE 删掉)。 */
 const IMPORT_CODE = `t${TEST_PREFIX}imp_${uniqueSuffix()}`.toLowerCase();
 const IMPORT_NAME = `${TEST_PREFIX}导入字典`;
 
@@ -30,14 +30,8 @@ const IMPORT_NAME = `${TEST_PREFIX}导入字典`;
 const createdIds: string[] = [];
 
 after(async () => {
-	// 先按 `__test__` 前缀扫全表把本文件造的行收成 id(**必须在 router 软删之前**):
-	// 软删会把 code 换成墓碑(`...#d#<id 尾段>`),之后再按 code 就查不到了。
-	const leftovers = await db.select({ id: sysDict.id, code: sysDict.code, name: sysDict.name }).from(sysDict);
-	for (const row of leftovers) {
-		if (row.code.includes(TEST_PREFIX) || row.name.includes(TEST_PREFIX)) createdIds.push(row.id);
-	}
-	await caller.dict.remove({ codes: [CODE] }).catch(() => undefined);
-	await caller.dict.remove({ codes: [IMPORT_CODE] }).catch(() => undefined);
+	// 按本轮编码和已记录的软删 ID 清理,不能按公共前缀扫描其他测试的数据。
+	await db.delete(sysDict).where(inArray(sysDict.code, [CODE, IMPORT_CODE]));
 	const ids = [...new Set(createdIds)];
 	if (ids.length > 0) {
 		await db.delete(sysDict).where(inArray(sysDict.id, ids));

@@ -10,6 +10,7 @@ import { menuRouter } from "./routers/menu";
 import { noticeRouter } from "./routers/notice";
 import { paraRouter } from "./routers/para";
 import { roleRouter } from "./routers/role";
+import { shareTokenRouter } from "./routers/share-token";
 import { tagRouter } from "./routers/tag";
 import { taskCloseRouter } from "./routers/task-close";
 import { userRouter } from "./routers/user";
@@ -35,6 +36,8 @@ export const trpcRouter = createTRPCRouter({
 	role: roleRouter,
 	/** 系统设置 ▸ 用户管理 —— 只读 `sys_user` + 读写部门/角色分配 */
 	user: userRouter,
+	/** 系统设置 ▸ 用户管理 ▸ 访客管理 —— 读写 `sys_share_token`(外链免登令牌,见 doc/外链分享.md) */
+	shareToken: shareTokenRouter,
 	/** 系统设置 ▸ 文件管理 —— 读写 `sys_file`(字节存 MinIO,见 doc/文件管理.md) */
 	file: fileRouter,
 	/** 系统设置 ▸ 数据权限 ▸ 数据范围 —— 读写 `sys_data_policy`(行级可见范围,见 doc/数据权限.md) */

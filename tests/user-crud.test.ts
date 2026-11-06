@@ -64,6 +64,14 @@ const createdIds: string[] = [];
 const tempDeptIds: string[] = [];
 /** admin 守卫测试里直插的角色 —— 走 `db.insert(sysRole)`,`after` 要清,否则下次撞 `uk_sys_role_name` */
 const createdRoleIds: string[] = [];
+const fixtureRoleId = newId();
+
+before(async () => {
+	await db
+		.insert(sysRole)
+		.values({ id: fixtureRoleId, name: `${TEST_PREFIX}user-role-${SUFFIX}`, sort: 999, status: 1, remark: "" });
+	createdRoleIds.push(fixtureRoleId);
+});
 
 after(async () => {
 	// 清库顺序必须「子表 → 父表 → 部门」:`sys_user_dept` 的外键是 NO ACTION
@@ -141,11 +149,9 @@ test("user.update:改姓名与邮箱,库里真的变了", async () => {
 
 	const nextEmail = `${TEST_PREFIX}upd_after_${SUFFIX}@example.com`;
 	// 角色是全局的:编辑用户时一并覆盖保存(这里顺便给它一个角色)。
-	// **不能用 `list()[0]`**:若库里第一个角色恰好是「系统管理员」,新用户就继承成了 admin,
-	// `user.update` 的 admin 守卫会误伤。这条用例只关心"角色分配能落库",
-	// 不在意角色名 —— 取第一个**非 admin** 的即可。
-	const role = (await caller.role.list()).find((r) => r.name !== "系统管理员");
-	assert.ok(role, "前置条件:库里至少要有一个非管理员角色");
+	// 使用本次测试创建的普通角色,不依赖库里预先存在的业务角色。
+	const role = (await caller.role.list()).find((r) => r.id === fixtureRoleId);
+	assert.ok(role, "测试角色应存在");
 	const updated = await caller.user.update({
 		id: created.id,
 		name: "改名后",
@@ -215,9 +221,9 @@ test("user.remove:连会话 / account / 部门成员一起清掉", async () => {
 	createdIds.push(created.id);
 	const dept = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}删除测试部门_${SUFFIX}` });
 	tempDeptIds.push(dept.id);
-	// 取第一个**非 admin** 的角色 —— 见上文 user.update 用例的同样解释
-	const role = (await caller.role.list()).find((r) => r.name !== "系统管理员");
-	assert.ok(role, "前置条件:库里至少要有一个非管理员角色");
+	// 使用本次测试创建的普通角色。
+	const role = (await caller.role.list()).find((r) => r.id === fixtureRoleId);
+	assert.ok(role, "测试角色应存在");
 	await caller.department.addMember({ departmentId: dept.id, userId: created.id });
 	await caller.user.update({
 		id: created.id,
@@ -482,10 +488,10 @@ test("user.remove:被删的人是 admin 时拒", async () => {
 test("user.import:批量开账号 —— 新邮箱真能登录,角色 / 部门挂上,不留会话", async () => {
 	const emailA = `${TEST_PREFIX}import-a_${SUFFIX}@example.com`;
 	const emailB = `${TEST_PREFIX}import-b_${SUFFIX}@example.com`;
-	// 角色 / 部门都按**名字**解析 —— 用库里现成的一行
+	// 角色 / 部门按名字解析;部门用本次测试创建的唯一名称,避免与并行测试争用。
 	const roleRow = await getSystemAdminRoleRow();
-	const [deptRow] = await db.select({ id: sysDept.id, name: sysDept.name }).from(sysDept).limit(1);
-	assert.ok(deptRow, "库里应该有部门");
+	const deptRow = await caller.department.create({ parentId: null, name: `${TEST_PREFIX}导入部门_${SUFFIX}` });
+	tempDeptIds.push(deptRow.id);
 
 	const result = await caller.user.import({
 		rows: [

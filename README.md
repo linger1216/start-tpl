@@ -14,8 +14,8 @@
 
 ```bash
 pnpm install
-cp .env.example .env.local     # 然后按需填写 DATABASE_URL 等
-pnpm db:create                 # 建 27 张系统表(20 张 sys_* + demo_grid + 6 张 tc_*, 幂等)
+cp .env.example .env.local     # 填写 DATABASE_URL 和 INITIAL_ADMIN_PASSWORD 等
+pnpm db:create                 # 建 28 张系统表(21 张 sys_* + demo_grid + 6 张 tc_*, 幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
 pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是本机手工准备的,种子不建)
 pnpm dev                       # http://localhost:3000
@@ -24,7 +24,7 @@ pnpm dev                       # http://localhost:3000
 `pnpm dev` 固定监听 **3000** 端口。
 
 > **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
-> `/settings` 十二页全部读真库,没配 `DATABASE_URL` 会落到错误边界。演示账号见 `doc/测试数据/README.md`(密码统一 `Passw0rd123`,管理员 `admin@example.com`)。
+> `/settings` 十二页全部读真库,没配 `DATABASE_URL` 会落到错误边界。首次初始化的管理员是 `admin@example.com`,密码由 `INITIAL_ADMIN_PASSWORD` 指定;派生脚本会为每个新项目生成独立密码。首次登录后请修改密码并从环境配置中移除初始密码。
 > 不想在本机装 MySQL / MinIO:`docker compose` 一套起齐,见下文「Docker / 容器化」。
 
 ---
@@ -83,7 +83,7 @@ src/
 │   ├── data-scope*.ts / soft-delete.ts / reorder.ts / file-preview.ts …(完整清单见 doc/后端代码导读.md §7)
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 27 张表(20 张 sys_* + demo_grid + 6 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
+│   ├── data-base-schema.ts       # 28 张表(21 张 sys_* + demo_grid + 6 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
@@ -205,7 +205,7 @@ src/
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit;只管 `src/db/schema.ts`(当前是 `todos`) |
-| `pnpm db:create` | 建 **27 张**系统表(20 张 `sys_*` + `demo_grid` + 6 张 `tc_*`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:create` | 建 **28 张**系统表(21 张 `sys_*` + `demo_grid` + 6 张 `tc_*`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
 | `pnpm db:sync:meta` | 只对齐列注释与索引名(老库升级用,**幂等**;第二次必须打印「无需改动」) |
 | `pnpm db:migrate:ids` | 把自增 id 迁成 nanoid(一次性) |
 | `pnpm db:dm:smoke` / `db:dm:defaults` | 达梦专项:drizzle 冒烟 / 默认值对齐 |
@@ -239,7 +239,7 @@ docker compose up -d                                  # http://localhost:3000
 | `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
 | `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
-| `bootstrap` | — | profile `setup` 的一次性任务:建 27 张表 + 四个种子 + `db:minio:init` |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 28 张表 + 四个种子 + `db:minio:init` |
 
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
@@ -294,7 +294,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **27 张表**(20 张 `sys_*` + `demo_grid` + 6 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **28 张表**(21 张 `sys_*` + `demo_grid` + 6 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 / 访客令牌 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -449,6 +449,7 @@ function UsersPage() {
 | 页面 | 路由 | 数据来源 | 演示的骨架 |
 | --- | --- | --- | --- |
 | 用户管理 | `/settings/users` | `sys_user` + `sys_user_dept` + `sys_casbin_rule`(`g` 行) | 台账 CRUD + 角色 / 部门分配 |
+| 访客管理(用户管理页的 Tab) | `/settings/users` | `sys_share_token` | 外链免登令牌:签发 / 改范围 / 启停 / 删除,见 `doc/外链分享.md` |
 | 角色管理 | `/settings/roles` | `sys_role` + `sys_casbin_rule`(`p` / `g` 行) | 台账 CRUD + 权限树勾选(`PermissionTree`) |
 | 部门管理 | `/settings/departments` | `sys_dept` + `sys_user_dept` | 可拖拽树 + 成员管理 |
 | 菜单管理 | `/settings/menus` | `sys_menu` | 可排序树 + 右侧编辑表单(改完即时生效) |
@@ -538,7 +539,8 @@ function UsersPage() {
 | 复制 | rsync 主路径,失败回落到 `find`;排除 `node_modules` / `.git` / `.output` / `dist` / `.vite` / `.tanstack` / `.turbo` / `coverage` / `new-project.sh` / 真实 `.env*` |
 | 带走的东西 | `.env.example`(**唯一的 env 文件**)、`pnpm-lock.yaml`(让 `pnpm install` 命中锁) |
 | 改写 | `package.json` 的 `name`(包名,小写 ASCII)与 `app.title`(展示标题,**你输入的原样**,中文也行)、`.cta.json` 的 `projectName` |
-| 生成 env | 由 `.env.example` 复制出 `.env.local`,随机填 32 字节 base64 的 `BETTER_AUTH_SECRET`,权限 600 |
+| 生成 env | 优先继承模板 `.env.local` 的本地配置并更换密钥;仅在 MySQL 库名可安全隔离时继承数据库连接,否则清空 `DATABASE_URL` 待手动配置;没有本地配置时使用 `.env.example`。文件权限 600 |
+| 初始化 | 安装依赖、生成路由并尝试初始化独立 MySQL 库;失败时保留工程文件并返回非零状态。达梦需手动配置独立 schema,按 `doc/达梦支持.md` 初始化 |
 | 修权限 | 模板里 600 的文件归一成 644(否则新项目里 Git 会不认识) |
 
 `--strict` 的两种边界:模板有未提交改动 → 列出脏文件并中止;模板**不是 git 仓库** → 打印「无从判断'未提交改动',本次已跳过该检查」而不是静默跳过。

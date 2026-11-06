@@ -11,7 +11,7 @@
  * 规则用的是 `*`(所有人)主体,所以**必须**按 id 删 —— 不能只靠前缀扫。
  */
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
@@ -20,6 +20,7 @@ import {
 	sysDataPlugin,
 	sysDataPolicy,
 	sysDemoGrid,
+	sysDept,
 	sysMenu,
 	sysRole,
 } from "../src/db/data-base-schema.ts";
@@ -28,6 +29,7 @@ import { addUserRole, clearCasbinCache, setRoleMenus } from "../src/lib/casbin.t
 import { clearDataScopeCache } from "../src/lib/data-scope.ts";
 import {
 	BUILTIN_PLUGIN_KEYS,
+	clearDeptCache,
 	clearPluginCache,
 	LISTED_BUILTIN_PLUGIN_KEYS,
 	loadDeptNodes,
@@ -56,18 +58,46 @@ const roleIds: string[] = [];
 const usersWithRoles: string[] = [];
 /** 本文件建过的自定义插件标识 —— 中途断言失败也要能清干净 */
 const pluginKeys: string[] = [];
+const fixtureDeptIds = [newId(), newId(), newId(), newId(), newId()];
+const fixtureGridIds = [newId(), newId(), newId(), newId()];
+
+before(async () => {
+	const [root, first, child, second, third] = fixtureDeptIds;
+	await db.insert(sysDept).values([
+		{ id: root, name: `${TEST_PREFIX}街镇分组_${SUFFIX}` },
+		{ id: first, parent_id: root, name: STREET_NAMES[0] },
+		{ id: child, parent_id: first, name: `${TEST_PREFIX}下级_${SUFFIX}` },
+		{ id: second, parent_id: root, name: STREET_NAMES[1] },
+		{ id: third, parent_id: root, name: STREET_NAMES[2] },
+	]);
+	await db.insert(sysDemoGrid).values(
+		fixtureGridIds.map((id, i) => ({
+			id,
+			name: `${TEST_PREFIX}网格_${SUFFIX}_${i}`,
+			town_id: [first, first, second, third][i],
+			owner_id: `${TEST_PREFIX}owner_${SUFFIX}_${i}`,
+		})),
+	);
+	clearDeptCache();
+});
 
 after(async () => {
+	await db.delete(sysDemoGrid).where(inArray(sysDemoGrid.id, fixtureGridIds));
+	for (const id of [...fixtureDeptIds].reverse()) await db.delete(sysDept).where(eq(sysDept.id, id));
+	clearDeptCache();
 	for (const id of ruleIds) {
 		await db.delete(sysDataPolicy).where(eq(sysDataPolicy.id, id));
 	}
-	// 兜底:按 `__test__` 前缀扫全表把本文件造的行收成 id —— 删除现在是软删,`plugin_key` 已被
-	// `tombstone()` 改成 `...#d#<id 尾段>`,再按 key 查就查不到了(会留一堆软删行)
+	// 软删后 key 带墓碑;同时核对本次运行的唯一后缀,不能清掉其他测试的数据。
 	const plugins = await db.select({ id: sysDataPlugin.id, pluginKey: sysDataPlugin.plugin_key }).from(sysDataPlugin);
-	const pluginIds = plugins.filter((row) => row.pluginKey.includes(TEST_PREFIX)).map((row) => row.id);
+	const pluginIds = plugins
+		.filter((row) => row.pluginKey.startsWith(TEST_PREFIX) && row.pluginKey.includes(SUFFIX))
+		.map((row) => row.id);
 	if (pluginIds.length > 0) await db.delete(sysDataPlugin).where(inArray(sysDataPlugin.id, pluginIds));
 	const rules = await db.select({ id: sysDataPolicy.id, pluginKey: sysDataPolicy.plugin_key }).from(sysDataPolicy);
-	const staleRuleIds = rules.filter((row) => (row.pluginKey ?? "").includes(TEST_PREFIX)).map((row) => row.id);
+	const staleRuleIds = rules
+		.filter((row) => row.pluginKey?.startsWith(TEST_PREFIX) && row.pluginKey.includes(SUFFIX))
+		.map((row) => row.id);
 	if (staleRuleIds.length > 0) await db.delete(sysDataPolicy).where(inArray(sysDataPolicy.id, staleRuleIds));
 	// 没被软删过的那几个(用例中途失败时)按原始 key 直接清
 	for (const pluginKey of pluginKeys) {
@@ -473,17 +503,19 @@ function ctxWithDepts(depts: PolicyDept[]): PolicyCtx {
 	return { user: { id: `${TEST_PREFIX}me`, name: "测试人" }, roles: [], depts, descendants: [] };
 }
 
-/** 线上组织树里「镇、街道」那一层;用例要拿真实树跑,不然名单漏了人也发现不了 */
+/** 本次测试创建的街镇分组,不依赖部署环境已有的组织树。 */
 async function streetContainerId(): Promise<string> {
 	const nodes = await loadDeptNodes();
-	const container = nodes.find((node) => node.name === "镇、街道");
-	assert.ok(container, "前置条件:线上组织树里要有「镇、街道」这一层");
+	const container = nodes.find((node) => node.id === fixtureDeptIds[0]);
+	assert.ok(container, "测试街镇分组应存在");
 	return container.id;
 }
 
-test("v1.6 my_street:14 个街镇名必须覆盖组织树里「镇、街道」下的每一个节点", async () => {
+test("v1.6 my_street:街镇名覆盖测试树及现有「镇、街道」分组", async () => {
 	const containerId = await streetContainerId();
-	const streets = (await loadDeptNodes()).filter((node) => node.parentId === containerId);
+	const nodes = await loadDeptNodes();
+	const containers = new Set([containerId, ...nodes.filter((node) => node.name === "镇、街道").map((node) => node.id)]);
+	const streets = nodes.filter((node) => node.parentId !== null && containers.has(node.parentId));
 	assert.ok(streets.length > 0, "前置条件:「镇、街道」下面要挂着街镇");
 	for (const street of streets) {
 		assert.ok(
@@ -499,7 +531,7 @@ test("v1.6 my_street:从我开始往上找第一个街镇,链上没有街镇就�
 	const byId = new Map(nodes.map((node) => [node.id, node]));
 
 	// 拿真实树造一条链:一个街镇 + 它下面的一个子孙当"我"
-	const street = nodes.find((node) => node.parentId === containerId && STREET_NAMES.includes(node.name));
+	const street = nodes.find((node) => node.id === fixtureDeptIds[1] && node.parentId === containerId);
 	assert.ok(street, "前置条件:要有一个名字在名单里的街镇");
 	const isUnder = (node: (typeof nodes)[number], ancestorId: string): boolean => {
 		let cursor = node.parentId ? byId.get(node.parentId) : undefined;
@@ -578,7 +610,7 @@ test("v1.7 my_sub_departments:是「我的部门及以下」减掉本级,带 nam
 	const containerId = await streetContainerId();
 	const nodes = await loadDeptNodes();
 	const byId = new Map(nodes.map((node) => [node.id, node]));
-	const street = nodes.find((node) => node.parentId === containerId && STREET_NAMES.includes(node.name));
+	const street = nodes.find((node) => node.id === fixtureDeptIds[1] && node.parentId === containerId);
 	assert.ok(street, "前置条件:要有一个名字在名单里的街镇");
 
 	const descendants = collectDescendantIds(nodes, [street.id]);
@@ -606,7 +638,7 @@ test("v1.7 my_sub_departments:是「我的部门及以下」减掉本级,带 nam
 test("v1.7 my_street_tree:街镇 + 它下面整棵子树(与 my_street 只回一个节点成对比)", async () => {
 	const containerId = await streetContainerId();
 	const nodes = await loadDeptNodes();
-	const street = nodes.find((node) => node.parentId === containerId && STREET_NAMES.includes(node.name));
+	const street = nodes.find((node) => node.id === fixtureDeptIds[1] && node.parentId === containerId);
 	assert.ok(street, "前置条件:要有一个名字在名单里的街镇");
 	const expected = collectDescendantIds(nodes, [street.id]);
 	assert.ok(expected.length > 1, "前置条件:街镇下面要有子树,否则这个用例证不了「及以下」");

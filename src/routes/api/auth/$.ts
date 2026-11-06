@@ -33,9 +33,13 @@ async function emailOf(request: Request): Promise<string | null> {
 	}
 }
 
-async function handleAuth(request: Request): Promise<Response> {
+export async function handleAuth(request: Request): Promise<Response> {
 	const startedAt = Date.now();
 	const { pathname } = new URL(request.url);
+	// 账号只能由受权限保护的服务端流程创建,不向匿名 HTTP 请求开放注册。
+	if (pathname.replace(/\/+$/, "") === "/api/auth/sign-up/email") {
+		return new Response(null, { status: 404 });
+	}
 	const event = authEvent(pathname);
 	if (!event) return auth.handler(request);
 	const email = event === "auth.sign_in" ? await emailOf(request) : null;

@@ -230,7 +230,7 @@ export function SettingsDataScopeForm({
 									setSubjectId("");
 								}}
 							>
-								<SelectTrigger id="scope-kind" size="sm" className="w-full">
+								<SelectTrigger id="scope-kind" size="form" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -273,7 +273,7 @@ export function SettingsDataScopeForm({
 									setColumn("");
 								}}
 							>
-								<SelectTrigger id="scope-resource" size="sm" className="w-full">
+								<SelectTrigger id="scope-resource" size="form" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -308,7 +308,7 @@ export function SettingsDataScopeForm({
 									setValueKey(plugins.find((item) => item.key === key)?.valueKeys[0] ?? "");
 								}}
 							>
-								<SelectTrigger id="scope-plugin" size="sm" className="w-full">
+								<SelectTrigger id="scope-plugin" size="form" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -331,7 +331,7 @@ export function SettingsDataScopeForm({
 					{pluginKey ? (
 						<DetailRow label="判据列" htmlFor="scope-column">
 							<Select items={columnItems} value={column} onValueChange={(next) => setColumn(next ?? "")}>
-								<SelectTrigger id="scope-column" size="sm" className="w-full">
+								<SelectTrigger id="scope-column" size="form" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -358,7 +358,7 @@ export function SettingsDataScopeForm({
 						>
 							<div className="flex flex-col gap-1.5">
 								<Select items={valueKeyItems} value={valueKey} onValueChange={(next) => setValueKey(next ?? "")}>
-									<SelectTrigger id="scope-value-key" size="sm" className="w-full">
+									<SelectTrigger id="scope-value-key" size="form" className="w-full">
 										<SelectValue placeholder="选一个 key" />
 									</SelectTrigger>
 									<SelectContent>

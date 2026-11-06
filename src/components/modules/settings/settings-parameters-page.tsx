@@ -202,7 +202,7 @@ export function SettingsParametersPage() {
 						<ExcelExportButton columns={PARA_EXCEL_COLUMNS} rows={excelRows} fileName="参数" />
 						<ExcelImportButton
 							title="导入参数"
-							description="一行 = 一条参数(参数名是业务键)。库里没有的建、已有的改值;代码内置的参数会跳过并报错,值会按类型校验。"
+							description="一行 = 一条参数(参数名是业务键)。库里没有的建、已有的改值;已锁定的参数会跳过并报错,值会按类型校验。"
 							fields={PARA_EXCEL_COLUMNS}
 							fileNamePrefix="参数导入模板"
 							onImport={(importRows) => importMutation.mutateAsync({ rows: importRows })}

@@ -10,12 +10,12 @@
     "规则种类:paths / lines(matches、prefixes、plus、min) / block(begin、end、back) / imports(from[]) / json(matches) / replace(from、to、count)。"
   ],
   "core": {
-    "procedures": 73,
+    "procedures": 78,
     "seeds": ["db:seed:menus", "db:seed:rbac", "db:seed:paras", "db:seed:dicts"],
     "_note": "已接线之外的功能(用户管理 / 角色 / 部门 / 菜单 / 字典 / 参数 / 标签 / 文件管理 / 审计日志 / 数据权限 / 达梦 / 容器化)目前**一律保留**,它们的 procedures 记在这里;等各自接线后从这里减掉。",
     "tables": [
       "sys_menu", "sys_dict", "sys_para", "sys_tag", "sys_tag_relation",
-      "sys_user", "sys_session", "sys_account", "sys_verification", "sys_account_lockout", "sys_rate_limit",
+      "sys_user", "sys_session", "sys_account", "sys_verification", "sys_account_lockout", "sys_rate_limit", "sys_share_token",
       "sys_dept", "sys_role", "sys_user_dept", "sys_casbin_rule",
       "sys_notice", "sys_log", "sys_file", "sys_data_policy", "sys_data_plugin", "demo_grid",
       "todos", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"
@@ -29,7 +29,7 @@
       "description": "甲发任务给乙 → 处置 → 审批 → 关闭归档(含活动日志 tc_log)",
       "tip": "工单/审批流业务选配；常规基础后台无流转需求可不选",
       "default": false,
-      "requires": [],
+      "requires": ["notice"],
       "procedures": 25,
       "paths": [
         "src/components/modules/task-close",
@@ -56,6 +56,10 @@
       ],
       "rules": [
         { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/task-close"] },
+        { "file": "src/lib/use-notice-sse.ts", "kind": "lines", "matches": ["void queryClient.invalidateQueries(trpc.taskClose.pathFilter());"], "prefixes": ["// 「我的任务」红点也吃通知"] },
+        { "file": "src/components/layout/sidebar.tsx", "kind": "imports", "from": ["@tanstack/react-query", "#/integrations/trpc/react"] },
+        { "file": "src/components/layout/sidebar.tsx", "kind": "lines", "matches": ["const trpc = useTRPC();", "const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });"], "prefixes": ["// 「我的任务」红点:", "// 新通知由 SSE"] },
+        { "file": "src/components/layout/sidebar.tsx", "kind": "replace", "from": "const taskDot = (badgeQuery.data?.count ?? 0) > 0;", "to": "const taskDot = false;" },
         {
           "file": "src/integrations/trpc/router.ts",
           "kind": "lines",

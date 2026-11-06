@@ -13,6 +13,7 @@
 import { getRequestHeaders } from "@tanstack/react-start/server";
 
 import { auth } from "#/lib/auth";
+import { matchShareToken, readShareTokenFromHeaders, SHARE_GUEST } from "#/lib/share-access";
 
 /**
  * 当前会话的用户 id;没有会话(或不在请求上下文里,比如脚本 / 单测直调 procedure)返回 `null`。
@@ -24,19 +25,40 @@ export async function getCurrentUserId(): Promise<string | null> {
 }
 
 /** 当前登录用户(**带姓名** —— 审计要存姓名快照,账号将来被删也能读懂历史) */
-type CurrentUser = { id: string; name: string };
+type CurrentUser = {
+	id: string;
+	name: string;
+	/**
+	 * 访客身份时命中令牌的**允许页面**前缀(tRPC 权限中间件按它放行读接口);
+	 * 普通登录用户没有这个字段 —— 它是 `share-guest` 专属的。
+	 */
+	sharePaths?: readonly string[];
+};
 
 /**
  * 读当前用户(id + 姓名)。与 `getCurrentUserId` 同样吞掉"没有请求上下文"的异常:
  * 脚本 / 单测直调 procedure 时,"没有用户"就是正确结论 —— 该由 `protectedProcedure` 拒绝,
  * 不该在这里炸成 500。
+ *
+ * 会话为空时**追加访客兜底**(外链 share token,见 `lib/share-access.ts` 与 `doc/外链分享.md`):
+ * 读同一颗 httpOnly cookie 比对令牌表,命中即返回「访客」—— 数据层认人就到这里为止,
+ * 访客能调哪些接口由权限中间件的访客特判收口(只读 + 只放行允许页面的 query)。
  */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
 	try {
 		const session = await auth.api.getSession({ headers: getRequestHeaders() });
-		if (!session?.user) return null;
-		return { id: session.user.id, name: session.user.name ?? "" };
+		if (session?.user) return { id: session.user.id, name: session.user.name ?? "" };
 	} catch {
+		// 脚本 / 单测没有请求上下文:拿不到会话也拿不到 Cookie,自然走不到访客
+		return null;
+	}
+	try {
+		const token = readShareTokenFromHeaders(getRequestHeaders());
+		const matched = token ? await matchShareToken(token) : null;
+		if (!matched) return null;
+		return { id: SHARE_GUEST.id, name: SHARE_GUEST.name, sharePaths: matched.allowedPaths };
+	} catch {
+		// 同上:没有请求上下文(读不到 Cookie)就按未登录处理
 		return null;
 	}
 }

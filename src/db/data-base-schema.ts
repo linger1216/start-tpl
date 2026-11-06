@@ -1,5 +1,5 @@
 /**
- * **系统表**的 drizzle 定义 —— 十九张:
+ * **系统表**的 drizzle 定义 —— 二十八张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
@@ -7,6 +7,7 @@
  *    **`sys_casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`);
  *  - 数据权限两张:**`sys_data_policy`**(谁看到哪些行)/ **`sys_data_plugin`**(值域插件登记;
  *    加 / 改插件不用重启,见 `lib/data-scope.ts` + `lib/data-scope-plugins.ts`);
+ *  - 外链访客一张:**`sys_share_token`**(外链免登令牌 —— 用户管理 ▸ 访客管理,见 `lib/share-access.ts`);
  *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
@@ -405,6 +406,41 @@ export const sysRateLimit = mysqlTable("sys_rate_limit", {
 	value: text("value"),
 	expiresAt: timestamp("expires_at", { mode: "date" }),
 });
+
+/**
+ * 外链访客令牌(`sys_share_token`)—— 「用户管理 ▸ 访客管理」的数据源。
+ *
+ * 一行 = 一条外链:拿到 `token` 链接的外部人员,可在 `allowed_paths` 允许的页面上
+ * **免登只读**查看。判定链:`lib/share-access.ts` 的 `matchShareToken` → 路由守卫
+ * (`routes/(main)/route.tsx`)→ tRPC 权限中间件;机制与安全边界见 `doc/外链分享.md`。
+ *
+ * 口径:
+ *  - **凭证表,硬删**(不加 `deleted_at`,与 `sys_rate_limit` 同档,见 `lib/soft-delete.ts`
+ *    的运维表口径):删除 = 这条外链立即失效,留痕走 `sys_log` 审计;
+ *  - `token` 明文存(管理页要随时「复制链接」);比对用 sha256 + `timingSafeEqual` 常数时间;
+ *  - `allowed_paths` 是 JSON 数组字符串(如 `["/demo/grid"]`),按**路径前缀**匹配;
+ *  - **无总开关**:存在「启用 ∧ 未过期」的令牌 = 访客开启,全部停用即关闭。
+ */
+export const sysShareToken = mysqlTable(
+	"sys_share_token",
+	{
+		/** 主键:nanoid(见 `lib/ids.ts` 的 `newId()`) */
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** 令牌本体(32 位 hex);外链形如 `https://域名/页面?share=<token>` */
+		token: varchar("token", { length: 64 }).notNull(),
+		/** 给人看的备注(发给谁、看什么) */
+		remark: varchar("remark", { length: 255 }).notNull().default(""),
+		/** 允许页面的 JSON 数组(路径前缀,如 `["/demo/grid"]`) */
+		allowed_paths: text("allowed_paths").notNull(),
+		/** 过期时刻;null = 长期有效 */
+		expires_at: datetime("expires_at", { mode: "date" }),
+		/** 1 启用 / 0 停用 —— 行级启停就是访客的总开关 */
+		enabled: tinyint("enabled").notNull().default(1),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [uniqueIndex("uk_sys_share_token").on(table.token)],
+);
 
 // ── 权限(部门 / 角色)────────────────────────────────────
 //

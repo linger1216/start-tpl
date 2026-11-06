@@ -414,12 +414,14 @@ if command -v rsync >/dev/null 2>&1; then
   # Prefer rsync when available (fast, preserves modes, respects trailing-slash semantics).
   RSYNC_ARGS=( -a )
   for pattern in "${DENY[@]}"; do RSYNC_ARGS+=( --exclude "$pattern" ); done
-  for pattern in "${MODULE_EXCLUDES[@]}"; do
-    case "$pattern" in
-      /*) RSYNC_ARGS+=( --exclude "$pattern" ) ;;
-      *) RSYNC_ARGS+=( --exclude "/$pattern" ) ;;
-    esac
-  done
+  if [ ${#MODULE_EXCLUDES[@]} -gt 0 ]; then
+    for pattern in "${MODULE_EXCLUDES[@]}"; do
+      case "$pattern" in
+        /*) RSYNC_ARGS+=( --exclude "$pattern" ) ;;
+        *) RSYNC_ARGS+=( --exclude "/$pattern" ) ;;
+      esac
+    done
+  fi
   # .env.example is the ONLY env file that ships — never copy real secrets.
   # ORDER MATTERS: rsync uses the first matching pattern, so the include must precede the exclude.
   RSYNC_ARGS+=( --include .env.example --exclude '.env*' )
@@ -439,11 +441,13 @@ elif [ "$IS_GIT" -eq 1 ]; then
         .env*) continue ;;
       esac
       case "$f" in new-project.sh|.serena|.serena/*) continue ;; esac
-      for ex in "${MODULE_EXCLUDES[@]}"; do
-        case "$f" in
-          "$ex"|"$ex"/*) continue 2 ;;
-        esac
-      done
+      if [ ${#MODULE_EXCLUDES[@]} -gt 0 ]; then
+        for ex in "${MODULE_EXCLUDES[@]}"; do
+          case "$f" in
+            "$ex"|"$ex"/*) continue 2 ;;
+          esac
+        done
+      fi
       mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
     done
   )
@@ -465,11 +469,13 @@ else
             case "$(basename "$f")" in $pattern) skip=1; break ;; esac
             case "$f" in */"$pattern"|*/"$pattern"/*) skip=1; break ;; esac
           done
-          for ex in "${MODULE_EXCLUDES[@]}"; do
-            case "${f#./}" in
-              "$ex"|"$ex"/*) skip=1; break ;;
-            esac
-          done
+          if [ ${#MODULE_EXCLUDES[@]} -gt 0 ]; then
+            for ex in "${MODULE_EXCLUDES[@]}"; do
+              case "${f#./}" in
+                "$ex"|"$ex"/*) skip=1; break ;;
+              esac
+            done
+          fi
           if [ "$skip" -eq 1 ]; then continue; fi
           mkdir -p "$TARGET_DIR/$(dirname "$f")" && cp -p "$f" "$TARGET_DIR/$f"
         done
@@ -556,82 +562,180 @@ if [ -f "$CTA" ]; then
   echo "  .cta.json projectName -> $PROJECT_NAME"
 fi
 
-# --- bootstrap .env.local from the example -----------------------------------
-ENV_EXAMPLE="$TARGET_DIR/.env.example"
+# --- bootstrap .env.local ---------------------------------------------------
+# 优先从模板当前的 .env.local 继承(本地基础设施完全对齐: 用户名/密码/MinIO等全部就绪),
+# 仅安全替换数据库库名为新工程专属库名, 并生成新密钥; 模板没有时才回落到 .env.example
+TEMPLATE_ENV_LOCAL="$TEMPLATE_DIR/.env.local"
 ENV_LOCAL="$TARGET_DIR/.env.local"
-if [ -f "$ENV_EXAMPLE" ]; then
-  # umask 077 包住:让文件**生下来**就是 600,而不是先 644 再 chmod —— 中间那一瞬
-  # BETTER_AUTH_SECRET 是同组/其他可读的(单机影响小,但没理由留着)
-  ( umask 077; cp "$ENV_EXAMPLE" "$ENV_LOCAL" )
+DB_NAME="$(printf '%s' "$PROJECT_NAME" | tr '-' '_' | tr '[:upper:]' '[:lower:]')"
+PORT_NUM="${PORT:-3000}"
+
+if [ -f "$TEMPLATE_ENV_LOCAL" ]; then
+  ( umask 077; cp "$TEMPLATE_ENV_LOCAL" "$ENV_LOCAL" )
+  SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))')"
+  CAPTCHA_SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')"
+  node -e '
+    const fs = require("fs");
+    const [p, secret, captcha, dbName, port] = process.argv.slice(1);
+    let t = fs.readFileSync(p, "utf8");
+
+    // 1. 替换或填入 BETTER_AUTH_SECRET
+    if (/^BETTER_AUTH_SECRET=/m.test(t)) {
+      t = t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=" + secret);
+    } else {
+      t += "\nBETTER_AUTH_SECRET=" + secret + "\n";
+    }
+
+    // 2. 替换或填入 CAPTCHAKIT_SECRET
+    if (/^CAPTCHAKIT_SECRET=/m.test(t)) {
+      t = t.replace(/^CAPTCHAKIT_SECRET=.*$/m, "CAPTCHAKIT_SECRET=" + captcha);
+    }
+
+    // 3. 替换或设置 BETTER_AUTH_URL 端口
+    if (/^BETTER_AUTH_URL=/m.test(t)) {
+      t = t.replace(/^BETTER_AUTH_URL=.*$/m, "BETTER_AUTH_URL=http://localhost:" + port);
+    } else {
+      t += "\nBETTER_AUTH_URL=http://localhost:" + port + "\n";
+    }
+
+    // 4. 追加开发端口到 BETTER_AUTH_TRUSTED_ORIGINS (允许 localhost 与 127.0.0.1 任意端口访问)
+    if (/^BETTER_AUTH_TRUSTED_ORIGINS=/m.test(t)) {
+      t = t.replace(/^BETTER_AUTH_TRUSTED_ORIGINS=(.*)$/m, (_, old) => {
+        const list = old.trim() ? old.trim().split(",").map(s => s.trim()).filter(Boolean) : [];
+        const portOrigin = "http://localhost:" + port;
+        const ipOrigin = "http://127.0.0.1:" + port;
+        if (!list.includes(portOrigin)) list.push(portOrigin);
+        if (!list.includes(ipOrigin)) list.push(ipOrigin);
+        return "BETTER_AUTH_TRUSTED_ORIGINS=" + list.join(",");
+      });
+    } else {
+      t += "\nBETTER_AUTH_TRUSTED_ORIGINS=http://localhost:" + port + ",http://127.0.0.1:" + port + "\n";
+    }
+
+    // 5. 只继承能证明与模板库隔离的 MySQL URL。其他驱动必须手动配置独立库。
+    t = t.replace(/^DATABASE_URL\s*=.*$/m, (line) => {
+      const raw = line.slice(line.indexOf("=") + 1).trim().replace(/^(["\x27])([\s\S]*)\1$/, "$2");
+      try {
+        const url = new URL(raw);
+        if (!["mysql:", "mysql2:"].includes(url.protocol) || !url.pathname.slice(1) || decodeURIComponent(url.pathname.slice(1)).toLowerCase() === dbName.toLowerCase()) {
+          return "DATABASE_URL=";
+        }
+        url.pathname = "/" + dbName;
+        return "DATABASE_URL=" + JSON.stringify(url.toString());
+      } catch {
+        return "DATABASE_URL=";
+      }
+    });
+
+    fs.writeFileSync(p, t);
+  ' "$ENV_LOCAL" "$SECRET" "$CAPTCHA_SECRET" "$DB_NAME" "$PORT_NUM"
+  chmod 600 "$ENV_LOCAL" 2>/dev/null || true
+  echo "  .env.local 已生成(安全隔离的 MySQL 连接可继承,端口 -> $PORT_NUM,权限 600)"
+elif [ -f "$TARGET_DIR/.env.example" ]; then
+  ( umask 077; cp "$TARGET_DIR/.env.example" "$ENV_LOCAL" )
   SECRET="$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))')"
   node -e '
     const fs = require("fs");
-    const [p, secret, name] = process.argv.slice(1);
+    const [p, secret, dbName] = process.argv.slice(1);
     let t = fs.readFileSync(p, "utf8");
     if (/^BETTER_AUTH_SECRET=/m.test(t)) {
       t = t.replace(/^BETTER_AUTH_SECRET=.*$/m, "BETTER_AUTH_SECRET=" + secret);
     } else {
-      // .env.example 里没有这一项也要能用
-      t = t.replace(/\s*$/, "") + "\n\n# Better Auth\nBETTER_AUTH_SECRET=" + secret + "\n";
+      t += "\nBETTER_AUTH_SECRET=" + secret + "\n";
     }
-    // 自动将默认数据库名 mydb 替换为项目同名库,隔离多项目开发
-    if (name) {
-      t = t.replace(/(mysql:\/\/[^/]+\/)mydb([?"\s]|$)/m, "$1" + name + "$2");
-    }
+    const dbRegex = new RegExp("((?:mysql|mysql2):\\/\\/[^/]+\\/)mydb([?\"\\s]|$)", "m");
+    t = t.replace(dbRegex, "$1" + dbName + "$2");
     fs.writeFileSync(p, t);
-  ' "$ENV_LOCAL" "$SECRET" "$PROJECT_NAME"
-  # .env.local 含 BETTER_AUTH_SECRET(以及你之后填的 DATABASE_URL),收紧为仅属主可读写
+  ' "$ENV_LOCAL" "$SECRET" "$DB_NAME"
   chmod 600 "$ENV_LOCAL" 2>/dev/null || true
-  echo "  .env.local 已生成(BETTER_AUTH_SECRET 随机填充, DATABASE_URL 库名 -> $PROJECT_NAME, 权限 600)"
-else
-  echo "提示: 目标目录没有 .env.example,跳过 .env.local 生成。" >&2
+  echo "  .env.local 已由 .env.example 生成(库名 -> $DB_NAME, 权限 600)"
+fi
+
+# 初始管理员密码每个项目独立生成;不写日志,不继承模板的凭据。
+if [ -f "$ENV_LOCAL" ]; then
+  node -e '
+    const fs = require("fs");
+    const crypto = require("crypto");
+    const p = process.argv[1];
+    let text = fs.readFileSync(p, "utf8");
+    const line = "INITIAL_ADMIN_PASSWORD=" + crypto.randomBytes(24).toString("base64url");
+    if (/^INITIAL_ADMIN_PASSWORD=.*$/m.test(text)) text = text.replace(/^INITIAL_ADMIN_PASSWORD=.*$/m, line);
+    else text += "\n" + line + "\n";
+    fs.writeFileSync(p, text);
+  ' "$ENV_LOCAL"
+  echo "  初始管理员密码已生成到目标 .env.local 的 INITIAL_ADMIN_PASSWORD。"
 fi
 
 SCAFFOLD_OK=1
 
-# --- 自动安装依赖与构建路由 ---------------------------------------------------
-DID_INSTALL=0
-if [ "$INSTALL_DEPS" -eq 1 ]; then
-  DID_INSTALL=1
-elif [ -t 0 ] && [ "$NO_INPUT" -eq 0 ]; then
-  echo ""
-  printf "是否立即安装依赖并构建路由 (pnpm install && pnpm generate-routes)? [y/N]: "
-  read -r DO_INSTALL || DO_INSTALL=""
-  case "$DO_INSTALL" in
-    y*|Y*) DID_INSTALL=1 ;;
-  esac
+# --- 深度初始化: 依赖安装、路由生成、自动建库、建表与种子灌装 -------------
+echo ""
+echo "==============================================================================="
+echo "  工程文件已就绪，正在执行全自动化初始化 (依赖/路由/建库/建表/种子)..."
+echo "==============================================================================="
+
+# 1. 安装依赖并编译路由
+echo ""
+echo "▶ [1/4] 安装依赖与生成路由表 (pnpm install && pnpm generate-routes) ..."
+if command -v pnpm >/dev/null 2>&1; then
+  ( cd "$TARGET_DIR" && pnpm install --silent && pnpm generate-routes )
+else
+  echo "Error: 未找到 pnpm,工程文件已生成,初始化未完成。" >&2
+  exit 1
 fi
 
-if [ "$DID_INSTALL" -eq 1 ]; then
+# 2. 自动连接 MySQL 创建独立数据库
+DB_INIT_OK=0
+if [ -f "$TARGET_DIR/scripts/init-db.mjs" ]; then
   echo ""
-  echo "正在安装依赖与生成路由表 (pnpm install && pnpm generate-routes) ..."
-  if command -v pnpm >/dev/null 2>&1; then
-    ( cd "$TARGET_DIR" && pnpm install && pnpm generate-routes )
+  echo "▶ [2/4] 检查并创建 MySQL 独立数据库 ($DB_NAME) ..."
+  if ( cd "$TARGET_DIR" && node scripts/init-db.mjs ); then
+    DB_INIT_OK=1
   else
-    echo "提示: 未找到 pnpm,跳过自动安装。请在目标目录下手动执行 pnpm install && pnpm generate-routes。" >&2
-    DID_INSTALL=0
+    echo "  初始化未完成。请检查目标 .env.local 的 DATABASE_URL 并配置独立 MySQL 数据库。" >&2
+    echo "  随后在目标目录依次执行: node scripts/init-db.mjs && pnpm db:create && pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts && pnpm db:seed:tags" >&2
+    exit 1
+  fi
+else
+  echo "Error: 缺少 scripts/init-db.mjs,工程文件已生成,初始化未完成。" >&2
+  exit 1
+fi
+
+# 3. 自动建表与灌装种子
+if [ "$DB_INIT_OK" -eq 1 ]; then
+  echo ""
+  echo "▶ [3/4] 创建系统表并对齐元数据 (pnpm db:create) ..."
+  ( cd "$TARGET_DIR" && pnpm db:create )
+
+  echo ""
+  echo "▶ [4/4] 灌装种子数据 (sys_menu / 超管角色权限 / 系统参数 / 字典 / 标签) ..."
+  ( cd "$TARGET_DIR" && pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts && pnpm db:seed:tags )
+
+  # 专属模块种子
+  if [[ ",$FEATURES_IDS," == *",task-close,"* ]]; then
+    echo "  · 自动灌装「任务闭环」流程模板 (pnpm db:seed:task-close) ..."
+    ( cd "$TARGET_DIR" && pnpm db:seed:task-close )
+  fi
+  if [[ ",$FEATURES_IDS," == *",demo,"* ]]; then
+    echo "  · 自动灌装「Demo:综合网格履职」演示数据 (pnpm db:seed:demo) ..."
+    ( cd "$TARGET_DIR" && pnpm db:seed:demo )
   fi
 fi
 
 echo ""
-echo "Done. 项目位置: $TARGET_DIR"
+echo "==============================================================================="
+echo "  ✓ 新工程派生与数据库初始化已全量完成！"
+echo "    项目位置: $TARGET_DIR"
+echo "    数据库名: $DB_NAME"
+echo "    服务端口: ${PORT:-3000}"
+echo "==============================================================================="
 echo ""
-echo "Next steps:"
+echo "现在可以直接启动:"
 echo "  cd $TARGET_DIR"
-echo "  git init -b main          # 新项目不含 git,按需自行初始化"
-if [ "$DID_INSTALL" -eq 1 ]; then
-  echo "  pnpm typecheck && pnpm check"
-  echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
-  echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
-  echo "  pnpm dev                  # 启动开发服务器"
-else
-  echo "  pnpm install"
-  echo "  pnpm generate-routes      # ★ 必跑:路由表是生成物,裁过功能(删过路由文件)必须重建"
-  echo "  pnpm typecheck && pnpm check"
-  echo "  # 编辑 .env.local,补上 DATABASE_URL 等真实值"
-  echo "  pnpm db:create            # 只建剩下的表(见上面「不再建的表」)"
-  echo "  pnpm dev                  # 种子按上面「建议先跑的种子」那几个跑"
-fi
+echo "  pnpm dev                  # 启动开发服务器 (端口: ${PORT:-3000})"
+echo ""
+echo "Git 仓库初始化建议 (按需):"
+echo "  cd $TARGET_DIR && git init -b main && git add . && git commit -m 'chore: scaffold from start-tpl'"
 echo ""
 echo "提示:agent 的文件沙箱以「会话工作区」为界,工作区外的路径只能读、不能写。"
 echo "      要在 agent 里改这个项目的代码,请让它的工作区包含:"

@@ -92,3 +92,42 @@ export function validateParaValue(type: ParaType, value: string): string | null 
 			return null;
 	}
 }
+
+/** 格式化合法 JSON,只改变结构外的空白,保留数字精度与字符串原文。 */
+export function formatParaJson(value: string): string {
+	JSON.parse(value);
+	let result = "";
+	let depth = 0;
+	let inString = false;
+	let escaped = false;
+	for (let i = 0; i < value.length; i++) {
+		const char = value[i];
+		if (inString) {
+			result += char;
+			if (escaped) escaped = false;
+			else if (char === "\\") escaped = true;
+			else if (char === '"') inString = false;
+			continue;
+		}
+		if (/\s/.test(char)) continue;
+		if (char === '"') {
+			inString = true;
+			result += char;
+		} else if (char === "{" || char === "[") {
+			result += char;
+			depth++;
+			if (!/^[\s]*[}\]]/.test(value.slice(i + 1))) result += `\n${"  ".repeat(depth)}`;
+		} else if (char === "}" || char === "]") {
+			depth--;
+			if (result.at(-1) !== "{" && result.at(-1) !== "[") result += `\n${"  ".repeat(depth)}`;
+			result += char;
+		} else if (char === ",") {
+			result += `,\n${"  ".repeat(depth)}`;
+		} else if (char === ":") {
+			result += ": ";
+		} else {
+			result += char;
+		}
+	}
+	return result;
+}

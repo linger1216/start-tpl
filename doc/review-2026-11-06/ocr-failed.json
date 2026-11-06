@@ -1,0 +1,2953 @@
+{
+  "status": "failed",
+  "llm": {
+    "provider": "minimax-cn",
+    "model": "MiniMax-M3"
+  },
+  "message": "Review failed: 0 finding(s); 25 of 25 selected item(s) failed.",
+  "summary": {
+    "files_reviewed": 25,
+    "comments": 0,
+    "total_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "elapsed": "1m28s"
+  },
+  "tool_calls": {
+    "total": 0,
+    "by_tool": {},
+    "failure": 0,
+    "failure_by_tool": {},
+    "failure_details": []
+  },
+  "comments": null,
+  "groups": [
+    {
+      "label": "features.json",
+      "files": [
+        "features.json"
+      ]
+    },
+    {
+      "label": "new-project.sh",
+      "files": [
+        "new-project.sh"
+      ]
+    },
+    {
+      "label": "scripts/create-better-auth-tables-dm.ts",
+      "files": [
+        "scripts/create-better-auth-tables-dm.ts"
+      ]
+    },
+    {
+      "label": "scripts/create-system-tables.ts",
+      "files": [
+        "scripts/create-system-tables.ts"
+      ]
+    },
+    {
+      "label": "scripts/prune-features.mjs",
+      "files": [
+        "scripts/prune-features.mjs"
+      ]
+    },
+    {
+      "label": "scripts/seed-rbac.ts",
+      "files": [
+        "scripts/seed-rbac.ts"
+      ]
+    },
+    {
+      "label": "scripts/sync-table-meta.ts",
+      "files": [
+        "scripts/sync-table-meta.ts"
+      ]
+    },
+    {
+      "label": "src/components/modules/settings/settings-users-page.tsx",
+      "files": [
+        "src/components/modules/settings/settings-users-page.tsx"
+      ]
+    },
+    {
+      "label": "src/db/data-base-schema.ts",
+      "files": [
+        "src/db/data-base-schema.ts"
+      ]
+    },
+    {
+      "label": "src/integrations/trpc/init.ts",
+      "files": [
+        "src/integrations/trpc/init.ts"
+      ]
+    },
+    {
+      "label": "src/integrations/trpc/router.ts",
+      "files": [
+        "src/integrations/trpc/router.ts"
+      ]
+    },
+    {
+      "label": "src/lib/audit.ts",
+      "files": [
+        "src/lib/audit.ts"
+      ]
+    },
+    {
+      "label": "src/lib/auth.ts",
+      "files": [
+        "src/lib/auth.ts"
+      ]
+    },
+    {
+      "label": "src/lib/current-user.ts",
+      "files": [
+        "src/lib/current-user.ts"
+      ]
+    },
+    {
+      "label": "src/lib/rbac.ts",
+      "files": [
+        "src/lib/rbac.ts"
+      ]
+    },
+    {
+      "label": "src/lib/use-notice-sse.ts",
+      "files": [
+        "src/lib/use-notice-sse.ts"
+      ]
+    },
+    {
+      "label": "src/routes/(main)/route.tsx",
+      "files": [
+        "src/routes/(main)/route.tsx"
+      ]
+    },
+    {
+      "label": "src/routes/(main)/settings/users.tsx",
+      "files": [
+        "src/routes/(main)/settings/users.tsx"
+      ]
+    },
+    {
+      "label": "scripts/init-db.mjs",
+      "files": [
+        "scripts/init-db.mjs"
+      ]
+    },
+    {
+      "label": "src/components/modules/settings/settings-guests-detail.tsx",
+      "files": [
+        "src/components/modules/settings/settings-guests-detail.tsx"
+      ]
+    },
+    {
+      "label": "src/components/modules/settings/settings-guests-form.tsx",
+      "files": [
+        "src/components/modules/settings/settings-guests-form.tsx"
+      ]
+    },
+    {
+      "label": "src/components/modules/settings/settings-guests-table.tsx",
+      "files": [
+        "src/components/modules/settings/settings-guests-table.tsx"
+      ]
+    },
+    {
+      "label": "src/integrations/trpc/routers/share-token.ts",
+      "files": [
+        "src/integrations/trpc/routers/share-token.ts"
+      ]
+    },
+    {
+      "label": "src/lib/share-access.ts",
+      "files": [
+        "src/lib/share-access.ts"
+      ]
+    },
+    {
+      "label": "src/lib/share-token-spec.ts",
+      "files": [
+        "src/lib/share-token-spec.ts"
+      ]
+    }
+  ],
+  "session_id": "888c1d57-2116-47b6-93e7-6ad128f80a20",
+  "manifest": {
+    "schema_version": "ocr.run-manifest/v1",
+    "run_id": "888c1d57-2116-47b6-93e7-6ad128f80a20",
+    "operation": "review",
+    "terminal_state": "failed",
+    "repository": {
+      "identity_sha256": "367941c306e49d2c1ba88dc01befe147df7c94fe02c0fbf4ad8980efe3774d87"
+    },
+    "input": {
+      "mode": "workspace",
+      "resolved_base": "33760db6738e8a18c29576278ba240a9836fa271",
+      "source_artifact_sha256": "a6830a80ded80d52cff035881eb915743bd612769b75e51abe0de5637b3e91be"
+    },
+    "execution": {
+      "ocr_version": "v1.13.6",
+      "provider": "minimax-cn",
+      "model": "MiniMax-M3",
+      "configured_concurrency": 8,
+      "max_tool_request_times": 100,
+      "rule_config_sha256": "f3463a1822e849bd50fa4ba17bc23067e956e85e65b72a71f89bb8c8435cfd25",
+      "runtime_config_sha256": "f3ac1cdd2a45285ba614e32ab9bd03b86d9911c8deb3bec22fccf7b7bd4e6913"
+    },
+    "coverage": {
+      "selected": [
+        {
+          "item_id": "002b9ac98fb0a61cee2601d25c93feb62e947a80980fdbe8d0bdcb44be682e5a",
+          "path": "src/integrations/trpc/routers/share-token.ts",
+          "fingerprint": "b1fab92dd4e64d3a07b079ec7b8239b004a43f25400fa263d1aadfe957a8950a"
+        },
+        {
+          "item_id": "0fc777957f1972cb017af3b06d422e34be77ff16d2d19eaa117c359d2312c394",
+          "path": "src/components/modules/settings/settings-users-page.tsx",
+          "fingerprint": "9ce5fec1c315594716bfdf719aa36479dbb93c1a718552a09658bd114a587a49"
+        },
+        {
+          "item_id": "152f8a71c22bc9025b6ebb19ae2ac434750a383d522f28a09ce2b53faffa3d45",
+          "path": "scripts/seed-rbac.ts",
+          "fingerprint": "377ca7f132dbd5103bb0073ccc2f3d27bb1912f1f6d053283b5ca0b00ed09328"
+        },
+        {
+          "item_id": "15909b1cefcba2219d4f5e49d7ac0c9bd84827b33706be46711a26bf004b1810",
+          "path": "src/components/modules/settings/settings-guests-form.tsx",
+          "fingerprint": "08c63d3bf0ccee7e4d44dc9fb2d4873ca6aa48bed54940ecc187ec546055ff99"
+        },
+        {
+          "item_id": "1a08c6591f7e342f1468d725e7378dcc715e6429a16534571dc0baf317df3086",
+          "path": "src/lib/rbac.ts",
+          "fingerprint": "4da8ff077c2d498644bd868e13b45abe8bcdd5b5f4b60a573a0f01c8e970ec05"
+        },
+        {
+          "item_id": "2047ece90ed25d90492d7c3de06adc515b207e1ee94fa47ab2602d915e880ec3",
+          "path": "scripts/init-db.mjs",
+          "fingerprint": "77d40a1635116dac529b892ee8e7b4ea4c5708df0e80bb4e1f2b4e152148611f"
+        },
+        {
+          "item_id": "337657c57e10cd13138d50b92f4f629cdfcc701bc96b3e9f7b7d96e1d7af161a",
+          "path": "src/routes/(main)/settings/users.tsx",
+          "fingerprint": "b0f90c78a29e8ad71e1e3d611a3596671dcc74d260fc09b3081b7ebabee738b3"
+        },
+        {
+          "item_id": "3fc71e5e19e37a6bc9949d71785d7d05d8a5be29b3c6216049645b570d3680b5",
+          "path": "scripts/create-system-tables.ts",
+          "fingerprint": "85ec37c3805f83ab3b762e82dbf9d66bd34d76758e74295b52f062b1829ccac6"
+        },
+        {
+          "item_id": "4dae939457683d3934612be3fa328743420ff143a6b2ebd3e82b2fea8d0d5863",
+          "path": "src/lib/auth.ts",
+          "fingerprint": "7b91c6ada97ee24ed1f288396b4484623317cda105662039c503f8f7af1f65ad"
+        },
+        {
+          "item_id": "5104ced0421acb0013e964277f2249a0dd42c570f5059021be5e6cc085982569",
+          "path": "new-project.sh",
+          "fingerprint": "5368feb961af107f1cca6641fffb3ef54676d408d7250722e826388d1d1ff4ac"
+        },
+        {
+          "item_id": "559822452cbae082b70639d8c7eea9d30a127ce685bd794742ac6612eb134232",
+          "path": "src/db/data-base-schema.ts",
+          "fingerprint": "6b26ac6a31cb2256f2a158c009ab3aaccb65771ddc75749863c4adf90e2818bb"
+        },
+        {
+          "item_id": "77c4a1242ce46cb3456f74e3ef2b87f5828f0427602661fa1e05eb28a3a8b975",
+          "path": "features.json",
+          "fingerprint": "28790cff283d63d41000fde149657e68b6049b02618f5806400f97e11e5f1805"
+        },
+        {
+          "item_id": "7c9b1d4000535fe936a38f55ef8d2e1c5f0d8befaf4bc4a848a521efa8fddd01",
+          "path": "src/lib/current-user.ts",
+          "fingerprint": "4185bf5449ba2c4441b1cd0487ffe805d271b68aeec0dd32671a1d1ee1897cbb"
+        },
+        {
+          "item_id": "81abe52fb3ae80dfd253603c5ecb6a3bf34cac1e6e35fe47f7174ce2959aeae6",
+          "path": "src/routes/(main)/route.tsx",
+          "fingerprint": "b0d8b3094279b9096422c29b8acf7126bc42754995518aabe2d8833161437631"
+        },
+        {
+          "item_id": "86494a27c9dc33ec6e9954da773e71155e9ce773c0270156a470152dbf95e89a",
+          "path": "scripts/sync-table-meta.ts",
+          "fingerprint": "da1bff98bf811c613c0dea17ffa418152f198c017ac5d1d5fc2ef9eb5caf4954"
+        },
+        {
+          "item_id": "8b418f0b66273cf1e7884670c524ceb8b8a1b732ff17ce83d535883e794ea4df",
+          "path": "src/lib/use-notice-sse.ts",
+          "fingerprint": "51ec9cce949034934a071550f6ac4162a343b8aaab05ec297092dd2eebe0fed3"
+        },
+        {
+          "item_id": "b32eb2c68de7c5c0adf5fd3ba97558d2c7a33b632690e15f4d492d4c970a17b7",
+          "path": "scripts/prune-features.mjs",
+          "fingerprint": "fe6531e554d625c9f83dcf0dd8369b1a48028be775a0b454d913fac72a5fafda"
+        },
+        {
+          "item_id": "b76efa91c3ffe5801ca322bc43b62ca7e8a3ee437bdbb6ad3589f5644500f8ac",
+          "path": "src/integrations/trpc/init.ts",
+          "fingerprint": "8fba4b4b29f7a2025989e204aabe78fc2c15aae21d608fd5fdd4e3aa9988b2ae"
+        },
+        {
+          "item_id": "c2f9b9f546da092466a5d575604ced97218d6700974eef69cab2af154b1730ca",
+          "path": "src/components/modules/settings/settings-guests-detail.tsx",
+          "fingerprint": "b31ddc52c3fdf51667e2a9ce62791e2ff3538e98c31a5df1be5c76287d26073a"
+        },
+        {
+          "item_id": "d34e3297563c410f1d71b62d03acb2eeaf32affba39f7da9273b8b9f233534ee",
+          "path": "src/lib/share-token-spec.ts",
+          "fingerprint": "690601823180a9de3aed2082698558bc722c04578b4e2f36044312f61b1bb4ab"
+        },
+        {
+          "item_id": "d71110ca8a689bf465a09ae020c6328f34d1166c61ed834dc4b9294cb4cbf65f",
+          "path": "src/integrations/trpc/router.ts",
+          "fingerprint": "c618aa0aff1163a4192a02b10bdb7f187c4ee0ff04223ba69cde713a44a78e3f"
+        },
+        {
+          "item_id": "e3dbaa48ab5a5d6de8a21a1d7ba79aa14092d657e67107d89f1ff3ed5efa1b70",
+          "path": "src/components/modules/settings/settings-guests-table.tsx",
+          "fingerprint": "c68442357b547a1efd2bae9a9c6a73d462ea949451bffff307f7ab5e0f5bf61c"
+        },
+        {
+          "item_id": "e424e99a8e1e5f248ca480ec5617b81936e8bcd7c6fca13b4228d106d369d5ed",
+          "path": "src/lib/share-access.ts",
+          "fingerprint": "43d06ad4fa2baad301b0ca398d47004a9a9ca50d32959ab2e58ad1638067aaff"
+        },
+        {
+          "item_id": "ebe944caba1425a946d6b7605d086b6b1339e5fa11a96fe98a6aa64cdcee4e9e",
+          "path": "scripts/create-better-auth-tables-dm.ts",
+          "fingerprint": "aebdaece5436940612e9da69565daa3bf6f75eb81efea4cd2a2fdc82138c94bb"
+        },
+        {
+          "item_id": "f3a1d75d3435e47b43f17eec3727e7b182fb786b9a5236e858c6ea5e26bf72b1",
+          "path": "src/lib/audit.ts",
+          "fingerprint": "9752073bbda0ce0593cde4bdd87fcf0325ec5f0be6b53db488e109f844bc3b48"
+        }
+      ],
+      "completed": [],
+      "reused": [],
+      "failed": [
+        {
+          "item_id": "002b9ac98fb0a61cee2601d25c93feb62e947a80980fdbe8d0bdcb44be682e5a",
+          "path": "src/integrations/trpc/routers/share-token.ts",
+          "fingerprint": "b1fab92dd4e64d3a07b079ec7b8239b004a43f25400fa263d1aadfe957a8950a",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "0fc777957f1972cb017af3b06d422e34be77ff16d2d19eaa117c359d2312c394",
+          "path": "src/components/modules/settings/settings-users-page.tsx",
+          "fingerprint": "9ce5fec1c315594716bfdf719aa36479dbb93c1a718552a09658bd114a587a49",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "152f8a71c22bc9025b6ebb19ae2ac434750a383d522f28a09ce2b53faffa3d45",
+          "path": "scripts/seed-rbac.ts",
+          "fingerprint": "377ca7f132dbd5103bb0073ccc2f3d27bb1912f1f6d053283b5ca0b00ed09328",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "15909b1cefcba2219d4f5e49d7ac0c9bd84827b33706be46711a26bf004b1810",
+          "path": "src/components/modules/settings/settings-guests-form.tsx",
+          "fingerprint": "08c63d3bf0ccee7e4d44dc9fb2d4873ca6aa48bed54940ecc187ec546055ff99",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "1a08c6591f7e342f1468d725e7378dcc715e6429a16534571dc0baf317df3086",
+          "path": "src/lib/rbac.ts",
+          "fingerprint": "4da8ff077c2d498644bd868e13b45abe8bcdd5b5f4b60a573a0f01c8e970ec05",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "2047ece90ed25d90492d7c3de06adc515b207e1ee94fa47ab2602d915e880ec3",
+          "path": "scripts/init-db.mjs",
+          "fingerprint": "77d40a1635116dac529b892ee8e7b4ea4c5708df0e80bb4e1f2b4e152148611f",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "337657c57e10cd13138d50b92f4f629cdfcc701bc96b3e9f7b7d96e1d7af161a",
+          "path": "src/routes/(main)/settings/users.tsx",
+          "fingerprint": "b0f90c78a29e8ad71e1e3d611a3596671dcc74d260fc09b3081b7ebabee738b3",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "3fc71e5e19e37a6bc9949d71785d7d05d8a5be29b3c6216049645b570d3680b5",
+          "path": "scripts/create-system-tables.ts",
+          "fingerprint": "85ec37c3805f83ab3b762e82dbf9d66bd34d76758e74295b52f062b1829ccac6",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "4dae939457683d3934612be3fa328743420ff143a6b2ebd3e82b2fea8d0d5863",
+          "path": "src/lib/auth.ts",
+          "fingerprint": "7b91c6ada97ee24ed1f288396b4484623317cda105662039c503f8f7af1f65ad",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "5104ced0421acb0013e964277f2249a0dd42c570f5059021be5e6cc085982569",
+          "path": "new-project.sh",
+          "fingerprint": "5368feb961af107f1cca6641fffb3ef54676d408d7250722e826388d1d1ff4ac",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "559822452cbae082b70639d8c7eea9d30a127ce685bd794742ac6612eb134232",
+          "path": "src/db/data-base-schema.ts",
+          "fingerprint": "6b26ac6a31cb2256f2a158c009ab3aaccb65771ddc75749863c4adf90e2818bb",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "77c4a1242ce46cb3456f74e3ef2b87f5828f0427602661fa1e05eb28a3a8b975",
+          "path": "features.json",
+          "fingerprint": "28790cff283d63d41000fde149657e68b6049b02618f5806400f97e11e5f1805",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "7c9b1d4000535fe936a38f55ef8d2e1c5f0d8befaf4bc4a848a521efa8fddd01",
+          "path": "src/lib/current-user.ts",
+          "fingerprint": "4185bf5449ba2c4441b1cd0487ffe805d271b68aeec0dd32671a1d1ee1897cbb",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "81abe52fb3ae80dfd253603c5ecb6a3bf34cac1e6e35fe47f7174ce2959aeae6",
+          "path": "src/routes/(main)/route.tsx",
+          "fingerprint": "b0d8b3094279b9096422c29b8acf7126bc42754995518aabe2d8833161437631",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "86494a27c9dc33ec6e9954da773e71155e9ce773c0270156a470152dbf95e89a",
+          "path": "scripts/sync-table-meta.ts",
+          "fingerprint": "da1bff98bf811c613c0dea17ffa418152f198c017ac5d1d5fc2ef9eb5caf4954",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "8b418f0b66273cf1e7884670c524ceb8b8a1b732ff17ce83d535883e794ea4df",
+          "path": "src/lib/use-notice-sse.ts",
+          "fingerprint": "51ec9cce949034934a071550f6ac4162a343b8aaab05ec297092dd2eebe0fed3",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "b32eb2c68de7c5c0adf5fd3ba97558d2c7a33b632690e15f4d492d4c970a17b7",
+          "path": "scripts/prune-features.mjs",
+          "fingerprint": "fe6531e554d625c9f83dcf0dd8369b1a48028be775a0b454d913fac72a5fafda",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "b76efa91c3ffe5801ca322bc43b62ca7e8a3ee437bdbb6ad3589f5644500f8ac",
+          "path": "src/integrations/trpc/init.ts",
+          "fingerprint": "8fba4b4b29f7a2025989e204aabe78fc2c15aae21d608fd5fdd4e3aa9988b2ae",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "c2f9b9f546da092466a5d575604ced97218d6700974eef69cab2af154b1730ca",
+          "path": "src/components/modules/settings/settings-guests-detail.tsx",
+          "fingerprint": "b31ddc52c3fdf51667e2a9ce62791e2ff3538e98c31a5df1be5c76287d26073a",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "d34e3297563c410f1d71b62d03acb2eeaf32affba39f7da9273b8b9f233534ee",
+          "path": "src/lib/share-token-spec.ts",
+          "fingerprint": "690601823180a9de3aed2082698558bc722c04578b4e2f36044312f61b1bb4ab",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "d71110ca8a689bf465a09ae020c6328f34d1166c61ed834dc4b9294cb4cbf65f",
+          "path": "src/integrations/trpc/router.ts",
+          "fingerprint": "c618aa0aff1163a4192a02b10bdb7f187c4ee0ff04223ba69cde713a44a78e3f",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "e3dbaa48ab5a5d6de8a21a1d7ba79aa14092d657e67107d89f1ff3ed5efa1b70",
+          "path": "src/components/modules/settings/settings-guests-table.tsx",
+          "fingerprint": "c68442357b547a1efd2bae9a9c6a73d462ea949451bffff307f7ab5e0f5bf61c",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "e424e99a8e1e5f248ca480ec5617b81936e8bcd7c6fca13b4228d106d369d5ed",
+          "path": "src/lib/share-access.ts",
+          "fingerprint": "43d06ad4fa2baad301b0ca398d47004a9a9ca50d32959ab2e58ad1638067aaff",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "ebe944caba1425a946d6b7605d086b6b1339e5fa11a96fe98a6aa64cdcee4e9e",
+          "path": "scripts/create-better-auth-tables-dm.ts",
+          "fingerprint": "aebdaece5436940612e9da69565daa3bf6f75eb81efea4cd2a2fdc82138c94bb",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        },
+        {
+          "item_id": "f3a1d75d3435e47b43f17eec3727e7b182fb786b9a5236e858c6ea5e26bf72b1",
+          "path": "src/lib/audit.ts",
+          "fingerprint": "9752073bbda0ce0593cde4bdd87fcf0325ec5f0be6b53db488e109f844bc3b48",
+          "classification": "provider",
+          "reason": "provider or subtask request failed"
+        }
+      ],
+      "waived": []
+    },
+    "elapsed_ms": 88183
+  },
+  "retry_report": {
+    "schema_version": "ocr.llm-retry-report/v1",
+    "total_requests": 38,
+    "retried_requests": 38,
+    "total_retries": 190,
+    "recovered_requests": 0,
+    "failed_requests": 38,
+    "cancelled_requests": 0,
+    "requests": [
+      {
+        "logical_request_id": "0359734b99aa803ee5b1b25b67a556e0ad8c8881da968dfe120e3ed66a8f37cf",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-form.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 207
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 490,
+            "duration_to_headers_ms": 184
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 952,
+            "duration_to_headers_ms": 191
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1830,
+            "duration_to_headers_ms": 420
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3441,
+            "duration_to_headers_ms": 185
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6269,
+            "duration_to_headers_ms": 175
+          }
+        ]
+      },
+      {
+        "logical_request_id": "050740d29ea5a11da05c4c4bffe8c9e9d5e7ab468d5ee15f61dd3c0b753e11bf",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/integrations/trpc/routers/share-token.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 179
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 478,
+            "duration_to_headers_ms": 166
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 774,
+            "duration_to_headers_ms": 336
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1878,
+            "duration_to_headers_ms": 153
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3148,
+            "duration_to_headers_ms": 181
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6635,
+            "duration_to_headers_ms": 52
+          }
+        ]
+      },
+      {
+        "logical_request_id": "09c7099ba8001e443d5f962bb16da44d13af5db6d7001338e637cfc16ae801c6",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/create-system-tables.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 340
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 394,
+            "duration_to_headers_ms": 180
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 958,
+            "duration_to_headers_ms": 161
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1557,
+            "duration_to_headers_ms": 166
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3111,
+            "duration_to_headers_ms": 170
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7256,
+            "duration_to_headers_ms": 316
+          }
+        ]
+      },
+      {
+        "logical_request_id": "19dba29d8ae8d75f5e9528dc87cf70d5248aa169a1d7b7c0f7c68b4a6c8a2131",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-detail.tsx",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 188
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 385,
+            "duration_to_headers_ms": 182
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 796,
+            "duration_to_headers_ms": 71
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1538,
+            "duration_to_headers_ms": 197
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3390,
+            "duration_to_headers_ms": 60
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7231,
+            "duration_to_headers_ms": 212
+          }
+        ]
+      },
+      {
+        "logical_request_id": "1b266412143bf0b028234185d4b0edbb611f3a8111cf6a39e196ac9a6f0d0736",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/share-token-spec.ts",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 200
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 442,
+            "duration_to_headers_ms": 167
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 945,
+            "duration_to_headers_ms": 75
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1840,
+            "duration_to_headers_ms": 179
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3047,
+            "duration_to_headers_ms": 284
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6216,
+            "duration_to_headers_ms": 145
+          }
+        ]
+      },
+      {
+        "logical_request_id": "1ce19763a827bfd6cb6ce8498055a2ce03bf2760273158dffc6858d7ba454360",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "features.json",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 371
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 413,
+            "duration_to_headers_ms": 217
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 894,
+            "duration_to_headers_ms": 311
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1593,
+            "duration_to_headers_ms": 116
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3210,
+            "duration_to_headers_ms": 331
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7591,
+            "duration_to_headers_ms": 188
+          }
+        ]
+      },
+      {
+        "logical_request_id": "23cd3bce9e60ebed679ee109aab422ddad06acd28aafb9247b78c510eb4eaf91",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/db/data-base-schema.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 187
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 414,
+            "duration_to_headers_ms": 65
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 775,
+            "duration_to_headers_ms": 69
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1891,
+            "duration_to_headers_ms": 111
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3237,
+            "duration_to_headers_ms": 88
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6606,
+            "duration_to_headers_ms": 61
+          }
+        ]
+      },
+      {
+        "logical_request_id": "27ae3603230a7ff43572b354014f1c54bfe151f9f41d2301a601418f274bc774",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/current-user.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 200
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 414,
+            "duration_to_headers_ms": 60
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 886,
+            "duration_to_headers_ms": 72
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1543,
+            "duration_to_headers_ms": 62
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3561,
+            "duration_to_headers_ms": 70
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7969,
+            "duration_to_headers_ms": 62
+          }
+        ]
+      },
+      {
+        "logical_request_id": "41b9d80c59f45712db9782036ebdc221837f044475bb76ccfe77f4c83dffeea9",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/audit.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 191
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 445,
+            "duration_to_headers_ms": 99
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 776,
+            "duration_to_headers_ms": 67
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1728,
+            "duration_to_headers_ms": 63
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3491,
+            "duration_to_headers_ms": 74
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7204,
+            "duration_to_headers_ms": 67
+          }
+        ]
+      },
+      {
+        "logical_request_id": "450f447c62a1593ced28a33fc7c15333ce7bc5f9e16071b9220fbce91a1b6a5d",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "new-project.sh",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 251
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 417,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 800,
+            "duration_to_headers_ms": 75
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1896,
+            "duration_to_headers_ms": 140
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3466,
+            "duration_to_headers_ms": 75
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7743,
+            "duration_to_headers_ms": 70
+          }
+        ]
+      },
+      {
+        "logical_request_id": "4a4bfb33ff28173fb331f1438106c2dfc6b221aa118b284aad932e093164b037",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/init-db.mjs",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 186
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 493,
+            "duration_to_headers_ms": 205
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 783,
+            "duration_to_headers_ms": 60
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1522,
+            "duration_to_headers_ms": 62
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3931,
+            "duration_to_headers_ms": 68
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6364,
+            "duration_to_headers_ms": 166
+          }
+        ]
+      },
+      {
+        "logical_request_id": "4f47d3bb431d57ef957b96450b3251427c91242fb1e7365d70cb492a0fd7b033",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "__grouping__",
+        "task_type": "grouping_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 656
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 442,
+            "duration_to_headers_ms": 169
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 803,
+            "duration_to_headers_ms": 130
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1856,
+            "duration_to_headers_ms": 164
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3566,
+            "duration_to_headers_ms": 242
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6182,
+            "duration_to_headers_ms": 157
+          }
+        ]
+      },
+      {
+        "logical_request_id": "566fa57ae631a7fa697cd8a159b531f9846aae1bb11adfe9f67f7cf79d1559bb",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/create-better-auth-tables-dm.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 219
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 472,
+            "duration_to_headers_ms": 318
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 800,
+            "duration_to_headers_ms": 173
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1980,
+            "duration_to_headers_ms": 162
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3975,
+            "duration_to_headers_ms": 166
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7607,
+            "duration_to_headers_ms": 204
+          }
+        ]
+      },
+      {
+        "logical_request_id": "5809184a57cb15cdcb37e04e8041f64a30aab8f7f8cf2d3d8ac7d9cede55b803",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/routes/(main)/route.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 382,
+            "duration_to_headers_ms": 128
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 770,
+            "duration_to_headers_ms": 216
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1823,
+            "duration_to_headers_ms": 187
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3211,
+            "duration_to_headers_ms": 316
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7685,
+            "duration_to_headers_ms": 166
+          }
+        ]
+      },
+      {
+        "logical_request_id": "5e953349e671c93017f7a83afa9ede15272936969833eca07b8c66179f687300",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/prune-features.mjs",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 196
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 409,
+            "duration_to_headers_ms": 235
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 960,
+            "duration_to_headers_ms": 303
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1813,
+            "duration_to_headers_ms": 169
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3646,
+            "duration_to_headers_ms": 368
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7362,
+            "duration_to_headers_ms": 60
+          }
+        ]
+      },
+      {
+        "logical_request_id": "657b90a3f7d98bddd5afffa7056b99a9d331b1a0bf7e5e5a5441e7870bee0d51",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-users-page.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 175
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 419,
+            "duration_to_headers_ms": 76
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 847,
+            "duration_to_headers_ms": 70
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1916,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3174,
+            "duration_to_headers_ms": 137
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6494,
+            "duration_to_headers_ms": 75
+          }
+        ]
+      },
+      {
+        "logical_request_id": "65d76b143083e27f2b28357f737b14a56a4fac5b6944149e4e522d9350236975",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/seed-rbac.ts",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 214
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 386,
+            "duration_to_headers_ms": 195
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 835,
+            "duration_to_headers_ms": 237
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1633,
+            "duration_to_headers_ms": 307
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3391,
+            "duration_to_headers_ms": 218
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7694,
+            "duration_to_headers_ms": 187
+          }
+        ]
+      },
+      {
+        "logical_request_id": "6874f7c8815bcdd12afb34e8ca0d7d4677aa807774094a8be653deba5162b433",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/rbac.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 170
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 439,
+            "duration_to_headers_ms": 67
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 972,
+            "duration_to_headers_ms": 170
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1637,
+            "duration_to_headers_ms": 74
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3316,
+            "duration_to_headers_ms": 64
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7800,
+            "duration_to_headers_ms": 201
+          }
+        ]
+      },
+      {
+        "logical_request_id": "753c77afb18ee93730f1e94673616500823219caae73729d4c60ce383a187f5f",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-form.tsx",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 171
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 480,
+            "duration_to_headers_ms": 71
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 849,
+            "duration_to_headers_ms": 59
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1929,
+            "duration_to_headers_ms": 329
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3543,
+            "duration_to_headers_ms": 161
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7397,
+            "duration_to_headers_ms": 187
+          }
+        ]
+      },
+      {
+        "logical_request_id": "79624c76ddee3132932df7a98084f4cd32316c3ca5ce173fe31b2b5967c9658e",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/init-db.mjs",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 61
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 393,
+            "duration_to_headers_ms": 68
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 996,
+            "duration_to_headers_ms": 175
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1751,
+            "duration_to_headers_ms": 310
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3080,
+            "duration_to_headers_ms": 182
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6433,
+            "duration_to_headers_ms": 159
+          }
+        ]
+      },
+      {
+        "logical_request_id": "9aca025b6f67476b155a2af56218b08e10c2e5de80ac3004cdf9a4b594ca3622",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-detail.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 78
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 400,
+            "duration_to_headers_ms": 123
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 847,
+            "duration_to_headers_ms": 322
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1768,
+            "duration_to_headers_ms": 180
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3713,
+            "duration_to_headers_ms": 479
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7773,
+            "duration_to_headers_ms": 310
+          }
+        ]
+      },
+      {
+        "logical_request_id": "9ae5af298c8c51b8a7ac8e0a17e99fc3b98b354127b13ee806b7107a7226ef75",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/share-access.ts",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 67
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 417,
+            "duration_to_headers_ms": 177
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 773,
+            "duration_to_headers_ms": 71
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1936,
+            "duration_to_headers_ms": 171
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3748,
+            "duration_to_headers_ms": 168
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6812,
+            "duration_to_headers_ms": 177
+          }
+        ]
+      },
+      {
+        "logical_request_id": "9cae5f9acd8806a131fddd7bda47566713b6883ae575d2cc9f3a6498fd89f877",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/integrations/trpc/router.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 183
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 385,
+            "duration_to_headers_ms": 251
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 767,
+            "duration_to_headers_ms": 72
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1675,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3765,
+            "duration_to_headers_ms": 56
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6921,
+            "duration_to_headers_ms": 210
+          }
+        ]
+      },
+      {
+        "logical_request_id": "9e61a5ce38948c8b0c39f7073b5e3af1e371a3104bb2a29d1bb1bbc101762c43",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-table.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 187
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 383,
+            "duration_to_headers_ms": 173
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 993,
+            "duration_to_headers_ms": 194
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1574,
+            "duration_to_headers_ms": 192
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3140,
+            "duration_to_headers_ms": 170
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6637,
+            "duration_to_headers_ms": 76
+          }
+        ]
+      },
+      {
+        "logical_request_id": "afbfc5c586894d740f1934769a5c782daa2037f979deab898017effc6774340a",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-guests-table.tsx",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 64
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 435,
+            "duration_to_headers_ms": 61
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 958,
+            "duration_to_headers_ms": 181
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1598,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3694,
+            "duration_to_headers_ms": 171
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6044,
+            "duration_to_headers_ms": 177
+          }
+        ]
+      },
+      {
+        "logical_request_id": "b1a53162890a10af9efc95c1e5bf8ce6eb9d06174f041c725a674e83bcf084a2",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "new-project.sh",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 353
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 459,
+            "duration_to_headers_ms": 195
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 950,
+            "duration_to_headers_ms": 176
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1573,
+            "duration_to_headers_ms": 167
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3399,
+            "duration_to_headers_ms": 180
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6892,
+            "duration_to_headers_ms": 168
+          }
+        ]
+      },
+      {
+        "logical_request_id": "bd4579fc36cf18ce17c1b9fee7f79e2c5aa13ff71d277aa1169cb392c1eee731",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/integrations/trpc/init.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 79
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 386,
+            "duration_to_headers_ms": 70
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 920,
+            "duration_to_headers_ms": 184
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1816,
+            "duration_to_headers_ms": 126
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3053,
+            "duration_to_headers_ms": 60
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6489,
+            "duration_to_headers_ms": 189
+          }
+        ]
+      },
+      {
+        "logical_request_id": "bdc9d3bfd32c2cc91549904f070ef9bd4cabb39b1e1dd95b724ea1eebf27b528",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/routes/(main)/settings/users.tsx",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 185
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 420,
+            "duration_to_headers_ms": 193
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 856,
+            "duration_to_headers_ms": 53
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1621,
+            "duration_to_headers_ms": 185
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3443,
+            "duration_to_headers_ms": 53
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7088,
+            "duration_to_headers_ms": 62
+          }
+        ]
+      },
+      {
+        "logical_request_id": "be345e49c62ab4f2f31135e21b3df8d1e3ada3fe6a96496e88e10e91ca7acb37",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/sync-table-meta.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 200
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 471,
+            "duration_to_headers_ms": 248
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 973,
+            "duration_to_headers_ms": 188
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1862,
+            "duration_to_headers_ms": 164
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3556,
+            "duration_to_headers_ms": 208
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7800,
+            "duration_to_headers_ms": 71
+          }
+        ]
+      },
+      {
+        "logical_request_id": "c101a3da4efb5e4cea20c6aee5709a6fe5570f21a922691838110245a7efbd15",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/auth.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 214
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 490,
+            "duration_to_headers_ms": 74
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 752,
+            "duration_to_headers_ms": 59
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1881,
+            "duration_to_headers_ms": 69
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3570,
+            "duration_to_headers_ms": 67
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7851,
+            "duration_to_headers_ms": 73
+          }
+        ]
+      },
+      {
+        "logical_request_id": "c2c31d9e1313f808ddafb3dc560cff1c8af6e5db2c27a687b6629549d8f5cd26",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "scripts/seed-rbac.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 166
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 488,
+            "duration_to_headers_ms": 189
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 872,
+            "duration_to_headers_ms": 195
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1655,
+            "duration_to_headers_ms": 67
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3043,
+            "duration_to_headers_ms": 77
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7717,
+            "duration_to_headers_ms": 144
+          }
+        ]
+      },
+      {
+        "logical_request_id": "cb6bb0050bcfd6298a42c0fef7f769ac7bb1beab4b132d3d2c4908731928143c",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/integrations/trpc/init.ts",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 186
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 418,
+            "duration_to_headers_ms": 55
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 985,
+            "duration_to_headers_ms": 135
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1660,
+            "duration_to_headers_ms": 187
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3762,
+            "duration_to_headers_ms": 215
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6989,
+            "duration_to_headers_ms": 202
+          }
+        ]
+      },
+      {
+        "logical_request_id": "ccf93b4c7b583de55426260dacfeeecc3c6a24e5cc3940f9b3c5f56663c889ef",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/integrations/trpc/routers/share-token.ts",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 60
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 482,
+            "duration_to_headers_ms": 173
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 803,
+            "duration_to_headers_ms": 73
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1594,
+            "duration_to_headers_ms": 331
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3879,
+            "duration_to_headers_ms": 160
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6916,
+            "duration_to_headers_ms": 262
+          }
+        ]
+      },
+      {
+        "logical_request_id": "d1a11a2669e97b23c61c591a53d65c2f9e0569f0cc8d9a8bdbc1b366886883d8",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/share-access.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 343
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 480,
+            "duration_to_headers_ms": 311
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 790,
+            "duration_to_headers_ms": 190
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1668,
+            "duration_to_headers_ms": 305
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3775,
+            "duration_to_headers_ms": 64
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6873,
+            "duration_to_headers_ms": 161
+          }
+        ]
+      },
+      {
+        "logical_request_id": "d2fd7a638b7bcf5f22973a2f5271278a983873e4d514d55dfe64f1e723579e4c",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/routes/(main)/route.tsx",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 57
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 388,
+            "duration_to_headers_ms": 64
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 823,
+            "duration_to_headers_ms": 191
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1658,
+            "duration_to_headers_ms": 57
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3571,
+            "duration_to_headers_ms": 183
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7718,
+            "duration_to_headers_ms": 109
+          }
+        ]
+      },
+      {
+        "logical_request_id": "d8aca304c70d82156eae53041ba8280c7a6de6cbe7cc128e1b73b04e9424df03",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/share-token-spec.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 173
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 424,
+            "duration_to_headers_ms": 200
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 757,
+            "duration_to_headers_ms": 164
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1693,
+            "duration_to_headers_ms": 159
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3475,
+            "duration_to_headers_ms": 311
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6568,
+            "duration_to_headers_ms": 161
+          }
+        ]
+      },
+      {
+        "logical_request_id": "dfcaed7bab3cce42f42c000edfd274812db6e5a3ad98d4d9374600db6c05c690",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/lib/use-notice-sse.ts",
+        "task_type": "main_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 113
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 435,
+            "duration_to_headers_ms": 177
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 790,
+            "duration_to_headers_ms": 204
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1757,
+            "duration_to_headers_ms": 53
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3190,
+            "duration_to_headers_ms": 229
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 7342,
+            "duration_to_headers_ms": 188
+          }
+        ]
+      },
+      {
+        "logical_request_id": "ebf5031ce973d35d77c9c8b043022fdfbc02cee419a1c8a6f8a6431cb014a2e4",
+        "provider": "minimax-cn",
+        "model": "MiniMax-M3",
+        "file_path": "src/components/modules/settings/settings-users-page.tsx",
+        "task_type": "plan_task",
+        "request_no": 1,
+        "outcome": "failed",
+        "attempts": [
+          {
+            "attempt": 1,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "duration_to_headers_ms": 347
+          },
+          {
+            "attempt": 2,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 390,
+            "duration_to_headers_ms": 274
+          },
+          {
+            "attempt": 3,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 922,
+            "duration_to_headers_ms": 324
+          },
+          {
+            "attempt": 4,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 1770,
+            "duration_to_headers_ms": 301
+          },
+          {
+            "attempt": 5,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 3306,
+            "duration_to_headers_ms": 320
+          },
+          {
+            "attempt": 6,
+            "outcome": "error",
+            "error_class": "rate_limited",
+            "failure_phase": "http",
+            "status_code": 429,
+            "observed_backoff_ms": 6098,
+            "duration_to_headers_ms": 182
+          }
+        ]
+      }
+    ]
+  }
+}

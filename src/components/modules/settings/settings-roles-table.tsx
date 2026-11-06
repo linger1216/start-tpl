@@ -62,7 +62,10 @@ export function roleColumns({
 			header: "备注",
 			size: 200,
 			cell: (ctx) => (
-				<span className="line-clamp-2 max-w-56 text-xs text-muted-foreground" title={ctx.getValue() ?? ""}>
+				<span
+					className="line-clamp-2 max-w-56 whitespace-normal break-words text-xs text-muted-foreground"
+					title={ctx.getValue() ?? ""}
+				>
 					<TextCell value={ctx.getValue()} />
 				</span>
 			),

@@ -29,7 +29,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "../src/db/index.ts";
 
-/** 表注释(27 张系统表 + `todos` 示例表全要有;`create-system-tables.ts` 只建系统 27 张) */
+/** 表注释(28 张系统表 + `todos` 示例表全要有;`create-system-tables.ts` 只建系统 28 张) */
 const TABLE_COMMENTS: Record<string, string> = {
 	sys_menu: "后台菜单(侧边栏 / 面包屑 / 模块概览的运行时来源;代码里的 NAV_NODES 只是兜底)",
 	sys_dict: "系统字典(全系统共用的枚举;读写走 trpc.dict)",
@@ -47,6 +47,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_account_lockout: "登录风控(累计失败次数 + 锁定到期时间;阈值见 src/lib/auth-lockout.ts)",
 	sys_rate_limit:
 		"限流计数(better-auth secondaryStorage 落地表;多副本 / 进程崩溃后仍生效,见 src/lib/rate-limit-storage.ts)",
+	sys_share_token: "外链访客令牌(用户管理 ▸ 访客管理;持有令牌的外链可免登只读查看允许页面,见 doc/外链分享.md)",
 	sys_dept: "部门树(组织架构;谁是成员见 sys_user_dept)",
 	sys_role: "角色(全局定义 —— 不随部门数增长;谁有哪些角色见 sys_casbin_rule 的 g 行)",
 	sys_user_dept: "部门成员(谁在哪个部门;只管组织架构,不携带角色)",
@@ -203,6 +204,19 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_rate_limit", column: "count", comment: "当前窗口累计请求数(increment 走这列)" },
 	{ table: "sys_rate_limit", column: "value", comment: "通用 KV 值(BA session cache 等用;限流时为空)" },
 	{ table: "sys_rate_limit", column: "expires_at", comment: "过期时刻(创建行时设,后续 increment 不延长)" },
+	// sys_share_token(外链访客令牌;见 doc/外链分享.md)
+	{ table: "sys_share_token", column: "id", comment: "主键(nanoid,由代码生成)" },
+	{ table: "sys_share_token", column: "token", comment: "令牌本体(32 位 hex;外链 ?share= 的值;唯一)" },
+	{ table: "sys_share_token", column: "remark", comment: "备注(发给谁、看什么)" },
+	{
+		table: "sys_share_token",
+		column: "allowed_paths",
+		comment: '允许页面的 JSON 数组(路径前缀,如 ["/demo/grid"])',
+	},
+	{ table: "sys_share_token", column: "expires_at", comment: "过期时刻;null = 长期有效" },
+	{ table: "sys_share_token", column: "enabled", comment: "1 启用 / 0 停用(行级启停就是访客的总开关)" },
+	{ table: "sys_share_token", column: "created_at", comment: "创建时间" },
+	{ table: "sys_share_token", column: "updated_at", comment: "更新时间" },
 	// sys_dept
 	{ table: "sys_dept", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_dept", column: "parent_id", comment: "上级部门 id;null = 顶级" },
@@ -367,6 +381,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "tc_task", column: "status", comment: "当前状态,取值来自 tc_task.workflow.statuses" },
 	{ table: "tc_task", column: "creator_id", comment: "创建人;任务的固有属性,唯一恒定" },
 	{ table: "tc_task", column: "due_at", comment: "任务期限" },
+	{ table: "tc_task", column: "priority", comment: "任务优先级:0=P0 / 1=P1 / 2=P2;null=未设置" },
 	{ table: "tc_task", column: "payload", comment: "任务业务数据(用户自定义)" },
 	{ table: "tc_task", column: "workflow", comment: "状态图快照(创建时从 tc_workflow.payload 复制)" },
 	{ table: "tc_task", column: "deleted_at", comment: "软删除时间(null = 未删除);口径见 lib/soft-delete.ts" },

@@ -60,7 +60,7 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 			size: 90,
 			onView: onOpen,
 			viewLabel: "打开",
-			disabled: (row) => !row.path,
+			viewDisabled: (row) => !row.path,
 		}),
 	]);
 }

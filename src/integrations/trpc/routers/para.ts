@@ -123,7 +123,7 @@ export const paraRouter = createTRPCRouter({
 				.where(and(eq(sysPara.para_key, input.key), alive(sysPara)))
 				.limit(1);
 			if (row && Number(row.editable ?? 1) === 0) {
-				throw new TRPCError({ code: "FORBIDDEN", message: `参数 ${input.key} 是代码内置的,不允许在界面上修改` });
+				throw new TRPCError({ code: "FORBIDDEN", message: `参数 ${input.key} 已锁定,不允许在界面上修改` });
 			}
 			const type = (row?.para_type ?? fallback?.type ?? 3) as ParaType;
 			const problem = validateParaValue(type, input.value);
@@ -148,9 +148,10 @@ export const paraRouter = createTRPCRouter({
 					para_key: input.key,
 					para_value: value,
 					para_type: type,
-					para_group: fallback?.group ?? "其它",
-					remark: fallback?.remark ?? "",
-					editable: 1,
+					para_group: input.group ?? fallback?.group ?? "其它",
+					remark: input.remark ?? fallback?.remark ?? "",
+					status: input.status ?? 1,
+					editable: input.editable ?? 1,
 				});
 			}
 			clearParaCache();
@@ -188,7 +189,8 @@ export const paraRouter = createTRPCRouter({
 				para_type: input.type,
 				para_group: input.group ?? fallback?.group ?? "其它",
 				remark: input.remark ?? fallback?.remark ?? "",
-				editable: 1,
+				status: input.status ?? 1,
+				editable: input.editable ?? 1,
 			});
 			clearParaCache();
 			return { key: input.key, value: input.value.trim() };
@@ -199,7 +201,7 @@ export const paraRouter = createTRPCRouter({
 	 *
 	 * 语义是 **upsert**:库里没有的键按「新增」建(类型取「类型」列,空则按 `PARA_DEFAULTS` 兜底);
 	 * 已有的键改值 / 分组 / 说明 / 类型(**只覆盖表里填了的字段**,空单元格不把库里的值清掉)。三条规矩:
-	 *  - 代码内置(`editable = 0`)的参数一律跳过报错 —— 与「修改」同一口径,否则界面改不了、导入却能改;
+	 *  - 已锁定(`editable = 0`)的参数一律跳过报错 —— 与「修改」同一口径,否则界面改不了、导入却能改;
 	 *  - 值一律过 `validateParaValue`,类型对不上就逐行报错;
 	 *  - 和库里完全一样的行进 `duplicates`(重复导入不会假装"改了一堆")。
 	 */
@@ -276,7 +278,7 @@ export const paraRouter = createTRPCRouter({
 				const existing = stored.get(row.key);
 				const fallback = PARA_DEFAULTS[row.key];
 				if (existing && Number(existing.editable ?? 1) === 0) {
-					result.errors.push({ index: row.index, message: `参数 ${row.key} 是代码内置的,不允许在界面上修改` });
+					result.errors.push({ index: row.index, message: `参数 ${row.key} 已锁定,不允许在界面上修改` });
 					continue;
 				}
 				const type = row.type ?? (existing ? asParaType(existing.para_type) : (fallback?.type ?? PARA_TYPE.STRING));
@@ -351,6 +353,10 @@ export const paraRouter = createTRPCRouter({
 				.where(and(inArray(sysPara.para_key, input.keys), alive(sysPara)));
 			if (rows.length !== new Set(input.keys).size) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "有参数不存在(可能已被删除)" });
+			}
+			const locked = rows.find((row) => Number(row.editable ?? 1) === 0);
+			if (locked) {
+				throw new TRPCError({ code: "FORBIDDEN", message: `参数 ${locked.para_key} 已锁定,不允许删除` });
 			}
 			for (const row of rows) {
 				await db

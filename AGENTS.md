@@ -27,6 +27,7 @@ Before editing files for a substantial task:
 | 改接口 / tRPC / 错误处理 | **`doc/后端接口约定.md`** |
 | 文件 / 上传 / MinIO | **`doc/文件管理.md`** |
 | 站内通知 / 铃铛 | **`doc/通知中心.md`** |
+| 外链免登 / 访客令牌 | **`doc/外链分享.md`** |
 | 鉴权(登录 / 权限)、审计日志 | **`doc/审计日志.md`** |
 | **改任何东西之前** | **`doc/已知陷阱.md`**(每条都真实踩过) + **`doc/数据库与认证.md`**(含数据库陷阱一节) |
 | 视觉规范 / 动效 / 色板 | **`DESIGN.md`**(token 在 `src/styles.css`) |
@@ -41,8 +42,8 @@ pnpm check            # biome check --write —— 格式化 + lint + 整理 imp
 pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生成物,不要手改)
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
-pnpm db:create        # 建系统表 27 张(20 张 sys_* + demo_grid + 6 张 tc_*;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
-pnpm db:dm:create-ba  # 达梦线:建 17 张表(逐张清单见 doc/达梦支持.md,幂等)
+pnpm db:create        # 建系统表 28 张(21 张 sys_* + demo_grid + 6 张 tc_*;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
+pnpm db:dm:create-ba  # 达梦线:建 18 张表(逐张清单见 doc/达梦支持.md,幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
 pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo   # 六个种子都幂等「只补不覆盖」
 pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期

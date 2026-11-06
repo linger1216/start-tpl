@@ -394,27 +394,40 @@ if (has("pick")) {
 		}
 		const count = chosen.size;
 		logUi(`当前已选择 ${count} 项 / 共 ${manifest.features.length} 项`);
-		logUi("指令: 输入编号切换(如 1 4) | none/minimal (只要核心底座) | all (全选) | q (退出) | 回车 (确认并继续)");
+		logUi("指令: 输入编号切换勾选(如 1 2) | none (只要底座) | all (全选) | y 或回车 (确认) | q (退出)");
 		logUi("");
 	};
 	if (interactive) {
 		render();
 		for (;;) {
-			process.stderr.write("> ");
+			process.stderr.write("请输入操作 (如 1 2, y 确认, q 退出): ");
 			const line = readLine();
 			if (line === null) break;
 			const text = line.trim();
-			if (text === "") break;
 			if (text === "q" || text === "quit" || text === "exit") {
 				logUi("已退出派生。");
 				process.exit(130);
+			}
+			if (text === "y" || text === "yes" || text === "ok" || text === "done" || text === "") {
+				const selectedNames = manifest.features.filter((f) => chosen.has(f.id)).map((f) => f.name);
+				const summary = selectedNames.length > 0 ? selectedNames.join("、") : "仅核心底座(无业务模块)";
+				process.stderr.write(`\n确认选用模块【${summary}】并开始创建项目? [Y/n]: `);
+				const confirmLine = readLine();
+				const confirmText = confirmLine ? confirmLine.trim().toLowerCase() : "";
+				if (confirmText === "n" || confirmText === "no") {
+					render();
+					continue;
+				}
+				break;
 			}
 			if (text === "all") {
 				manifest.features.forEach((f) => {
 					chosen.add(f.id);
 				});
+				render();
 			} else if (text === "none" || text === "minimal") {
 				chosen.clear();
+				render();
 			} else {
 				for (const piece of text.split(/[\s,]+/).filter(Boolean)) {
 					const n = Number(piece);
@@ -422,14 +435,14 @@ if (has("pick")) {
 					const byId = !feature && manifest.features.find((f) => f.id === piece);
 					const target = feature ?? byId;
 					if (!target) {
-						logUi(`  忽略无效编号/模块 id:${piece}`);
+						logUi(`  忽略无效编号/模块 id: ${piece}`);
 						continue;
 					}
 					if (chosen.has(target.id)) chosen.delete(target.id);
 					else chosen.add(target.id);
 				}
+				render();
 			}
-			render();
 		}
 	}
 	const order = manifest.features.filter((f) => chosen.has(f.id)).map((f) => f.id);

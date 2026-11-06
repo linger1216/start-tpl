@@ -58,8 +58,8 @@ function LoginPage() {
 	/** 服务端给的开关(见上面 `beforeLoad`):`false` = 不画验证码栏、提交不带 token */
 	const { captchaEnabled } = Route.useRouteContext();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
-	const [email, setEmail] = useState("admin@example.com");
-	const [password, setPassword] = useState("Passw0rd123");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [submitting, setSubmitting] = useState(false);
 	// proof token 由 `<Captcha />` 解题后给;提交登录时随请求头一起走,服务端消费一次。

@@ -56,7 +56,7 @@ export function SettingsParametersDetail({
 						</DetailRow>
 						<DetailRow label="类型">{PARA_TYPE_META[row.type].label}</DetailRow>
 						<DetailRow label="分组">{row.group || "—"}</DetailRow>
-						<DetailRow label="可编辑">{row.editable ? "允许(editable = 1)" : "代码内置,不可改"}</DetailRow>
+						<DetailRow label="可编辑">{row.editable ? "允许" : "已锁定,不可修改或删除"}</DetailRow>
 						<DetailRow label="说明">
 							<span className="text-sm">{row.remark || "—"}</span>
 						</DetailRow>

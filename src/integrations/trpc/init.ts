@@ -9,6 +9,7 @@ import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
 import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
+import { guestMayQuery, SHARE_GUEST, SHARE_GUEST_SHELL_QUERIES } from "#/lib/share-access";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -59,7 +60,13 @@ export const loggingMiddleware = t.middleware(async ({ path, type, next, getRawI
 });
 
 /** 直调 caller 可以注入的用户(脚本 / 测试);HTTP 路径永远拿不到它,只能靠会话 */
-type InjectedUser = { id: string; name: string; isSuper?: boolean };
+type InjectedUser = {
+	id: string;
+	name: string;
+	isSuper?: boolean;
+	/** 访客身份时命中令牌的允许页面(`getCurrentUser()` 的访客兜底带回来);普通用户没有 */
+	sharePaths?: readonly string[];
+};
 
 /** 请求来源 IP;没有请求上下文(脚本 / 单测)返回 null */
 function clientIp(): string | null {
@@ -87,7 +94,16 @@ const requireUser = t.middleware(async ({ ctx, next }) => {
 	}
 	const user = await getCurrentUser();
 	if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "请先登录" });
-	return next({ ctx: { ...ctx, user: { id: user.id, name: user.name } } });
+	return next({
+		ctx: {
+			...ctx,
+			user: {
+				id: user.id,
+				name: user.name,
+				...(user.sharePaths ? { sharePaths: user.sharePaths } : {}),
+			},
+		},
+	});
 });
 
 /**
@@ -153,10 +169,24 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
  * 与数组语义一一对应(不是"全都要")。这里不再取 `effectiveMenusFor`,因为那要**译成菜单树**,
  * 而接口守卫只关心"这个码放不放行",少一层翻译就少一处漂移。
  */
-const permMiddleware = t.middleware(async ({ ctx, path, next }) => {
+const permMiddleware = t.middleware(async ({ ctx, path, type, next }) => {
+	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
+	// 访客特判(外链 share token,见 `lib/share-access.ts` 与 doc/外链分享.md):
+	// **只读** + 只放行「令牌允许页面」的读接口。必须抢在 `!mapped` 早退**之前** ——
+	// 对访客,"登录即可"不等于"访客即可",未登记的接口一律拒绝(否则 user.list 这类外壳读口全开)。
+	if (user?.id === SHARE_GUEST.id) {
+		if (type !== "query") {
+			throw new TRPCError({ code: "FORBIDDEN", message: "外链访客只读,不能执行该操作" });
+		}
+		// 外壳级读接口放行;页面数据按实际登记的页面路径和令牌前缀共同判定。
+		if (SHARE_GUEST_SHELL_QUERIES.includes(path)) return next();
+		if (guestMayQuery(user.sharePaths ?? [], path)) {
+			return next();
+		}
+		throw new TRPCError({ code: "FORBIDDEN", message: "外链访客只能读取令牌允许页面的数据" });
+	}
 	const mapped = PERM_BY_PATH[path];
 	if (!mapped) return next();
-	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
 	// 超级管理员短路:**两条**都给放行。
 	//   - `user.isSuper` 是测试通道:`callerAs({ isSuper: true })` 不造库里的 g 行,靠这一行免去
 	//     "测试里也要造角色授权"的样板 —— 但生产里 ctx.user 永远没有 isSuper(getCurrentUser()
@@ -196,7 +226,11 @@ const dataScopeMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	// 这一步抢在 buildPolicyCtx 之前,免得给 admin 拼一遍「我+我的角色+我的部门+子孙」浪费一次 IO,
 	// 同时保证 admin 看数据范围预览面板也是「全部」,不是他本人的部门子集。
 	// `user.isSuper` 与 `permMiddleware` 同口径:测试通道的短路,生产里 ctx.user 没这字段。
-	const adminBypass = user ? user.isSuper === true || (await isAdminUser(user.id)) : false;
+	// 访客与 admin 同口径放行:它没有角色没有部门,部门口径只会把允许页面筛成空 ——
+	// 行级收口对访客没有意义(它进得来哪个页面,守卫和 permMiddleware 已经管过了)。
+	const adminBypass = user
+		? user.isSuper === true || user.id === SHARE_GUEST.id || (await isAdminUser(user.id))
+		: false;
 	let policyCtx: PolicyCtx | null = null;
 	const scope: DataScopeFn = async (resource) => {
 		if (adminBypass) return undefined;

@@ -35,7 +35,13 @@ import { getParaBool } from "#/lib/sys-para";
  * - 因此 `https://*.localhost` 能覆盖 portless 的所有 `https://xxx.localhost`。
  * - 没有 `://` 的纯主机 glob(`*.localhost`)只比 host 不比 scheme,**不建议**用。
  */
-const DEFAULT_TRUSTED_ORIGINS = ["http://localhost:3000", "https://*.localhost"];
+const DEFAULT_TRUSTED_ORIGINS = [
+	"http://localhost:*",
+	"http://127.0.0.1:*",
+	"http://localhost:3000",
+	"http://127.0.0.1:3000",
+	"https://*.localhost",
+];
 
 /**
  * 从请求头里取人机验证的 proof token。
@@ -59,6 +65,11 @@ function loadTrustedOrigins(): string[] {
 		.split(",")
 		.map((s) => s.trim())
 		.filter(Boolean);
+	if (process.env.BETTER_AUTH_URL) {
+		try {
+			extra.push(new URL(process.env.BETTER_AUTH_URL).origin);
+		} catch {}
+	}
 	// 去重 + 保序,避免相同 origin 在列表里出现两次。
 	const seen = new Set<string>();
 	const out: string[] = [];

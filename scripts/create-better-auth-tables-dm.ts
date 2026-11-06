@@ -121,6 +121,21 @@ const STATEMENTS: string[] = [
 	)`,
 	`create index if not exists "idx_sys_rate_limit_expires" on ${S}."sys_rate_limit" ("expires_at")`,
 
+	// ── sys_share_token(外链访客令牌;用户管理 ▸ 访客管理,见 doc/外链分享.md)────
+	// 凭证表硬删(无 deleted_at,与 sys_rate_limit 同档,见 lib/soft-delete.ts 的运维表口径)。
+	`create table if not exists ${S}."sys_share_token" (
+		"id" varchar(32) not null,
+		"token" varchar(64) not null,
+		"remark" varchar(255) default '' not null,
+		"allowed_paths" text not null,
+		"expires_at" datetime,
+		"enabled" tinyint default 1 not null,
+		"created_at" datetime default current_timestamp not null,
+		"updated_at" datetime default current_timestamp not null,
+		primary key ("id")
+	)`,
+	`create unique index if not exists "uk_sys_share_token" on ${S}."sys_share_token" ("token")`,
+
 	// ── 权限四表(部门 / 角色;形状见 src/db/data-base-schema.ts)──
 	`create table if not exists ${S}."sys_dept" (
 		"id" varchar(32) not null,

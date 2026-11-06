@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -16,7 +17,15 @@ import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
-import { PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
+import {
+	formatParaJson,
+	PARA_TYPE,
+	PARA_TYPE_META,
+	PARA_TYPES,
+	PARA_VALUE_MAX,
+	type ParaType,
+	validateParaValue,
+} from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
 export type ParameterFormPayload = {
@@ -58,6 +67,7 @@ export function SettingsParametersForm({
 	const [remark, setRemark] = useState("");
 	const [status, setStatus] = useState(true);
 	const [editable, setEditable] = useState(true);
+	const valueDrafts = useRef<Partial<Record<ParaType, string>>>({});
 
 	/**
 	 * 类型下拉的 `{ value, label }` 列表 —— **同一份**同时喂给 `<Select items>` 和 `<SelectItem>`。
@@ -69,6 +79,7 @@ export function SettingsParametersForm({
 
 	useEffect(() => {
 		if (!open) return;
+		valueDrafts.current = {};
 		if (creating) {
 			setKey("");
 			setValue("");
@@ -91,7 +102,9 @@ export function SettingsParametersForm({
 	const effectiveType = creating ? type : (row?.type ?? PARA_TYPE.STRING);
 	const effectiveRowId = row?.id ?? null;
 	const problem = validateParaValue(effectiveType, value);
-	const isJsonLike = effectiveType === PARA_TYPE.JSON;
+	const valueDescription = problem ? "cfg-value-error" : "cfg-value-hint";
+	const formattedJson = effectiveType === PARA_TYPE.JSON && !problem ? formatParaJson(value) : null;
+	const formatTooLong = formattedJson !== null && formattedJson.length > PARA_VALUE_MAX;
 
 	function handleSubmit() {
 		if (problem) return;
@@ -154,17 +167,25 @@ export function SettingsParametersForm({
 								<Select
 									items={typeItems}
 									value={String(type)}
-									// 换类型时给一个该类型合法的默认值(如 bool → "true"、int → "1"),
-									// 否则旧值直接挂在新的校验上,保存键就会一直灰着
 									onValueChange={(next) => {
 										const nextType = Number(next) as ParaType;
+										valueDrafts.current[type] = value;
 										setType(nextType);
-										if (validateParaValue(nextType, value) !== null) {
-											setValue(nextType === PARA_TYPE.BOOL ? "true" : nextType === PARA_TYPE.INT ? "1" : "");
-										}
+										setValue(
+											valueDrafts.current[nextType] ??
+												(validateParaValue(nextType, value) === null
+													? value
+													: nextType === PARA_TYPE.BOOL
+														? "false"
+														: nextType === PARA_TYPE.INT
+															? "0"
+															: nextType === PARA_TYPE.JSON
+																? "{}"
+																: ""),
+										);
 									}}
 								>
-									<SelectTrigger id="cfg-type" size="sm" className="w-full">
+									<SelectTrigger id="cfg-type" size="form" className="w-full">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -179,11 +200,11 @@ export function SettingsParametersForm({
 						</div>
 					) : null}
 
-					<DetailRow label="参数值" htmlFor="cfg-value" hint={problem ? undefined : PARA_TYPE_META[effectiveType].hint}>
+					<DetailRow label="参数值" htmlFor={effectiveType === PARA_TYPE.BOOL ? undefined : "cfg-value"}>
 						{effectiveType === PARA_TYPE.BOOL ? (
 							// 布尔参数:开关,不是打字 —— 要改的只有 true / false 两个可能
 							<Switch
-								aria-label="参数值(布尔)"
+								label={value === "true" ? "参数值：开启" : "参数值：关闭"}
 								checked={value === "true"}
 								onCheckedChange={(checked) => setValue(checked ? "true" : "false")}
 							/>
@@ -195,34 +216,64 @@ export function SettingsParametersForm({
 								inputMode="numeric"
 								min={0}
 								step={1}
+								aria-invalid={Boolean(problem)}
+								aria-describedby={valueDescription}
 								value={value}
 								translate="no"
 								spellCheck={false}
 								className={`font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
-						) : isJsonLike ? (
-							<Textarea
-								id="cfg-value"
-								value={value}
-								translate="no"
-								spellCheck={false}
-								rows={5}
-								placeholder={'{"a":1} 或 ["a","b"]'}
-								className={`min-w-0 break-all font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
-								onChange={(event) => setValue(event.target.value)}
-							/>
+						) : effectiveType === PARA_TYPE.JSON ? (
+							<div className="min-w-0 space-y-2">
+								<Textarea
+									id="cfg-value"
+									value={value}
+									translate="no"
+									spellCheck={false}
+									rows={5}
+									aria-invalid={Boolean(problem)}
+									aria-describedby={valueDescription}
+									placeholder={'{"a":1} 或 ["a","b"]'}
+									className="max-h-64 min-w-0 overflow-auto break-all font-mono text-xs"
+									onChange={(event) => setValue(event.target.value)}
+								/>
+								<div className="flex items-center justify-between gap-3">
+									<ActionButton
+										disabled={Boolean(problem) || pending || formatTooLong}
+										onClick={() => formattedJson !== null && setValue(formattedJson)}
+									>
+										格式化 JSON
+									</ActionButton>
+									<span className="text-xs tabular-nums text-muted-foreground">
+										{value.length} / {PARA_VALUE_MAX}
+									</span>
+								</div>
+								{formatTooLong ? (
+									<p className="text-xs text-muted-foreground">格式化后超过长度上限，保留原文即可保存。</p>
+								) : null}
+							</div>
 						) : (
 							<Input
 								id="cfg-value"
 								value={value}
+								aria-invalid={Boolean(problem)}
+								aria-describedby={valueDescription}
 								translate="no"
 								spellCheck={false}
 								className={`font-mono text-xs ${problem ? "border-destructive/60" : ""}`}
 								onChange={(event) => setValue(event.target.value)}
 							/>
 						)}
-						{problem ? <p className="text-xs text-destructive">{problem}</p> : null}
+						{problem ? (
+							<p id="cfg-value-error" role="alert" className="text-xs text-destructive">
+								{problem}
+							</p>
+						) : (
+							<p id="cfg-value-hint" className="text-xs leading-5 text-muted-foreground">
+								{PARA_TYPE_META[effectiveType].hint}
+							</p>
+						)}
 					</DetailRow>
 
 					<DetailRow label="分组" htmlFor="cfg-group">
@@ -246,10 +297,10 @@ export function SettingsParametersForm({
 
 					{/* 状态 / 可编辑是这个表的真实列(列表里都有),所以表单里也要能改 */}
 					<div className="flex flex-col gap-1">
-						<DetailRow label="启用">
+						<DetailRow label="启用" hint="仅记录管理状态,不影响参数读取和生效。">
 							<Switch aria-label="启用" checked={status} onCheckedChange={setStatus} />
 						</DetailRow>
-						<DetailRow label="允许修改">
+						<DetailRow label="允许修改" hint={editable ? undefined : "关闭后，该参数不能通过界面修改或删除。"}>
 							<Switch aria-label="允许修改" checked={editable} onCheckedChange={setEditable} />
 						</DetailRow>
 					</div>

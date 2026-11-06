@@ -1,26 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   设计系统 —— 实现见 DESIGN.md(Inspired by Airtable)
-   白底画布 + 深海军蓝文字 + Airtable Blue 强调色;Swiss-precision 排版。
+   设计系统 —— 视觉规范见 DESIGN.md「公文·印鉴」。
+   暖纸白画布、墨色文字与低饱和黛蓝强调色;印泥红只用于章与批注。
 
-   品牌色 → 语义 token 映射(DESIGN.md §2 的 7 个角色):
-
-     DESIGN.md 角色              值          本文件里的语义 token
-     background                #ffffff     --background / --popover / --sidebar
-     foreground                #181d26     --foreground / --card-foreground …
-     accent (Airtable Blue)    #1b61c9     --primary / --ring / --sidebar-primary
-     surface                   #f8fafc     --card / --muted / --secondary / --accent
-     muted (次要文字)           #333333     --muted-foreground
-     border                    #e0e2e6     --border / --input / --sidebar-border
-     accent-secondary (Success) #006400    --success / --success-fg
-
-   规范未覆盖、但功能上必需的三项(视作功能色,不是品牌色,改前先读 DESIGN.md §10):
-     --warn-* / --danger-*   规范没有警示色与危险色,但状态徽章、表单校验需要
-     --destructive           错误态,与 --danger 同源
-     --chart-1..5            分类图表调色板,规范未定义
-
-   注意:DESIGN.md §2 里给的是「可直接复制」的 --color-* 变量名,与 Tailwind 由
-   @theme 生成的 --color-accent(= shadcn 的浅色 hover 面,非品牌蓝)同名冲突,
-   所以这里统一落到语义 token,组件侧继续用 bg-primary / text-foreground 这类工具类。
+   品牌原色和功能色定义在下方 :root / .dark;组件使用语义 token,
+   例如 bg-background、text-foreground、bg-primary 和 text-muted-foreground。
+   状态使用 success / warn / danger,不要用点缀色替代告警语义。
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @import 'tailwindcss';
@@ -34,7 +18,7 @@
   --paper: #f7f5f0;             /* 画布:暖纸白(bolder:纸/卡对比拉满,"纸叠纸"一眼可读) */
   --paper-raised: #ffffff;      /* 卡面:比画布白一档(纸叠纸) */
   --paper-panel: #f4f2ee;       /* 面板:侧栏 / 表头 / 次级区 */
-  --ink: #1a1a18;               /* 墨:正文与主按钮 */
+  --ink: #1a1a18;               /* 墨:正文 */
   --ink-soft: #4a463f;          /* 墨的次级(次要文字) */
   --line: #d9d5cd;              /* 纸线:1px 分隔与控件边 */
   --seal: oklch(0.5 0.11 38);   /* 印泥红:仅 章 / 批注竖线 / 章形 logo */
@@ -49,9 +33,8 @@
      这里给出 6 个**低饱和**色相(oklch chroma 0.086–0.135,约 9%–13% 彩度,
      远低于 Material 的 0.18+ 鲜艳档),用来做**有含义的配色编码**而不是装饰:
 
-       ① 一级模块配色编码 —— 侧边栏 / 面包屑 / 工作台入口各认一色,扫一眼就知道在哪;
-       ② 指标卡与分类标签 —— 同一张表里的不同口径用不同色相区分;
-       ③ 状态强调 —— 与 --success / --warn / --danger 互补,不做告警语义。
+       ① 指标卡与分类标签 —— 同一张表里的不同口径用不同色相区分;
+       ② 状态强调 —— 与 --success / --warn / --danger 互补,不做告警语义。
 
      每个色相四个角色(务必配对使用):
        --hue-X        实体色(图标底 / 进度条 / 小圆点)

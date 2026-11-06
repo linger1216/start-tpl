@@ -168,6 +168,7 @@ export function actionsColumn<TRow extends MockRow>({
 	extra,
 	onView,
 	viewLabel = "详情",
+	viewDisabled,
 	onEdit,
 	onDelete,
 	disabled,
@@ -178,6 +179,8 @@ export function actionsColumn<TRow extends MockRow>({
 	onView?: (row: TRow) => void;
 	/** 查看按钮文案 —— 通知页的语义是「打开」,默认「详情」 */
 	viewLabel?: string;
+	/** 逐行判断查看动作是否可用,不影响编辑和删除。 */
+	viewDisabled?: (row: TRow) => boolean;
 	onEdit?: (row: TRow) => void;
 	onDelete?: (row: TRow) => void;
 	/**
@@ -196,7 +199,11 @@ export function actionsColumn<TRow extends MockRow>({
 		cell: ({ row }) => (
 			<div className="flex items-center gap-3">
 				{extra?.(row.original)}
-				{onView ? <ActionButton onClick={() => onView(row.original)}>{viewLabel}</ActionButton> : null}
+				{onView ? (
+					<ActionButton disabled={viewDisabled?.(row.original)} onClick={() => onView(row.original)}>
+						{viewLabel}
+					</ActionButton>
+				) : null}
 				{onEdit ? (
 					<ActionButton disabled={disabled?.(row.original)} onClick={() => onEdit(row.original)}>
 						编辑
