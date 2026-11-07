@@ -73,7 +73,7 @@ export function SettingsMenusPage() {
 				setValues(menuFormValues({ ...(byId.get(row.id) as MenuTreeNode), ...row }));
 				toast.success(`已保存「${row.name}」`);
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -83,7 +83,7 @@ export function SettingsMenusPage() {
 				await invalidate();
 				if (outcome.updated > 0) toast.success("已调整顺序");
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -102,7 +102,7 @@ export function SettingsMenusPage() {
 				});
 				toast.success(`已新增「${row.name}」,改完记得保存`);
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 

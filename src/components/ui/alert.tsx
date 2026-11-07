@@ -40,9 +40,7 @@ export function Alert({
 	const tone = VARIANT[variant];
 	return (
 		<div className={cn("border-l-2 pl-2.5", tone.line, className)}>
-			{title ? (
-				<span className={cn("block text-[10px] font-medium tracking-[0.05em]", tone.title)}>{title}</span>
-			) : null}
+			{title ? <span className={cn("block text-[10px] font-medium tracking-wider", tone.title)}>{title}</span> : null}
 			<div className={cn("text-sm leading-relaxed text-foreground", title && "mt-0.5")}>{children}</div>
 		</div>
 	);

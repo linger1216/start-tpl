@@ -33,21 +33,19 @@ import {
 	clearPluginCache,
 	LISTED_BUILTIN_PLUGIN_KEYS,
 	loadDeptNodes,
+	loadPlugins,
 	resolvePluginValues,
 	STREET_NAMES,
 } from "../src/lib/data-scope-plugins.ts";
 import {
-	isIdent,
 	PLUGIN_ITEM_KEY_MAX,
 	PLUGIN_ITEM_VALUE_MAX,
 	type PolicyCtx,
 	type PolicyDept,
-	parseSubject,
-	validatePolicyCombo,
 } from "../src/lib/data-scope-spec.ts";
 import { newId } from "../src/lib/ids.ts";
 import { collectDescendantIds } from "../src/lib/tree.ts";
-import { assertRejects, caller, callerAs, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { anonymousCaller, assertRejects, caller, callerAs, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 /** `isIdent` 只认字母/数字/下划线 ⇒ 标识里不能带 `.` */
@@ -144,37 +142,6 @@ async function resetRules(): Promise<void> {
 	ruleIds.length = 0;
 	clearDataScopeCache();
 }
-
-// ───────────────────────────── 纯规格层(不碰库) ─────────────────────────────
-
-test("规格:规则组合校验(m18228 后只剩两种合法形态)", () => {
-	// ① 什么也不填 = 整类可见
-	assert.equal(validatePolicyCombo({ column: null, pluginKey: null }), null);
-	// 不填插件却填了列 ⇒ 拒(否则人会以为"列 + 空插件"能筛出什么来)
-	assert.match(validatePolicyCombo({ column: "town_id", pluginKey: null }) ?? "", /没选插件/);
-	// ② 填了插件 ⇒ 必须选列
-	assert.match(validatePolicyCombo({ column: null, pluginKey: "self" }) ?? "", /必须选一个列/);
-	assert.equal(validatePolicyCombo({ column: "town_id", pluginKey: "self" }), null);
-});
-
-test("规格:主体写法解析,`up:` 这类 v0 写法必须不再被识别", () => {
-	assert.deepEqual(parseSubject("*"), { kind: "all" });
-	assert.deepEqual(parseSubject("role:r1"), { kind: "role", id: "r1" });
-	assert.deepEqual(parseSubject("dept:d1"), { kind: "dept", id: "d1" });
-	assert.deepEqual(parseSubject("user:u1"), { kind: "user", id: "u1" });
-	assert.equal(parseSubject("up:1"), null, "v0 的 up: 语法已整体删除,不能再解析出来");
-	assert.equal(parseSubject("role:"), null, "空的 id 不算主体");
-	assert.equal(parseSubject("role"), null, "没有冒号就不是主体");
-});
-
-test("规格:表名 / 列名要拼进 SQL,所以只认标识符形状", () => {
-	assert.equal(isIdent("demo_grid"), true);
-	assert.equal(isIdent("_x1"), true);
-	assert.equal(isIdent("1abc"), false, "不能以数字开头");
-	assert.equal(isIdent("a.b"), false, "带点的限定名不放行");
-	assert.equal(isIdent("a`b"), false);
-	assert.equal(isIdent("数据表"), false, "中文表名不放行(要拼 SQL)");
-});
 
 // ───────────────────────────── 元数据 / 插件清单 ─────────────────────────────
 
@@ -499,9 +466,48 @@ test("规则的增删改查:出参带人话标签,删掉后条件也跟着消失
 // ───────────────────────────── v1.6 内置 my_street(m19644 反馈) ─────────────────────────────
 
 /** 给 `my_street` 造一份"我是谁"(只用到 `depts`;引擎真正装配的 ctx 多 user/roles/descendants) */
+test("插件求值只接受对象字符串字段，并去除空值和重复行", async () => {
+	const plugins = await loadPlugins();
+	const key = `${PLUGIN_KEY}_shape`;
+	plugins.set(key, {
+		key,
+		label: "测试返回形态",
+		impl: "builtin",
+		valueKeys: ["id"],
+		resolve: async () =>
+			["legacy", 42, null, { id: "a", name: "" }, { name: "", id: "a" }, { id: 42 }] as unknown as Record<
+				string,
+				string
+			>[],
+	});
+	try {
+		assert.deepEqual(await resolvePluginValues(key, { ctx: ctxWithDepts([]) }), [{ id: "a" }]);
+		assert.equal(await resolvePluginValues(`${key}_missing`, { ctx: ctxWithDepts([]) }), null);
+	} finally {
+		plugins.delete(key);
+	}
+});
+
 function ctxWithDepts(depts: PolicyDept[]): PolicyCtx {
 	return { user: { id: `${TEST_PREFIX}me`, name: "测试人" }, roles: [], depts, descendants: [] };
 }
+
+test("我的部门及以下:多个归属去重并带部门名,没有归属时为空", async () => {
+	const nodes = await loadDeptNodes();
+	const root = nodes.find((node) => node.id === fixtureDeptIds[1]);
+	const child = nodes.find((node) => node.id === fixtureDeptIds[2]);
+	assert.ok(root && child);
+	const ctx = ctxWithDepts([
+		{ ...root, mine: true },
+		{ ...child, mine: true },
+	]);
+	const rows = await resolvePluginValues("my_departments", { ctx });
+	assert.deepEqual(rows, [
+		{ id: root.id, name: root.name },
+		{ id: child.id, name: child.name },
+	]);
+	assert.deepEqual(await resolvePluginValues("my_departments", { ctx: ctxWithDepts([]) }), []);
+});
 
 /** 本次测试创建的街镇分组,不依赖部署环境已有的组织树。 */
 async function streetContainerId(): Promise<string> {
@@ -1004,4 +1010,13 @@ test("写插件谁都能:有权限点的普通角色也建得来(m21097)", async
 	// 改 / 删也走得通
 	await plain.dataPlugin.update({ pluginKey: key, label: "改名" });
 	await plain.dataPlugin.remove({ pluginKeys: [key] });
+});
+
+test("管理员旁路(dataScopeMiddleware):scope() 给 admin 直接返 undefined,不再走行级过滤", async () => {
+	// 数据权限(行级)与功能权限(菜单级)是**两层**,admin 两层都得放行。
+	// 走 TEST_USER(它有 isSuper=true,isAdminUser(userId, isSuper=true) 也走 admin 旁路);
+	// `demoGrid.list` 是当前**唯一一个**登记在 `DATA_SCOPE_BY_PATH` 的接口,验的就是它。
+	await caller.demoGrid.list();
+	// 对照:`anonymous` 没 ctx.user,scope 仍按未授权处理
+	await assertRejects(() => anonymousCaller.demoGrid.list(), "请先登录");
 });

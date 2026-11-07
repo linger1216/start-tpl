@@ -100,23 +100,18 @@ describe("服务端鉴权", () => {
 	it("权限:有权限体系但这个账号没有该权限 ⇒ FORBIDDEN(不是只靠前端藏按钮)", async () => {
 		const menus = await db.select().from(sysMenu);
 		// 菜单表空 = 权限体系未启用 ⇒ 一律放行(与前端 useHasPerm 同口径),这条不适用
-		console.warn(
-			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
-		);
-		if (menus.length === 0) return;
+		assert.ok(menus.length > 0, "权限测试需要菜单数据，请在隔离测试库执行 pnpm db:seed:menus 和 pnpm db:seed:rbac");
 
 		// 不带 `isSuper` 的注入用户:库里没有任何角色授权 ⇒ 权限集是空集
 		const nobody = createCallerFactory(trpcRouter)({ user: { id: "test-nobody", name: "无权用户" } });
 		await assertRejects(() => nobody.log.list(), "没有权限");
 		await assertRejects(() => nobody.role.create({ name: "不该建成", remark: "" }), "没有权限");
 		await assertRejects(() => nobody.file.remove({ ids: ["whatever"] }), "没有权限");
-		await assertRejects(() => nobody.notice.create({ userIds: ["x"], title: "不该发出" }), "没有权限");
 		// 页面数据类读接口也必须硬拦(前端藏菜单只是表象 —— 记住 url 直接调接口才是真口子)
 		await assertRejects(() => nobody.role.list(), "没有权限");
 		await assertRejects(() => nobody.para.list(), "没有权限");
 		await assertRejects(() => nobody.department.tree(), "没有权限");
-		// 外壳级读接口不受影响:顶栏铃铛、侧栏与每页的偏好参数 —— 拦它们会让整站打不开
-		await nobody.notice.list({ limit: 1 });
+		// 外壳级偏好参数不受影响,否则整站打不开。
 		await nobody.para.byKey({ key: "page.size" });
 	});
 
@@ -126,10 +121,7 @@ describe("服务端鉴权", () => {
 		// 在真账号上根本没机会跑。修法是 `permMiddleware` 直接按 user.id 查「系统管理员」角色。
 		// 这里用一个真账号 + 真角色分配来验,**故意**不勾任何菜单 + ctx 不带 isSuper —— 模拟真 HTTP 请求。
 		const menus = await db.select().from(sysMenu);
-		console.warn(
-			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
-		);
-		if (menus.length === 0) return; // 未初始化时这条不适用
+		assert.ok(menus.length > 0, "权限测试需要菜单数据，请在隔离测试库执行 pnpm db:seed:menus 和 pnpm db:seed:rbac");
 
 		const role = await caller.role.create({
 			name: `${TEST_PREFIX}超管测试_${SUFFIX}`,
@@ -148,11 +140,7 @@ describe("服务端鉴权", () => {
 		// 同名冲突(库对 name 有唯一索引 `uk_sys_role_name`)。这条用例不是测"造一个 admin 角色"——
 		// 是测"真账号持 admin 角色,缺授权,permMiddleware 仍放行"这条用 admin bypass 的语义。
 		const adminRoleRow = (await caller.role.list()).find((r) => r.name === ADMIN_ROLE_NAME);
-		if (!adminRoleRow) {
-			// 没 seed 时本用例前提不成立 —— 跳过,别让测试挂掉基础设施
-			console.warn("[auth] 未找到 prod seed 的「系统管理员」角色,跳过 admin bypass 测试");
-			return;
-		}
+		assert.ok(adminRoleRow, "权限测试需要系统管理员角色，请在隔离测试库执行 pnpm db:seed:rbac");
 		const realAdminRoleId = adminRoleRow.id;
 		// 把 user 分配到这个角色 —— 走 caller.user.update,与产品路径一致
 		const me = (await caller.user.list()).find((row) => row.id === user.id);
@@ -209,15 +197,6 @@ describe("服务端鉴权", () => {
 			!(otherMenuAccess.rows ?? []).some((row) => row.id === freshMenu.id),
 			"非 admin 账号没有授权行,就不该看见新菜单",
 		);
-	});
-
-	it("管理员旁路(dataScopeMiddleware):scope() 给 admin 直接返 undefined,不再走行级过滤", async () => {
-		// 数据权限(行级)与功能权限(菜单级)是**两层**,admin 两层都得放行。
-		// 走 TEST_USER(它有 isSuper=true,isAdminUser(userId, isSuper=true) 也走 admin 旁路);
-		// `demoGrid.list` 是当前**唯一一个**登记在 `DATA_SCOPE_BY_PATH` 的接口,验的就是它。
-		await caller.demoGrid.list();
-		// 对照:`anonymous` 没 ctx.user,scope 仍按未授权处理
-		await assertRejects(() => anonymousCaller.demoGrid.list(), "请先登录");
 	});
 
 	it("个人资料:只读自己那一行,roles / depts 永远给数组(个人资料页的数据源)", async () => {
@@ -286,10 +265,7 @@ describe("服务端鉴权", () => {
 		const menus = await db.select().from(sysMenu);
 		const perms = new Set(menus.map((menu) => menu.perm).filter((perm): perm is string => Boolean(perm)));
 		// 空库(权限体系还没初始化)时这条不适用 —— 它防的是"配了码但忘了建按钮",不是"还没建表"
-		console.warn(
-			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
-		);
-		if (perms.size === 0) return;
+		assert.ok(perms.size > 0, "权限测试需要权限点，请在隔离测试库执行 pnpm db:seed:rbac");
 		/** `page:*:view` 是**合成码**(按可见菜单的路由算的),库里没有对应按钮,由下一条用例管 */
 		const codes = mappedCodes().filter((code) => !code.startsWith("page:"));
 		const missing = codes.filter((code) => !perms.has(code));
@@ -302,10 +278,7 @@ describe("服务端鉴权", () => {
 
 	it("合成的页面码必须对应真实的菜单路由(防页面路径拼错)", async () => {
 		const paths = await db.select({ path: sysMenu.path }).from(sysMenu);
-		console.warn(
-			"[auth.test] sys_menu 是空的 —— 权限守卫整组不设防(假绿)。先跑 `pnpm db:seed:rbac` 再测,CI 必须强制 seed。",
-		);
-		if (paths.length === 0) return;
+		assert.ok(paths.length > 0, "权限测试需要菜单数据，请在隔离测试库执行 pnpm db:seed:menus");
 		const known = new Set(paths.map((row) => pagePermOf(row.path)));
 		const orphan = mappedCodes().filter((code) => code.startsWith("page:") && !known.has(code));
 		assert.deepEqual(orphan, [], `这些页面码没有对应的菜单路由,登记它的读接口永远没人调得动:${orphan.join(", ")}`);

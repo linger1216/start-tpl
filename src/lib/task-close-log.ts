@@ -19,7 +19,7 @@ import { statusLabelOf, type WorkflowStatus } from "./task-close-spec";
 export const LOCKED_STATUS = "pending";
 export const LOCKED_STATUS_LABEL = "待审批";
 
-/** 12 个事件码 —— **加事件要同时改**:这里 + `detail` 类型 + 界面注册表 + `doc/task-close.md` */
+/** 12 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
 export const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -63,34 +63,6 @@ export function logCategoryOf(event: string): TaskLogCategory | null {
 	const [head] = event.split(".");
 	return head === "task" || head === "action" || head === "comment" || head === "member" ? head : null;
 }
-
-/** 需要按事件塞进 `tc_log.detail` 的补充信息(判别联合:每个事件一个形状) */
-export type TaskLogDetail = {
-	"task.create": { workflowId: string; members: Array<{ userId: string; role: string; isPrimary: boolean }> };
-	"task.update": {
-		fields: Array<{ key: string; from: string | number | null; to: string | number | null }>;
-		payloadChanged: boolean;
-	};
-	"task.remove": null;
-	"task.transit": { who: string[] };
-	"action.create": {
-		/** 这次审批**想去的**状态;征询为 null(「想去哪」不进 to_status,to_status 只记真实的状态变化) */
-		intendedTo: string | null;
-		handleId: string;
-		isLocking: boolean;
-		parentActionId: string | null;
-		sequence: number;
-	};
-	"action.respond": { approved: boolean; reason: string | null; actionStatus: string };
-	/** 回复征询 —— 意见直接落成一条评论(`commentId` / `attachments` 给动态流直接渲染) */
-	"action.reply": { consultOf: string; commentId: string; attachments: number };
-	"comment.create": { attachments: number };
-	"comment.remove": null;
-	"member.add": { role: string; isPrimary: boolean };
-	"member.remove": { role: string };
-	/** `from` = 转交**前**的主执行人 user id(读取侧给 `target_id` = 转交后的执行人) */
-	"member.transfer": { from: string | null };
-};
 
 /**
  * 一行日志的**读取形状**(router 出参 / 界面入参共用)。

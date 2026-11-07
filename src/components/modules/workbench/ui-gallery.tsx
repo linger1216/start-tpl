@@ -16,8 +16,6 @@
  *    ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。
  */
 
-import { useStore } from "@tanstack/react-store";
-import { Store } from "@tanstack/store";
 import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -108,11 +106,8 @@ import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { formatJson } from "#/lib/format";
-import { formatCode, ID_PATTERN, ID_PREFIX, newId } from "#/lib/ids";
-import { createMockTable } from "#/lib/mock-table";
 import { joinMultiValue, splitMultiValue } from "#/lib/multi-value";
 import { asParaType, PARA_TYPE, PARA_TYPE_META, PARA_TYPES, type ParaType, validateParaValue } from "#/lib/para-spec";
-import type { MockRow } from "#/lib/table";
 import { formatLocalDate, formatLocalDateTime, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -670,19 +665,6 @@ const DEMO_PERMISSIONS: PermissionNode[] = [
 	{ id: "data", name: "数据", children: [{ id: "data:export", name: "导出", kind: "操作" }] },
 ];
 
-/** 假后端表:模块级建一次 → 切走再回来数据还在(与业务页用法一致;刷页面回种子) */
-const demoMockTable = createMockTable<MockRow>([{ id: "ENT-0001", title: "示例记录", status: "未读" }], "ENT");
-
-/** 全局 store 演示:模块级单例，组件内通过 useStore 订阅 */
-const demoStore = new Store({
-	firstName: "Jane",
-	lastName: "Smith",
-});
-
-function selectFullName(state: typeof demoStore.state): string {
-	return `${state.firstName} ${state.lastName}`;
-}
-
 function ModuleGallery() {
 	const [pickedIds, setPickedIds] = useState<string[]>(["d2", "d4"]);
 
@@ -693,10 +675,7 @@ function ModuleGallery() {
 	const [multiValue, setMultiValue] = useState("紧急、待审;hot");
 	const [paraInput, setParaInput] = useState("0");
 	const [paraType, setParaType] = useState<ParaType>(PARA_TYPE.INT);
-	const [demoFirst, setDemoFirst] = useState("");
 
-	const mockRows = demoMockTable((state) => state.rows);
-	const fullName = useStore(demoStore, selectFullName);
 	const paraError = validateParaValue(asParaType(paraType), paraInput);
 
 	return (
@@ -855,13 +834,8 @@ function ModuleGallery() {
 					</div>
 				</Cell>
 
-				<Cell name="ids" hint="主键(nanoid)+ 业务编号;派生项目先改 ID_PREFIX">
-					<div className="space-y-1 font-mono text-xs">
-						<div>newId() → {newId()}</div>
-						<div>formatCode("ENT") → {formatCode("ENT")}</div>
-						<div>ID_PREFIX.ENTITY = {ID_PREFIX.ENTITY}</div>
-						<div>ID_PATTERN = {ID_PATTERN}</div>
-					</div>
+				<Cell name="ids" hint="内部主键使用 nanoid；业务编号由具体业务定义">
+					<code className="font-mono text-xs">newId()</code>
 				</Cell>
 
 				<Cell name="format" hint="空值兜底 / JSON 展示 —— 表格单元格常用">
@@ -915,66 +889,6 @@ function ModuleGallery() {
 					</div>
 				</Cell>
 
-				<Cell name="mock-table" hint="设计期的假后端(zustand):增 / 删,切页面不丢、刷新回种子" wide>
-					<div className="space-y-2">
-						<div className="flex flex-wrap gap-2">
-							<Button
-								size="sm"
-								onClick={() => demoMockTable.getState().insert([{ title: `新记录 ${mockRows.length + 1}` }])}
-							>
-								追加一行
-							</Button>
-							<Button
-								size="sm"
-								variant="outline"
-								onClick={() => demoMockTable.getState().remove(mockRows.slice(0, 1).map((r) => r.id))}
-							>
-								删第一行
-							</Button>
-							<Button
-								size="sm"
-								variant="ghost"
-								onClick={() => demoMockTable.getState().replaceAll([{ title: "只剩我" }])}
-							>
-								覆盖导入
-							</Button>
-						</div>
-						<ul className="space-y-1">
-							{mockRows.map((row) => (
-								<li
-									key={row.id}
-									className="flex items-center gap-2 rounded border border-border bg-card/60 px-3 py-1.5 text-sm"
-								>
-									<code className="font-mono text-xs text-muted-foreground">{row.id}</code>
-									<span className="truncate">{String(row.title ?? "")}</span>
-								</li>
-							))}
-						</ul>
-					</div>
-				</Cell>
-
-				<Cell name="demo-store" hint="全局 store(@tanstack/store)—— useStore(store, selector) 订阅">
-					<div className="space-y-2">
-						<p className="text-sm">
-							firstName = <code className="font-mono text-foreground">{fullName}</code>
-						</p>
-						<div className="flex gap-2">
-							<Input value={demoFirst} onChange={(e) => setDemoFirst(e.target.value)} placeholder="改成别的名字" />
-							<Button
-								size="sm"
-								disabled={!demoFirst.trim()}
-								onClick={() => {
-									demoStore.setState((state) => ({ ...state, firstName: demoFirst.trim() }));
-									setDemoFirst("");
-								}}
-							>
-								写入
-							</Button>
-						</div>
-						<p className="text-xs text-muted-foreground">切到别的 Group 再回来值还在;刷新页面回种子。</p>
-					</div>
-				</Cell>
-
 				<Cell
 					name="auth / auth-client / sys-para / excel(服务端或重依赖)"
 					hint="只给签名 —— 这些不能在浏览器 import"
@@ -1006,7 +920,7 @@ function ModuleGallery() {
 						</div>
 						<div className="space-y-1 font-mono text-xs">
 							<div className="font-sans font-medium text-foreground">lib/excel.ts(重依赖)</div>
-							<div>readSheetTable(buf, opts) / writeSheet(columns, rows, fileName) / cellText(v)</div>
+							<div>writeSheet(columns, rows, fileName) / writeTemplate(columns, fileName)</div>
 							<div className="font-sans text-muted-foreground">
 								依赖 <code className="font-mono">xlsx</code>;业务页都经 `shared/excel-actions` 懒加载它,别在页面直接
 								import。

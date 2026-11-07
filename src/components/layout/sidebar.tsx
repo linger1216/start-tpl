@@ -7,10 +7,9 @@ import { useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { APP_SUBTITLE, APP_TITLE } from "#/lib/app-meta";
 import { parseSidebarCollapseMode, SIDEBAR_MODE_CONFIG_KEY, type SidebarCollapseMode } from "#/lib/sidebar-mode";
-import { useNoticeSse } from "#/lib/use-notice-sse";
 import { cn } from "#/lib/utils";
-import { collectNavGroupIds, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
-import { useNavNodes, useNavTrail } from "./nav-data";
+import { collectNavGroupIds, findNavTrailIn, NAV_ICON_MAP, type NavNode, navNodeContains } from "./nav-config";
+import { useNavNodes } from "./nav-data";
 import { SidebarHeader } from "./sidebar-header";
 
 /** 「我的任务」的菜单 path;红点只挂它与它所在的分组 / 迷你图标上 */
@@ -52,12 +51,11 @@ export function Sidebar({ collapsed, onExpand }: { collapsed: boolean; onExpand?
 	// 「我的任务」红点:当前用户的待办动作数 + 未读任务通知(taskClose.menuBadge,30s 轮询兜底;
 	// 新通知由 SSE 举旗 —— useNoticeSse 在收到 notice.new 时也会失效 taskClose 的查询缓存)
 	const trpc = useTRPC();
-	useNoticeSse();
 	const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });
 	const taskDot = (badgeQuery.data?.count ?? 0) > 0;
 
 	// 当前路径命中的分组链 —— 决定初始展开哪些分支
-	const trail = useNavTrail(pathname);
+	const trail = useMemo(() => findNavTrailIn(nodes, pathname), [nodes, pathname]);
 	const trailIds = useMemo(() => trail.map((n) => n.path ?? n.name), [trail]);
 	/**
 	 * **唯一被选中的菜单路径** —— 命中链末端那一条(`findNavTrailIn` 已按 `path` 最长挑过)。

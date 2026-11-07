@@ -23,9 +23,10 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { MENU_TYPE } from "#/lib/menu-spec";
 import { matchKeyword } from "#/lib/table";
 import { bySortThenName, groupByParent } from "#/lib/tree";
@@ -163,13 +164,13 @@ export function SettingsRolesPage() {
 	const addUserMutation = useMutation(
 		trpc.role.addUser.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const removeUserMutation = useMutation(
 		trpc.role.removeUser.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -183,7 +184,7 @@ export function SettingsRolesPage() {
 				close: () => setCreating(false),
 				message: (row) => `已新增角色「${row.name}」`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -193,14 +194,14 @@ export function SettingsRolesPage() {
 				close: () => dialogs.setEditing(null),
 				message: (row) => `已保存「${row.name}」`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.role.remove.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => dialogs.setPendingDelete(null), message: () => "已删除角色" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

@@ -5,7 +5,7 @@ import { PaginationControl } from "#/components/modules/shared/pagination-contro
 import { DataTable, TableLoadingShell } from "#/components/modules/shared/table-kit";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag";
-import type { MockRow, useAppTable } from "#/lib/table";
+import type { TableRowData, useAppTable } from "#/lib/table";
 
 /**
  * 台账卡 —— 9 个列表页共用的「卡内表格 + 分页」骨架(版式见 `doc/界面约定.md` 的台账布局)。
@@ -17,7 +17,7 @@ import type { MockRow, useAppTable } from "#/lib/table";
  * 批量条本身也收在这里(见下面的 `SelectionBar`):三个页面曾各手写一份「已选 N 条(前三个名字…)
  * + 右侧动作」,连省略号前的空格都对不齐。
  */
-export function LedgerCard<TRow extends MockRow>({
+export function LedgerCard<TRow extends TableRowData>({
 	title,
 	Icon,
 	count,

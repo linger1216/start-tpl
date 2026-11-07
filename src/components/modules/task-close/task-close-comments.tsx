@@ -11,8 +11,9 @@ import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useFileUpload } from "#/hooks/use-file-upload";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -87,14 +88,14 @@ export function TaskCloseComments({
 					setAttachments([]);
 				},
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const removeMutation = useMutation(
 		trpc.taskClose.commentRemove.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

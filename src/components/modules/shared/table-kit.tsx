@@ -5,7 +5,7 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Skeleton, SkeletonTable } from "#/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { Tag } from "#/components/ui/tag";
-import type { MockRow } from "#/lib/table";
+import type { TableRowData } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -31,7 +31,7 @@ import { cn } from "#/lib/utils";
  */
 
 /** 表壳:表头可排序 + 空态一行。数据与状态都由编排壳传入 */
-export function DataTable<TRow extends MockRow>({
+export function DataTable<TRow extends TableRowData>({
 	table,
 	emptyText = "暂无数据",
 	className,
@@ -116,7 +116,7 @@ function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
 }
 
 /** 多选列(表头全选本页 + 行勾选);选中状态由编排壳持有 */
-export function selectColumn<TRow extends MockRow>({
+export function selectColumn<TRow extends TableRowData>({
 	selected,
 	onToggleOne,
 	onToggleMany,
@@ -164,7 +164,7 @@ export function selectColumn<TRow extends MockRow>({
  * ⚠️ `size` 默认 132(不是原来的 96):文字比图标占地方,三个两字标签 + 间距大概这么宽;
  * 只传一两个回调时可以自己调小。宽度给不够,操作列会换行把行高撑开 —— 那正是"操作按钮空间小"的由来。
  */
-export function actionsColumn<TRow extends MockRow>({
+export function actionsColumn<TRow extends TableRowData>({
 	extra,
 	onView,
 	viewLabel = "详情",
@@ -246,7 +246,7 @@ function TimeCell({ value }: { value: unknown }) {
  * 列 id 都保持原样(换成 display 列会两者一起丢)。
  * `header` 默认「创建时间」,更新时间等场景自己覆盖;`size` 默认 150(与现有时间列一致)。
  */
-export function timeColumn<TRow extends MockRow>(
+export function timeColumn<TRow extends TableRowData>(
 	key: keyof TRow & string,
 	{ header = "创建时间", size = 150 }: { header?: string; size?: number } = {},
 ) {

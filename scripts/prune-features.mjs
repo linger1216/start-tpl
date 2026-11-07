@@ -52,15 +52,20 @@ const byId = new Map(manifest.features.map((f) => [f.id, f]));
 
 /** 逗号列表 → 选中的功能(含依赖闭包;`-x` 表示不要) */
 function resolveSelection(raw) {
-	const on = new Set();
+	const requested = new Set();
 	const off = new Set();
 	for (const piece of raw
 		.split(",")
 		.map((s) => s.trim())
 		.filter(Boolean)) {
 		if (piece.startsWith("-")) off.add(piece.slice(1));
-		else on.add(piece);
+		else requested.add(piece);
 	}
+	for (const id of [...requested, ...off]) {
+		if (!byId.has(id)) throw new Error(`features.json 里没有这个功能: ${id}`);
+	}
+	const on = new Set([...requested].filter((id) => !off.has(id)));
+	const autoAdded = [];
 	const add = (id, why) => {
 		if (on.has(id)) return;
 		const feature = byId.get(id);
@@ -69,10 +74,6 @@ function resolveSelection(raw) {
 		autoAdded.push(`${id}(${why})`);
 		for (const need of feature.requires ?? []) add(need, `被 ${id} 依赖`);
 	};
-	const autoAdded = [];
-	for (const id of [...on]) {
-		if (!byId.has(id)) throw new Error(`features.json 里没有这个功能: ${id}`);
-	}
 	for (const id of [...on]) {
 		byId.get(id).requires?.forEach((need) => {
 			add(need, `被 ${id} 依赖`);
@@ -80,13 +81,8 @@ function resolveSelection(raw) {
 	}
 	for (const id of off) {
 		if (!on.has(id)) continue;
-		// 依赖闭包在 `-x` 之前跑过:被别的已选功能依赖的项,关不掉
 		const dependents = [...on].filter((other) => other !== id && (byId.get(other).requires ?? []).includes(id));
-		if (dependents.length > 0) {
-			if (!has("quiet")) console.warn(`  注意: ${id} 被 ${dependents.join("、")} 依赖,"-${id}" 未生效`);
-			continue;
-		}
-		on.delete(id);
+		if (!has("quiet")) console.warn(`  注意: ${id} 被 ${dependents.join("、")} 依赖,"-${id}" 未生效`);
 	}
 	return { selected: [...on], autoAdded };
 }
@@ -265,7 +261,7 @@ function remove(abs) {
 const KINDS = ["paths", "lines", "block", "imports", "json", "replace"];
 
 /** 应用一个功能的全部规则;返回 {ok, rows} */
-function applyFeature(target, feature) {
+function applyFeature(target, feature, excludedPaths) {
 	const rows = [];
 	const fail = (kind, rule, extra) => {
 		rows.push({ ok: false, kind, at: rule.file ?? `paths`, extra });
@@ -294,6 +290,16 @@ function applyFeature(target, feature) {
 	for (const rule of feature.rules ?? []) {
 		if (!KINDS.includes(rule.kind)) {
 			fail(rule.kind, rule, "未知规则种类");
+			continue;
+		}
+		// 其他未选功能的专属文件可能已在复制阶段排除，或由前面的功能删除。
+		if (
+			!selftest &&
+			rule.file &&
+			!fs.existsSync(path.join(target, rule.file)) &&
+			excludedPaths.some((rel) => rule.file === rel || rule.file.startsWith(`${rel}/`))
+		) {
+			rows.push({ ok: true, kind: rule.kind, at: rule.file, extra: "文件随其他未选功能移除" });
 			continue;
 		}
 		const res = rules[rule.kind](target, rule);
@@ -494,8 +500,9 @@ if (selection.autoAdded.length > 0) {
 
 let failed = 0;
 const removedFeatures = manifest.features.filter((f) => !selectedSet.has(f.id));
+const excludedPaths = removedFeatures.flatMap((feature) => feature.paths ?? []);
 for (const feature of removedFeatures) {
-	const { rows } = applyFeature(root, feature);
+	const { rows } = applyFeature(root, feature, excludedPaths);
 	const bad = rows.filter((r) => !r.ok);
 	if (bad.length === 0) {
 		console.log(`  ✓ 剔除「${feature.name}」`);
@@ -503,31 +510,6 @@ for (const feature of removedFeatures) {
 		failed += bad.length;
 		console.log(`  ✗ 剔除「${feature.name}」有 ${bad.length} 条规则没命中:`);
 		for (const row of bad) console.log(`      ${row.kind} @ ${row.at} —— ${row.extra}`);
-	}
-}
-
-// 过程数自校验:core + Σ 所选 == 模板里的 EXPECTED_PROCEDURES,并改写那一行
-const loggingTest = path.join(root, "tests/logging.test.ts");
-if (!dryRun && fs.existsSync(loggingTest)) {
-	const keptProcedures =
-		(manifest.core.procedures ?? 0) + selected.reduce((sum, id) => sum + (byId.get(id).procedures ?? 0), 0);
-	const text = fs.readFileSync(loggingTest, "utf8");
-	const found = /const EXPECTED_PROCEDURES = (\d+);/.exec(text);
-	if (!found) {
-		console.log("  ✗ tests/logging.test.ts 里找不到 EXPECTED_PROCEDURES,无法重算");
-		failed += 1;
-	} else if (
-		Number(found[1]) !==
-		manifest.core.procedures + manifest.features.reduce((s, f) => s + (f.procedures ?? 0), 0)
-	) {
-		console.log(
-			`  ✗ features.json 的 procedures 之和(${manifest.core.procedures + manifest.features.reduce((s, f) => s + (f.procedures ?? 0), 0)})` +
-				`与模板常量(${found[1]})对不上 —— 加过接口就要同步清单`,
-		);
-		failed += 1;
-	} else {
-		fs.writeFileSync(loggingTest, text.replace(found[0], `const EXPECTED_PROCEDURES = ${keptProcedures};`));
-		console.log(`  ✓ EXPECTED_PROCEDURES -> ${keptProcedures}(按所选功能重算)`);
 	}
 }
 

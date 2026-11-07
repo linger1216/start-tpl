@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 
 /**
  * 工作台 · **打标签**示例(标签 ↔ 业务对象 的多态多对多)。
@@ -70,14 +71,14 @@ export function WorkbenchTagging() {
 				close: () => setPickTag(""),
 				message: (o) => (o.created ? "已打标签" : "这个标签已经贴过了"),
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const unlinkMutation = useMutation(
 		trpc.tag.unlink.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

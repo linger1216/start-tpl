@@ -17,7 +17,7 @@ import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
@@ -68,7 +68,7 @@ export function SettingsFilesPage() {
 				close: () => setEditing(null),
 				message: (o) => `已重命名为 ${o.originName}`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -82,7 +82,7 @@ export function SettingsFilesPage() {
 				message: (o) => `已删除 ${o.removed} 个文件`,
 				description: () => "对象已从桶里清掉,记录保留(状态=已删除)",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

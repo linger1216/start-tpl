@@ -20,9 +20,9 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError } from "#/lib/api/error";
+import { toApiError, toastApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
@@ -87,7 +87,7 @@ export function SettingsDataPluginsPage() {
 				message: (o) => `已新增插件 ${o.pluginKey}`,
 				description: () => "立即可用,不用重启服务。",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -98,7 +98,7 @@ export function SettingsDataPluginsPage() {
 				message: (o) => `已保存插件 ${o.pluginKey}`,
 				description: () => "缓存 30 秒内过期,以后按新定义取数。",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

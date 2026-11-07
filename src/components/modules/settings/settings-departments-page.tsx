@@ -18,8 +18,9 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { buildTree, bySortThenName } from "#/lib/tree";
 
 /**
@@ -77,21 +78,21 @@ export function SettingsDepartmentsPage() {
 				},
 				message: (row) => `已新增「${row.name}」`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.department.update.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { message: (row) => `已保存「${row.name}」` }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const reorderMutation = useMutation(
 		trpc.department.reorder.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -105,21 +106,21 @@ export function SettingsDepartmentsPage() {
 				},
 				message: () => "已删除",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const memberMutation = useMutation(
 		trpc.department.addMember.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { message: () => "已更新成员角色" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const removeMemberMutation = useMutation(
 		trpc.department.removeMember.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { message: () => "已移出该部门" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

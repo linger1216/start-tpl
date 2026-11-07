@@ -20,8 +20,9 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { matchKeyword } from "#/lib/table";
 
 /**
@@ -57,14 +58,14 @@ export function SettingsParametersPage() {
 				message: (o) => `已保存 ${o.key}`,
 				description: (o) => `新值:${o.value}`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const createMutation = useMutation(
 		trpc.para.create.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setCreating(false), message: (o) => `已新增参数 ${o.key}` }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -74,7 +75,7 @@ export function SettingsParametersPage() {
 				close: () => dialogs.setPendingDelete(null),
 				message: (o) => `已删除 ${o.removed} 条参数`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

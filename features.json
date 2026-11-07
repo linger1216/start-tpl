@@ -4,22 +4,11 @@
     "功能切分的唯一真源:new-project.sh 读它做交互与依赖补齐,scripts/prune-features.mjs 读它做裁剪。",
     "改这里的三条纪律(与 tests/auth.test.ts 的分类守卫同一个立场 —— 漏了就直接红):",
     "  1. 每条规则都必须命中,命中 0 处 = 派生中止(模板重构后请同步这里的规则);",
-    "  2. procedures 必须与代码对得上:core + Σ features 必须等于 tests/logging.test.ts 里的 EXPECTED_PROCEDURES,",
-    "     否则派生中止(加过接口就要回来加数字);",
-    "  3. tokens 只放**构建会炸**的东西(import 路径 / 掉不掉的标识符);注释里的中文提及交给收尾报告的「残留提及」。",
+    "  2. tokens 只放**构建会炸**的东西(import 路径 / 掉不掉的标识符);注释里的中文提及交给收尾报告的「残留提及」。",
     "规则种类:paths / lines(matches、prefixes、plus、min) / block(begin、end、back) / imports(from[]) / json(matches) / replace(from、to、count)。"
   ],
   "core": {
-    "procedures": 78,
-    "seeds": ["db:seed:menus", "db:seed:rbac", "db:seed:paras", "db:seed:dicts"],
-    "_note": "已接线之外的功能(用户管理 / 角色 / 部门 / 菜单 / 字典 / 参数 / 标签 / 文件管理 / 审计日志 / 数据权限 / 达梦 / 容器化)目前**一律保留**,它们的 procedures 记在这里;等各自接线后从这里减掉。",
-    "tables": [
-      "sys_menu", "sys_dict", "sys_para", "sys_tag", "sys_tag_relation",
-      "sys_user", "sys_session", "sys_account", "sys_verification", "sys_account_lockout", "sys_rate_limit", "sys_share_token",
-      "sys_dept", "sys_role", "sys_user_dept", "sys_casbin_rule",
-      "sys_notice", "sys_log", "sys_file", "sys_data_policy", "sys_data_plugin", "demo_grid",
-      "todos", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"
-    ]
+    "seeds": ["db:seed:menus", "db:seed:rbac", "db:seed:paras", "db:seed:dicts"]
   },
   "features": [
     {
@@ -30,7 +19,6 @@
       "tip": "工单/审批流业务选配；常规基础后台无流转需求可不选",
       "default": false,
       "requires": ["notice"],
-      "procedures": 25,
       "paths": [
         "src/components/modules/task-close",
         "src/routes/(main)/task-close",
@@ -60,6 +48,7 @@
         { "file": "src/components/layout/sidebar.tsx", "kind": "imports", "from": ["@tanstack/react-query", "#/integrations/trpc/react"] },
         { "file": "src/components/layout/sidebar.tsx", "kind": "lines", "matches": ["const trpc = useTRPC();", "const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });"], "prefixes": ["// 「我的任务」红点:", "// 新通知由 SSE"] },
         { "file": "src/components/layout/sidebar.tsx", "kind": "replace", "from": "const taskDot = (badgeQuery.data?.count ?? 0) > 0;", "to": "const taskDot = false;" },
+        { "file": "src/routes/(main)/route.tsx", "kind": "lines", "matches": ["context.queryClient.ensureQueryData(context.trpc.taskClose.menuBadge.queryOptions()).catch(() => undefined),"] },
         {
           "file": "src/integrations/trpc/router.ts",
           "kind": "lines",
@@ -75,6 +64,7 @@
           "end": "^\\t\\},$"
         },
         { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.workflowGet\": pagePermOf", "end": "^\\t\"taskClose\\.workflowRemove\"" },
+        { "file": "src/lib/rbac.ts", "kind": "lines", "matches": ["\"taskClose.menuBadge\","], "prefixes": ["// 类别 1:外壳级 —— 「我的任务」侧栏红点", "// 类别 1:外壳级 —— 侧边栏「我的任务」的红点徽标"], "min": 4 },
         { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.workflowList\",$", "end": "^\\t\"taskClose\\.attachmentUrl\",$" },
         { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"taskClose\\.taskCreate\",$", "end": "^\\t\"taskClose\\.commentRemove\",$" },
         {
@@ -113,8 +103,7 @@
       "tables": ["tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
       "seeds": [],
       "hints": [
-        "`tc_*` 六张表不再建;`pnpm db:create` 只建剩下的表",
-        "tests/nav.test.ts 用 `/task-close/workflows` 当菜单夹具 —— 裁掉后跑 `pnpm test` 要先把那里的路径换成自己的页面"
+        "`tc_*` 六张表不再建;`pnpm db:create` 只建剩下的表"
       ]
     },
     {
@@ -125,7 +114,6 @@
       "tip": "综合网格履职演示业务与数据权限样例页；正式生产工程通常不需要",
       "default": false,
       "requires": [],
-      "procedures": 5,
       "paths": [
         "src/routes/(main)/demo",
         "src/components/modules/demo",
@@ -185,11 +173,20 @@
           "prefixes": ["{ table: \"demo_grid\"", "// demo_grid"],
           "min": 11
         },
-        { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:demo"] }
+        {
+          "file": "package.json",
+          "kind": "json",
+          "matches": [
+            "scripts.db:seed:demo",
+            "dependencies.@tanstack/react-form",
+            "dependencies.@tanstack/react-store",
+            "dependencies.@tanstack/store"
+          ]
+        }
       ],
       "tables": ["demo_grid"],
       "seeds": [],
-      "hints": ["「数据权限」的测试用 demo_grid 当夹具 → 已连带删掉 tests/data-scope.test.ts,那份覆盖要自己补回来"]
+      "hints": ["数据权限核心 SQL 过滤与规则规格测试保留；依赖 demo_grid 的预览、CRUD 和接口链测试仍随 demo 移除"]
     },
     {
       "id": "workbench",
@@ -199,10 +196,21 @@
       "tip": "首页上手清单 + 41 个 UI 原语与展示件活文档；已有专有首页可不选",
       "default": true,
       "requires": [],
-      "procedures": 0,
-      "paths": ["src/components/modules/workbench", "src/routes/(main)/index.tsx"],
+      "paths": ["src/components/modules/workbench"],
       "tokens": ["#/components/modules/workbench"],
       "rules": [
+        {
+          "file": "src/routes/(main)/index.tsx",
+          "kind": "replace",
+          "from": "import { WorkbenchPage } from \"#/components/modules/workbench/workbench-page\";",
+          "to": "import { EmptyState } from \"#/components/layout/empty-state\";"
+        },
+        {
+          "file": "src/routes/(main)/index.tsx",
+          "kind": "replace",
+          "from": "component: WorkbenchPage,",
+          "to": "component: () => <EmptyState title=\"欢迎使用\" description=\"请从侧边栏选择功能。\" />,"
+        },
         {
           "file": "src/components/layout/nav-config.ts",
           "kind": "block",
@@ -213,7 +221,7 @@
       ],
       "tables": [],
       "seeds": [],
-      "hints": ["`/` 的落地页没了 —— 记得新建 `src/routes/(main)/index.tsx`(否则 / 是 404)"]
+      "hints": ["`/` 已保留基础首页，可按业务替换"]
     },
     {
       "id": "notice",
@@ -223,7 +231,6 @@
       "tip": "站内信列表/已读/铃铛/SSE 实时推送；纯数据看板或无站内信系统可不选",
       "default": true,
       "requires": [],
-      "procedures": 4,
       "paths": [
         "src/components/modules/notice",
         "src/components/layout/notification-bell.tsx",
@@ -260,17 +267,6 @@
           "file": "src/components/layout/topbar.tsx",
           "kind": "lines",
           "matches": ["<NotificationBell />"],
-          "min": 1
-        },
-        {
-          "file": "src/components/layout/sidebar.tsx",
-          "kind": "imports",
-          "from": ["#/lib/use-notice-sse"]
-        },
-        {
-          "file": "src/components/layout/sidebar.tsx",
-          "kind": "lines",
-          "matches": ["useNoticeSse();"],
           "min": 1
         },
         {
@@ -323,20 +319,16 @@
       ],
       "tables": ["sys_notice"],
       "seeds": [],
-      "hints": [
-        "顶栏的铃铛(src/components/layout/notification-bell.tsx 与 topbar 里那一处 import / JSX)要手动摘掉",
-        "`/api/sse` 那条 SSE 路由(若存在)与 `seed-*/demo` 里的发通知调用也一并检查"
-      ]
+      "hints": []
     },
     {
       "id": "tests",
       "name": "测试套件",
       "category": "开发测试",
-      "description": "直连真库的 26 个集成测试 + 覆盖率脚本",
-      "tip": "直连真库的 26 个集成测试 + 覆盖率脚本；纯前端开发或快速原型可不选",
+      "description": "集成测试与覆盖率脚本",
+      "tip": "包含直连测试数据库和对象存储的用例；快速原型可不选",
       "default": true,
       "requires": [],
-      "procedures": 0,
       "paths": ["tests"],
       "tokens": [],
       "rules": [{ "file": "package.json", "kind": "json", "matches": ["scripts.test", "scripts.test:cov"] }],

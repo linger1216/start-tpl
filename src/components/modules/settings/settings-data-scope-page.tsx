@@ -20,7 +20,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { POLICY_STATUS, type PolicyStatus, policyStatusMeta } from "#/lib/data-scope-spec";
@@ -60,7 +60,7 @@ export function SettingsDataScopePage() {
 				message: () => "已新增数据范围规则",
 				description: () => "现在是「启用」,引擎还不加载它 —— 点这一行的「预览」算一遍,对了再「上线」。",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -77,7 +77,7 @@ export function SettingsDataScopePage() {
 				}
 				toast.success("已保存数据范围规则", { description: "缓存 30 秒内过期,之后按新规则筛行。" });
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -89,7 +89,7 @@ export function SettingsDataScopePage() {
 				const meta = policyStatusMeta(Number(data.status));
 				toast.success(`已${meta.label}这条规则`, { description: meta.hint });
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -99,7 +99,7 @@ export function SettingsDataScopePage() {
 				close: () => dialogs.setPendingDelete(null),
 				message: () => "已删除数据范围规则",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

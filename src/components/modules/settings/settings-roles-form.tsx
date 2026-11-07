@@ -21,8 +21,9 @@ import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { TagList } from "#/components/ui/tag-list";
 import { Textarea } from "#/components/ui/textarea";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 // 真源在 `lib/menu-spec.ts`(client-safe) —— 不能从 server-only 的 `#/lib/casbin` 拉(见 menu-spec.ts 注释)。
 import { ADMIN_ROLE_NAME } from "#/lib/menu-spec";
 
@@ -118,7 +119,7 @@ export function SettingsRolesForm({
 				close: () => setDraft(null),
 				message: (o) => `已保存「${role?.name ?? ""}」的权限(${o.count} 项,含自动补全的上级菜单)`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

@@ -85,11 +85,6 @@ function sha256(value: string): Buffer {
 	return createHash("sha256").update(value).digest();
 }
 
-/** 常数时间比较(防时序侧信道);先 sha256 把长度对齐,`timingSafeEqual` 才吃得下 */
-function tokenEquals(a: string, b: string): boolean {
-	return timingSafeEqual(sha256(a), sha256(b));
-}
-
 /**
  * 命中「启用 ∧ 未过期」的令牌;没命中返回 `null` —— 调用方一律按**未登录**处理。
  * 每个请求(守卫 + 数据层)都会走这里,行清单走 30 秒内存缓存(与 `getParaMap` 同思路)。
@@ -99,8 +94,10 @@ export async function matchShareToken(
 ): Promise<{ token: string; allowedPaths: ShareGuestPaths } | null> {
 	const candidate = token?.trim();
 	if (!candidate) return null;
+	// 哈希统一长度后再做常数时间比较;输入只需计算一次。
+	const candidateHash = sha256(candidate);
 	for (const row of await activeRows()) {
-		if (!tokenEquals(candidate, row.token)) continue;
+		if (!timingSafeEqual(candidateHash, sha256(row.token))) continue;
 		if (row.expires_at && row.expires_at.getTime() <= Date.now()) return null;
 		return { token: row.token, allowedPaths: parseStoredPaths(row.allowed_paths) };
 	}

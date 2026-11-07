@@ -135,7 +135,8 @@ type AuditConfig = { enabled: boolean; skipPrefixes: string[] };
  */
 export async function readAuditConfig(): Promise<AuditConfig> {
 	try {
-		const [enabled, paraMap] = await Promise.all([getParaBool("log.enabled", true), getParaMap()]);
+		const enabled = await getParaBool("log.enabled", true);
+		const paraMap = await getParaMap();
 		return {
 			enabled,
 			skipPrefixes: (paraMap.get("log.skip_paths") ?? "page.")

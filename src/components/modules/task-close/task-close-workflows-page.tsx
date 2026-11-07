@@ -20,9 +20,10 @@ import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Tag } from "#/components/ui/tag";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -82,7 +83,7 @@ export function TaskCloseWorkflowsPage() {
 	const createMutation = useMutation(
 		trpc.taskClose.workflowCreate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setFormOpen(false), message: () => "流程模板已创建" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -95,14 +96,14 @@ export function TaskCloseWorkflowsPage() {
 				},
 				message: () => "流程模板已保存",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const removeMutation = useMutation(
 		trpc.taskClose.workflowRemove.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "流程模板已删除" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

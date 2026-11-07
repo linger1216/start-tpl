@@ -63,7 +63,7 @@ export function sanitize(value: unknown, depth = 0): unknown {
 
 function envLevel(): LogLevel {
 	const raw = (process.env.LOG_LEVEL ?? "info").toLowerCase();
-	return (["debug", "info", "warn", "error"] as const).includes(raw as LogLevel) ? (raw as LogLevel) : "info";
+	return raw === "debug" || raw === "info" || raw === "warn" || raw === "error" ? raw : "info";
 }
 function envSilent(): boolean {
 	return process.env.LOG_SILENT === "1" || process.env.NODE_ENV === "test";

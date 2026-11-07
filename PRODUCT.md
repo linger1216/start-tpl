@@ -42,7 +42,7 @@ TanStack Start 全栈 + tRPC-only 后端 + MySQL/**达梦**双库的可派生后
 ## Evidence on Hand
 
 - `doc/测试数据/综合网格履职情况列表.xlsx` —— 左侧真实业务表(网格长履职)的演示数据源,种子脚本用它与 `demo_grid` 对账。
-- 22 页文档(`doc/*.md`)+ `AGENTS.md` 的硬规矩——它们是产品事实的可靠来源;`README.md` 的历轮记录是 changelog 不是现状。
+- 22 页文档(`doc/*.md`)+ `AGENTS.md` 的硬规矩——它们是产品事实的可靠来源;`README.md` 记录当前入口与操作，历史变化以 Git 记录为准。
 
 ## Product Principles
 

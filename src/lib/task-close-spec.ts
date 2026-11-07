@@ -41,12 +41,6 @@ export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
 	2: "P2 · 普通",
 };
 
-/** 取键为 `P0`/`P1`/`P2` 的展示短名(给详情头 meta-line 用)。null / 未知 → "未设置" */
-export function priorityShortLabel(priority: TaskPriority | null | undefined): string {
-	if (priority === null || priority === undefined) return "未设置";
-	return `P${priority}`;
-}
-
 /** 从 `tc_task.priority` 取展示名;null/未知/空 → "未设置" */
 export function priorityLabelOf(priority: number | string | null | undefined): string {
 	if (priority === null || priority === undefined || priority === "") return "未设置";

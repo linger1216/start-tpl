@@ -20,7 +20,7 @@ import { db } from "#/db";
 import { sysFile } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { FILE_ALLOW_EXT_DEFAULT, FILE_MAX_SIZE_MB_DEFAULT } from "#/lib/para-spec";
-import { bucketFor, buildObjectKey, getStorage, isPublicBucket, publicUrlOf } from "#/lib/storage";
+import { bucketFor, buildObjectKey, getObjectUrl, getStorage, isPublicBucket, publicUrlOf } from "#/lib/storage";
 import { getParaMap } from "#/lib/sys-para";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -181,7 +181,7 @@ export const fileRouter = createTRPCRouter({
 
 			const objectKey = buildObjectKey(ext);
 			const storage = await getStorage();
-			const { url, expiresIn } = await storage.presignPut(bucket, objectKey, input.contentType);
+			const { url, expiresIn } = await storage.presignPut(bucket, objectKey);
 
 			// 先登记再上传:status=0 是"签发了但还没传上来"的**正常中间态**,清理任务按它扫
 			await db.insert(sysFile).values({
@@ -255,19 +255,10 @@ export const fileRouter = createTRPCRouter({
 		.query(async ({ input }) => {
 			const [row] = await db.select().from(sysFile).where(eq(sysFile.id, input.id)).limit(1);
 			if (!row || Number(row.status) === 2) throw new TRPCError({ code: "NOT_FOUND", message: "文件不存在或已删除" });
-			const storage = await getStorage();
 			// ⚠️ **要下载就必须走预签名** —— 公开桶的直链没法带 `Content-Disposition`,
 			// 浏览器会拿对象键(`{yyyy}/{MM}/{nanoid}.{ext}` 那串)当文件名存盘,
 			// 而不是原始文件名(需求就是"按文件名下载",这里踩过)。
-			const url =
-				input.download || !isPublicBucket(row.bucket)
-					? await storage.presignGet(
-							row.bucket,
-							row.object_key,
-							undefined,
-							input.download ? row.origin_name : undefined,
-						)
-					: storage.publicUrl(row.bucket, row.object_key);
+			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
 			return { url, originName: row.origin_name, contentType: row.content_type, isPublic: isPublicBucket(row.bucket) };
 		}),
 

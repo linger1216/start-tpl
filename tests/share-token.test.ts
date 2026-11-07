@@ -125,6 +125,8 @@ describe("matchShareToken(判定核心)", () => {
 		const matched = await matchShareToken(activeRow.token);
 		assert.ok(matched, "启用且未过期应命中");
 		assert.deepEqual(matched.allowedPaths, ["/demo/grid"]);
+		assert.deepEqual(await matchShareToken(`  ${activeRow.token}  `), matched, "输入两端空白不影响匹配");
+		assert.equal(await matchShareToken(`${activeRow.token}x`), null, "不同长度的令牌不能命中");
 		assert.equal(await matchShareToken(expiredRow.token), null, "过期的令牌不命中");
 		assert.equal(await matchShareToken(disabledRow.token), null, "停用的令牌不命中");
 		assert.equal(await matchShareToken("  "), null, "空白令牌不命中");

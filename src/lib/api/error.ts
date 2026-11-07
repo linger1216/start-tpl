@@ -55,23 +55,15 @@ export function toApiError(e: unknown): ApiError {
 		}
 	}
 
-	if (e instanceof Error) {
-		// 拿到 HTML 的 JSON 解析错误:换成能照着做的提示
-		if (HTML_RESPONSE_PATTERN.test(e.message)) return new ApiError(FALLBACK_CODE, HTML_RESPONSE_HINT);
-		return new ApiError(FALLBACK_CODE, e.message || FALLBACK_MSG);
-	}
-
-	const text = String(e);
-	if (HTML_RESPONSE_PATTERN.test(text)) return new ApiError(FALLBACK_CODE, HTML_RESPONSE_HINT);
-	return new ApiError(FALLBACK_CODE, text);
+	const message = e instanceof Error ? e.message || FALLBACK_MSG : String(e);
+	return new ApiError(FALLBACK_CODE, HTML_RESPONSE_PATTERN.test(message) ? HTML_RESPONSE_HINT : message);
 }
 
 /**
  * 任意错误 → 「错误吐司」一键收尾。
  *
  * 把 22+ 处 `toastApiError(err)` 的样板合成一处,新增 / 改错误样式
- * 只需动这一行;同时 `use-ledger-write.ts` 的 `writeError` 也是这个实现的薄包装,
- * 但仍保留专用名(语义挂在「写接口的 onError」上,提示调用点该在哪个生命周期)。
+ * 只需动这一处;写接口的 `onError` 也直接使用它。
  */
 import { toast } from "sonner";
 

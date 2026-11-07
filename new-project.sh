@@ -9,7 +9,7 @@
 # 行为:
 #   - 在模板目录的同级(即 start-tpl 旁边)创建新项目
 #   - 排除 node_modules / 构建产物 / 缓存 / .git / 本脚本
-#   - 只带 .env.example,绝不复制任何真实 env 文件
+#   - 生成独立 .env.local,仅在可以隔离 MySQL 库名时继承连接
 #   - 重写 package.json 的 name 与 .cta.json 的 projectName
 #   - 由 .env.example 生成 .env.local,并自动填充 BETTER_AUTH_SECRET
 #   - **不初始化 git 仓库**,由使用者自行 git init
@@ -46,7 +46,7 @@ usage() {
   --strict        模板目录存在未提交改动时直接中止(默认只警告并继续)
   --title <名>    网页标题 + 侧边栏品牌名;可与包名不同(中文也行),默认用你输入的项目名
   --port <端口>   本地开发端口(写入 package.json,默认: 3000)
-  --install, -i   派生完成后自动安装依赖并生成路由
+  --install, -i   兼容旧命令;默认已执行安装、路由生成与数据库初始化
   --all           功能全要(= 包含全部业务与演示模块)
   --minimal       只要核心(登录 / 后台外壳 / 数据库 / 权限判定 / UI 原语)
   --features a,b  按模块 id 选择(清单与说明见仓库根 features.json)
@@ -93,9 +93,6 @@ NO_INPUT=0
 TITLE=""
 # 本地开发端口(写入 package.json scripts.dev)
 PORT=""
-# 自动安装依赖并构建路由
-INSTALL_DEPS=0
-
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
@@ -103,7 +100,7 @@ while [ $# -gt 0 ]; do
     --all) FEATURES="__all__"; FEATURES_GIVEN=1; shift ;;
     --minimal) FEATURES="__none__"; FEATURES_GIVEN=1; shift ;;
     --no-input) NO_INPUT=1; shift ;;
-    -i|--install) INSTALL_DEPS=1; shift ;;
+    -i|--install) shift ;; # 兼容旧命令,初始化现在总会执行
     --port|-p)
       if [ $# -lt 2 ]; then
         echo "Error: $1 需要一个端口号(如 3001)。" >&2
@@ -678,7 +675,7 @@ echo "==========================================================================
 echo ""
 echo "▶ [1/4] 安装依赖与生成路由表 (pnpm install && pnpm generate-routes) ..."
 if command -v pnpm >/dev/null 2>&1; then
-  ( cd "$TARGET_DIR" && pnpm install --silent && pnpm generate-routes )
+  ( cd "$TARGET_DIR" && pnpm install --silent --no-frozen-lockfile && pnpm generate-routes )
 else
   echo "Error: 未找到 pnpm,工程文件已生成,初始化未完成。" >&2
   exit 1

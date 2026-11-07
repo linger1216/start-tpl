@@ -15,9 +15,7 @@
 /** 「系统设置 ▸ 参数管理」里决定侧边栏收起形态的参数名 */
 export const SIDEBAR_MODE_CONFIG_KEY = "ui.sidebar.collapsed_mode";
 
-const SIDEBAR_COLLAPSE_MODES = ["rail", "hidden"] as const;
-
-export type SidebarCollapseMode = (typeof SIDEBAR_COLLAPSE_MODES)[number];
+export type SidebarCollapseMode = "rail" | "hidden";
 
 /** 默认值:窄菜单(比"完全隐藏"信息更多,且永远留着一条可点的导航) */
 export const SIDEBAR_COLLAPSE_MODE_DEFAULT: SidebarCollapseMode = "rail";
@@ -28,6 +26,6 @@ export const SIDEBAR_COLLAPSE_MODE_DEFAULT: SidebarCollapseMode = "rail";
  * 这条容错是必须的:参数在界面上是**手输的字符串**,代码不能假设库里存的一定合法。
  */
 export function parseSidebarCollapseMode(value: string | null | undefined): SidebarCollapseMode {
-	if (value && (SIDEBAR_COLLAPSE_MODES as readonly string[]).includes(value)) return value as SidebarCollapseMode;
+	if (value === "rail" || value === "hidden") return value;
 	return SIDEBAR_COLLAPSE_MODE_DEFAULT;
 }

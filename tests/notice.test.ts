@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { eq, inArray } from "drizzle-orm";
-import { sysNotice, sysUser } from "../src/db/data-base-schema.ts";
+import { sysMenu, sysNotice, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -29,6 +29,13 @@ after(async () => {
 });
 
 describe("通知", () => {
+	it("普通用户可读自己的通知,但没有权限时不能发送通知", async () => {
+		assert.ok((await db.select({ id: sysMenu.id }).from(sysMenu).limit(1)).length > 0, "请先初始化菜单与 RBAC 种子");
+		const nobody = createCallerFactory(trpcRouter)({ user: { id: `notice-nobody-${SUFFIX}`, name: "无权用户" } });
+		await nobody.notice.list({ limit: 1 });
+		await assertRejects(() => nobody.notice.create({ userIds: ["x"], title: "不该发出" }), "没有权限");
+	});
+
 	it("发一条 → 能查到,未读数 +1", async () => {
 		const before = (await caller.notice.list()).unread;
 		await notify(TEST_USER.id, { title: `测试通知 ${SUFFIX}`, body: "正文", path: "/settings/files" });

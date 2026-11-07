@@ -18,7 +18,7 @@ import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { notify, notifyMany } from "#/lib/notice";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { getStorage, isPublicBucket } from "#/lib/storage";
+import { getObjectUrl } from "#/lib/storage";
 import { LOCKED_STATUS, type TaskLogEvent } from "#/lib/task-close-log";
 import { DEFAULT_WORKFLOW_ID, type WorkflowStatus } from "#/lib/task-close-spec";
 import { normalizePayload, parseBlocks, taskPayloadSchema } from "#/lib/task-content";
@@ -724,16 +724,7 @@ export const taskCloseRouter = createTRPCRouter({
 				throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在或已删除" });
 			}
 
-			const storage = await getStorage();
-			const url =
-				input.download || !isPublicBucket(row.bucket)
-					? await storage.presignGet(
-							row.bucket,
-							row.object_key,
-							undefined,
-							input.download ? row.origin_name : undefined,
-						)
-					: storage.publicUrl(row.bucket, row.object_key);
+			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
 			return {
 				url,
 				originName: row.origin_name,

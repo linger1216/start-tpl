@@ -14,9 +14,10 @@ import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Tag } from "#/components/ui/tag.tsx";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { PAGE_SIZES } from "#/lib/constants";
 import { priorityLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
@@ -88,7 +89,7 @@ export function TaskCloseCardsPage() {
 	const createMutation = useMutation(
 		trpc.taskClose.taskCreate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setCreateOpen(false), message: () => "任务已创建" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

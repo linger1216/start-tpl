@@ -15,7 +15,7 @@ import { eq, inArray } from "drizzle-orm";
 
 import { sysFile } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { getStorage } from "../src/lib/storage.ts";
+import { bucketFor, getStorage } from "../src/lib/storage.ts";
 import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
@@ -44,6 +44,27 @@ after(async () => {
 		await db.delete(sysFile).where(inArray(sysFile.object_key, created));
 	}
 	await closeDb();
+});
+
+test("存储区分对象不存在和桶不存在", async () => {
+	const storage = await getStorage();
+	const key = `__test__missing_${SUFFIX}`;
+	const missingBucket = `missing-${SUFFIX.toLowerCase()}`;
+	const bucket = bucketFor("private");
+	assert.equal(await storage.stat(bucket, key), null);
+	await storage.remove(bucket, key);
+	for (const operation of [() => storage.stat(missingBucket, key), () => storage.remove(missingBucket, key)]) {
+		await assert.rejects(operation, (error: { code?: string }) => error.code === "NoSuchBucket");
+	}
+	const id = `${TEST_PREFIX}missing_${SUFFIX}`;
+	try {
+		await db.insert(sysFile).values({ id, bucket: missingBucket, object_key: key, origin_name: key, status: 1 });
+		await assert.rejects(() => caller.file.remove({ ids: [id] }));
+		const [row] = await db.select({ status: sysFile.status }).from(sysFile).where(eq(sysFile.id, id));
+		assert.equal(row?.status, 1, "桶不存在时不能把文件记录标成已删除");
+	} finally {
+		await db.delete(sysFile).where(eq(sysFile.id, id));
+	}
 });
 
 test("presign:默认不限制后缀(任意类型都收);参数里配了白名单才拦名单外的后缀", async () => {

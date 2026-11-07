@@ -1,5 +1,5 @@
 /**
- * `Storage` 的 MinIO 实现 —— **只被 `#/lib/storage` 动态 import**,不要从业务代码直接引。
+ * MinIO 实现 —— **只被 `#/lib/storage` 动态 import**,不要从业务代码直接引。
  *
  * ⚠️ 文件名是**扁平**的(`storage-minio.ts`)而不是 `storage/minio.ts`:后者会让
  * `#/lib/storage` 同时指向文件和目录,`tsc` 与 Nitro 的 ESM 解析各选一边,运行时才报
@@ -11,7 +11,6 @@
 import { Client } from "minio";
 
 import { logger } from "#/lib/logger";
-import { joinPublicUrl, type PresignedPut, type Storage, type StoredObject } from "#/lib/storage";
 
 type MinioConfig = {
 	endpoint: string;
@@ -19,20 +18,15 @@ type MinioConfig = {
 	useSSL: boolean;
 	accessKey: string;
 	secretKey: string;
-	bucketPublic: string;
-	bucketPrivate: string;
-	publicUrl: string;
 };
 
-type Options = {
-	defaultExpiresPut: number;
-	publicExpiresGet: number;
-};
+const DEFAULT_EXPIRES_PUT = 600;
+const DEFAULT_EXPIRES_GET = 300;
 
 /** MinIO 的 S3 错误:只有"对象不存在"该被吞掉,其余要往上抛 */
 function isNotFound(error: unknown): boolean {
 	const code = (error as { code?: string } | null)?.code ?? "";
-	return code === "NotFound" || code === "NoSuchKey" || code === "NoSuchBucket";
+	return code === "NotFound" || code === "NoSuchKey";
 }
 
 /**
@@ -49,7 +43,7 @@ function logFailure(op: string, bucket: string, objectKey: string, error: unknow
 	throw error;
 }
 
-export function createMinioStorage(config: MinioConfig, options: Options): Storage {
+export function createMinioStorage(config: MinioConfig) {
 	const client = new Client({
 		endPoint: config.endpoint,
 		port: config.port,
@@ -59,12 +53,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 	});
 
 	return {
-		async presignPut(
-			bucket,
-			objectKey,
-			_contentType,
-			expiresSeconds = options.defaultExpiresPut,
-		): Promise<PresignedPut> {
+		async presignPut(bucket: string, objectKey: string, expiresSeconds = DEFAULT_EXPIRES_PUT) {
 			// ⚠️ 预签名里**不绑 Content-Type**:绑了浏览器就得一模一样地发,少一个分号就 403。
 			// 真实类型在 `confirm` 阶段用 `stat` 回读并写库(见 doc/文件管理.md「两阶段」)。
 			try {
@@ -75,7 +64,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 			}
 		},
 
-		async stat(bucket, objectKey): Promise<StoredObject | null> {
+		async stat(bucket: string, objectKey: string) {
 			try {
 				const info = await client.statObject(bucket, objectKey);
 				const meta = (info.metaData ?? {}) as Record<string, string>;
@@ -90,7 +79,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 			}
 		},
 
-		async presignGet(bucket, objectKey, expiresSeconds = options.publicExpiresGet, downloadName): Promise<string> {
+		async presignGet(bucket: string, objectKey: string, expiresSeconds = DEFAULT_EXPIRES_GET, downloadName?: string) {
 			// `response-content-disposition` 让"另存为"用回原始文件名(否则是 objectKey 那串 nanoid)。
 			// 用 **RFC 5987/6266 的双保险**:`filename=` 给纯 ASCII 兜底、`filename*=` 给真名(百分号编码)——
 			// 实测 MinIO 两种都认(单个 `filename*=` 也认,但老浏览器会退化成对象键)。
@@ -109,12 +98,7 @@ export function createMinioStorage(config: MinioConfig, options: Options): Stora
 			});
 		},
 
-		publicUrl(bucket, objectKey): string {
-			const base = config.publicUrl || `${config.useSSL ? "https" : "http"}://${config.endpoint}:${config.port}`;
-			return joinPublicUrl(base, bucket, objectKey);
-		},
-
-		async remove(bucket, objectKey): Promise<void> {
+		async remove(bucket: string, objectKey: string): Promise<void> {
 			try {
 				await client.removeObject(bucket, objectKey);
 			} catch (error) {

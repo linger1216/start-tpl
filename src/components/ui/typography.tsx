@@ -17,7 +17,12 @@ import { cn } from "#/lib/utils";
 /** 页头 / 记录标题 —— 宋体 24px/700(满强度:这是世界最重的声音)。 */
 export function PageTitle({ children, className }: { children: React.ReactNode; className?: string }) {
 	return (
-		<h1 className={cn("font-heading text-2xl font-bold leading-snug tracking-[-0.015em] text-foreground whitespace-nowrap", className)}>
+		<h1
+			className={cn(
+				"font-heading text-2xl font-bold leading-snug tracking-[-0.015em] text-foreground whitespace-nowrap",
+				className,
+			)}
+		>
 			{children}
 		</h1>
 	);
@@ -33,7 +38,7 @@ export function MetaRow({ children, className }: { children: React.ReactNode; cl
 	return (
 		<div
 			className={cn(
-				"flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs tracking-[0.05em] text-muted-foreground",
+				"flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs tracking-wider text-muted-foreground",
 				className,
 			)}
 		>

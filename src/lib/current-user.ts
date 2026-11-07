@@ -46,19 +46,15 @@ type CurrentUser = {
  */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
 	try {
-		const session = await auth.api.getSession({ headers: getRequestHeaders() });
+		const headers = getRequestHeaders();
+		const session = await auth.api.getSession({ headers });
 		if (session?.user) return { id: session.user.id, name: session.user.name ?? "" };
-	} catch {
-		// 脚本 / 单测没有请求上下文:拿不到会话也拿不到 Cookie,自然走不到访客
-		return null;
-	}
-	try {
-		const token = readShareTokenFromHeaders(getRequestHeaders());
+		const token = readShareTokenFromHeaders(headers);
 		const matched = token ? await matchShareToken(token) : null;
 		if (!matched) return null;
 		return { id: SHARE_GUEST.id, name: SHARE_GUEST.name, sharePaths: matched.allowedPaths };
 	} catch {
-		// 同上:没有请求上下文(读不到 Cookie)就按未登录处理
+		// 没有请求上下文或身份读取失败时按未登录处理。
 		return null;
 	}
 }

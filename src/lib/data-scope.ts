@@ -103,7 +103,7 @@ function deptTreeOf(nodes: DeptNode[], mineIds: string[]): PolicyDept[] {
 		}
 	}
 
-	// 根在前 —— 顺序只影响人看(预览弹窗把 `depts` 摊成一行),不影响判定
+	// 越靠近归属部门越靠前:街镇插件取第一个匹配节点,因此顺序影响结果。
 	const depthOf = (id: string): number => {
 		let depth = 0;
 		let cursor = byId.get(id);
@@ -153,7 +153,9 @@ type LoadedRule = {
 	id: string;
 	/** 原始写法(`role:<id>` / `*` …)—— 台账页与预览的人话要用它 */
 	rawSubject: string;
-	subject: Subject;
+	subject: Subject | null;
+	/** 损坏的上线规则不能消失,否则资源可能被误判为没有配置规则。 */
+	invalidReason?: string;
 	column: string | null;
 	/**
 	 * 从插件输出的每行里取哪个 key 的值(m23422)—— `<column> in 插件行[valueKey]`。
@@ -180,8 +182,8 @@ export function clearDataScopeCache(): void {
  * 按资源表分组装载**全部启用规则**(一次查全,不是每张表一次)—— 这张表注定很小(个位数),
  * 一次查全省得每个读接口都发一条 SQL。
  *
- * 解析不出主体的行(脏数据)、以及**填了列却没填插件**这种形状非法的行,在这里丢掉并留一条 warn:
- * 一条配错的行不该让别人的权限跟着变。
+ * 损坏的上线规则保留在对应资源中并记日志,编译时跳过该规则。
+ * 若资源没有其他有效规则,结果必须是空集,不能退化为"没有上线规则"。
  */
 async function loadRules(): Promise<Map<string, LoadedRule[]>> {
 	if (ruleCache && Date.now() - ruleCache.at < RULE_CACHE_TTL_MS) return ruleCache.byResource;
@@ -194,18 +196,13 @@ async function loadRules(): Promise<Map<string, LoadedRule[]>> {
 
 	for (const row of rows) {
 		const subject = parseSubject(row.subject);
-		if (!subject) {
-			logger.warn("data_scope.rule_broken", { ruleId: row.id, reason: "subject 解析不出来", subject: row.subject });
-			continue;
-		}
-		if (row.column && !row.plugin_key) {
-			logger.warn("data_scope.rule_broken", { ruleId: row.id, reason: "填了列却没填插件" });
-			continue;
-		}
+		const invalidReason = !subject ? "主体格式无效" : row.column && !row.plugin_key ? "填了列却没填插件" : undefined;
+		if (invalidReason) logger.warn("data_scope.rule_broken", { ruleId: row.id, reason: invalidReason });
 		const rule: LoadedRule = {
 			id: row.id,
 			rawSubject: row.subject,
 			subject,
+			invalidReason,
 			column: row.column || null,
 			valueKey: row.value_key || null,
 			pluginKey: row.plugin_key || null,
@@ -392,6 +389,17 @@ async function compileScope(
 	const texts: string[] = [];
 	const breakdown: RuleBreakdown[] = [];
 	for (const rule of rules) {
+		if (rule.invalidReason || !rule.subject) {
+			breakdown.push({
+				id: rule.id,
+				subject: rule.rawSubject,
+				matched: false,
+				effect: "skipped",
+				detail: `规则无效:${rule.invalidReason ?? "主体格式无效"}`,
+				values: null,
+			});
+			continue;
+		}
 		if (!subjectMatches(rule.subject, ctx)) {
 			breakdown.push({
 				id: rule.id,
@@ -609,7 +617,7 @@ type TrialRule = {
 	pluginKey?: string | null;
 };
 
-function toTrialRule(trial: TrialRule): LoadedRule | null {
+function toTrialRule(trial: TrialRule): (LoadedRule & { subject: Subject }) | null {
 	const subject = parseSubject(trial.subject);
 	if (!subject) return null;
 	return {
@@ -642,7 +650,7 @@ export async function previewScope(args: {
 		return { total: 0, visible: 0, condition: "(表名不合法)", sample: [], warning: "表名只能是字母 / 数字 / 下划线" };
 	}
 
-	let trialRule: LoadedRule | undefined;
+	let trialRule: (LoadedRule & { subject: Subject }) | undefined;
 	if (args.trial) {
 		const built = toTrialRule(args.trial);
 		if (!built) {

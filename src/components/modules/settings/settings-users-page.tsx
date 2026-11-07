@@ -28,8 +28,9 @@ import { RefreshButton } from "#/components/ui/refresh-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { isShareTokenExpired } from "#/lib/share-token-spec";
 import { matchKeyword } from "#/lib/table";
 
@@ -96,14 +97,14 @@ export function SettingsUsersPage() {
 				close: () => dialogs.setEditing(null),
 				message: (u) => `已保存 ${u.name}`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const deleteMutation = useMutation(
 		trpc.user.remove.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => dialogs.setPendingDelete(null), message: () => "账号已删除" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -114,7 +115,7 @@ export function SettingsUsersPage() {
 				message: (created) => `已创建账号 ${created.email}`,
 				description: () => "还没有角色 —— 点「编辑」给他分配。",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -154,7 +155,7 @@ export function SettingsUsersPage() {
 				message: () => "已生成访客令牌",
 				description: () => "点该行的「复制链接」把外链发给对方。",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const tokenUpdateMutation = useMutation(
@@ -163,7 +164,7 @@ export function SettingsUsersPage() {
 				close: () => guestDialogs.setEditing(null),
 				message: () => "已保存访客令牌",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const tokenToggleMutation = useMutation(
@@ -171,7 +172,7 @@ export function SettingsUsersPage() {
 			onSuccess: writeSuccess(invalidateTokens, {
 				message: (r) => (r.enabled ? "已启用,外链恢复有效" : "已停用,外链立即失效"),
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const tokenDeleteMutation = useMutation(
@@ -180,7 +181,7 @@ export function SettingsUsersPage() {
 				close: () => guestDialogs.setPendingDelete(null),
 				message: () => "令牌已删除,外链立即失效",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

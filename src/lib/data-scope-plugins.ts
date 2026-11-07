@@ -15,17 +15,6 @@
  *   ctx = "我是谁":`{ user, roles, depts, descendants }`(见 `data-scope-spec.ts` 的 `PolicyCtx`)。
  *         v2 起**没有** `query` / `log` / `descendantsOf` 这层助手了 —— 用户写的是「清单」不是代码。
  *
- * v1.3 (m18228):user 明确「插件不需要域概念」 —— 「给值 / 给行」「user / dept / town / area
- * / text」整组字段砍掉,`code` → `fn`。
- *
- * v2 (m20034):user 进一步明确「函数插件只能代码预制」(即写在这里的内置),「新建插件」界面
- * 上**只接受「指定清单」(fixed)类** —— 用户手填 `[{key, value}]`,由 `toPlugin()` 拼成
- * `resolve` 函数。**`fn` 列 / `new Function` 编译路径已删**,`PLUGIN_PARAMS_MAX` 兜底
- * 也不需要了(规则行的 `params` 列也删了)。
- *
- * 旧 API(`resolve({ ctx, params })` / `args.items`)**已彻底删除** —— v1.4 / v1.5
- * 期间作为兼容层保留,v2 起引擎与所有内置/自定义插件统一按 `resolve({ ctx })` 实现。
- *
  * 三条纪律:
  * 1. **标识符只有"选"能决定**:资源表名 / 判据列名会拼进 SQL(它们当不了参数),
  *    所以界面上从 `information_schema` 里选 + `isIdent()` 校验;请求方输入永远只落进 `in (参数)`。
@@ -87,11 +76,7 @@ export type ResolvedPlugin = {
 	 *   - `value_key = "name"` ⇒ 取 `name`(同插件服务多列,适配表里存"街镇名"而非"街镇 id"的场景)
 	 *   - 缺失 key ⇒ warn + 空数组(规则编译为 `1 = 0`,一行也看不到)
 	 *
-	 * 兼容:插件返 `string[]` 也接受(被 coerce 成 `[{value: str}]`);`fixed` / `self` 等
-	 * 简单场景就返 `[{value: ...}]`。**空数组 = 这个人什么都没有**。
-	 *
-	 * v1.4 (m18655):从 `string[]` 升级到 `Record<string,string>[]`,因为按 value 单形态
-	 * 撑不住"表里存的是街镇值/街镇名"这类非 id 列。
+	 * 空数组表示没有可见值。插件只允许返回字符串字段的对象数组。
 	 */
 	resolve: (args: ResolveArgs) => Promise<Record<string, string>[]>;
 };
@@ -99,62 +84,24 @@ export type ResolvedPlugin = {
 /** 界面清单用的形状 —— 去掉函数与 `hidden` 标记,可以安全地回给客户端 */
 export type PluginInfo = Omit<ResolvedPlugin, "resolve" | "hidden">;
 
-// ── SQL 小工具 ──────────────────────────────────────────────────────────────
-
-// v2 起已删:`selectRows()` 没用了 —— 内置插件都只看 ctx,不走 SQL;`toPlugin()` 也不再编译函数体。
-// `toValueRows` / `coerceRow` 仍保留作为防御层(以防用户代码/老插件代码意外走到这里)。
-
-/**
- * 插件返回值归一:统一成 `Record<string, string>[]`(一行一个对象,每个字段都是字符串)。
- *
- * 三种输入都接受 —— 兼容现有插件代码:
- *  - `string[]`             → `[{value: str}, ...]`(老插件不用动)
- *  - `number[]`             → `[{value: String(n)}, ...]`(同上,数值兼容)
- *  - `Record<string, ...>[]` → 字段是字符串的留下,其它丢弃(数字会 `String(n)`)
- *
- * 空数组 / 空字段 / 空字符串 全部丢弃,去重(按"全字段序列化的 JSON"做 key)。
- *
- * 插件是别人写的代码,返回 `undefined` / 一个字符串 / 一堆对象都有可能 —— 求值路径上
- * 不能因为这个把读接口炸掉。
- *
- * v1.4 (m18655):从「只收字符串」改成「收对象 + 自动 coerce 字符串」,因为按 value 单形态
- * 撑不住"表里存的是街镇名/街镇 id"这类多字段场景。
- */
+/** 清理空字段并按完整对象去重；异常形态不转换成权限值。 */
 function toValueRows(value: unknown): Record<string, string>[] {
 	if (!Array.isArray(value)) return [];
 	const seen = new Set<string>();
-	const out: Record<string, string>[] = [];
+	const rows: Record<string, string>[] = [];
 	for (const item of value) {
-		const row = coerceRow(item);
-		if (!row) continue;
-		const fingerprint = JSON.stringify(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)));
+		if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+		const entries = Object.entries(item).filter(
+			(entry): entry is [string, string] =>
+				entry[0] !== "__proto__" && typeof entry[1] === "string" && entry[1].length > 0,
+		);
+		if (entries.length === 0) continue;
+		const fingerprint = JSON.stringify([...entries].sort(([a], [b]) => a.localeCompare(b)));
 		if (seen.has(fingerprint)) continue;
 		seen.add(fingerprint);
-		out.push(row);
+		rows.push(Object.fromEntries(entries));
 	}
-	return out;
-}
-
-/** 一项 → `{[k]: string}`;非对象 / 全空字段 一律回 `null`(被 `toValueRows` 跳过) */
-function coerceRow(item: unknown): Record<string, string> | null {
-	if (item === null || item === undefined) return null;
-	if (typeof item === "string") return item ? { value: item } : null;
-	if (typeof item === "number") return Number.isFinite(item) ? { value: String(item) } : null;
-	if (typeof item !== "object") return null;
-
-	const obj = item as Record<string, unknown>;
-	const row: Record<string, string> = {};
-	let has = false;
-	for (const [k, v] of Object.entries(obj)) {
-		if (typeof v === "string" && v) {
-			row[k] = v;
-			has = true;
-		} else if (typeof v === "number" && Number.isFinite(v)) {
-			row[k] = String(v);
-			has = true;
-		}
-	}
-	return has ? row : null;
+	return rows;
 }
 
 // ── 组织树缓存 ──────────────────────────────────────────────────────────────
@@ -186,6 +133,12 @@ export async function loadDeptNodes(): Promise<DeptNode[]> {
 		.where(alive(sysDept));
 	deptCache = { at: Date.now(), nodes };
 	return nodes;
+}
+
+async function descendantsWithNames(roots: string[]) {
+	const nodes = await loadDeptNodes();
+	const names = new Map(nodes.map((node) => [node.id, node.name]));
+	return collectDescendantIds(nodes, roots).map((id) => ({ id, name: names.get(id) ?? "" }));
 }
 
 // ── 闵行区的 14 个街镇(工业区) ─────────────────────────────────────────────
@@ -254,12 +207,7 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		resolve: async ({ ctx }) => {
 			const roots = ctxDeptIds(ctx);
 			if (roots.length === 0) return [];
-			const ids = collectDescendantIds(await loadDeptNodes(), roots);
-			// 用 `loadDeptNodes()` 已经返回了 name —— 但 collectDescendantIds 只回 id。
-			// 为了一并拿 name,这里再查一次;或读缓存的 nodes 拼一下。
-			const nodes = await loadDeptNodes();
-			const byId = new Map(nodes.map((n) => [n.id, n.name]));
-			return ids.map((id) => ({ id, name: byId.get(id) ?? "" }));
+			return descendantsWithNames(roots);
 		},
 	},
 	{
@@ -303,7 +251,7 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		impl: "builtin",
 		remark:
 			"从我所在的部门往上找,遇到第一个街镇(闵行区 14 个街镇 / 工业区之一)就返它的 id + name;整条链上没有街镇 ⇒ 空(失败关闭)",
-		// m19644:`ctx.depts` 是根 → 我 的祖先链(由 `deptTreeOf` 在引擎里构造,见
+		// m19644:`ctx.depts` 按深度由深到浅排列(由 `deptTreeOf` 在引擎里构造,见
 		// `src/lib/data-scope.ts`),所以插件只要在数组里找名字就行,不必再爬 `parentId`。
 		// 链上一个街镇都没有 ⇒ `[]`(失败关闭 —— 不能把"我挂区级机关"的人也判成可见)。
 		resolve: ({ ctx }) => {
@@ -322,7 +270,7 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		label: "我所在的居村",
 		impl: "builtin",
 		remark: "从我所在的部门往上找,遇到第一个居村就返它的 id + name;整条链上没有 ⇒ 空(失败关闭)",
-		// m19644:`ctx.depts` 是根 → 我 的祖先链(由 `deptTreeOf` 在引擎里构造,见
+		// m19644:`ctx.depts` 按深度由深到浅排列(由 `deptTreeOf` 在引擎里构造,见
 		// `src/lib/data-scope.ts`),所以插件只要在数组里找名字就行,不必再爬 `parentId`。
 		// 链上一个街镇都没有 ⇒ `[]`(失败关闭 —— 不能把"我挂区级机关"的人也判成可见)。
 		resolve: ({ ctx }) => {
@@ -353,9 +301,7 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		resolve: async ({ ctx }) => {
 			const street = ctx.depts.find((dept) => STREET_NAME_SET.has(dept.name));
 			if (!street) return [];
-			const nodes = await loadDeptNodes();
-			const byId = new Map(nodes.map((node) => [node.id, node.name]));
-			return collectDescendantIds(nodes, [street.id]).map((id) => ({ id, name: byId.get(id) ?? "" }));
+			return descendantsWithNames([street.id]);
 		},
 	},
 

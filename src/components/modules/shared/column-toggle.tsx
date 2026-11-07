@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
-import type { MockRow, useAppTable } from "#/lib/table";
+import type { TableRowData, useAppTable } from "#/lib/table";
 import { cn } from "#/lib/utils";
 
 /**
@@ -23,7 +23,7 @@ import { cn } from "#/lib/utils";
  * 所以列定义加一列,这个开关自动多一项,不会漂移。
  * `getCanHide() === false` 的列(操作列 / 勾选列)显示一把锁,不给隐藏。
  */
-export function ColumnToggle<TRow extends MockRow>({
+export function ColumnToggle<TRow extends TableRowData>({
 	table,
 	onPersist,
 }: {

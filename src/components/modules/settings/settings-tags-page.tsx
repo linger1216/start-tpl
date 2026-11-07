@@ -15,7 +15,7 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { buildTree, bySortThenLabel } from "#/lib/tree";
@@ -58,7 +58,7 @@ export function SettingsTagsPage() {
 				},
 				message: () => "已新增标签节点",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -69,7 +69,7 @@ export function SettingsTagsPage() {
 				setValues(tagFormValues(row));
 				toast.success("已保存");
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -84,7 +84,7 @@ export function SettingsTagsPage() {
 				}
 				toast.success(`已删除 ${outcome.deleted} 个节点`);
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -93,7 +93,7 @@ export function SettingsTagsPage() {
 			onSuccess: async () => {
 				await queryClient.invalidateQueries(trpc.tag.pathFilter());
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 

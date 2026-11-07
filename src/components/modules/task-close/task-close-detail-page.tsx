@@ -33,7 +33,7 @@ import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
@@ -127,7 +127,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				setActionMode(null);
 				toast.success(variables.toStatus ? "已发起审批" : "已发起征询");
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -135,7 +135,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const transferMutation = useMutation(
 		trpc.taskClose.taskTransfer.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setTransferOpen(false), message: () => "已转交" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -143,7 +143,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const transitMutation = useMutation(
 		trpc.taskClose.taskTransit.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setStatusOpen(false), message: () => "状态已更新" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -156,7 +156,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				setRejectReason("");
 				toast.success(variables.approved ? "已通过" : "已驳回");
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -164,14 +164,14 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const replyMutation = useMutation(
 		trpc.taskClose.actionReply.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { message: () => "意见已回复,进了评论区" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const updateMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setEditOpen(false), message: () => "已保存" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -179,7 +179,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const attachMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setAttachOpen(false), message: () => "附件已更新" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
@@ -191,7 +191,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				void queryClient.invalidateQueries({ ...trpc.taskClose.pathFilter(), refetchType: "none" });
 				void navigate({ to: "/task-close", replace: true });
 			},
-			onError: (error) => toastApiError(error),
+			onError: toastApiError,
 		}),
 	);
 
@@ -205,14 +205,14 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				},
 				message: () => "已加入成员",
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 
 	const memberRemoveMutation = useMutation(
 		trpc.taskClose.memberRemove.mutationOptions({
 			onSuccess: writeSuccess(invalidate),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

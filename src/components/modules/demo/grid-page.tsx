@@ -27,9 +27,10 @@ import {
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useLedgerTable } from "#/hooks/use-ledger-table";
-import { writeError, writeSuccess } from "#/hooks/use-ledger-write";
+import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
+import { toastApiError } from "#/lib/api/error";
 import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
@@ -68,13 +69,13 @@ export function GridPage() {
 	const createMutation = useMutation(
 		trpc.demoGrid.create.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setCreating(false), message: () => "已新增网格" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const updateMutation = useMutation(
 		trpc.demoGrid.update.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setEditing(null), message: () => "已保存" }),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const deleteMutation = useMutation(
@@ -83,7 +84,7 @@ export function GridPage() {
 				close: () => setPendingDelete(null),
 				message: (o) => `已删除 ${o.removed} 条`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 	const assignMutation = useMutation(
@@ -92,7 +93,7 @@ export function GridPage() {
 				close: () => setAssignOpen(false),
 				message: (o) => `已把 ${o.assigned} 条指派给负责人`,
 			}),
-			onError: writeError,
+			onError: toastApiError,
 		}),
 	);
 

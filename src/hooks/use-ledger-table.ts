@@ -1,8 +1,8 @@
 import { useColumnPrefs, usePageSize } from "#/hooks/use-para-prefs";
-import { type MockRow, useAppTable } from "#/lib/table";
+import { type TableRowData, useAppTable } from "#/lib/table";
 
 /** `useAppTable` 的入参,去掉 `initialState` —— 每页条数由这里的 `usePageSize()` 统一给 */
-type LedgerTableOptions<TRow extends MockRow> = Omit<Parameters<typeof useAppTable<TRow>>[0], "initialState">;
+type LedgerTableOptions<TRow extends TableRowData> = Omit<Parameters<typeof useAppTable<TRow>>[0], "initialState">;
 
 /**
  * 台账表格装配 —— 9 个列表页各有 8 行逐字相同的「读默认每页条数 → 建表 → 读列偏好」。
@@ -13,7 +13,7 @@ type LedgerTableOptions<TRow extends MockRow> = Omit<Parameters<typeof useAppTab
  * `prefKey` 是该页在 `page.columns` 里的页键(如 `settings.parameters`),**不要改** ——
  * 改了等于把所有人的列偏好清空。
  */
-export function useLedgerTable<TRow extends MockRow>({
+export function useLedgerTable<TRow extends TableRowData>({
 	prefKey,
 	...options
 }: LedgerTableOptions<TRow> & { prefKey: string }) {

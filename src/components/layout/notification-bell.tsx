@@ -36,7 +36,7 @@ export function NotificationBell() {
 	const router = useRouter();
 	const [open, setOpen] = useState(false);
 
-	// 60 秒轮询就够:这是站内通知,不是聊天(真需要实时再上 SSE)
+	// 60 秒轮询兜底,SSE 到达时立即刷新。
 	const listQuery = useQuery({ ...trpc.notice.list.queryOptions(), refetchInterval: 60_000 });
 
 	// 订阅 SSE:有新通知就直接 invalidate 缓存,轮询周期里也能秒级收到。
