@@ -1567,20 +1567,23 @@ export const taskCloseRouter = createTRPCRouter({
 			.where(eq(taskCloseContentRevision.task_id, task.id))
 			.orderBy(desc(taskCloseContentRevision.revision));
 		const names = await nameMapOf(rows.map((row) => row.actor_id));
-		return Promise.all(
-			rows.map(async (row) => {
-				const payload = row.payload as { content?: unknown } | null;
-				return {
-					id: row.id,
-					revision: row.revision,
-					description: row.description,
-					content: parseBlocks(payload?.content),
-					attachments: await resolveAttachments(attachmentIdsOf(row.payload)),
-					actorName: names.get(row.actor_id) ?? row.actor_id,
-					createdAt: row.created_at?.toISOString() ?? null,
-				};
-			}),
-		);
+		// 一次性把全部修订的附件查出来,按附件 id 归组 —— 逐行 `resolveAttachments` 会变成 N+1
+		const attachmentIds = rows.flatMap((row) => attachmentIdsOf(row.payload));
+		const attachmentRows = await resolveAttachments(attachmentIds);
+		const attachmentById = new Map(attachmentRows.map((row) => [row.id, row]));
+		return rows.map((row) => {
+			const payload = row.payload as { content?: unknown } | null;
+			const ids = attachmentIdsOf(row.payload);
+			return {
+				id: row.id,
+				revision: row.revision,
+				description: row.description,
+				content: parseBlocks(payload?.content),
+				attachments: ids.map((id) => attachmentById.get(id)).filter((item) => item !== undefined),
+				actorName: names.get(row.actor_id) ?? row.actor_id,
+				createdAt: row.created_at?.toISOString() ?? null,
+			};
+		});
 	}),
 
 	/**
@@ -1687,20 +1690,20 @@ export const taskCloseRouter = createTRPCRouter({
 			// 变更前的值只能在这里取(update 之后就没了)—— 日志要写"从什么改成什么"
 			const nextName = input.name.trim();
 			if (!nextName) throw new TRPCError({ code: "BAD_REQUEST", message: "任务名称不能为空" });
-			const nextDescription = input.description?.trim() || null;
-			const nextDueAt = input.dueAt ? new Date(input.dueAt) : null;
-			/** 优先级 `undefined` = 不动;`null` = 显式清空;字符串 = 改值 */
-			const nextPriority = input.priority === undefined ? undefined : input.priority;
 			/**
-			 * `undefined` = **整块不动** —— 这是修过的坑:早先无条件 `normalizePayload(input.payload)`,
-			 * 不传 payload 的老客户端 / 只改名称的调用会把内容区和附件区一起清空,还顺手写一条空修订。
-			 * `null` 仍然是「显式清空」,与 `priority` 同口径。
+			 * 可空字段同口径:**`undefined` = 不动**(回退锁上的旧值,下游比较自然为 false);
+			 * `null` / 空串 = 显式清空;有值 = 改值。与 `priority` / `payload` 一致。
+			 * 回退用的旧值必须在事务内取 —— 外层的 `task` 是加锁前的快照。
 			 */
 			const payloadTouched = input.payload !== undefined;
 
 			const now = new Date();
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
+				const nextDescription = input.description === undefined ? task.description : input.description?.trim() || null;
+				const nextDueAt = input.dueAt === undefined ? task.due_at : input.dueAt ? new Date(input.dueAt) : null;
+				/** 优先级 `undefined` = 不动;`null` = 显式清空;字符串 = 改值 */
+				const nextPriority = input.priority === undefined ? undefined : input.priority;
 				const nextPayload = payloadTouched ? await prepareTaskPayload(tx, input.payload) : task.payload;
 				const prevDueAt = task.due_at ? task.due_at.toISOString() : null;
 				const nextDueText = nextDueAt ? nextDueAt.toISOString() : null;
@@ -1875,18 +1878,13 @@ export const taskCloseRouter = createTRPCRouter({
 						.limit(1);
 					if (executor) throw new TRPCError({ code: "BAD_REQUEST", message: "任务已有执行人，请使用转交" });
 				}
+				// 去重键只到「人」为止 —— 带上 role 会允许同一人同时留 participant + executor 两行
 				const [dup] = await tx
 					.select({ id: taskCloseMember.id })
 					.from(taskCloseMember)
-					.where(
-						and(
-							eq(taskCloseMember.task_id, task.id),
-							eq(taskCloseMember.user_id, input.userId),
-							eq(taskCloseMember.role, input.role),
-						),
-					)
+					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)))
 					.limit(1);
-				if (dup) throw new TRPCError({ code: "BAD_REQUEST", message: "这个人已经是该角色了" });
+				if (dup) throw new TRPCError({ code: "BAD_REQUEST", message: "这个人已经是任务成员了" });
 				await tx.insert(taskCloseMember).values({
 					id: newId(),
 					task_id: task.id,
@@ -2357,7 +2355,7 @@ export const taskCloseRouter = createTRPCRouter({
 					source: { type: "task_action", id: input.id },
 					title: `任务催办：${row.task.name}`,
 					content: "您有一项待处理的审批或征询，请及时查看。",
-					payload: { actionId: input.id, operatorId: me.id },
+					payload: { path: taskPathOf(row.task.id), actionId: input.id, operatorId: me.id },
 					dedupeKey: key,
 					recipients: channels.map((channel) => ({
 						userId: row.user.id,

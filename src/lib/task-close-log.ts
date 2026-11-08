@@ -216,6 +216,14 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 				note: "新执行人(主);原执行人改为参与者",
 			};
 		}
+		case "report.bind":
+			return { title: TASK_LOG_LABEL["report.bind"], note: null };
+		case "report.submit":
+			return { title: TASK_LOG_LABEL["report.submit"], note: null };
+		case "report.return": {
+			const reason = text(detail.reason);
+			return { title: TASK_LOG_LABEL["report.return"], note: reason ? `退回原因:${reason}` : null };
+		}
 		default:
 			// 将来新增事件码而界面没跟上时走这里:显示码本身,不白屏、不错位
 			return { title: TASK_LOG_LABEL[item.event as TaskLogEvent] ?? item.event, note: "未知事件类型" };

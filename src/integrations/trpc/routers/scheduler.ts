@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import { sysJobExecution, sysScheduledJob } from "#/db/data-base-schema";
@@ -44,7 +44,16 @@ export const schedulerRouter = createTRPCRouter({
 				throw new TRPCError({ code: "BAD_REQUEST", message: "调度表达式、时区或间隔无效" });
 			}
 			const now = new Date();
-			const result = await db
+			// 先查再写:`affectedRows` 是「实际改了行」而非「匹配到行」,重复提交同一份配置会得 0
+			const [job] = await db
+				.select({ id: sysScheduledJob.id, lockedUntil: sysScheduledJob.locked_until })
+				.from(sysScheduledJob)
+				.where(eq(sysScheduledJob.id, input.id))
+				.limit(1);
+			if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
+			if (job.lockedUntil && job.lockedUntil > now)
+				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "任务正在执行" });
+			await db
 				.update(sysScheduledJob)
 				.set({
 					interval_seconds: input.mode === "interval" ? (input.intervalSeconds ?? 0) : 0,
@@ -54,14 +63,7 @@ export const schedulerRouter = createTRPCRouter({
 					attempts: 0,
 					updated_at: now,
 				})
-				.where(
-					and(
-						eq(sysScheduledJob.id, input.id),
-						or(isNull(sysScheduledJob.locked_until), lte(sysScheduledJob.locked_until, now)),
-					),
-				);
-			if (result[0].affectedRows !== 1)
-				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "任务不存在或正在执行" });
+				.where(eq(sysScheduledJob.id, input.id));
 			return { ok: true };
 		}),
 	executions: protectedProcedure.input(idInput).query(async ({ input }) => {
@@ -95,18 +97,24 @@ export const schedulerRouter = createTRPCRouter({
 	}),
 	trigger: protectedProcedure.input(idInput).mutation(async ({ input }) => {
 		const now = new Date();
-		const result = await db
+		// 同 `configure`:先查再写。`affectedRows` 算的是真改了几行,连点两次会得 0 而不是报错
+		const [job] = await db
+			.select({
+				id: sysScheduledJob.id,
+				enabled: sysScheduledJob.enabled,
+				lockedUntil: sysScheduledJob.locked_until,
+			})
+			.from(sysScheduledJob)
+			.where(eq(sysScheduledJob.id, input.id))
+			.limit(1);
+		if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "调度任务不存在" });
+		if (!job.enabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "调度任务已停用" });
+		if (job.lockedUntil && job.lockedUntil > now)
+			throw new TRPCError({ code: "PRECONDITION_FAILED", message: "调度任务正在执行" });
+		await db
 			.update(sysScheduledJob)
 			.set({ next_run_at: new Date(Math.floor(now.getTime() / 1000) * 1000), attempts: 0, updated_at: now })
-			.where(
-				and(
-					eq(sysScheduledJob.id, input.id),
-					eq(sysScheduledJob.enabled, true),
-					or(isNull(sysScheduledJob.locked_until), lte(sysScheduledJob.locked_until, now)),
-				),
-			);
-		if (result[0].affectedRows !== 1)
-			throw new TRPCError({ code: "PRECONDITION_FAILED", message: "任务不存在、已停用或正在执行" });
+			.where(eq(sysScheduledJob.id, input.id));
 		return { ok: true };
 	}),
 });

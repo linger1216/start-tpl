@@ -140,6 +140,14 @@ describe("活动日志文本", () => {
 		assert.equal(unknown.note, "未知事件类型");
 	});
 
+	it("填报事件有专属文案,退回带原因", () => {
+		for (const event of ["report.bind", "report.submit", "report.return"] as const)
+			assert.notEqual(describeLog(item({ event }), ctx).note, "未知事件类型", `${event} 要有专属分支`);
+		const returned = describeLog(item({ event: "report.return", detail: { reason: "数字不对" } }), ctx);
+		assert.equal(returned.title, "退回填报");
+		assert.equal(returned.note, "退回原因:数字不对");
+	});
+
 	it("类别取事件码前缀;流程条只认动过状态的行", () => {
 		assert.equal(logCategoryOf("member.add"), "member");
 		assert.equal(logCategoryOf("task.transit"), "task");

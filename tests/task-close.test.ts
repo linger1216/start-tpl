@@ -818,6 +818,16 @@ describe("任务闭环", () => {
 		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
 	});
 
+	it("同一个人不能以两个角色重复入表", async () => {
+		const id = await newTask("角色去重"); // 建任务时 B 已是 executor
+		await assertRejects(
+			() => asA().taskClose.memberAdd({ taskId: id, userId: B.id, role: "participant" }),
+			"已经是任务成员",
+		);
+		const members = (await asA().taskClose.taskGet({ id })).members.filter((member) => member.userId === B.id);
+		assert.equal(members.length, 1, "同一个人只该有一行");
+	});
+
 	it("taskUpdate 不传 payload 时保留原有内容与附件,传 null 才是清空", async () => {
 		const id = await newTask("payload 保留");
 		await asA().taskClose.taskUpdate({
@@ -834,6 +844,26 @@ describe("任务闭环", () => {
 		await asA().taskClose.taskUpdate({ id, name: "改了名字", payload: null });
 		detail = await asA().taskClose.taskGet({ id });
 		assert.equal(detail.content.length, 0, "payload: null 才清空");
+	});
+
+	it("taskUpdate 不传 description / dueAt 时保留旧值,传 null 才是清空", async () => {
+		const id = await newTask("字段保留");
+		await asA().taskClose.taskUpdate({
+			id,
+			name: "字段保留",
+			description: "原说明",
+			dueAt: "2026-12-31T00:00:00.000Z",
+		});
+		// 只改名字,不带 description / dueAt
+		await asA().taskClose.taskUpdate({ id, name: "只改名字" });
+		let detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.task.description, "原说明", "不传 description 不能清空");
+		assert.equal(detail.task.dueAt, "2026-12-31T00:00:00.000Z", "不传 dueAt 不能清空");
+		// 显式 null 才是清空
+		await asA().taskClose.taskUpdate({ id, name: "只改名字", description: null, dueAt: null });
+		detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.task.description, null, "description: null 才清空");
+		assert.equal(detail.task.dueAt, null, "dueAt: null 才清空");
 	});
 
 	it("payload 里的附件 id 必须真存在且已确认", async () => {

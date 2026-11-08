@@ -144,7 +144,7 @@ export const noticeRouter = createTRPCRouter({
 		.input(
 			z.object({
 				// 与 `sys_user.id` 的 varchar(36) 对齐;BA 默认生成 32 位,但 uuid 配置下是 36 位
-				userIds: z.array(z.string().max(36)).min(1, "至少要选一个收件人"),
+				userIds: z.array(z.string().max(36)).min(1, "至少要选一个收件人").max(500, "一次最多通知 500 人"),
 				title: z.string().min(1, "标题不能为空").max(128),
 				body: z.string().max(255).optional(),
 				path: z.string().max(255).optional(),
