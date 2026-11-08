@@ -13,6 +13,7 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 
 /**
  * 重命名(改)—— 只改**展示用**的文件名。
@@ -65,7 +66,7 @@ export function SettingsFilesForm({
 						/>
 					</DetailRow>
 					<DetailRow label="对象键">
-						<span className="font-mono text-xs text-muted-foreground">{row?.objectKey ?? "—"}</span>
+						<span className="font-mono text-xs text-muted-foreground">{row?.objectKey ?? PLACEHOLDER_EMPTY}</span>
 					</DetailRow>
 				</div>
 

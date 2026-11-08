@@ -29,7 +29,9 @@ import { auth } from "#/lib/auth";
 import {
 	allUserRoles,
 	clearCasbinCache,
+	enforceAny,
 	isAdminUser,
+	isPermissionConfigured,
 	removeAllRolesOfUser,
 	roleIdsOf,
 	setUserRoles,
@@ -63,7 +65,13 @@ export const userRouter = createTRPCRouter({
 	 *
 	 * 一次查完所有分配再按 user 归组,**别在循环里逐人查**(N+1)。
 	 */
-	list: protectedProcedure.query(async () => {
+	list: protectedProcedure.query(async ({ ctx }) => {
+		const me = requireCurrentUser(ctx);
+		const canReadPhone =
+			!me.sharePaths &&
+			(!(await isPermissionConfigured()) ||
+				(await isAdminUser(me.id, me.isSuper === true)) ||
+				(await enforceAny(me.id, ["sys:user:edit"])));
 		const [users, deptRows, roleRows, roles] = await Promise.all([
 			// 读路径一律过 `alive()`:软删的用户行留在库里只为审计留痕,不能出现在台账里
 			db.select().from(sysUser).where(alive(sysUser)).orderBy(asc(sysUser.name), asc(sysUser.email)),
@@ -118,6 +126,7 @@ export const userRouter = createTRPCRouter({
 				id: row.id,
 				name: row.name ?? "",
 				email: row.email,
+				phone: canReadPhone ? row.phone : null,
 				emailVerified: row.emailVerified,
 				image: row.image ?? null,
 				createdAt: row.createdAt?.toISOString() ?? null,
@@ -190,6 +199,12 @@ export const userRouter = createTRPCRouter({
 				name: z.string().min(1, "姓名不能为空").max(128),
 				email: z.string().min(3, "邮箱不能为空").max(255),
 				/** 头像 URL(BA 的 `image` 列;空串 = 清掉) */
+				phone: z
+					.string()
+					.trim()
+					.max(32)
+					.refine((value) => !value || /^\+?[0-9][0-9 -]{5,30}$/.test(value), "请输入有效的电话号码")
+					.optional(),
 				image: z.string().max(512),
 				/** 邮箱是否已验证 —— 管理员可以直接替用户标记(BA 的 `email_verified` 列) */
 				emailVerified: z.boolean(),
@@ -242,6 +257,7 @@ export const userRouter = createTRPCRouter({
 					.set({
 						name: input.name.trim(),
 						email,
+						...(input.phone !== undefined ? { phone: input.phone || null } : {}),
 						image: input.image.trim() || null,
 						emailVerified: input.emailVerified,
 						updatedAt: new Date(),

@@ -131,6 +131,7 @@ export function TaskTodoStrip({
 	onApprove,
 	onReject,
 	onReply,
+	onView,
 }: {
 	items: TodoItem[];
 	busy: boolean;
@@ -139,12 +140,15 @@ export function TaskTodoStrip({
 	participants: readonly Participant[] | undefined;
 	onApprove: (id: string) => void;
 	onReject: (id: string) => void;
-	onReply: (id: string, content: string, attachments: string[]) => void;
+	onReply: (id: string, content: string, attachments: string[], mentionIds: string[]) => void;
+	onView: (id: string) => Promise<void>;
 }) {
 	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const textRef = useRef<HTMLTextAreaElement | null>(null);
 	const [replyFor, setReplyFor] = useState<string | null>(null);
+	const [openAction, setOpenAction] = useState<string | null>(null);
+	const [opening, setOpening] = useState(false);
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<ReplyFile[]>([]);
 	const [uploading, setUploading] = useState(false);
@@ -173,13 +177,29 @@ export function TaskTodoStrip({
 		if (confirmTimer.current) clearTimeout(confirmTimer.current);
 	}
 
+	async function openDetails(id: string) {
+		if (openAction === id) {
+			setOpenAction(null);
+			return;
+		}
+		setOpening(true);
+		try {
+			await onView(id);
+			setOpenAction(id);
+		} catch {
+			/* 调用方展示错误 */
+		} finally {
+			setOpening(false);
+		}
+	}
+
 	if (items.length === 0) return null;
 
 	function openReply(id: string) {
 		setReplyFor((prev) => (prev === id ? null : id));
 		setText("");
 		setFiles([]);
-		mention.close();
+		mention.reset();
 	}
 
 	async function pickReplyFiles(list: FileList | null) {
@@ -206,10 +226,12 @@ export function TaskTodoStrip({
 			id,
 			text.trim(),
 			files.map((file) => file.id),
+			mention.mentionIds,
 		);
 		setReplyFor(null);
 		setText("");
 		setFiles([]);
+		mention.reset();
 	}
 
 	return (
@@ -233,7 +255,18 @@ export function TaskTodoStrip({
 								</span>
 								<span className="text-foreground">{item.title}</span>
 							</span>
-							{item.actionable && !item.consult ? (
+							{item.actionable ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									disabled={opening}
+									aria-expanded={openAction === item.id}
+									onClick={() => void openDetails(item.id)}
+								>
+									{openAction === item.id ? "收起" : "查看"}
+								</Button>
+							) : null}
+							{item.actionable && openAction === item.id && !item.consult ? (
 								<span className="inline-flex items-center gap-2">
 									{/* 两段式:第一击进待确认态(按钮变「确认通过」),第二击才生效;2s 自动还原 */}
 									{confirmFor === item.id ? (
@@ -263,7 +296,7 @@ export function TaskTodoStrip({
 									</ActionButton>
 								</span>
 							) : null}
-							{item.actionable && item.consult ? (
+							{item.actionable && openAction === item.id && item.consult ? (
 								<Button size="sm" variant="outline" disabled={replyBusy} onClick={() => openReply(item.id)}>
 									<ReplyIcon className="size-3.5" />
 									回复
@@ -271,7 +304,7 @@ export function TaskTodoStrip({
 							) : null}
 						</div>
 						{/* 征询的回复就一行:意见 + 附件 → 提交后意见落成一条评论,动作即结 */}
-						{item.actionable && item.consult && replyFor === item.id ? (
+						{item.actionable && openAction === item.id && item.consult && replyFor === item.id ? (
 							<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
 								<textarea
 									ref={textRef}
@@ -281,7 +314,7 @@ export function TaskTodoStrip({
 										setText(event.target.value);
 										mention.track(event.target.value, event.target.selectionStart);
 									}}
-									placeholder="把意见写在这里,发表后进评论区…(可用 @ 提及参与人)"
+									placeholder="把意见写在这里,发表后进评论区…(可用 @ 提及成员)"
 									aria-label="回复意见"
 									className="block w-full resize-none bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground"
 									onKeyDown={(event) => {
@@ -293,7 +326,7 @@ export function TaskTodoStrip({
 									<MentionList
 										options={mention.options}
 										highlight={mention.highlight}
-										onPick={(person) => mention.insert(person.name, text)}
+										onPick={(person) => mention.insert(person, text)}
 									/>
 								) : null}
 								{files.length > 0 ? (

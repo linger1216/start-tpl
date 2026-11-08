@@ -10,6 +10,7 @@ import { ADMIN_ROLE_NAME } from "../src/lib/menu-spec.ts";
 import { pagePermOf } from "../src/lib/perm-code.ts";
 import {
 	DATA_SCOPE_BY_PATH,
+	effectiveMenusFor,
 	PERM_BY_PATH,
 	UNMAPPED_MUTATIONS,
 	UNMAPPED_QUERIES,
@@ -161,6 +162,10 @@ describe("服务端鉴权", () => {
 		await realAdmin.role.list();
 		await realAdmin.department.tree();
 		await realAdmin.log.list();
+		assert.ok(
+			(await effectiveMenusFor(user.id)).perms?.includes("sys:scheduler:manage"),
+			"管理员前端权限应包含按钮权限",
+		);
 		// 对照:同样注入 id 但**不是 admin** 的真账号,这条接口照旧被拒
 		const other = await caller.user.create({
 			name: `${TEST_PREFIX}非超管对照${SUFFIX}`,
@@ -184,7 +189,6 @@ describe("服务端鉴权", () => {
 			perm: "",
 		});
 		createdMenuIds.push(freshMenu.id);
-		const { effectiveMenusFor } = await import("#/lib/rbac");
 		const menuAccess = await effectiveMenusFor(user.id);
 		assert.ok(menuAccess.rows, "admin 必须拿到非 null 的菜单清单");
 		assert.ok(

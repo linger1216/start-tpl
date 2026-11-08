@@ -1,5 +1,6 @@
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 与 `trpc.log.list` 的出参一一对应(`sys_log` 的列,一个不少) */
@@ -71,7 +72,7 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 		columnHelper.accessor("errorCode", {
 			header: "错误码",
 			size: 120,
-			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? PLACEHOLDER_EMPTY}</span>,
 		}),
 		columnHelper.accessor("errorMessage", {
 			header: "错误信息",
@@ -82,18 +83,22 @@ export function logColumns({ onView }: { onView: (row: LogRow) => void }) {
 			header: "耗时",
 			size: 90,
 			cell: (ctx) => (
-				<span className="tabular-nums text-xs">{ctx.getValue() === null ? "—" : `${ctx.getValue()} ms`}</span>
+				<span className="tabular-nums text-xs">
+					{ctx.getValue() === null ? PLACEHOLDER_EMPTY : `${ctx.getValue()} ms`}
+				</span>
 			),
 		}),
 		columnHelper.accessor("ip", {
 			header: "来源 IP",
 			size: 130,
-			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => <span className="font-mono text-xs">{ctx.getValue() ?? PLACEHOLDER_EMPTY}</span>,
 		}),
 		columnHelper.accessor("traceId", {
 			header: "追踪号",
 			size: 150,
-			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => (
+				<span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? PLACEHOLDER_EMPTY}</span>
+			),
 		}),
 		columnHelper.accessor("input", {
 			header: "入参快照",

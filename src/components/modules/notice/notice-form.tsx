@@ -77,7 +77,7 @@ export function NoticeForm({
 				<DialogHeader className="shrink-0">
 					<DialogTitle>发通知</DialogTitle>
 					<DialogDescription>
-						选人 → 写标题 → 可选填一条**站内路径**,对方点开就能跳到那个页面(必须以 / 开头)。
+						选人 → 写标题 → 可选填一条站内路径,对方点开就能跳到那个页面(必须以 / 开头)。
 					</DialogDescription>
 				</DialogHeader>
 
@@ -97,6 +97,7 @@ export function NoticeForm({
 						<Input
 							id="notice-title"
 							className="h-8 text-sm"
+							maxLength={128}
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
 							placeholder="例如:有 3 个账号还没分配角色"
@@ -106,6 +107,7 @@ export function NoticeForm({
 						<Input
 							id="notice-body"
 							className="h-8 text-sm"
+							maxLength={255}
 							value={body}
 							onChange={(e) => setBody(e.target.value)}
 							placeholder="一句话说明,最长 255 字"
@@ -115,6 +117,7 @@ export function NoticeForm({
 						<Input
 							id="notice-path"
 							className="h-8 font-mono text-sm"
+							maxLength={255}
 							value={path}
 							onChange={(e) => setPath(e.target.value)}
 							placeholder="/settings/users"

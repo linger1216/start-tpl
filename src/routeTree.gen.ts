@@ -32,6 +32,7 @@ import { Route as mainSettingsMenusRouteImport } from './routes/(main)/settings/
 import { Route as mainSettingsParametersRouteImport } from './routes/(main)/settings/parameters'
 import { Route as mainSettingsProfileRouteImport } from './routes/(main)/settings/profile'
 import { Route as mainSettingsRolesRouteImport } from './routes/(main)/settings/roles'
+import { Route as mainSettingsSchedulerRouteImport } from './routes/(main)/settings/scheduler'
 import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/tags'
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
 import { Route as mainTaskCloseIndexRouteImport } from './routes/(main)/task-close/index'
@@ -156,6 +157,11 @@ const mainSettingsRolesRoute = mainSettingsRolesRouteImport.update({
   path: '/settings/roles',
   getParentRoute: () => mainRouteRoute,
 } as any)
+const mainSettingsSchedulerRoute = mainSettingsSchedulerRouteImport.update({
+  id: '/settings/scheduler',
+  path: '/settings/scheduler',
+  getParentRoute: () => mainRouteRoute,
+} as any)
 const mainSettingsTagsRoute = mainSettingsTagsRouteImport.update({
   id: '/settings/tags',
   path: '/settings/tags',
@@ -224,6 +230,7 @@ export interface FileRoutesByFullPath {
   '/settings/parameters': typeof mainSettingsParametersRoute
   '/settings/profile': typeof mainSettingsProfileRoute
   '/settings/roles': typeof mainSettingsRolesRoute
+  '/settings/scheduler': typeof mainSettingsSchedulerRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/settings/parameters': typeof mainSettingsParametersRoute
   '/settings/profile': typeof mainSettingsProfileRoute
   '/settings/roles': typeof mainSettingsRolesRoute
+  '/settings/scheduler': typeof mainSettingsSchedulerRoute
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
@@ -292,6 +300,7 @@ export interface FileRoutesById {
   '/(main)/settings/parameters': typeof mainSettingsParametersRoute
   '/(main)/settings/profile': typeof mainSettingsProfileRoute
   '/(main)/settings/roles': typeof mainSettingsRolesRoute
+  '/(main)/settings/scheduler': typeof mainSettingsSchedulerRoute
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
   '/(main)/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
@@ -327,6 +336,7 @@ export interface FileRouteTypes {
     | '/settings/parameters'
     | '/settings/profile'
     | '/settings/roles'
+    | '/settings/scheduler'
     | '/settings/tags'
     | '/settings/users'
     | '/task-close/$taskId'
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/settings/parameters'
     | '/settings/profile'
     | '/settings/roles'
+    | '/settings/scheduler'
     | '/settings/tags'
     | '/settings/users'
     | '/task-close/$taskId'
@@ -394,6 +405,7 @@ export interface FileRouteTypes {
     | '/(main)/settings/parameters'
     | '/(main)/settings/profile'
     | '/(main)/settings/roles'
+    | '/(main)/settings/scheduler'
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
     | '/(main)/task-close/$taskId'
@@ -578,6 +590,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainSettingsRolesRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/settings/scheduler': {
+      id: '/(main)/settings/scheduler'
+      path: '/settings/scheduler'
+      fullPath: '/settings/scheduler'
+      preLoaderRoute: typeof mainSettingsSchedulerRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/(main)/settings/tags': {
       id: '/(main)/settings/tags'
       path: '/settings/tags'
@@ -664,6 +683,7 @@ interface mainRouteRouteChildren {
   mainSettingsParametersRoute: typeof mainSettingsParametersRoute
   mainSettingsProfileRoute: typeof mainSettingsProfileRoute
   mainSettingsRolesRoute: typeof mainSettingsRolesRoute
+  mainSettingsSchedulerRoute: typeof mainSettingsSchedulerRoute
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
   mainTaskCloseTaskIdRoute: typeof mainTaskCloseTaskIdRoute
@@ -693,6 +713,7 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainSettingsParametersRoute: mainSettingsParametersRoute,
   mainSettingsProfileRoute: mainSettingsProfileRoute,
   mainSettingsRolesRoute: mainSettingsRolesRoute,
+  mainSettingsSchedulerRoute: mainSettingsSchedulerRoute,
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,
   mainTaskCloseTaskIdRoute: mainTaskCloseTaskIdRoute,

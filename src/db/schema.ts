@@ -5,11 +5,11 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *
  * 这里只剩模板的示例表 `todos`。**其它表都不在本文件**,分两组口径,不要混:
  *
- *  1. **系统表(20 张 `sys_*` + 6 张 `tc_*`)**:`src/db/data-base-schema.ts` —— 五张系统设置
+ *  1. **系统表(25 张 `sys_*` + 13 张 `tc_*` + `demo_grid`)**:`src/db/data-base-schema.ts` —— 五张系统设置
  *     (`sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`)+ **认证四张**
  *     (`sys_user` / `sys_session` / `sys_account` / `sys_verification`,Better Auth 内核)+
  *     **权限四张**(`sys_dept` / `sys_role` / `sys_user_dept` / `sys_casbin_rule`)+
- *     `sys_file` / `sys_log` / `sys_notice` + 示例表 `demo_grid` + 任务闭环六张 `tc_*`。
+ *     `sys_file` / `sys_log` / `sys_notification*` + 示例表 `demo_grid` + 任务闭环十三张 `tc_*`。
  *     它们只声明「读写的形状」、**不进迁移**
  *     (库里已存在,进了 1050 报错);DDL 由 `scripts/create-system-tables.ts`(MySQL)与
  *     `scripts/create-better-auth-tables-dm.ts`(达梦)维护。
@@ -18,9 +18,9 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *  - **Better Auth 四表的模型名 / 字段名不可改**(传给 adapter 的键必须是 `user` / `session` / `account` /
  *    `verification`,列名是 `email_verified` / `expires_at` / `provider_id` …)。改了 better-auth 会在运行时报
  *    「找不到字段」,`pnpm typecheck` 抓不到 —— 映射点见 `src/lib/auth.ts`。
- *  - **时间列口径**:全库统一 `created_at` / `updated_at` / `deleted_at`(`_at` 后缀,不用 `_time`)——
- *    认证四表本来就是 better-auth 那一套,其余表已对齐(见 `doc/task-close.md` 的「时间列约定」);
- *    两批表不互相引用。
+ *  - **时间列口径分两套,不要混**:认证四表与 `tc_*` 用 `created_at` / `updated_at` / `deleted_at`
+ *    (`_at` 后缀);系统设置表(`sys_*` 的部门 / 角色 / 字典 / 参数 …)用 `create_time` / `update_time`
+ *    (`_time` 后缀)。见 `doc/后端代码导读.md`;两批表不互相引用。
  *
  * ⚠️ **RBAC 五表(`role` / `permission` / `user_role` / `role_permission` / `user_permission`)已下线**:
  * RBAC 已实装,表在 `data-base-schema.ts`(部门 / 角色 / 成员 / 角色→菜单),不在这个文件里

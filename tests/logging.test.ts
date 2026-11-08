@@ -219,6 +219,7 @@ describe("日志脱敏与截断(sanitize 是唯一闸门)", () => {
 			password: "***",
 			nested: { Authorization: "***", cookie: "***" },
 		});
+		assert.deepEqual(sanitize({ fileBase64: "sensitive-data", taskId: "task" }), { fileBase64: "***", taskId: "task" });
 	});
 
 	it("超长字符串截断并标注原长,数组只留前 10 个", () => {

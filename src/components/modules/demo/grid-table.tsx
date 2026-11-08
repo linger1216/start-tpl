@@ -1,5 +1,6 @@
 import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 与 `trpc.demoGrid.list` 的出参一一对应(见 doc/测试数据/README.md 的字段对应) */
@@ -51,7 +52,7 @@ export function gridColumns({
 			size: 120,
 			cell: (ctx) => (
 				<span className="text-xs" title={ctx.row.original.townId ?? ""}>
-					{ctx.getValue() ?? "—"}
+					{ctx.getValue() ?? PLACEHOLDER_EMPTY}
 				</span>
 			),
 		}),

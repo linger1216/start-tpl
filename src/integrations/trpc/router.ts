@@ -10,6 +10,7 @@ import { menuRouter } from "./routers/menu";
 import { noticeRouter } from "./routers/notice";
 import { paraRouter } from "./routers/para";
 import { roleRouter } from "./routers/role";
+import { schedulerRouter } from "./routers/scheduler";
 import { shareTokenRouter } from "./routers/share-token";
 import { tagRouter } from "./routers/tag";
 import { taskCloseRouter } from "./routers/task-close";
@@ -18,6 +19,7 @@ import { userRouter } from "./routers/user";
 export const trpcRouter = createTRPCRouter({
 	/** 审计日志(只读,见 doc/审计日志.md) */
 	log: logRouter,
+	scheduler: schedulerRouter,
 	/** 站内通知(只碰自己的,见 doc/通知中心.md) */
 	notice: noticeRouter,
 	/** Demo:综合网格履职(见 doc/测试数据/README.md) */

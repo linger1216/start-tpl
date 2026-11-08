@@ -8,18 +8,8 @@
  * 图标与色调**不在这里**(lucide 是客户端概念,别让它进 router 的 import 图)——
  * 见 `components/modules/task-close/task-close-log.tsx` 的注册表。
  */
-import { statusLabelOf, type WorkflowStatus } from "./task-close-spec";
 
-/**
- * 框架**锁定态** —— `actionCreate` 发起带目标的根级动作时把 `tc_task.status` 硬写成它。
- *
- * ⚠️ 它不是模板里声明的状态:模板可以碰巧也声明一个 `pending`,但锁定语义只认这个字面量
- * (`routers/task-close.ts` 里的 `pending` 与它同源)。展示名兜底用 `待审批`。
- */
-export const LOCKED_STATUS = "pending";
-export const LOCKED_STATUS_LABEL = "待审批";
-
-/** 12 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
+/** 16 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
 export const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -28,11 +18,15 @@ export const TASK_LOG_EVENTS = [
 	"action.create",
 	"action.respond",
 	"action.reply",
+	"action.withdraw",
 	"comment.create",
 	"comment.remove",
 	"member.add",
 	"member.remove",
 	"member.transfer",
+	"report.bind",
+	"report.submit",
+	"report.return",
 ] as const;
 
 export type TaskLogEvent = (typeof TASK_LOG_EVENTS)[number];
@@ -46,11 +40,15 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"action.create": "发起审批",
 	"action.respond": "答复审批",
 	"action.reply": "回复征询",
+	"action.withdraw": "撤回动作",
 	"comment.create": "发表评论",
 	"comment.remove": "删除评论",
 	"member.add": "加入成员",
 	"member.remove": "移出成员",
 	"member.transfer": "转交",
+	"report.bind": "配置填报",
+	"report.submit": "提交填报",
+	"report.return": "退回填报",
 };
 
 /**
@@ -91,19 +89,6 @@ export function logMovedStatus(item: Pick<TaskLogItem, "toStatus">): boolean {
 	return item.toStatus !== null;
 }
 
-/**
- * 状态展示名 —— 先查模板的 `statuses`,再认框架锁定态,都没有就回退 `value`。
- *
- * 为什么需要这一层:`pending` 是框架锁出来的状态,模板里**可能压根没声明**,
- * 直接 `statusLabelOf` 会显示成英文 `pending`。
- */
-export function logStatusLabel(statuses: readonly WorkflowStatus[] | undefined, value: string): string {
-	const fromTemplate = statuses?.find((item) => item.value === value)?.label;
-	if (fromTemplate) return fromTemplate;
-	if (value === LOCKED_STATUS) return LOCKED_STATUS_LABEL;
-	return statusLabelOf(statuses, value);
-}
-
 /** `task.update` 记下来的字段键 → 中文(新增可编辑字段时记得补) */
 export const TASK_LOG_FIELD_LABEL: Record<string, string> = {
 	name: "标题",
@@ -114,7 +99,7 @@ export const TASK_LOG_FIELD_LABEL: Record<string, string> = {
 };
 
 export type LogTextContext = {
-	/** 状态 value → 展示名(传 `(v) => logStatusLabel(statuses, v)`) */
+	/** 状态 value → 展示名(传 `(v) => statusLabelOf(statuses, v)`) */
 	statusLabel: (value: string) => string;
 	/** 成员角色 → 展示名(复用调用点既有的 `roleText`,不在这里再维护一份角色词表) */
 	roleLabel: (role: string) => string;
@@ -167,10 +152,11 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 			return { title: `${TASK_LOG_LABEL["task.transit"]}:${arrow(from, to)}`, note: null };
 		case "action.create": {
 			const intended = text(detail.intendedTo);
+			const intendedFrom = text(detail.intendedFrom);
 			const target = item.targetName ?? text(detail.handleId);
 			if (intended) {
 				return {
-					title: `${TASK_LOG_LABEL["action.create"]}:${arrow(from, ctx.statusLabel(intended))}`,
+					title: `${TASK_LOG_LABEL["action.create"]}:${arrow(intendedFrom ? ctx.statusLabel(intendedFrom) : from, ctx.statusLabel(intended))}`,
 					note: target ? `指派给 ${target}${bool(detail.isLocking) ? " · 任务已锁定" : ""}` : null,
 				};
 			}
@@ -198,6 +184,8 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 				note: parts.length > 0 ? parts.join(" · ") : null,
 			};
 		}
+		case "action.withdraw":
+			return { title: TASK_LOG_LABEL["action.withdraw"], note: null };
 		case "comment.create": {
 			const count = typeof detail.attachments === "number" ? detail.attachments : 0;
 			const note = [item.excerpt, count > 0 ? `附 ${count} 个附件` : null].filter((part) => part !== null).join(" · ");

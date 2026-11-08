@@ -1,6 +1,7 @@
 /**
  * **系统表的建表脚本**(设置五张 + 认证六张 + 权限四张 + 数据权限两张 + `sys_file` / `sys_log` /
- * `sys_notice` / `demo_grid` / `sys_share_token` = 22 张,外加任务闭环 `tc_*` 6 张)—— 幂等,可重复执行。
+ * `sys_notification*` / `sys_scheduled_job` / `sys_job_execution` / `demo_grid` / `sys_share_token`
+ * = 26 张,外加任务闭环 `tc_*` 13 张,共 39 张)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -124,6 +125,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`id\` varchar(36) not null,
 			\`name\` varchar(128) not null,
 			\`email\` varchar(255) not null,
+			\`phone\` varchar(32) default null,
 			\`email_verified\` tinyint(1) not null default 0,
 			\`image\` varchar(512) default null,
 			\`created_at\` timestamp not null default current_timestamp,
@@ -340,21 +342,44 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_sys_log_path\` (\`path\`, \`created_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '审计日志(只增不改;见 doc/审计日志.md)'`,
 	},
-	/** 站内通知(一条通知一个收件人;已读 = read_at,见 doc/通知中心.md) */
 	{
-		name: "sys_notice",
-		ddl: `create table if not exists \`sys_notice\` (
-    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`user_id\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`title\` varchar(128) collate utf8mb4_unicode_ci not null,
-    \`body\` varchar(255) collate utf8mb4_unicode_ci default null,
-    \`path\` varchar(255) collate utf8mb4_unicode_ci default null,
-    \`level\` varchar(16) collate utf8mb4_unicode_ci not null default 'info',
-    \`read_at\` datetime default null,
-    \`created_at\` datetime not null default current_timestamp,
-    primary key (\`id\`),
-    key \`idx_sys_notice_user\` (\`user_id\`, \`read_at\`, \`created_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '站内通知(一条一个收件人,见 doc/通知中心.md)'`,
+		name: "sys_notification",
+		ddl: `create table if not exists \`sys_notification\` (
+    \`id\` varchar(32) not null primary key, \`type\` varchar(64) not null, \`source_type\` varchar(64), \`source_id\` varchar(191), \`title\` varchar(128) not null, \`content\` text, \`payload\` text, \`dedupe_key\` varchar(191) not null, \`created_at\` datetime not null,
+    unique key \`uk_notification_dedupe\` (\`dedupe_key\`),
+    key \`idx_notification_source\` (\`source_type\`, \`source_id\`, \`type\`, \`created_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "sys_notification_delivery",
+		ddl: `create table if not exists \`sys_notification_delivery\` (
+    \`id\` varchar(32) not null primary key, \`notification_id\` varchar(32) not null, \`recipient_id\` varchar(36) not null, \`channel\` varchar(16) not null, \`target\` varchar(255), \`status\` varchar(16) not null, \`read_at\` datetime, \`attempts\` int not null default 0, \`next_attempt_at\` datetime, \`locked_until\` datetime, \`lock_token\` varchar(32), \`provider\` varchar(64), \`provider_message_id\` varchar(255), \`sent_at\` datetime, \`last_error\` text, \`created_at\` datetime not null, \`updated_at\` datetime not null,
+    unique key \`uk_notification_recipient_channel\` (\`notification_id\`,\`recipient_id\`,\`channel\`),
+    key \`idx_delivery_recipient\` (\`recipient_id\`,\`channel\`,\`read_at\`,\`created_at\`),
+    key \`idx_delivery_pending\` (\`status\`,\`next_attempt_at\`,\`locked_until\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "sys_notification_attempt",
+		ddl: `create table if not exists \`sys_notification_attempt\` (
+    \`id\` varchar(32) not null primary key, \`delivery_id\` varchar(32) not null, \`attempt_no\` int not null, \`status\` varchar(16) not null, \`provider\` varchar(64), \`error\` text, \`started_at\` datetime not null, \`finished_at\` datetime,
+    unique key \`uk_delivery_attempt\` (\`delivery_id\`,\`attempt_no\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "sys_scheduled_job",
+		ddl: `create table if not exists \`sys_scheduled_job\` (
+    \`id\` varchar(32) not null primary key, \`name\` varchar(128) not null, \`handler\` varchar(128) not null, \`interval_seconds\` int not null, \`cron_expression\` varchar(128) default null, \`timezone\` varchar(64) not null default 'UTC', \`timeout_seconds\` int not null default 60, \`max_attempts\` int not null default 3, \`retry_delay_seconds\` int not null default 30, \`enabled\` tinyint(1) not null default 1, \`next_run_at\` datetime not null, \`locked_until\` datetime, \`lock_token\` varchar(32), \`attempts\` int not null default 0, \`created_at\` datetime not null, \`updated_at\` datetime not null,
+    unique key \`uk_scheduled_job_name\` (\`name\`),
+    key \`idx_job_due\` (\`enabled\`,\`next_run_at\`,\`locked_until\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "sys_job_execution",
+		ddl: `create table if not exists \`sys_job_execution\` (
+    \`id\` varchar(32) not null primary key, \`job_id\` varchar(32) not null, \`started_at\` datetime not null, \`finished_at\` datetime, \`status\` varchar(16) not null, \`error\` text, \`duration_ms\` int,
+    key \`idx_execution_job\` (\`job_id\`,\`started_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	/** Demo:综合网格履职(见 doc/测试数据/README.md) */
 	{
@@ -434,6 +459,108 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	// ── 任务闭环(task-close):状态图 / 任务本体 / 外挂动作(三张不走 drizzle 迁移;理由见 data-base-schema.ts 的头注释)
 	// ── 任务闭环(tc_close):状态图 / 任务本体 / 外挂动作(三张不进 drizzle 迁移;理由见 data-base-schema.ts 头注释)
 	{
+		name: "tc_report_template",
+		ddl: `create table if not exists \`tc_report_template\` (
+    \`id\` varchar(32) not null,
+    \`name\` varchar(255) not null,
+    \`creator_id\` varchar(36) not null,
+    \`created_at\` datetime default current_timestamp,
+    \`updated_at\` datetime default current_timestamp,
+    primary key (\`id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_report_template_version",
+		ddl: `create table if not exists \`tc_report_template_version\` (
+    \`id\` varchar(32) not null,
+    \`template_id\` varchar(32) not null,
+    \`version\` int not null,
+    \`schema\` json not null,
+    \`created_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_report_template_version\` (\`template_id\`, \`version\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_task_report",
+		ddl: `create table if not exists \`tc_task_report\` (
+    \`id\` varchar(32) not null,
+    \`task_id\` varchar(191) not null,
+    \`version_id\` varchar(32) not null,
+    \`status\` varchar(16) not null,
+    \`draft\` json default null,
+    \`revision\` int not null default 0,
+    \`current_submission_id\` varchar(32) default null,
+    \`created_at\` datetime default current_timestamp,
+    \`updated_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_task_report_task\` (\`task_id\`),
+    key \`idx_task_report_version\` (\`version_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_report_submission",
+		ddl: `create table if not exists \`tc_report_submission\` (
+    \`id\` varchar(32) not null,
+    \`report_id\` varchar(32) not null,
+    \`task_id\` varchar(191) not null,
+    \`version_id\` varchar(32) not null,
+    \`submitter_id\` varchar(36) not null,
+    \`revision\` int not null,
+    \`payload\` json not null,
+    \`created_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_report_submission_revision\` (\`report_id\`, \`revision\`),
+    key \`idx_report_submission_task\` (\`task_id\`, \`created_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_report_batch",
+		ddl: `create table if not exists \`tc_report_batch\` (
+    \`id\` varchar(32) not null,
+    \`creator_id\` varchar(36) not null,
+    \`request_id\` varchar(64) not null,
+    \`request_hash\` varchar(64) not null,
+    \`name\` varchar(255) not null,
+    \`version_id\` varchar(32) not null,
+    \`workflow_id\` varchar(191) not null,
+    \`status\` varchar(16) not null,
+    \`due_at\` datetime default null,
+    \`created_at\` datetime default current_timestamp,
+    \`updated_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_report_batch_request\` (\`creator_id\`, \`request_id\`),
+    key \`idx_report_batch_creator\` (\`creator_id\`, \`created_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_report_batch_task",
+		ddl: `create table if not exists \`tc_report_batch_task\` (
+    \`id\` varchar(32) not null,
+    \`batch_id\` varchar(32) not null,
+    \`task_id\` varchar(191) not null,
+    \`target_user_id\` varchar(36) not null,
+    \`created_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_report_batch_task\` (\`task_id\`),
+    unique key \`uk_report_batch_target\` (\`batch_id\`, \`target_user_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
+		name: "tc_content_revision",
+		ddl: `create table if not exists \`tc_content_revision\` (
+    \`id\` varchar(32) not null,
+    \`task_id\` varchar(191) not null,
+    \`revision\` int not null,
+    \`description\` text default null,
+    \`payload\` json default null,
+    \`actor_id\` varchar(36) not null,
+    \`created_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_content_revision_task\` (\`task_id\`, \`revision\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+	},
+	{
 		name: "tc_workflow",
 		ddl: `create table if not exists \`tc_workflow\` (
     \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
@@ -478,12 +605,16 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`created_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`handle_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`status\` varchar(16) collate utf8mb4_unicode_ci not null,
+    \`viewed_at\` datetime default null,
+    \`activated_at\` datetime default null,
+    \`last_urged_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
     key \`idx_action_task_serial\` (\`task_id\`, \`serial_no\`, \`sequence\`),
     key \`idx_action_handle_status\` (\`handle_id\`, \`status\`),
-    key \`idx_action_parent\` (\`parent_action_id\`)
+    key \`idx_action_parent\` (\`parent_action_id\`),
+    key \`idx_action_unviewed\` (\`status\`, \`viewed_at\`, \`activated_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外挂动作(tc_close 模块:审批/征询/监督同一种模式;用法见 doc/task-close.md)'`,
 	},
 	// ── tc_close:任务-成员关系(who 协议扩展:participant / executor)
@@ -598,6 +729,15 @@ for (const table of TABLES) {
  * 幂等:列已存在就跳过。
  */
 const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
+	{ table: "sys_scheduled_job", column: "cron_expression", ddl: "varchar(128) default null" },
+	{ table: "sys_scheduled_job", column: "timezone", ddl: "varchar(64) not null default 'UTC'" },
+	{ table: "sys_user", column: "phone", ddl: "varchar(32) default null" },
+	{ table: "tc_action", column: "last_urged_at", ddl: "datetime default null" },
+	{ table: "sys_scheduled_job", column: "timeout_seconds", ddl: "int not null default 60" },
+	{ table: "sys_scheduled_job", column: "max_attempts", ddl: "int not null default 3" },
+	{ table: "sys_scheduled_job", column: "retry_delay_seconds", ddl: "int not null default 30" },
+	{ table: "tc_action", column: "viewed_at", ddl: "datetime default null" },
+	{ table: "tc_action", column: "activated_at", ddl: "datetime default null" },
 	{ table: "tc_task", column: "priority", ddl: "tinyint default null" },
 	{
 		table: "sys_menu",
@@ -830,6 +970,31 @@ for (const drop of COLUMN_DROPS) {
 }
 
 /**
+ * 老库补索引 —— `create table if not exists` 不会给**已存在的表**加索引,
+ * 所以新索引挂在既有表上时必须在这里登记,否则老库静默漏掉(只剩全表扫描)。
+ *
+ * 幂等:查 `information_schema.statistics`,已有同名索引就跳过。
+ */
+const INDEX_UPGRADES: Array<{ table: string; index: string; columns: string }> = [
+	// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作(见 lib/task-close-reminders.ts)
+	{ table: "tc_action", index: "idx_action_unviewed", columns: "`status`, `viewed_at`, `activated_at`" },
+];
+
+for (const upgrade of INDEX_UPGRADES) {
+	const idxs = (
+		await db.execute(
+			sql`select index_name as name from information_schema.statistics where table_schema = database() and table_name = ${upgrade.table}`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (idxs.some((row) => row.name === upgrade.index)) {
+		console.log(`· ${upgrade.table}.${upgrade.index} 已存在,跳过`);
+		continue;
+	}
+	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add index \`${upgrade.index}\` (${upgrade.columns})`));
+	console.log(`✓ ${upgrade.table} 补索引 ${upgrade.index}`);
+}
+
+/**
  * 真删索引 —— 和列一起在 demo_grid 上撤掉的 `idx_demo_grid_group`(m24215:不再限制 demo_grid)。
  * 幂等:索引不存在就跳过。
  */
@@ -852,6 +1017,8 @@ for (const drop of INDEX_DROPS) {
 	console.log(`✓ ${drop.table} 删索引 ${drop.index}`);
 }
 
+// 旧通知表 `sys_notice` 不在这里删:本脚本的立场是「不 drop、不 truncate」(见文件头),
+// 而删表会丢数据 —— 老库用一句手工 SQL 收尾,见 `doc/通知中心.md`「数据库初始化」。
 // 建完表再对齐一次列注释 / 索引名:老库通常是在更早的 DDL 下建的,注释里会留着旧列名
 await syncTableMeta();
 

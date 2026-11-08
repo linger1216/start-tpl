@@ -31,6 +31,7 @@ import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { matchKeyword, useRowSelection } from "#/lib/table";
 
 /**
@@ -320,12 +321,12 @@ export function GridPage() {
 			>
 				{viewing ? (
 					<>
-						<DetailRow label="所属街镇">{viewing.townName ?? "—"}</DetailRow>
+						<DetailRow label="所属街镇">{viewing.townName ?? PLACEHOLDER_EMPTY}</DetailRow>
 						<DetailRow label="网格名称(片区)">{viewing.name}</DetailRow>
-						<DetailRow label="网格长(Excel)">{viewing.ownerName ?? "—"}</DetailRow>
+						<DetailRow label="网格长(Excel)">{viewing.ownerName ?? PLACEHOLDER_EMPTY}</DetailRow>
 						<DetailRow label="负责人(系统账号)">{ownerNameOf(viewing.ownerId) ?? "未指派"}</DetailRow>
-						<DetailRow label="工作职务">{viewing.duty ?? "—"}</DetailRow>
-						<DetailRow label="备注">{viewing.remark ?? "—"}</DetailRow>
+						<DetailRow label="工作职务">{viewing.duty ?? PLACEHOLDER_EMPTY}</DetailRow>
+						<DetailRow label="备注">{viewing.remark ?? PLACEHOLDER_EMPTY}</DetailRow>
 					</>
 				) : null}
 			</DetailDialog>

@@ -6,6 +6,7 @@ import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { formatBytes } from "#/lib/format";
 
 /**
@@ -75,9 +76,9 @@ export function SettingsFilesDetail({
 							<span className="font-mono text-xs">{row.id}</span>
 						</DetailRow>
 						<DetailRow label="文件名">{row.originName}</DetailRow>
-						<DetailRow label="后缀">{row.ext || "—"}</DetailRow>
+						<DetailRow label="后缀">{row.ext || PLACEHOLDER_EMPTY}</DetailRow>
 						<DetailRow label="类型">
-							<span className="font-mono text-xs">{row.contentType || "—"}</span>
+							<span className="font-mono text-xs">{row.contentType || PLACEHOLDER_EMPTY}</span>
 						</DetailRow>
 						<DetailRow label="大小">{formatBytes(row.size)}</DetailRow>
 						<DetailRow label="状态">{status.label}</DetailRow>
@@ -88,7 +89,7 @@ export function SettingsFilesDetail({
 							<span className="font-mono text-xs break-all">{row.objectKey}</span>
 						</DetailRow>
 						<DetailRow label="sha256">
-							<span className="font-mono text-xs break-all">{row.hash || "—"}</span>
+							<span className="font-mono text-xs break-all">{row.hash || PLACEHOLDER_EMPTY}</span>
 						</DetailRow>
 					</div>
 				</>

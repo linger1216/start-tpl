@@ -1,14 +1,17 @@
 /**
- * **系统表**的 drizzle 定义 —— 二十八张:
+ * **系统表**的 drizzle 定义 —— 三十九张:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
+ *  - 登录风控两张:`sys_account_lockout`(账号锁定)/ `sys_rate_limit`(限流);
  *  - 权限四张:`sys_dept` / `sys_role` / `sys_user_dept` /
  *    **`sys_casbin_rule`**(功能权限策略:谁有哪些角色 + 角色能进哪些菜单,见 `lib/casbin.ts`);
  *  - 数据权限两张:**`sys_data_policy`**(谁看到哪些行)/ **`sys_data_plugin`**(值域插件登记;
  *    加 / 改插件不用重启,见 `lib/data-scope.ts` + `lib/data-scope-plugins.ts`);
  *  - 外链访客一张:**`sys_share_token`**(外链免登令牌 —— 用户管理 ▸ 访客管理,见 `lib/share-access.ts`);
- *  - 运行记录三张:`sys_notice`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据);
+ *  - 运行记录:`sys_notification*`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据)/
+ *    `sys_scheduled_job` / `sys_job_execution`(调度,见 `lib/scheduler.ts`);
+ *  - 任务闭环十三张 `tc_*`(见 `doc/task-close.md`);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
  * 为什么单独一个文件、而不是并进 `src/db/schema.ts`:
@@ -290,6 +293,7 @@ export const sysUser = mysqlTable(
 		id: varchar("id", { length: 36 }).primaryKey(),
 		name: varchar("name", { length: 128 }).notNull(),
 		email: varchar("email", { length: 255 }).notNull().unique(),
+		phone: varchar("phone", { length: 32 }),
 		emailVerified: boolean("email_verified").notNull().default(false),
 		image: varchar("image", { length: 512 }),
 		createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
@@ -583,33 +587,111 @@ export const sysCasbinRule = mysqlTable(
  * `status` 是三态而非软删时间列:上传是**两阶段**的,`0` 是"签发了但还没传上来"的正常中间态,
  * 清理任务就按 `(status, created_at)` 扫它。
  */
-/**
- * 站内通知 —— 一条通知**只属于一个收件人**,所以「已读」就是这一行的 `read_at`:
- * 零附带表、零联合查询(群发 = 多插几行,`lib/notice.ts` 的 `notifyMany`)。
- *
- * 发送只在**服务端**发生(`lib/notice.ts` 的 `notify`),没有公开的创建接口 ——
- * 站内通知不该被前端随便造。
- */
-export const sysNotice = mysqlTable(
-	"sys_notice",
+/** 一次通知事件；各接收人与渠道的状态保存在 sys_notification_delivery。 */
+export const sysNotification = mysqlTable(
+	"sys_notification",
 	{
-		/** 主键:nanoid */
 		id: varchar("id", { length: 32 }).primaryKey(),
-		/** 收件人 —— 所有查询都以它为第一条件(别人的通知在 SQL 层就碰不到) */
-		user_id: varchar("user_id", { length: 32 }).notNull(),
-		/** 标题(一行字) */
+		type: varchar("type", { length: 64 }).notNull(),
+		source_type: varchar("source_type", { length: 64 }),
+		source_id: varchar("source_id", { length: 191 }),
 		title: varchar("title", { length: 128 }).notNull(),
-		/** 可选正文 */
-		body: varchar("body", { length: 255 }),
-		/** 点击后跳转的**站内路径**(如 `/settings/files`);写入时校验必须 `/` 开头 */
-		path: varchar("path", { length: 255 }),
-		/** info / success / warn / danger —— 决定图标与颜色(走 DESIGN 的语义色) */
-		level: varchar("level", { length: 16 }).notNull().default("info"),
-		/** null = 未读 */
-		read_at: datetime("read_at", { mode: "date" }),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		content: text("content"),
+		payload: text("payload"),
+		dedupe_key: varchar("dedupe_key", { length: 191 }).notNull().unique(),
+		created_at: datetime("created_at", { mode: "date" })
+			.notNull()
+			.$defaultFn(() => new Date()),
 	},
-	(table) => [index("idx_sys_notice_user").on(table.user_id, table.read_at, table.created_at)],
+	(table) => [index("idx_notification_source").on(table.source_type, table.source_id, table.type, table.created_at)],
+);
+
+export const sysNotificationDelivery = mysqlTable(
+	"sys_notification_delivery",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		notification_id: varchar("notification_id", { length: 32 }).notNull(),
+		recipient_id: varchar("recipient_id", { length: 36 }).notNull(),
+		channel: varchar("channel", { length: 16 }).notNull(),
+		target: varchar("target", { length: 255 }),
+		status: varchar("status", { length: 16 }).notNull(),
+		read_at: datetime("read_at", { mode: "date" }),
+		attempts: int("attempts").notNull().default(0),
+		next_attempt_at: datetime("next_attempt_at", { mode: "date" }),
+		locked_until: datetime("locked_until", { mode: "date" }),
+		lock_token: varchar("lock_token", { length: 32 }),
+		provider: varchar("provider", { length: 64 }),
+		provider_message_id: varchar("provider_message_id", { length: 255 }),
+		sent_at: datetime("sent_at", { mode: "date" }),
+		last_error: text("last_error"),
+		created_at: datetime("created_at", { mode: "date" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_notification_recipient_channel").on(table.notification_id, table.recipient_id, table.channel),
+		index("idx_delivery_recipient").on(table.recipient_id, table.channel, table.read_at, table.created_at),
+		index("idx_delivery_pending").on(table.status, table.next_attempt_at, table.locked_until),
+	],
+);
+
+export const sysNotificationAttempt = mysqlTable(
+	"sys_notification_attempt",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		delivery_id: varchar("delivery_id", { length: 32 }).notNull(),
+		attempt_no: int("attempt_no").notNull(),
+		status: varchar("status", { length: 16 }).notNull(),
+		provider: varchar("provider", { length: 64 }),
+		error: text("error"),
+		started_at: datetime("started_at", { mode: "date" }).notNull(),
+		finished_at: datetime("finished_at", { mode: "date" }),
+	},
+	(table) => [uniqueIndex("uk_delivery_attempt").on(table.delivery_id, table.attempt_no)],
+);
+
+export const sysScheduledJob = mysqlTable(
+	"sys_scheduled_job",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		name: varchar("name", { length: 128 }).notNull().unique(),
+		handler: varchar("handler", { length: 128 }).notNull(),
+		interval_seconds: int("interval_seconds").notNull(),
+		cron_expression: varchar("cron_expression", { length: 128 }),
+		timezone: varchar("timezone", { length: 64 }).notNull().default("UTC"),
+		timeout_seconds: int("timeout_seconds").notNull().default(60),
+		max_attempts: int("max_attempts").notNull().default(3),
+		retry_delay_seconds: int("retry_delay_seconds").notNull().default(30),
+		enabled: boolean("enabled").notNull().default(true),
+		next_run_at: datetime("next_run_at", { mode: "date" }).notNull(),
+		locked_until: datetime("locked_until", { mode: "date" }),
+		lock_token: varchar("lock_token", { length: 32 }),
+		attempts: int("attempts").notNull().default(0),
+		created_at: datetime("created_at", { mode: "date" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" })
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [index("idx_job_due").on(table.enabled, table.next_run_at, table.locked_until)],
+);
+
+export const sysJobExecution = mysqlTable(
+	"sys_job_execution",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		job_id: varchar("job_id", { length: 32 }).notNull(),
+		started_at: datetime("started_at", { mode: "date" }).notNull(),
+		finished_at: datetime("finished_at", { mode: "date" }),
+		status: varchar("status", { length: 16 }).notNull(),
+		error: text("error"),
+		duration_ms: int("duration_ms"),
+	},
+	(table) => [index("idx_execution_job").on(table.job_id, table.started_at)],
 );
 
 /**
@@ -894,6 +976,9 @@ export const taskCloseAction = mysqlTable(
 		created_id: varchar("created_id", { length: 191 }).notNull(),
 		handle_id: varchar("handle_id", { length: 191 }).notNull(),
 		status: varchar("status", { length: 16 }).notNull(),
+		viewed_at: datetime("viewed_at", { mode: "date" }),
+		activated_at: datetime("activated_at", { mode: "date" }),
+		last_urged_at: datetime("last_urged_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
@@ -901,6 +986,8 @@ export const taskCloseAction = mysqlTable(
 		index("idx_action_task_serial").on(table.task_id, table.serial_no, table.sequence),
 		index("idx_action_handle_status").on(table.handle_id, table.status),
 		index("idx_action_parent").on(table.parent_action_id),
+		// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作,三列都进条件
+		index("idx_action_unviewed").on(table.status, table.viewed_at, table.activated_at),
 	],
 );
 
@@ -1019,4 +1106,118 @@ export const taskCloseLog = mysqlTable(
 		/** 「这个动作 / 评论的历史」 */
 		index("idx_log_target").on(table.target_id, table.created_at),
 	],
+);
+
+/** 可复用的填报模板；发布版本单独保存。 */
+export const taskReportTemplate = mysqlTable("tc_report_template", {
+	id: varchar("id", { length: 32 }).primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	creator_id: varchar("creator_id", { length: 36 }).notNull(),
+	created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+});
+
+/** 发布后只增不改；任务绑定明确版本。 */
+export const taskReportTemplateVersion = mysqlTable(
+	"tc_report_template_version",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		template_id: varchar("template_id", { length: 32 }).notNull(),
+		version: int("version").notNull(),
+		schema: json("schema").notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [uniqueIndex("uk_report_template_version").on(table.template_id, table.version)],
+);
+
+/** 一任务一份填报；草稿与当前有效提交指针独立。 */
+export const taskReport = mysqlTable(
+	"tc_task_report",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		version_id: varchar("version_id", { length: 32 }).notNull(),
+		status: varchar("status", { length: 16 }).notNull(),
+		draft: json("draft"),
+		revision: int("revision").notNull().default(0),
+		current_submission_id: varchar("current_submission_id", { length: 32 }),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_task_report_task").on(table.task_id),
+		index("idx_task_report_version").on(table.version_id),
+	],
+);
+
+/** 正式提交快照不可变，不以草稿或评论代替。 */
+export const taskReportSubmission = mysqlTable(
+	"tc_report_submission",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		report_id: varchar("report_id", { length: 32 }).notNull(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		version_id: varchar("version_id", { length: 32 }).notNull(),
+		submitter_id: varchar("submitter_id", { length: 36 }).notNull(),
+		revision: int("revision").notNull(),
+		payload: json("payload").notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_report_submission_revision").on(table.report_id, table.revision),
+		index("idx_report_submission_task").on(table.task_id, table.created_at),
+	],
+);
+
+/** 一次批量征集；request_id 与创建人共同保证重试幂等。 */
+export const taskReportBatch = mysqlTable(
+	"tc_report_batch",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		creator_id: varchar("creator_id", { length: 36 }).notNull(),
+		request_id: varchar("request_id", { length: 64 }).notNull(),
+		request_hash: varchar("request_hash", { length: 64 }).notNull(),
+		name: varchar("name", { length: 255 }).notNull(),
+		version_id: varchar("version_id", { length: 32 }).notNull(),
+		workflow_id: varchar("workflow_id", { length: 191 }).notNull(),
+		status: varchar("status", { length: 16 }).notNull(),
+		due_at: datetime("due_at", { mode: "date" }),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_report_batch_request").on(table.creator_id, table.request_id),
+		index("idx_report_batch_creator").on(table.creator_id, table.created_at),
+	],
+);
+
+/** 一个任务只属于一个批次，一个批次对每个执行人只生成一个任务。 */
+export const taskReportBatchTask = mysqlTable(
+	"tc_report_batch_task",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		batch_id: varchar("batch_id", { length: 32 }).notNull(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		target_user_id: varchar("target_user_id", { length: 36 }).notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_report_batch_task").on(table.task_id),
+		uniqueIndex("uk_report_batch_target").on(table.batch_id, table.target_user_id),
+	],
+);
+
+/** 任务说明的不可变修订快照，不与填报草稿混用。 */
+export const taskCloseContentRevision = mysqlTable(
+	"tc_content_revision",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		revision: int("revision").notNull(),
+		description: text("description"),
+		payload: json("payload"),
+		actor_id: varchar("actor_id", { length: 36 }).notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [uniqueIndex("uk_content_revision_task").on(table.task_id, table.revision)],
 );

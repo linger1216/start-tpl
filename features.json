@@ -25,9 +25,17 @@
         "src/integrations/trpc/routers/task-close.ts",
         "src/lib/task-close-log.ts",
         "src/lib/task-close-spec.ts",
+        "src/lib/task-report-spec.ts",
+        "src/lib/task-report-summary.ts",
+        "src/lib/task-report-excel.ts",
+        "src/lib/task-report-download.ts",
+        "tests/task-report-spec.test.ts",
+        "tests/task-report-excel.test.ts",
+        "src/lib/task-close-reminders.ts",
         "src/lib/task-content.ts",
         "scripts/seed-task-close.ts",
         "tests/task-close.test.ts",
+        "tests/mention-ranges.test.ts",
         "tests/task-close-log.test.ts",
         "tests/task-content.test.ts",
         "doc/task-close.md",
@@ -43,8 +51,14 @@
         "#/lib/task-content"
       ],
       "rules": [
+        { "file": "scripts/job-runner.ts", "kind": "imports", "from": ["../src/lib/task-close-reminders.ts"] },
+        { "file": "scripts/job-runner.ts", "kind": "lines", "matches": ["\"task-close.unviewed\": checkUnviewedActions,"] },
+        { "file": "scripts/worker.ts", "kind": "lines", "matches": ["await scheduler.registerJob({ name: \"task-close.unviewed\", handler: \"task-close.unviewed\", intervalSeconds: 60 });"] },
+        { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t`create table if not exists .*\\.\"tc_", "end": "^    \\)`,$" },
+        { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "lines", "prefixes": ["`create index if not exists \"idx_report_", "`create unique index if not exists \"uk_content_", "`create unique index if not exists \"uk_report_", "`create unique index if not exists \"uk_task_report_", "`create index if not exists \"idx_task_", "`create index if not exists \"idx_action_", "`create index if not exists \"idx_member_", "`create unique index if not exists \"uk_member_", "`create index if not exists \"idx_comment_", "`create index if not exists \"idx_log_", "{ table: \"tc_action\", column:"], "min": 10 },
         { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/task-close"] },
         { "file": "src/lib/use-notice-sse.ts", "kind": "lines", "matches": ["void queryClient.invalidateQueries(trpc.taskClose.pathFilter());"], "prefixes": ["// 「我的任务」红点也吃通知"] },
+        { "file": "src/lib/use-notice-sse.ts", "kind": "lines", "matches": ["void queryClient.invalidateQueries(trpc.taskClose.menuBadge.queryFilter());"], "prefixes": [] },
         { "file": "src/components/layout/sidebar.tsx", "kind": "imports", "from": ["@tanstack/react-query", "#/integrations/trpc/react"] },
         { "file": "src/components/layout/sidebar.tsx", "kind": "lines", "matches": ["const trpc = useTRPC();", "const badgeQuery = useQuery({ ...trpc.taskClose.menuBadge.queryOptions(), refetchInterval: 30_000 });"], "prefixes": ["// 「我的任务」红点:", "// 新通知由 SSE"] },
         { "file": "src/components/layout/sidebar.tsx", "kind": "replace", "from": "const taskDot = (badgeQuery.data?.count ?? 0) > 0;", "to": "const taskDot = false;" },
@@ -70,7 +84,7 @@
         {
           "file": "src/db/data-base-schema.ts",
           "kind": "block",
-          "begin": "^export const taskClose",
+          "begin": "^export const task(?:Close|Report)",
           "back": "^/\\*\\*",
           "end": "^\\}\\);$|^\\);$"
         },
@@ -93,17 +107,18 @@
           "file": "scripts/sync-table-meta.ts",
           "kind": "lines",
           "prefixes": [
-            "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
+            "tc_content_revision:", "tc_report_batch:", "tc_report_batch_task:", "tc_report_template:", "tc_report_template_version:", "tc_task_report:", "tc_report_submission:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
             "{ table: \"tc_", "// tc_", "// ── 任务闭环"
           ],
           "min": 40
         },
         { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:task-close"] }
       ],
-      "tables": ["tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
+      "tables": ["tc_content_revision", "tc_report_batch", "tc_report_batch_task", "tc_report_template", "tc_report_template_version", "tc_task_report", "tc_report_submission", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
       "seeds": [],
       "hints": [
-        "`tc_*` 六张表不再建;`pnpm db:create` 只建剩下的表"
+        "`tc_*` 十三张表不再建;`pnpm db:create` 只建剩下的表",
+        "`scripts/worker.ts` 的 `registerJob(...)` 调用已删,`scheduler` 命名空间导入保留给 `runDueJobs`(调度是 Worker 共享底座,随底座保留)"
       ]
     },
     {
@@ -227,7 +242,7 @@
       "id": "notice",
       "name": "通知中心",
       "category": "系统增强",
-      "description": "站内通知:列表 / 已读 / 铃铛 / SSE 实时推送 + sys_notice 表",
+      "description": "统一通知:列表 / 已读 / 铃铛 / SSE 实时推送及渠道投递",
       "tip": "站内信列表/已读/铃铛/SSE 实时推送；纯数据看板或无站内信系统可不选",
       "default": true,
       "requires": [],
@@ -238,10 +253,15 @@
         "src/routes/api.sse.notice.ts",
         "src/integrations/trpc/routers/notice.ts",
         "src/lib/notice.ts",
+        "src/lib/notification.ts",
+        "src/lib/notification-delivery.ts",
+        "src/lib/sms-console-provider.ts",
+        "scripts/delivery-runner.ts",
         "src/lib/notice-levels.ts",
         "src/lib/use-notice-sse.ts",
         "src/lib/sse-bus.ts",
         "tests/notice.test.ts",
+        "tests/notification-delivery.test.ts",
         "tests/sse-bus.test.ts",
         "doc/通知中心.md"
       ],
@@ -251,12 +271,18 @@
         "#/integrations/trpc/routers/notice",
         "#/components/modules/notice",
         "#/lib/notice",
+        "#/lib/notification",
+        "#/lib/notification-delivery",
         "#/lib/notice-levels",
         "#/lib/use-notice-sse",
         "#/lib/sse-bus",
         "./notification-bell"
       ],
       "rules": [
+        { "file": "scripts/worker.ts", "kind": "lines", "matches": ["runChild(\"scripts/delivery-runner.ts\", [], 110),"] },
+        { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t`create table if not exists .*\\.\"sys_notification", "end": "^  \\)`,$" },
+        { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "lines", "prefixes": ["`create unique index if not exists \"uk_notification_", "`create unique index if not exists \"uk_delivery_", "`create index if not exists \"idx_delivery_", "`create index if not exists \"idx_notification_"], "min": 4 },
+        { "file": "scripts/sync-table-meta.ts", "kind": "lines", "prefixes": ["sys_notification:", "sys_notification_delivery:", "sys_notification_attempt:", "{ table: \"sys_notification\"", "{ table: \"sys_notification_delivery\"", "{ table: \"sys_notification_attempt\""], "min": 30 },
         { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/notice"] },
         {
           "file": "src/components/layout/topbar.tsx",
@@ -289,35 +315,21 @@
           "matches": [
             "\"notice.create\": \"sys:notice:add\",",
             "\"notice.list\",",
+            "\"notice.history\",",
+            "\"notice.attempts\",",
             "\"notice.read\",",
             "\"notice.readAll\","
           ],
           "min": 5
         },
-        {
-          "file": "src/db/data-base-schema.ts",
-          "kind": "block",
-          "begin": "^export const sysNotice",
-          "back": "^/\\*\\*",
-          "end": "^\\}\\);$|^\\);$"
-        },
-        {
-          "file": "scripts/create-system-tables.ts",
-          "kind": "block",
-          "begin": "^\\t\\tname: \"sys_notice\",$",
-          "back": "^\\t(?:\\{|/\\*\\*)",
-          "dropLeadingComments": true,
-          "end": "^\\t\\},$"
-        },
-        {
-          "file": "scripts/sync-table-meta.ts",
-          "kind": "lines",
-          "matches": ["sys_notice: \"站内通知(一条一个收件人;见 doc/通知中心.md)\","],
-          "prefixes": ["{ table: \"sys_notice\"", "// sys_notice"],
-          "min": 9
-        }
+        {"file": "src/db/data-base-schema.ts", "kind": "block", "begin": "^export const sysNotification\\b", "end": "^\\}\\);$|^\\);$"},
+        {"file": "src/db/data-base-schema.ts", "kind": "block", "begin": "^export const sysNotificationDelivery\\b", "end": "^\\}\\);$|^\\);$"},
+        {"file": "src/db/data-base-schema.ts", "kind": "block", "begin": "^export const sysNotificationAttempt\\b", "end": "^\\}\\);$|^\\);$"},
+        {"file": "scripts/create-system-tables.ts", "kind": "block", "begin": "^\\t\\tname: \"sys_notification\",$", "back": "^\\t\\{$", "end": "^\\t\\},$"},
+        {"file": "scripts/create-system-tables.ts", "kind": "block", "begin": "^\\t\\tname: \"sys_notification_delivery\",$", "back": "^\\t\\{$", "end": "^\\t\\},$"},
+        {"file": "scripts/create-system-tables.ts", "kind": "block", "begin": "^\\t\\tname: \"sys_notification_attempt\",$", "back": "^\\t\\{$", "end": "^\\t\\},$"}
       ],
-      "tables": ["sys_notice"],
+      "tables": ["sys_notification", "sys_notification_delivery", "sys_notification_attempt"],
       "seeds": [],
       "hints": []
     },
@@ -343,6 +355,7 @@
     { "id": "datascope", "note": "数据权限(12 个接口 + 两张表 + lib/data-scope* + init.ts 的 dataScopeMiddleware)" },
     { "id": "settings-*", "note": "系统设置的十二个页面(用户 / 部门 / 角色 / 菜单 / 字典 / 参数 / 标签 / 个人资料)—— 与 core 权限模型共用表与接口,要先定「删页面还是删整链」" },
     { "id": "excel", "note": "Excel 导入导出(跨 5 个页面的 UI 接线,不是自包含能力)" },
+    { "id": "scheduler", "note": "调度管理(1 个路由 + 1 个页面 + lib/scheduler.ts + 两张表 + sys:scheduler:manage)。**不单独可选**:Worker 的 `runDueJobs` 是通知投递与任务闭环共用的底座,裁掉调度会让 Worker 只剩空转;调度页可下线,底座不能" },
     { "id": "dm", "note": "达梦支持(src/db/dm + db:dm:* + db/index.ts 的协议分支)" },
     { "id": "docker", "note": "容器化(依赖 files:compose 里有 minio 服务与 db:minio:init)" }
   ]

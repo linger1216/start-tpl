@@ -14,7 +14,7 @@
 import { existsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import * as XLSXNS from "xlsx";
-import { sysDemoGrid, sysDept, sysNotice, sysUser } from "../src/db/data-base-schema.ts";
+import { sysDemoGrid, sysDept, sysNotificationDelivery, sysUser } from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
 import { newId } from "../src/lib/ids.ts";
 import { notify } from "../src/lib/notice.ts";
@@ -54,9 +54,9 @@ async function seedNotices(): Promise<void> {
 	let created = 0;
 	for (const user of users) {
 		const existing = await db
-			.select({ id: sysNotice.id })
-			.from(sysNotice)
-			.where(eq(sysNotice.user_id, user.id))
+			.select({ id: sysNotificationDelivery.id })
+			.from(sysNotificationDelivery)
+			.where(eq(sysNotificationDelivery.recipient_id, user.id))
 			.limit(1);
 		if (existing.length > 0) continue;
 		for (const item of DEMO_NOTICES) {

@@ -18,6 +18,7 @@
 import { Building2, ChevronRight, User } from "lucide-react";
 
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
 
 type PolicyContextBlockProps = {
@@ -67,7 +68,7 @@ export function PolicyContextBlock({
 			)}
 		>
 			<Row icon={<User className="size-3.5" />} label={whoLabel}>
-				<span className="text-foreground">{userName || "—"}</span>
+				<span className="text-foreground">{userName || PLACEHOLDER_EMPTY}</span>
 			</Row>
 
 			<Row icon={<Tag className="bg-hue-teal-soft text-hue-teal-fg text-xs">角色</Tag>} label={`${roleCount} 个`}>

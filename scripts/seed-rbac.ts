@@ -236,6 +236,8 @@ async function main() {
 		await upsertButton(参数管理MenuId, "修改参数", "sys:para:edit", 91);
 		await upsertButton(参数管理MenuId, "删除参数", "sys:para:remove", 92);
 	}
+	const 调度管理MenuId = byPath.get("/settings/scheduler")?.id;
+	if (调度管理MenuId) await upsertButton(调度管理MenuId, "管理调度", "sys:scheduler:manage", 90);
 	const 标签管理MenuId = byPath.get("/settings/tags")?.id;
 	if (标签管理MenuId) {
 		await upsertButton(标签管理MenuId, "新增标签", "sys:tag:add", 90);
@@ -279,6 +281,7 @@ async function main() {
 	const 通知MenuId = byPath.get("/notices")?.id;
 	if (通知MenuId) {
 		await upsertButton(通知MenuId, "手动发通知", "sys:notice:add", 90);
+		await upsertButton(通知MenuId, "查看投递记录", "sys:notice:history", 91);
 	}
 	const 网格MenuId = byPath.get("/demo/grid")?.id;
 	if (网格MenuId) {

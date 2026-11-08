@@ -10,11 +10,14 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { and, eq, inArray, isNull, like } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
+import * as XLSX from "xlsx";
 
 import {
 	sysFile,
-	sysNotice,
+	sysNotification,
+	sysNotificationAttempt,
+	sysNotificationDelivery,
 	sysUser,
 	taskCloseAction,
 	taskCloseComment,
@@ -22,9 +25,17 @@ import {
 	taskCloseMember,
 	taskCloseTask,
 	taskCloseWorkflow,
+	taskReport,
+	taskReportBatch,
+	taskReportBatchTask,
+	taskReportSubmission,
+	taskReportTemplate,
+	taskReportTemplateVersion,
 } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { addUserRole, removeAllRolesOfUser } from "../src/lib/casbin.ts";
+import { bucketFor } from "../src/lib/storage.ts";
+import { checkActionReminder } from "../src/lib/task-close-reminders.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
 import {
 	assertRejects,
@@ -53,10 +64,18 @@ const taskName = (label: string) => `${TEST_PREFIX}闭环-${label}-${suffix}`;
 let workflowId = "";
 /** 用例自建的流程模板 id —— `after` 里物理清(`tc_workflow` 没有 name 列,只能按 id 认领) */
 const createdWorkflowIds: string[] = [];
+const createdReportTemplateIds: string[] = [];
+const createdBatchIds: string[] = [];
 /** 评论 / 征询用的**真实**附件夹具(status=1 的 sys_file 行;2026-10 起附件 id 要真实存在) */
 const ATTACH_FILE_ID = `file-cmnt-${suffix}`;
 /** 故意不存在的附件 id —— 锁「未知 id 必须被拒」这条新守卫 */
 const FAKE_ATTACH_ID = `file-nope-${suffix}`;
+/** 真实存在、但**没挂在任何任务上**的文件 —— `attachmentUrl` 的归属守卫要拦它 */
+const FOREIGN_FILE_ID = `file-foreign-${suffix}`;
+/** 只挂在评论上的文件(正文附件区没有它)—— 走第二条归属链路 */
+const COMMENT_FILE_ID = `file-comment-${suffix}`;
+/** 用来验「已删除的文件签不出地址」;用例里临时改成 `status = 2`(已删除) */
+const DELETED_FILE_ID = `file-deleted-${suffix}`;
 
 before(async () => {
 	await db.insert(sysUser).values([
@@ -68,14 +87,16 @@ before(async () => {
 	assert.ok(workflows.length > 0, "要先跑 `pnpm db:seed:task-close` 才有模板");
 	workflowId = workflows[0].id;
 	// 附件夹具:status=1(已上传完成)的一行 sys_file
-	await db.insert(sysFile).values({
-		id: ATTACH_FILE_ID,
-		bucket: "private",
-		object_key: `${TEST_PREFIX}attach-${suffix}.txt`,
+	const fileRows = [ATTACH_FILE_ID, FOREIGN_FILE_ID, COMMENT_FILE_ID, DELETED_FILE_ID].map((id) => ({
+		id,
+		// 用真实配置的桶名:`attachmentUrl` 会对桶取 region(真发一次请求),桶名写错会抛
+		bucket: bucketFor("private"),
+		object_key: `${TEST_PREFIX}attach-${id}-${suffix}.txt`,
 		origin_name: "attachment.txt",
 		size: 8,
 		status: 1,
-	});
+	}));
+	await db.insert(sysFile).values(fileRows);
 });
 
 after(async () => {
@@ -84,20 +105,67 @@ after(async () => {
 		await db
 			.select({ id: taskCloseTask.id })
 			.from(taskCloseTask)
-			.where(like(taskCloseTask.name, `${TEST_PREFIX}闭环-%`))
+			.where(like(taskCloseTask.name, `${TEST_PREFIX}闭环-%-${suffix}`))
 	).map((row) => row.id);
 	if (ids.length > 0) {
+		const actions = await db
+			.select({ id: taskCloseAction.id })
+			.from(taskCloseAction)
+			.where(inArray(taskCloseAction.task_id, ids));
+		const notifications = await db
+			.select({ id: sysNotification.id })
+			.from(sysNotification)
+			.where(
+				or(
+					and(eq(sysNotification.source_type, "task"), inArray(sysNotification.source_id, ids)),
+					and(
+						eq(sysNotification.source_type, "task_action"),
+						inArray(
+							sysNotification.source_id,
+							actions.map((row) => row.id),
+						),
+					),
+				),
+			);
+		const notificationIds = notifications.map((row) => row.id);
+		if (notificationIds.length) {
+			const deliveries = await db
+				.select({ id: sysNotificationDelivery.id })
+				.from(sysNotificationDelivery)
+				.where(inArray(sysNotificationDelivery.notification_id, notificationIds));
+			if (deliveries.length)
+				await db.delete(sysNotificationAttempt).where(
+					inArray(
+						sysNotificationAttempt.delivery_id,
+						deliveries.map((row) => row.id),
+					),
+				);
+			await db.delete(sysNotificationDelivery).where(inArray(sysNotificationDelivery.notification_id, notificationIds));
+			await db.delete(sysNotification).where(inArray(sysNotification.id, notificationIds));
+		}
 		await db.delete(taskCloseAction).where(inArray(taskCloseAction.task_id, ids));
 		await db.delete(taskCloseMember).where(inArray(taskCloseMember.task_id, ids));
 		await db.delete(taskCloseComment).where(inArray(taskCloseComment.task_id, ids));
 		// 活动日志也要清:它只增不改,留着就是一堆指向已删任务的孤儿行
 		await db.delete(taskCloseLog).where(inArray(taskCloseLog.task_id, ids));
+		await db.delete(taskReportSubmission).where(inArray(taskReportSubmission.task_id, ids));
+		await db.delete(taskReport).where(inArray(taskReport.task_id, ids));
+		await db.delete(taskReportBatchTask).where(inArray(taskReportBatchTask.task_id, ids));
 		await db.delete(taskCloseTask).where(inArray(taskCloseTask.id, ids));
+	}
+	if (createdBatchIds.length) await db.delete(taskReportBatch).where(inArray(taskReportBatch.id, createdBatchIds));
+	if (createdReportTemplateIds.length) {
+		await db
+			.delete(taskReportTemplateVersion)
+			.where(inArray(taskReportTemplateVersion.template_id, createdReportTemplateIds));
+		await db.delete(taskReportTemplate).where(inArray(taskReportTemplate.id, createdReportTemplateIds));
 	}
 	if (createdWorkflowIds.length > 0) {
 		await db.delete(taskCloseWorkflow).where(inArray(taskCloseWorkflow.id, createdWorkflowIds));
 	}
-	await db.delete(sysFile).where(inArray(sysFile.id, [ATTACH_FILE_ID, FAKE_ATTACH_ID]));
+	await db
+		.delete(sysFile)
+		.where(inArray(sysFile.id, [ATTACH_FILE_ID, FAKE_ATTACH_ID, FOREIGN_FILE_ID, COMMENT_FILE_ID, DELETED_FILE_ID]));
 	await db.delete(sysUser).where(inArray(sysUser.id, [A.id, B.id, C.id]));
 	await closeDb();
 });
@@ -113,6 +181,444 @@ async function newTask(label: string) {
 }
 
 describe("任务闭环", () => {
+	it("进入模板结束状态会终止未完成征询", async () => {
+		const workflow = await caller.taskClose.workflowCreate({
+			name: `${TEST_PREFIX}结束-${suffix}`,
+			statuses: [
+				{ value: "open", label: "进行中" },
+				{ value: "closed", label: "已结束", terminal: true },
+			],
+			initial: "open",
+			edges: [{ from: "open", to: "closed", who: ["creator"], via: "direct" }],
+		});
+		createdWorkflowIds.push(workflow.id);
+		const task = await asA().taskClose.taskCreate({
+			name: taskName("结束终止"),
+			workflowId: workflow.id,
+			members: [{ userId: B.id, role: "executor" }],
+		});
+		const action = await asA().taskClose.actionCreate({ taskId: task.id, handleId: B.id, nextHandleIds: [C.id] });
+		await asA().taskClose.taskTransit({ id: task.id, to: "closed" });
+		assert.ok((await asA().taskClose.actionList({ taskId: task.id })).every((row) => row.status === "cancelled"));
+		assert.equal((await asA().taskClose.taskGet({ id: task.id })).permissions.canInitiateConsult, false);
+		await assertRejects(() => asB().taskClose.actionReply({ id: action.id, content: "迟到" }), "已经回复过");
+		await assertRejects(() => asA().taskClose.actionCreate({ taskId: task.id, handleId: B.id }), "任务已结束");
+	});
+	it("流程守卫限制动作展示和执行，并在审批时重新检查", async () => {
+		const workflow = await caller.taskClose.workflowCreate({
+			name: `${TEST_PREFIX}守卫-${suffix}`,
+			statuses: [
+				{ value: "open", label: "进行中" },
+				{ value: "done", label: "完成" },
+				{ value: "closed", label: "关闭" },
+			],
+			initial: "open",
+			edges: [
+				{ from: "open", to: "done", who: ["executor"], via: "action", guard: "report_submitted" },
+				{ from: "done", to: "closed", who: ["creator"], via: "direct", guard: "report_submitted" },
+			],
+		});
+		createdWorkflowIds.push(workflow.id);
+		const task = await asA().taskClose.taskCreate({
+			name: taskName("流程守卫"),
+			workflowId: workflow.id,
+			members: [{ userId: B.id, role: "executor" }],
+		});
+		const template = await asA().taskClose.reportTemplateCreate({
+			name: "守卫填报",
+			schema: { id: "report", kind: "OBJECT", fields: [{ id: "name", label: "名称", type: "text", required: true }] },
+		});
+		createdReportTemplateIds.push(template.id);
+		await asA().taskClose.reportBind({ taskId: task.id, versionId: template.versionId });
+		assert.deepEqual((await asB().taskClose.taskGet({ id: task.id })).permissions.actionTargets, []);
+		await assertRejects(
+			() => asB().taskClose.actionCreate({ taskId: task.id, handleId: B.id, toStatus: "done" }),
+			"未满足流程条件",
+		);
+		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 0, draft: { name: "初次" } });
+		await asB().taskClose.reportSubmit({ taskId: task.id, revision: 1 });
+		assert.deepEqual((await asB().taskClose.taskGet({ id: task.id })).permissions.actionTargets, ["done"]);
+		const action = await asB().taskClose.actionCreate({ taskId: task.id, handleId: B.id, toStatus: "done" });
+		await asA().taskClose.reportReturn({ taskId: task.id, reason: "需要补充" });
+		await assertRejects(() => asB().taskClose.actionRespond({ id: action.id, approved: true }), "未满足流程条件");
+		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 2, draft: { name: "补充" } });
+		await asB().taskClose.reportSubmit({ taskId: task.id, revision: 3 });
+		await asB().taskClose.actionRespond({ id: action.id, approved: true });
+		await asA().taskClose.reportReturn({ taskId: task.id, reason: "再次补充" });
+		assert.deepEqual((await asA().taskClose.taskGet({ id: task.id })).permissions.transitions, []);
+		await assertRejects(() => asA().taskClose.taskTransit({ id: task.id, to: "closed" }), "未满足流程条件");
+	});
+	it("串行多人审批逐步激活，全部通过后才推进", async () => {
+		const taskId = await newTask("串行多人审批");
+		const first = await asA().taskClose.actionCreate({
+			taskId,
+			toStatus: "done",
+			handleId: B.id,
+			nextHandleIds: [C.id],
+			flowMode: "serial",
+		});
+		const allowed = await asA().taskClose.taskGet({ id: taskId });
+		assert.equal(allowed.task.status, "open");
+		assert.equal(allowed.permissions.locked, true);
+		assert.deepEqual(allowed.permissions.actionTargets, []);
+		assert.equal(allowed.permissions.canInitiateConsult, true);
+		await asA().taskClose.actionCreate({ taskId, handleId: A.id });
+		let actions = await asA().taskClose.actionList({ taskId });
+		const second = actions.find((action) => action.handleId === C.id);
+		assert.ok(second?.isLocking && second.status === "queued");
+		assert.equal(
+			(await asC().taskClose.actionMine({})).items.some((item) => item.id === second.id),
+			false,
+		);
+		await assertRejects(() => asC().taskClose.actionRespond({ id: second.id, approved: true }), "已经答复过");
+		await asB().taskClose.actionRespond({ id: first.id, approved: true });
+		actions = await asA().taskClose.actionList({ taskId });
+		assert.equal(actions.find((action) => action.id === second.id)?.status, "active");
+		assert.equal((await asA().taskClose.taskGet({ id: taskId })).task.status, "open");
+		await asC().taskClose.actionRespond({ id: second.id, approved: true });
+		assert.equal((await asA().taskClose.taskGet({ id: taskId })).task.status, "done");
+	});
+
+	it("并行审批拒绝与通过竞争时回退并终止剩余节点", async () => {
+		const taskId = await newTask("并行多人审批");
+		const first = await asA().taskClose.actionCreate({
+			taskId,
+			toStatus: "done",
+			handleId: B.id,
+			nextHandleIds: [C.id],
+			flowMode: "parallel",
+		});
+		const second = (await asA().taskClose.actionList({ taskId })).find((action) => action.handleId === C.id);
+		assert.ok(second && second.status === "active" && second.isLocking);
+		const outcomes = await Promise.allSettled([
+			asB().taskClose.actionRespond({ id: first.id, approved: true }),
+			asC().taskClose.actionRespond({ id: second.id, approved: false, reason: "需补充" }),
+		]);
+		assert.equal(outcomes[1].status, "fulfilled");
+		assert.equal((await asA().taskClose.taskGet({ id: taskId })).task.status, "open");
+		const actions = await asA().taskClose.actionList({ taskId });
+		assert.ok(actions.every((action) => action.status !== "active" && action.status !== "queued"));
+	});
+
+	it("并行审批同时通过时最终推进一次", async () => {
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const taskId = await newTask(`并行通过${attempt}`);
+			const first = await asA().taskClose.actionCreate({
+				taskId,
+				toStatus: "done",
+				handleId: B.id,
+				nextHandleIds: [C.id],
+				flowMode: "parallel",
+			});
+			const second = (await asA().taskClose.actionList({ taskId })).find((action) => action.handleId === C.id);
+			assert.ok(second);
+			await Promise.all([
+				asB().taskClose.actionRespond({ id: first.id, approved: true }),
+				asC().taskClose.actionRespond({ id: second.id, approved: true }),
+			]);
+			assert.equal((await asA().taskClose.taskGet({ id: taskId })).task.status, "done");
+			const logs = await asA().taskClose.logList({ taskId });
+			assert.equal(logs.items.filter((item) => item.event === "action.respond" && item.toStatus === "done").length, 1);
+		}
+	});
+
+	it("撤回后续审批节点会终止整条审批并恢复原状态", async () => {
+		const taskId = await newTask("撤回多人审批");
+		const first = await asA().taskClose.actionCreate({
+			taskId,
+			toStatus: "done",
+			handleId: B.id,
+			nextHandleIds: [C.id],
+		});
+		await asB().taskClose.actionRespond({ id: first.id, approved: true });
+		const second = (await asA().taskClose.actionList({ taskId })).find((action) => action.handleId === C.id);
+		assert.ok(second);
+		await asA().taskClose.actionWithdraw({ id: second.id });
+		assert.equal((await asA().taskClose.taskGet({ id: taskId })).task.status, "open");
+		await assertRejects(() => asC().taskClose.actionRespond({ id: second.id, approved: true }), "已经答复过");
+	});
+	it("批次创建幂等、任务隔离，汇总只读取有效提交", async () => {
+		const schema = {
+			id: "survey",
+			kind: "OBJECT" as const,
+			fields: [
+				{ id: "key", label: "单位", type: "text" as const, required: true },
+				{ id: "amount", label: "数量", type: "decimal" as const, required: true },
+			],
+		};
+		const template = await asA().taskClose.reportTemplateCreate({ name: "批次模板", schema });
+		createdReportTemplateIds.push(template.id);
+		const input = {
+			name: taskName("批次"),
+			requestId: `batch-${suffix}`,
+			workflowId,
+			versionId: template.versionId,
+			targetUserIds: [B.id, C.id],
+		};
+		const results = await Promise.all([
+			asA().taskClose.reportBatchCreate(input),
+			asA().taskClose.reportBatchCreate(input),
+		]);
+		assert.equal(results[0].id, results[1].id);
+		assert.equal(results.filter((result) => result.created).length, 1);
+		const batchId = results[0].id;
+		createdBatchIds.push(batchId);
+		await assertRejects(() => asA().taskClose.reportBatchCreate({ ...input, name: "不同内容" }), "不同批次");
+		await assertRejects(() => asB().taskClose.reportBatchGet({ id: batchId }), "无权查看");
+		const batch = await asA().taskClose.reportBatchGet({ id: batchId });
+		assert.equal(batch.tasks.length, 2);
+		assert.equal(batch.expired, false, "未设截止时间的批次不算过期");
+		const taskB = batch.tasks.find((task) => task.targetUserId === B.id)?.taskId;
+		const taskC = batch.tasks.find((task) => task.targetUserId === C.id)?.taskId;
+		assert.ok(taskB && taskC && taskB !== taskC);
+		await assertRejects(
+			() => asB().taskClose.reportSaveDraft({ taskId: taskC, revision: 0, draft: { key: "甲", amount: 1 } }),
+			"当前执行人",
+		);
+		for (const [caller, taskId, amount] of [
+			[asB(), taskB, 1],
+			[asC(), taskC, 3],
+		] as const) {
+			const saved = await caller.taskClose.reportSaveDraft({ taskId, revision: 0, draft: { key: "同一单位", amount } });
+			await caller.taskClose.reportSubmit({ taskId, revision: saved.revision });
+		}
+		const append = await asA().taskClose.reportBatchSummary({ id: batchId, options: { strategy: "APPEND_ROWS" } });
+		assert.equal(append.total, 2);
+		assert.deepEqual(
+			new Set(append.rows.flatMap((row) => row.sources.map((source) => source.taskId))),
+			new Set([taskB, taskC]),
+		);
+		const merge = await asA().taskClose.reportBatchSummary({
+			id: batchId,
+			options: { strategy: "MERGE_BY_KEY", keys: ["key"] },
+		});
+		assert.equal(merge.total, 1);
+		assert.equal(merge.conflicts.length, 1);
+		await assertRejects(
+			() => asB().taskClose.reportBatchExcelExport({ id: batchId, options: { strategy: "APPEND_ROWS" } }),
+			"无权查看",
+		);
+		const exported = await asA().taskClose.reportBatchExcelExport({
+			id: batchId,
+			options: { strategy: "MERGE_BY_KEY", keys: ["key"] },
+		});
+		const workbook = XLSX.read(Buffer.from(exported.fileBase64, "base64"), { type: "buffer" });
+		assert.deepEqual(workbook.SheetNames, ["汇总", "冲突"]);
+		const aggregate = await asA().taskClose.reportBatchSummary({
+			id: batchId,
+			options: {
+				strategy: "AGGREGATE",
+				keys: ["key"],
+				metrics: [
+					{ field: "amount", operation: "sum" },
+					{ field: "amount", operation: "average" },
+					{ field: "amount", operation: "count" },
+				],
+			},
+		});
+		assert.equal(aggregate.rows[0].values.amount_sum, 4);
+		assert.equal(aggregate.rows[0].values.amount_average, 2);
+		assert.equal(aggregate.rows[0].values.amount_count, 2, "count 数的是非空值个数");
+		await asA().taskClose.reportReturn({ taskId: taskB, reason: "补充数据" });
+		assert.equal(
+			(await asA().taskClose.reportBatchSummary({ id: batchId, options: { strategy: "APPEND_ROWS" } })).total,
+			1,
+		);
+		await asA().taskClose.reportBatchClose({ id: batchId });
+		await assertRejects(() => asB().taskClose.reportSubmit({ taskId: taskB, revision: 2 }), "批次已关闭");
+		// 管理员能在列表里看到别人建的批次 —— 与 `reportBatchGet` / 汇总同口径
+		assert.ok(
+			!(await asB().taskClose.reportBatchList()).some((row) => row.id === batchId),
+			"非管理员的列表里不该出现别人的批次",
+		);
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			assert.ok(
+				(await asC().taskClose.reportBatchList()).some((row) => row.id === batchId),
+				"管理员应当能看到全部批次",
+			);
+		} finally {
+			await removeAllRolesOfUser(C.id);
+		}
+	});
+	it("填报版本、并发草稿、转交和退回重提保持独立历史", async () => {
+		const taskId = await newTask("填报生命周期");
+		const schema = {
+			id: "inspection",
+			kind: "OBJECT" as const,
+			fields: [{ id: "name", label: "名称", type: "text" as const, required: true }],
+		};
+		const template = await asA().taskClose.reportTemplateCreate({ name: "检查填报", schema });
+		createdReportTemplateIds.push(template.id);
+		await asA().taskClose.reportBind({ taskId, versionId: template.versionId });
+		const excel = await asB().taskClose.reportExcelDownload({ taskId, templateOnly: true });
+		await assertRejects(
+			() => asC().taskClose.reportExcelPreview({ taskId, fileBase64: excel.fileBase64 }),
+			"当前执行人",
+		);
+		const preview = await asB().taskClose.reportExcelPreview({ taskId, fileBase64: excel.fileBase64 });
+		assert.equal(preview.mappingError, null);
+		await asA().taskClose.reportTemplatePublish({
+			id: template.id,
+			schema: { ...schema, fields: [{ id: "other", label: "新版", type: "text" }] },
+		});
+		await assertRejects(() => asC().taskClose.reportGet({ taskId }), "无权查看");
+		await assertRejects(
+			() => asA().taskClose.reportSaveDraft({ taskId, revision: 0, draft: { name: "代填" } }),
+			"当前执行人",
+		);
+		const saves = await Promise.allSettled([
+			asB().taskClose.reportSaveDraft({ taskId, revision: 0, draft: { name: "第一次" } }),
+			asB().taskClose.reportSaveDraft({ taskId, revision: 0, draft: { name: "并发" } }),
+		]);
+		assert.equal(saves.filter((result) => result.status === "fulfilled").length, 1);
+		const first = await asB().taskClose.reportSubmit({ taskId, revision: 1 });
+		assert.equal((await asB().taskClose.reportSubmit({ taskId, revision: 1 })).id, first.id);
+		await asA().taskClose.reportReturn({ taskId, reason: "请修订" });
+		await asA().taskClose.memberAdd({ taskId, userId: C.id, role: "participant" });
+		await asB().taskClose.taskTransfer({ taskId, userId: C.id });
+		await assertRejects(
+			() => asB().taskClose.reportSaveDraft({ taskId, revision: 2, draft: { name: "旧执行人" } }),
+			"当前执行人",
+		);
+		const saved = await asC().taskClose.reportSaveDraft({ taskId, revision: 2, draft: { name: "第二次" } });
+		const second = await asC().taskClose.reportSubmit({ taskId, revision: saved.revision });
+		assert.notEqual(first.id, second.id);
+		const report = await asA().taskClose.reportGet({ taskId });
+		assert.equal(report?.version?.id, template.versionId);
+		assert.equal(report?.submissions.length, 2);
+		assert.equal(report?.report.current_submission_id, second.id);
+		assert.notDeepEqual(report?.submissions[0].payload, report?.submissions[1].payload);
+	});
+
+	it("幂等重提只对上一位提交人生效 —— 换人后旧 revision 不能被当成本人的已交", async () => {
+		const id = await newTask("幂等重提换人");
+		const schema = {
+			id: "idem_report",
+			kind: "OBJECT" as const,
+			fields: [{ id: "name", label: "名称", type: "text" as const }],
+		};
+		const template = await asA().taskClose.reportTemplateCreate({ name: `幂等模板-${suffix}`, schema });
+		createdReportTemplateIds.push(template.id);
+		await asA().taskClose.reportBind({ taskId: id, versionId: template.versionId });
+		const saved = await asB().taskClose.reportSaveDraft({ taskId: id, revision: 0, draft: { name: "乙交的" } });
+		const submitting = await asB().taskClose.reportSubmit({ taskId: id, revision: saved.revision });
+		assert.ok(submitting.id);
+		// 转交给 C,再让 C 拿同一个 revision 打一次(模拟换人后旧客户端重放)
+		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
+		await asB().taskClose.taskTransfer({ taskId: id, userId: C.id });
+		await assertRejects(
+			() => asC().taskClose.reportSubmit({ taskId: id, revision: saved.revision }),
+			"已由其他执行人提交",
+		);
+	});
+	it("串行征询只激活当前节点，并在回复后通知下一人", async () => {
+		const id = await newTask("串行征询");
+		const { id: first } = await asA().taskClose.actionCreate({ taskId: id, handleId: B.id, nextHandleIds: [C.id] });
+		let actions = await asA().taskClose.actionList({ taskId: id });
+		const next = actions.find((action) => action.handleId === C.id);
+		assert.ok(next);
+		assert.equal(next.status, "queued");
+		assert.equal(
+			(await asC().taskClose.actionMine({})).items.some((action) => action.id === next.id),
+			false,
+		);
+		const before = await db
+			.select()
+			.from(sysNotification)
+			.where(and(eq(sysNotification.source_type, "task_action"), eq(sysNotification.source_id, next.id)));
+		assert.equal(before.length, 0);
+		await assertRejects(() => asC().taskClose.actionReply({ id: next.id, content: "提前回复" }), "已经回复过");
+		await asB().taskClose.actionReply({ id: first, content: "第一步意见" });
+		actions = await asA().taskClose.actionList({ taskId: id });
+		assert.equal(actions.find((action) => action.id === next.id)?.status, "active");
+		assert.equal(
+			(await asC().taskClose.actionMine({})).items.some((action) => action.id === next.id),
+			true,
+		);
+		assert.equal(
+			(
+				await db
+					.select()
+					.from(sysNotification)
+					.where(and(eq(sysNotification.source_type, "task_action"), eq(sysNotification.source_id, next.id)))
+			).length,
+			1,
+		);
+		await asC().taskClose.actionReply({ id: next.id, content: "第二步意见" });
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "open");
+	});
+
+	it("删除任务同时终止活动和排队的征询", async () => {
+		const id = await newTask("删除终止征询");
+		await asA().taskClose.actionCreate({ taskId: id, handleId: B.id, nextHandleIds: [C.id] });
+		await asA().taskClose.taskRemove({ id });
+		const rows = await db.select().from(taskCloseAction).where(eq(taskCloseAction.task_id, id));
+		assert.equal(rows.length, 2);
+		assert.ok(rows.every((row) => row.status === "cancelled"));
+		assert.equal(
+			(await asB().taskClose.actionMine({})).items.some((row) => row.taskId === id),
+			false,
+		);
+	});
+
+	it("并行征询的处理人互不阻塞", async () => {
+		const id = await newTask("并行征询");
+		const { id: first } = await asA().taskClose.actionCreate({
+			taskId: id,
+			handleId: B.id,
+			nextHandleIds: [C.id],
+			flowMode: "parallel",
+		});
+		const next = (await asA().taskClose.actionList({ taskId: id })).find((action) => action.handleId === C.id);
+		assert.ok(next);
+		assert.equal(next.status, "active");
+		await asC().taskClose.actionReply({ id: next.id, content: "并行意见" });
+		assert.equal(
+			(await asA().taskClose.actionList({ taskId: id })).find((action) => action.id === first)?.status,
+			"active",
+		);
+		await asB().taskClose.actionReply({ id: first, content: "另一意见" });
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "open");
+	});
+
+	it("并发指派最多产生一个执行人", async () => {
+		const { id } = await asA().taskClose.taskCreate({ name: taskName("并发指派"), workflowId });
+		const results = await Promise.allSettled([
+			asA().taskClose.memberAdd({ taskId: id, userId: B.id, role: "executor" }),
+			asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "executor" }),
+		]);
+		assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+		const rejected = results.find((result) => result.status === "rejected");
+		assert.ok(rejected && rejected.status === "rejected" && String(rejected.reason).includes("已有执行人"));
+		const members = (await asA().taskClose.taskGet({ id })).members;
+		assert.equal(members.filter((member) => member.role === "executor").length, 1);
+		await assertRejects(
+			() =>
+				asA().taskClose.taskCreate({
+					name: taskName("多执行人"),
+					workflowId,
+					members: [
+						{ userId: B.id, role: "executor" },
+						{ userId: C.id, role: "executor" },
+					],
+				}),
+			"只能有一个执行人",
+		);
+	});
+
+	it("撤回与回复竞争时不能复活已撤回的征询", async () => {
+		const id = await newTask("撤回竞争");
+		const action = await asA().taskClose.actionCreate({ taskId: id, handleId: B.id });
+		const results = await Promise.allSettled([
+			asA().taskClose.actionWithdraw({ id: action.id }),
+			asB().taskClose.actionReply({ id: action.id, content: "意见" }),
+		]);
+		assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+		const row = (await asA().taskClose.actionList({ taskId: id })).find((item) => item.id === action.id);
+		assert.ok(row?.status === "done" || row?.status === "cancelled");
+	});
+
 	it("主链:建 → 执行者发起完成 → 锁住 → 答复 → 关单", async () => {
 		const id = await newTask("主链");
 
@@ -123,8 +629,9 @@ describe("任务闭环", () => {
 
 		// 乙(执行者)发起「改状态」action —— 默认模板里 open→done 的 who 是 ["creator","executor"]
 		const { id: actionId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
+		await assertRejects(() => asB().taskClose.actionReply({ id: actionId, content: "绕过审批" }), "审批必须通过或驳回");
 		detail = await asA().taskClose.taskGet({ id });
-		assert.equal(detail.task.status, "pending", "有 is_locking 的 action 在跑 → pending");
+		assert.equal(detail.task.status, "open", "审批期间任务状态不变");
 		const action = detail.actions.find((row) => row.id === actionId);
 		assert.ok(action, "动作要出现在详情里");
 		assert.equal(action.isLocking, true);
@@ -182,23 +689,23 @@ describe("任务闭环", () => {
 		assert.equal(items[0].actorName, A.name, "操作人姓名是快照");
 		assert.equal((items[0].detail as { members: unknown[] }).members.length, 1, "初始执行者折进 detail");
 
-		// ② 发起审批:任务被锁成 pending(真实的状态变化,如实记);「想去哪」在 detail.intendedTo
+		// ② 发起审批不改变任务状态;目标写在 detail.intendedTo
 		const { id: actionId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
 		items = await log();
 		const created = items.find((row) => row.event === "action.create");
 		assert.ok(created);
-		assert.equal(created.fromStatus, "open");
-		assert.equal(created.toStatus, "pending");
+		assert.equal(created.fromStatus, null);
+		assert.equal(created.toStatus, null);
 		assert.equal(created.actorName, B.name);
 		assert.equal((created.detail as { intendedTo: string }).intendedTo, "done");
 		assert.equal(created.targetName, B.name, "动作事件的展示名是「指派人」");
 
-		// ③ 答复通过:pending → done
+		// ③ 答复通过:open → done
 		await asB().taskClose.actionRespond({ id: actionId, approved: true });
 		items = await log();
 		const responded = items.find((row) => row.event === "action.respond");
 		assert.ok(responded);
-		assert.equal(responded.fromStatus, "pending");
+		assert.equal(responded.fromStatus, "open");
 		assert.equal(responded.toStatus, "done");
 
 		// ④ **直接改状态**(以前不留痕的那条路)现在有自己的行
@@ -280,20 +787,76 @@ describe("任务闭环", () => {
 		// 执行者的能力 —— 能发起改状态、能加人,但移出成员 / 改任务不行
 		const asExecutor = await asB().taskClose.taskGet({ id });
 		assert.equal(asExecutor.permissions.canInitiateStatusAction, true);
-		assert.equal(asExecutor.permissions.canAddMember, true, "所有角色都能加人");
+		assert.equal(asExecutor.permissions.canAddMember, true, "任务成员仍能加人(不是「所有登录用户」)");
 		assert.equal(asExecutor.permissions.canManageMembers, false, "移出成员仍仅创建者");
 		assert.equal(asExecutor.permissions.canUpdate, false);
 		assert.deepEqual(asExecutor.permissions.myRoles, ["executor"]);
 
 		// 非创建者**可以加**成员(需求:所有角色都能加),但**不能移出**、不能删任务
-		await asB().taskClose.memberAdd({ taskId: id, userId: C.id, role: "executor" });
+		await assertRejects(() => asB().taskClose.memberAdd({ taskId: id, userId: C.id, role: "executor" }), "已有执行人");
 		const afterAdd = await asA().taskClose.taskGet({ id });
 		assert.ok(
-			afterAdd.members.some((m) => m.userId === C.id && m.role === "executor"),
+			afterAdd.members.some((m) => m.userId === C.id && m.role === "participant"),
 			"非创建者(执行者 B)加的人要进成员表",
 		);
-		await assertRejects(() => asB().taskClose.memberRemove({ taskId: id, userId: C.id, role: "executor" }), "创建者");
+		await assertRejects(
+			() => asB().taskClose.memberRemove({ taskId: id, userId: C.id, role: "participant" }),
+			"创建者",
+		);
 		await assertRejects(() => asB().taskClose.taskRemove({ id }), "创建者");
+	});
+
+	it("陌生人不能把自己加成执行人(成员写权限只给任务相关方)", async () => {
+		const id = await newTask("陌生人不许入伙");
+		const outsiderId = `out-${crypto.randomUUID().slice(0, 24)}`;
+		const outsider = callerAs({ id: outsiderId, name: "路人" });
+		await assertRejects(
+			() => outsider.taskClose.memberAdd({ taskId: id, userId: outsiderId, role: "executor" }),
+			"创建者、管理员或任务成员",
+		);
+		// 创建者与当前成员仍可加人
+		await asA().taskClose.memberAdd({ taskId: id, userId: C.id, role: "participant" });
+	});
+
+	it("taskUpdate 不传 payload 时保留原有内容与附件,传 null 才是清空", async () => {
+		const id = await newTask("payload 保留");
+		await asA().taskClose.taskUpdate({
+			id,
+			name: "payload 保留",
+			payload: { type: "internal", content: [{ kind: "text", text: "原始说明" }] },
+		});
+		// 只改名字,不带 payload
+		await asA().taskClose.taskUpdate({ id, name: "改了名字" });
+		let detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.content[0]?.kind, "text", "不传 payload 不能把内容清空");
+		assert.equal((detail.task.payload as { type?: string }).type, "internal", "type 也要保住");
+		// 显式 null 才是清空
+		await asA().taskClose.taskUpdate({ id, name: "改了名字", payload: null });
+		detail = await asA().taskClose.taskGet({ id });
+		assert.equal(detail.content.length, 0, "payload: null 才清空");
+	});
+
+	it("payload 里的附件 id 必须真存在且已确认", async () => {
+		const id = await newTask("伪造附件");
+		await assertRejects(
+			() =>
+				asA().taskClose.taskUpdate({
+					id,
+					name: "伪造附件",
+					payload: { attachments: ["not-a-real-file-id"] },
+				}),
+			"附件不存在",
+		);
+		const workflowId = (await asA().taskClose.workflowList())[0]?.id ?? "";
+		await assertRejects(
+			() =>
+				asA().taskClose.taskCreate({
+					name: "伪造附件任务",
+					workflowId,
+					payload: { attachments: ["not-a-real-file-id"] },
+				}),
+			"附件不存在",
+		);
 	});
 
 	it("删掉之后这条 id 就查不到了(详情页据此自动回「我的任务」)", async () => {
@@ -391,7 +954,7 @@ describe("任务闭环", () => {
 		await assertRejects(() => asB().taskClose.actionReply({ id: consultId, content: "再补一句" }), "已经回复过了");
 	});
 
-	it("管理员:可以直接把任务改到模板里的任意状态(不必存在对应的边)", async () => {
+	it("管理员只能沿模板的直接转移边操作", async () => {
 		const id = await newTask("管理员改状态");
 		// 丙临时持「系统管理员」角色 —— `isAdminUser` 查的就是 casbin 这张图。
 		// 用丙(既不是创建者、也不是这条任务的成员),才验得到「管理员」这条路本身。
@@ -399,9 +962,11 @@ describe("任务闭环", () => {
 		try {
 			// 乙(执行者):open 没有到 archived 的 direct 边、也不是创建者 → 拒
 			await assertRejects(() => asB().taskClose.taskTransit({ id, to: "archived" }), "直接转移");
-			// 管理员:模板里声明的任意状态都能直接改
-			await asC().taskClose.taskTransit({ id, to: "archived" });
-			assert.equal((await asC().taskClose.taskGet({ id })).task.status, "archived");
+			await assertRejects(() => asC().taskClose.taskTransit({ id, to: "archived" }), "直接转移");
+			const approval = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
+			await asB().taskClose.actionRespond({ id: approval.id, approved: true });
+			await asC().taskClose.taskTransit({ id, to: "closed" });
+			assert.equal((await asC().taskClose.taskGet({ id })).task.status, "closed");
 		} finally {
 			// 摘掉角色,别污染这个文件共用的甲 / 乙 / 丙
 			await removeAllRolesOfUser(C.id);
@@ -422,7 +987,7 @@ describe("任务闭环", () => {
 
 	it("锁定期:连管理员也不能直接改状态", async () => {
 		const id = await newTask("锁定改状态");
-		// 乙发起审批 → 任务锁成 pending
+		// 乙发起审批 → 锁定状态转移
 		await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
 		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
 		try {
@@ -466,7 +1031,11 @@ describe("任务闭环", () => {
 	it("追问(子动作):答复只落在动作本身,任务状态 / 锁定都不动", async () => {
 		const id = await newTask("追问");
 		const { id: rootId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: B.id });
-		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "pending", "根级审批先锁上");
+		assert.equal((await asA().taskClose.taskGet({ id })).task.status, "open", "根级审批先锁上");
+		await assertRejects(
+			() => asC().taskClose.actionCreate({ taskId: id, parentActionId: rootId, handleId: C.id }),
+			"当前处理人",
+		);
 
 		// 在锁定期间,成员可以对这条审批发起追问(子级征询)—— 锁守卫不拦子动作
 		const { id: childId } = await asB().taskClose.actionCreate({
@@ -483,10 +1052,10 @@ describe("任务闭环", () => {
 		assert.equal(child?.sequence, (root?.sequence ?? 0) + 1, "子动作 sequence = 父 + 1");
 		assert.equal(root?.status, "active", "追问不影响父动作的进行中");
 
-		// 甲答复追问:只把子动作点亮,任务的锁还在 —— 父审批没答,状态仍然 pending
+		// 甲答复追问:只把子动作点亮,父审批的状态锁仍然存在
 		await asA().taskClose.actionRespond({ id: childId, approved: true });
 		const after = await asA().taskClose.taskGet({ id });
-		assert.equal(after.task.status, "pending", "子动作答复不解锁");
+		assert.equal(after.task.status, "open", "子动作答复不解锁");
 		assert.equal(after.actions.find((row) => row.id === childId)?.status, "done");
 	});
 
@@ -501,18 +1070,26 @@ describe("任务闭环", () => {
 		// (先建再建审批:审批一上任务就锁,征询类**不占锁**,所以这条要排在锁之前)
 		await asA().taskClose.actionCreate({ taskId: id, handleId: C.id });
 		const consultNotice = await db
-			.select()
-			.from(sysNotice)
-			.where(and(eq(sysNotice.user_id, C.id), like(sysNotice.body, "%征询%")));
+			.select({ title: sysNotification.title, read_at: sysNotificationDelivery.read_at })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(and(eq(sysNotificationDelivery.recipient_id, C.id), like(sysNotification.content, "%征询%")));
 		assert.ok(consultNotice.length > 0, "被征询的人也要收到通知(body 写明「征询了你」)");
 
 		// ① 乙发起审批,指给**创建者**甲 —— 甲有一条未读的「轮到你了」通知,红点 +1;
 		// **读掉它红点就消**(动作本身的待办不进徽标,「我的任务」页自己看得见)
-		await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: A.id });
+		const { id: assignedId } = await asB().taskClose.actionCreate({ taskId: id, toStatus: "done", handleId: A.id });
 		const assignRows = await db
-			.select()
-			.from(sysNotice)
-			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.path, `/task-close/${id}%`)));
+			.select({ title: sysNotification.title, read_at: sysNotificationDelivery.read_at })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(
+				and(
+					eq(sysNotificationDelivery.recipient_id, A.id),
+					eq(sysNotification.source_type, "task_action"),
+					eq(sysNotification.source_id, assignedId),
+				),
+			);
 		assert.ok(
 			assignRows.some((row) => row.title.includes("轮到你") && row.read_at === null),
 			"被审批的人要有未读的「轮到你了」通知",
@@ -521,12 +1098,13 @@ describe("任务闭环", () => {
 
 		// ② @提及:丙(参与者)评论里 @ 甲 → 甲再 +1;@陪路人 → 没有
 		const beforeComment = await badgeOf();
-		await asC().taskClose.commentCreate({ taskId: id, content: `@${A.name} 请看附件` });
+		await asC().taskClose.commentCreate({ taskId: id, content: `@${A.name} 请看附件`, mentionIds: [A.id, A.id] });
 		assert.equal(await badgeOf(), beforeComment + 1, "被 @ 的参与人要有通知");
 		const mentionRows = await db
-			.select()
-			.from(sysNotice)
-			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.title, "%@ 你%")));
+			.select({ title: sysNotification.title })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(and(eq(sysNotificationDelivery.recipient_id, A.id), like(sysNotification.title, "%@ 你%")));
 		assert.ok(
 			mentionRows.some((row) => row.title.includes(C.name)),
 			"提及通知的标题里带**作者**(丙)",
@@ -536,11 +1114,191 @@ describe("任务闭环", () => {
 
 		// ③ **把这一趟的两条读完 → 红点归零**(读了通知就消)
 		const unreadTasks = await db
-			.select()
-			.from(sysNotice)
-			.where(and(eq(sysNotice.user_id, A.id), like(sysNotice.path, `/task-close/${id}%`), isNull(sysNotice.read_at)));
+			.select({ id: sysNotificationDelivery.id })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(
+				and(
+					eq(sysNotificationDelivery.recipient_id, A.id),
+					or(eq(sysNotification.source_id, id), eq(sysNotification.source_id, assignedId)),
+					isNull(sysNotificationDelivery.read_at),
+				),
+			);
 		for (const row of unreadTasks) await asA().notice.read({ id: row.id });
 		assert.equal(await badgeOf(), before, "读了通知,红点取消");
+	});
+
+	it("未查看提醒按轮次去重，已查看或已完成的动作不再提醒", async () => {
+		const taskId = await newTask("未查看提醒");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, handleId: B.id });
+		const now = new Date();
+		await db
+			.update(taskCloseAction)
+			.set({ activated_at: new Date(now.getTime() - 181 * 60_000) })
+			.where(eq(taskCloseAction.id, actionId));
+		const results = await Promise.all(Array.from({ length: 4 }, () => checkActionReminder(actionId, now)));
+		assert.equal(
+			results.reduce((sum, count) => sum + count, 0),
+			2,
+		);
+		const rows = await db
+			.select()
+			.from(sysNotification)
+			.where(and(eq(sysNotification.source_id, actionId), eq(sysNotification.type, "action.unviewed")));
+		assert.equal(rows.length, 2);
+		await db.update(taskCloseAction).set({ viewed_at: now }).where(eq(taskCloseAction.id, actionId));
+		assert.equal(await checkActionReminder(actionId, now), 0);
+		await db.update(taskCloseAction).set({ viewed_at: null, status: "done" }).where(eq(taskCloseAction.id, actionId));
+		assert.equal(await checkActionReminder(actionId, now), 0);
+	});
+
+	it("未查看提醒按 60 / 180 分钟两档独立触发", async () => {
+		const taskId = await newTask("提醒边界");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, handleId: B.id });
+		const now = new Date();
+		const setAged = (minutes: number) =>
+			db
+				.update(taskCloseAction)
+				.set({ activated_at: new Date(now.getTime() - minutes * 60_000) })
+				.where(eq(taskCloseAction.id, actionId));
+		// `tc_action.activated_at` 是秒精度 `datetime`,写入时毫秒会四舍五入到秒 ——
+		// 所以"刚好 60 分"可能进位成 60 分零几百毫秒而落到阈值之外。用例取 59 / 61 分钟验档位,
+		// 边界本身由列精度决定,不在这里假装它精确到毫秒。
+		const count = async () =>
+			(
+				await db
+					.select()
+					.from(sysNotification)
+					.where(and(eq(sysNotification.source_id, actionId), eq(sysNotification.type, "action.unviewed")))
+			).length;
+
+		await setAged(59);
+		assert.equal(await checkActionReminder(actionId, now), 0, "不到 60 分钟不该发");
+		await setAged(61);
+		assert.equal(await checkActionReminder(actionId, now), 1, "过 60 分钟发第一档");
+		assert.equal(await checkActionReminder(actionId, now), 0, "同一档不重复发");
+		await setAged(179);
+		assert.equal(await checkActionReminder(actionId, now), 0, "不到 180 分钟不发第二档");
+		await setAged(181);
+		assert.equal(await checkActionReminder(actionId, now), 1, "过 180 分钟发第二档");
+		assert.equal(await count(), 2);
+	});
+
+	it("读取站内通知不等于查看动作，仅处理人打开动作记录首次查看时间", async () => {
+		const taskId = await newTask("查看动作");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, handleId: B.id });
+		const [delivery] = await db
+			.select({ id: sysNotificationDelivery.id })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(and(eq(sysNotification.source_id, actionId), eq(sysNotificationDelivery.recipient_id, B.id)))
+			.limit(1);
+		assert.ok(delivery);
+		await asB().notice.read({ id: delivery.id });
+		let [action] = await db.select().from(taskCloseAction).where(eq(taskCloseAction.id, actionId));
+		assert.equal(action?.viewed_at, null);
+		await assertRejects(() => asA().taskClose.actionView({ id: actionId }), "只有处理人");
+		await asB().taskClose.actionView({ id: actionId });
+		[action] = await db.select().from(taskCloseAction).where(eq(taskCloseAction.id, actionId));
+		const first = action?.viewed_at?.getTime();
+		assert.ok(first);
+		await asB().taskClose.actionView({ id: actionId });
+		[action] = await db.select().from(taskCloseAction).where(eq(taskCloseAction.id, actionId));
+		assert.equal(action?.viewed_at?.getTime(), first);
+	});
+
+	it("提及按用户 ID 定位，同名成员不会误收，非法目标使评论回滚", async () => {
+		const taskId = await newTask("结构化提及");
+		await asA().taskClose.memberAdd({ taskId, userId: C.id, role: "participant" });
+		await db.update(sysUser).set({ name: A.name }).where(eq(sysUser.id, B.id));
+		try {
+			await asC().taskClose.commentCreate({ taskId, content: `@${A.name} 请处理`, mentionIds: [A.id, A.id] });
+			const deliveries = await db
+				.select({ recipient: sysNotificationDelivery.recipient_id })
+				.from(sysNotificationDelivery)
+				.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+				.where(and(eq(sysNotification.source_id, taskId), eq(sysNotification.type, "comment.mentioned")));
+			assert.deepEqual(
+				deliveries.map((row) => row.recipient),
+				[A.id],
+			);
+			const before = await asC().taskClose.commentList({ taskId });
+			await assertRejects(
+				() => asC().taskClose.commentCreate({ taskId, content: "非法提及", mentionIds: ["outside"] }),
+				"只能提及任务成员",
+			);
+			assert.equal((await asC().taskClose.commentList({ taskId })).length, before.length);
+		} finally {
+			await db.update(sysUser).set({ name: B.name }).where(eq(sysUser.id, B.id));
+		}
+	});
+
+	it("催办校验权限、联系方式与冷却，重复请求不重复投递", async () => {
+		const taskId = await newTask("催办");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, handleId: B.id });
+		await assertRejects(
+			() => asC().taskClose.actionUrge({ id: actionId, requestId: "denied", channels: ["email"] }),
+			"只有任务创建人",
+		);
+		await assertRejects(
+			() => asA().taskClose.actionUrge({ id: actionId, requestId: "no-phone", channels: ["sms"] }),
+			"联系电话",
+		);
+		await db
+			.update(sysUser)
+			.set({ phone: "+8613800000000", email: `test-b-${suffix}@example.com` })
+			.where(eq(sysUser.id, B.id));
+		assert.equal((await asC().user.list()).find((user) => user.id === B.id)?.phone, null);
+		assert.equal((await caller.user.list()).find((user) => user.id === B.id)?.phone, "+8613800000000");
+		const input = { id: actionId, requestId: `urge-${suffix}`, channels: ["email", "sms"] as ("email" | "sms")[] };
+		const [first, second] = await Promise.all([asA().taskClose.actionUrge(input), asA().taskClose.actionUrge(input)]);
+		assert.equal(first.id, second.id);
+		assert.notEqual(first.reused, second.reused);
+		const deliveries = await db
+			.select()
+			.from(sysNotificationDelivery)
+			.where(eq(sysNotificationDelivery.notification_id, first.id));
+		assert.deepEqual(deliveries.map((item) => item.channel).sort(), ["email", "sms"]);
+		assert.ok(deliveries.every((item) => item.status === "pending"));
+		const history = await asA().taskClose.actionUrgeHistory({ id: actionId });
+		assert.equal(history.length, 2);
+		assert.ok(history.every((item) => item.status === "pending"));
+		await assertRejects(() => asC().taskClose.actionUrgeHistory({ id: actionId }), "没有权限查看催办记录");
+		await assertRejects(() => asA().taskClose.actionUrge({ ...input, requestId: "another" }), "冷却");
+		await db
+			.update(taskCloseAction)
+			.set({ status: "done", last_urged_at: null })
+			.where(eq(taskCloseAction.id, actionId));
+		await assertRejects(() => asA().taskClose.actionUrge({ ...input, requestId: "completed" }), "已结束");
+	});
+
+	it("催办:无效邮箱被拒,sms 与 email 各自落到对应 target", async () => {
+		const taskId = await newTask("催办渠道");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, handleId: B.id });
+		await db.update(sysUser).set({ phone: "+8613800000001", email: "not-an-email" }).where(eq(sysUser.id, B.id));
+		try {
+			await assertRejects(
+				() => asA().taskClose.actionUrge({ id: actionId, requestId: `bad-mail-${suffix}`, channels: ["email"] }),
+				"有效的邮箱",
+			);
+			const smsOnly = await asA().taskClose.actionUrge({
+				id: actionId,
+				requestId: `sms-only-${suffix}`,
+				channels: ["sms"],
+			});
+			const smsDeliveries = await db
+				.select()
+				.from(sysNotificationDelivery)
+				.where(eq(sysNotificationDelivery.notification_id, smsOnly.id));
+			assert.equal(smsDeliveries.length, 1);
+			assert.equal(smsDeliveries[0].channel, "sms");
+			assert.equal(smsDeliveries[0].target, "+8613800000001", "短信必须投到电话,不是邮箱");
+		} finally {
+			await db
+				.update(sysUser)
+				.set({ phone: "+8613800000000", email: `test-b-${suffix}@example.com` })
+				.where(eq(sysUser.id, B.id));
+		}
 	});
 
 	it("管理员:能删别人的评论(任务创建者不行 —— 口径是「作者本人或管理员」)", async () => {
@@ -707,5 +1465,155 @@ describe("流程模板", () => {
 		const { id: taskId } = await asA().taskClose.taskCreate({ name: taskName("仅审批"), workflowId: wfId });
 		// 创建者也不行:这条 (open,done) 只有 action 边,没有 direct 边 —— 必须走审批
 		await assertRejects(() => asA().taskClose.taskTransit({ id: taskId, to: "done" }), "直接转移");
+	});
+});
+
+/**
+ * 四个只读接口的回归:`reportTemplateList` / `taskList` / `attachmentUrl` / `contentHistory`。
+ *
+ * 都是**查询**,但各有自己的收口逻辑 —— `taskList` 的 `mine` 并集、`attachmentUrl` 的三条归属链、
+ * `contentHistory` 的参与者判据、`reportTemplateList` 的版本归并。这些在别的用例里只被间接碰过。
+ */
+describe("任务闭环 · 只读接口", () => {
+	it("reportTemplateList:版本按倒序挂在模板下,别家建的也看得到", async () => {
+		const schema = {
+			id: "list_template",
+			kind: "OBJECT" as const,
+			fields: [{ id: "name", label: "名称", type: "text" as const }],
+		};
+		const template = await asA().taskClose.reportTemplateCreate({ name: `${TEST_PREFIX}列表模板-${suffix}`, schema });
+		createdReportTemplateIds.push(template.id);
+		await asA().taskClose.reportTemplatePublish({
+			id: template.id,
+			schema: { ...schema, fields: [{ id: "changed", label: "改过", type: "text" as const }] },
+		});
+
+		const list = await asC().taskClose.reportTemplateList();
+		const mine = list.find((row) => row.id === template.id);
+		assert.ok(mine, "丙没参与也能看到模板(列表是全局只读)");
+		assert.deepEqual(
+			mine.versions.map((version) => version.version),
+			[2, 1],
+			"版本倒序,最新的在前",
+		);
+		assert.equal(
+			(mine.versions[0]?.schema as { fields: Array<{ id: string }> }).fields[0]?.id,
+			"changed",
+			"第一条是最新发布的结构",
+		);
+	});
+
+	it("taskList:mine 是「我创建 ∪ 我是成员」,keyword / status / 分页各自生效", async () => {
+		const first = await newTask("列表");
+		const second = await asA().taskClose.taskCreate({
+			name: `${taskName("列表")}-第二`,
+			workflowId,
+			members: [{ userId: B.id, role: "participant" }],
+		});
+		const third = await asA().taskClose.taskCreate({ name: `${taskName("列表")}-第三`, workflowId });
+
+		// keyword 用带后缀的片段,只命中本用例的三条
+		const keyword = `列表-${suffix}`;
+		const all = await asC().taskClose.taskList({ keyword });
+		assert.equal(all.total, 3, "不传 mine 时任何登录用户都能看到全部任务");
+		assert.deepEqual(all.items.map((row) => row.id).sort(), [first, second.id, third.id].sort());
+		assert.equal(all.items[0]?.creatorName, A.name, "brief 里带上创建人姓名");
+
+		// 乙:第一条是执行人、第二条是参与者 → 两条都算 mine;第三条跟他无关
+		const mineOfB = await asB().taskClose.taskList({ keyword, mine: true });
+		assert.equal(mineOfB.total, 2, "mine 要把「成员」也算进去,不能只看 creator_id");
+		assert.ok(!mineOfB.items.some((row) => row.id === third.id), "丙/乙都不是第三条的参与者");
+		assert.equal((await asC().taskClose.taskList({ keyword, mine: true })).total, 0);
+
+		// status:取第一条的真实状态来筛,它必然在结果里
+		const status = (await asA().taskClose.taskGet({ id: first })).task.status;
+		const byStatus = await asC().taskClose.taskList({ keyword, status });
+		assert.ok(
+			byStatus.items.every((row) => row.status === status),
+			"status 过滤要真的生效",
+		);
+
+		// 分页:pageSize 2 → 第一页两条 / total 仍是 3
+		const paged = await asC().taskClose.taskList({ keyword, page: 1, pageSize: 2 });
+		assert.equal(paged.items.length, 2);
+		assert.equal(paged.total, 3, "total 是命中总数,不受 pageSize 影响");
+	});
+
+	it("attachmentUrl:三条归属链都认,未挂载的文件一律 NOT_FOUND", async () => {
+		const id = await newTask("附件地址");
+		await asA().taskClose.taskUpdate({
+			id,
+			name: taskName("附件地址"),
+			payload: { content: [], attachments: [ATTACH_FILE_ID] },
+		});
+		await asC().taskClose.commentCreate({
+			taskId: id,
+			content: "评论带附件",
+			attachments: [COMMENT_FILE_ID],
+		});
+
+		// 链路一:payload.attachments
+		const fromPayload = await asB().taskClose.attachmentUrl({ taskId: id, fileId: ATTACH_FILE_ID });
+		assert.ok(fromPayload.url.includes(ATTACH_FILE_ID) || fromPayload.url.length > 0, "要签出地址");
+		assert.equal(fromPayload.originName, "attachment.txt");
+		assert.equal(fromPayload.size, 8);
+
+		// 链路二:评论附件
+		const fromComment = await asB().taskClose.attachmentUrl({ taskId: id, fileId: COMMENT_FILE_ID });
+		assert.ok(fromComment.url.length > 0, "评论里的附件同样能取地址");
+
+		// 真实存在、但没挂在这条任务上 → 不签
+		await assertRejects(() => asB().taskClose.attachmentUrl({ taskId: id, fileId: FOREIGN_FILE_ID }), "附件不存在");
+		// 压根不存在的 id 同样
+		await assertRejects(() => asB().taskClose.attachmentUrl({ taskId: id, fileId: FAKE_ATTACH_ID }), "附件不存在");
+
+		// download=true 走预签名,且带原始文件名
+		const download = await asB().taskClose.attachmentUrl({ taskId: id, fileId: ATTACH_FILE_ID, download: true });
+		assert.ok(decodeURIComponent(download.url).includes("attachment.txt"), "下载地址要带上原始文件名");
+	});
+
+	it("attachmentUrl:挂上去之后文件被删(status≠1)就不再签地址", async () => {
+		const id = await newTask("附件已删");
+		await asA().taskClose.taskUpdate({
+			id,
+			name: taskName("附件已删"),
+			payload: { content: [], attachments: [DELETED_FILE_ID] },
+		});
+		await db.update(sysFile).set({ status: 2 }).where(eq(sysFile.id, DELETED_FILE_ID));
+		// 归属链仍然成立(payload 里还在),但状态挡住了
+		await assertRejects(() => asA().taskClose.attachmentUrl({ taskId: id, fileId: DELETED_FILE_ID }), "还没上传完成");
+	});
+
+	it("contentHistory:创建即 revision 1,改动追加新修订,非参与者看不了", async () => {
+		const { id } = await asA().taskClose.taskCreate({
+			name: taskName("说明修订"),
+			workflowId,
+			description: "初版说明",
+			payload: { content: [{ kind: "text", text: "初版正文" }], attachments: [ATTACH_FILE_ID] },
+			members: [{ userId: B.id, role: "participant" }],
+		});
+		await asA().taskClose.taskUpdate({
+			id,
+			name: taskName("说明修订"),
+			description: "第二版说明",
+			payload: { content: [{ kind: "text", text: "第二版正文" }] },
+		});
+
+		const history = await asA().taskClose.contentHistory({ taskId: id });
+		assert.deepEqual(
+			history.map((row) => row.revision),
+			[2, 1],
+			"修订号倒序",
+		);
+		assert.equal(history[0]?.description, "第二版说明");
+		assert.equal(history[0]?.content[0]?.kind, "text");
+		assert.equal(history[0]?.attachments.length, 0, "第二版去掉了附件");
+		assert.equal(history[1]?.description, "初版说明");
+		assert.equal(history[1]?.attachments[0]?.id, ATTACH_FILE_ID, "旧修订的附件仍能解析");
+		assert.equal(history[0]?.actorName, A.name);
+
+		// 成员能看;路人不给
+		assert.equal((await asB().taskClose.contentHistory({ taskId: id })).length, 2, "任务成员可读");
+		await assertRejects(() => asC().taskClose.contentHistory({ taskId: id }), "无权查看说明修订");
 	});
 });

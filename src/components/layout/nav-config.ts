@@ -34,6 +34,7 @@ import {
 	Boxes,
 	Cable,
 	ClipboardList,
+	Clock,
 	Contact,
 	Database,
 	Files,
@@ -71,6 +72,7 @@ export const NAV_ICON_MAP = {
 	// 模块级
 	dashboard: Gauge,
 	bell: Bell,
+	clock: Clock,
 	library: Library,
 	sparkles: Sparkles,
 	workflow: Workflow,
@@ -192,6 +194,7 @@ export const NAV_NODES: NavNode[] = [
 			{ name: "菜单管理", path: "/settings/menus", icon: "menu" },
 			{ name: "字典管理", path: "/settings/dictionary", icon: "library" },
 			{ name: "参数管理", path: "/settings/parameters", icon: "sliders-horizontal" },
+			{ name: "调度管理", path: "/settings/scheduler", icon: "clock" },
 			{ name: "文件管理", path: "/settings/files", icon: "files" },
 			{ name: "审计日志", path: "/settings/logs", icon: "scroll-text" },
 			{ name: "数据范围", path: "/settings/data-scope", icon: "shield-alert" },

@@ -392,6 +392,7 @@ export function SettingsUsersPage() {
 							id: dialogs.editing.id,
 							name: payload.name,
 							email: payload.email,
+							phone: payload.phone,
 							image: payload.image,
 							emailVerified: payload.emailVerified,
 							roleIds: payload.roleIds,

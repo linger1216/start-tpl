@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import * as XLSX from "xlsx";
 import { writeSheet, writeTemplate } from "../src/lib/excel.ts";
+
+XLSX.set_fs(fs);
 
 test("Excel 导出保留表头、数字和多值字段，导入模板只有表头", () => {
 	const dir = mkdtempSync(path.join(tmpdir(), "stack-excel-test-"));

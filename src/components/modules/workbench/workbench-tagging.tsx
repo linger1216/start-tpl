@@ -10,6 +10,7 @@ import { TagList } from "#/components/ui/tag-list";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 
 /**
  * 工作台 · **打标签**示例(标签 ↔ 业务对象 的多态多对多)。
@@ -53,7 +54,7 @@ export function WorkbenchTagging() {
 		const dimName = new Map(rows.filter((row) => !row.parentId).map((row) => [row.id, row.label]));
 		return rows
 			.filter((row) => row.parentId)
-			.map((row) => ({ id: row.id, label: row.label, dim: dimName.get(row.parentId as string) ?? "—" }))
+			.map((row) => ({ id: row.id, label: row.label, dim: dimName.get(row.parentId as string) ?? PLACEHOLDER_EMPTY }))
 			.sort((a, b) =>
 				a.dim === b.dim ? a.label.localeCompare(b.label, "zh-Hans-CN") : a.dim.localeCompare(b.dim, "zh-Hans-CN"),
 			);

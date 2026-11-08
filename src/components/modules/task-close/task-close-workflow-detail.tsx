@@ -60,7 +60,11 @@ export function TaskCloseWorkflowDetail({
 			) : (
 				<>
 					<DetailRow label="状态">
-						<TagList values={detail.statuses.map((status) => status.label)} layout="wrap" color="stable" />
+						<TagList
+							values={detail.statuses.map((status) => (status.terminal ? `${status.label}（结束）` : status.label))}
+							layout="wrap"
+							color="stable"
+						/>
 					</DetailRow>
 					<DetailRow label="初始态">{statusLabelOf(detail.statuses, detail.initial)}</DetailRow>
 					<DetailRow label="转移边">
@@ -76,17 +80,9 @@ export function TaskCloseWorkflowDetail({
 									>
 										<span className="font-medium">{statusLabelOf(detail.statuses, edge.from)}</span>
 										<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-										{/* 审批边会先经系统锁态 `pending` —— 把它画出来;有声明就显示它的 label */}
-										{edge.via === "action" ? (
-											<>
-												<Tag variant="outline" className="border-dashed text-muted-foreground">
-													{statusLabelOf(detail.statuses, "pending")}
-												</Tag>
-												<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-											</>
-										) : null}
 										<span className="font-medium">{statusLabelOf(detail.statuses, edge.to)}</span>
 										<Tag variant="outline">{VIA_TEXT[edge.via] ?? edge.via}</Tag>
+										{edge.guard === "report_submitted" && <Tag variant="outline">要求有效填报提交</Tag>}
 										<span className="text-xs text-muted-foreground">
 											{edge.who.map((who) => WHO_TEXT[who] ?? who).join(" / ")} 可发起
 										</span>

@@ -15,13 +15,14 @@
 ```bash
 pnpm install
 cp .env.example .env.local     # 填写 DATABASE_URL 和 INITIAL_ADMIN_PASSWORD 等
-pnpm db:create                 # 建 28 张系统表(21 张 sys_* + demo_grid + 6 张 tc_*, 幂等)
+pnpm db:create                 # 建系统表、通知与调度表(幂等)
 pnpm db:seed:menus && pnpm db:seed:rbac && pnpm db:seed:paras && pnpm db:seed:dicts
 pnpm db:seed:demo              # 可选:71 条网格数据(那批演示账号是本机手工准备的,种子不建)
 pnpm dev                       # http://localhost:3000
+pnpm worker                    # 另一个终端:调度与外部渠道投递
 ```
 
-`pnpm dev` 固定监听 **3000** 端口。
+`pnpm dev` 固定监听 **3000** 端口。 通知投递和定时检查需要同时运行 `pnpm worker`；生产部署使用独立 Worker 进程。短信 Provider 和 SMTP 配置见 [通知中心](doc/通知中心.md)。旧通知表不迁移，开发库需删除旧表后重新建表。
 
 > **组件示例都在工作台 `/`**。它自己也读菜单表,所以要先把 `.env.local` 的 `DATABASE_URL` 配好再 `pnpm dev`。
 > `/settings` 十二页全部读真库,没配 `DATABASE_URL` 会落到错误边界。首次初始化的管理员是 `admin@example.com`,密码由 `INITIAL_ADMIN_PASSWORD` 指定;派生脚本会为每个新项目生成独立密码。首次登录后请修改密码并从环境配置中移除初始密码。
@@ -83,7 +84,7 @@ src/
 │   ├── data-scope*.ts / soft-delete.ts / reorder.ts / file-preview.ts …(完整清单见 doc/后端代码导读.md §7)
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 28 张表(21 张 sys_* + demo_grid + 6 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
+│   ├── data-base-schema.ts       # 39 张表(25 张 sys_* + demo_grid + 13 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
@@ -128,6 +129,7 @@ UI 组件与跨域展示件通过真实页面或工作台示例展示；Excel �
 | 命令 | 实际执行 | 说明 |
 | --- | --- | --- |
 | `pnpm dev` | `dotenv -e .env.local -- vite dev --port 3000` | 开发服务器,固定 3000 端口 |
+| `pnpm worker` | `dotenv -e .env.local -- tsx scripts/worker.ts` | 独立调度与通知投递进程 |
 | `pnpm build` | `vite build` | 产出 Nitro Node 服务到 `.output/` |
 | `pnpm start` | `node .output/server/index.mjs` | 运行生产产物,需先 `pnpm build`,**不读 env 文件**(见下文) |
 | `pnpm preview` | `vite preview` | Vite 自带预览。产物是 Nitro 服务,验证生产请用 `build && start` |
@@ -136,18 +138,18 @@ UI 组件与跨域展示件通过真实页面或工作台示例展示；Excel �
 | `pnpm generate-routes` | `tsr generate` | 扫描 `src/routes/` 重新生成 `routeTree.gen.ts` |
 | `pnpm test` | `LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts` | 直连测试库和 MinIO;权限测试要求先运行菜单与 RBAC 种子;跑完清理自身创建的 `__test__*` 数据 |
 | `pnpm test:cov` | 同上 + `--experimental-test-coverage` | Node 内置覆盖率，只统计运行时加载的文件，不能代表未加载的 UI 和路由 |
-| `pnpm check:legacy` | `node scripts/check-legacy.mjs` | 业务语汇残留扫描(清空业务后应当无输出) |
+| `pnpm check:legacy` | `node scripts/check-legacy.mjs` | 验证当前 Node 进程里 DES-CFB 算法是否可用(达梦老密码需要) |
 
 **数据库**(都读 `.env.local`):
 
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm db:generate` / `db:migrate` / `db:push` / `db:pull` / `db:studio` | drizzle-kit;只管 `src/db/schema.ts`(当前是 `todos`) |
-| `pnpm db:create` | 建 **28 张**系统表(21 张 `sys_*` + `demo_grid` + 6 张 `tc_*`,`create table if not exists`,幂等,建完顺带对齐列注释 / 索引名) |
+| `pnpm db:create` | 建系统表、通知投递表、调度表和任务闭环表(幂等,建完对齐列注释 / 索引名) |
 | `pnpm db:sync:meta` | 只对齐列注释与索引名(老库升级用,**幂等**;第二次必须打印「无需改动」) |
 | `pnpm db:migrate:ids` | 把自增 id 迁成 nanoid(一次性) |
 | `pnpm db:dm:smoke` / `db:dm:defaults` | 达梦专项:drizzle 冒烟 / 默认值对齐 |
-| `pnpm db:dm:create-ba` | 在达梦上建 Better Auth 四表 |
+| `pnpm db:dm:create-ba` | 在达梦上建系统、通知、调度和任务表(目标环境需实库验证) |
 
 **种子**(都幂等、只补不覆盖):
 
@@ -177,7 +179,7 @@ docker compose up -d                                  # http://localhost:3000
 | `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
 | `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
-| `bootstrap` | — | profile `setup` 的一次性任务:建 28 张表 + 四个种子 + `db:minio:init` |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 39 张表 + 四个种子 + `db:minio:init` |
 
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
@@ -231,7 +233,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **28 张表**(21 张 `sys_*` + `demo_grid` + 6 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 / 访客令牌 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **39 张表**(25 张 `sys_*` + `demo_grid` + 13 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 调度 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 / 访客令牌 / 任务闭环 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -405,7 +407,7 @@ UI 原语与跨域展示件保留真实调用或工作台示例，供派生项�
 
 ## 任务闭环模块 (业务状态机示范)
 
-`/task-close/*` 是模板内置的**复杂工作流与状态机示范模块**,全闭环读写真库(6 张 `tc_*` 表):
+`/task-close/*` 是模板内置的**复杂流程与状态机示范模块**,全闭环读写真库(13 张 `tc_*` 表):
 
 | 页面 | 路由 | 数据来源 | 说明 |
 | --- | --- | --- | --- |
@@ -413,7 +415,8 @@ UI 原语与跨域展示件保留真实调用或工作台示例，供派生项�
 | 任务详情 | `/task-close/$taskId` | `tc_task` + `tc_action` + `tc_log` + `tc_comment` | 核心闭环页:流程状态脊骨架 + 轮到你了待办条 + 评论讨论 + 活动日志时间轴 + 动态动作矩阵 |
 | 流程模板 | `/task-close/workflows` | `tc_workflow` | 流程状态机可视化编辑器:状态节点 + 转移边(直接改/审批动作)+ who 角色权限协议 |
 
-> 架构演进与插件化规划详见 [`doc/任务插件化设计.md`](doc/任务插件化设计.md)。
+> 结构化填报、批次与汇总见 [`doc/task-forms.md`](doc/task-forms.md)；通知、调度与 Worker 见 [`doc/通知中心.md`](doc/通知中心.md)。
+> `doc/任务插件化设计.md` 是**已废止的历史草案**（就地作答写 payload），不要照此实现。
 
 ---
 
@@ -522,7 +525,8 @@ pnpm check
 
 ## 后续设计
 
-任务闭环插件化尚未实现；设计草案见 [任务插件化设计](doc/任务插件化设计.md)。
+任务闭环插件化已废止（作答写进 `tc_task.payload` 与独立结构化填报冲突）；现行口径见
+[任务填报设计](doc/task-forms.md)。旧草案保留在 [任务插件化设计](doc/任务插件化设计.md) 供追溯。
 
 ---
 
@@ -540,8 +544,9 @@ pnpm check
 - `doc/通知中心.md` · `doc/文件管理.md` —— 通知与 MinIO 文件的能力边界
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
-- `doc/task-close.md` —— 任务闭环业务示例:三页、六张 `tc_*` 表与 `who` 协议、状态机与活动日志
-- `doc/任务插件化设计.md` —— **任务闭环插件化设计规范（待实现 TODO）**:一体化任务插件（描述与作答合一）、插件内聚流程模板、内核动态动作推导引擎、企业安全检查工单实战
+- `doc/task-close.md` —— 任务闭环业务示例:三页、`tc_*` 表与 `who` 协议、状态机与活动日志
+- `doc/task-forms.md` —— 结构化填报:模板版本、草稿 / 提交 / 退回、批次与汇总、受限 Excel
+- `doc/任务插件化设计.md` —— **已废止的历史草案**(就地作答写 `tc_task.payload`),仅供追溯,不要照此实现
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)

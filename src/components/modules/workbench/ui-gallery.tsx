@@ -594,12 +594,14 @@ export function UiGallery() {
 					<div className="w-full rounded-lg border border-border bg-card p-2 shadow-card">
 						<Calendar mode="single" selected={day} onSelect={setDay} />
 					</div>
-					<p className="text-xs text-muted-foreground">已选:{day ? day.toLocaleDateString("zh-CN") : "—"}</p>
+					<p className="text-xs text-muted-foreground">
+						已选:{day ? day.toLocaleDateString("zh-CN") : PLACEHOLDER_EMPTY}
+					</p>
 				</Cell>
 				<Cell name="DateRangePicker" hint="日期区间(带快捷范围)">
 					<DateRangePicker value={range} onChange={setRange} />
 					<p className="text-xs text-muted-foreground">
-						{range.from ?? "—"} ~ {range.to ?? "—"}
+						{range.from ?? PLACEHOLDER_EMPTY} ~ {range.to ?? PLACEHOLDER_EMPTY}
 					</p>
 				</Cell>
 			</Group>
@@ -774,7 +776,7 @@ function ModuleGallery() {
 						/>
 					</div>
 					<p className="mt-2 text-xs text-muted-foreground">
-						选中:<code className="font-mono">{treeSelected ?? "—"}</code>
+						选中:<code className="font-mono">{treeSelected ?? PLACEHOLDER_EMPTY}</code>
 					</p>
 				</Cell>
 
@@ -943,7 +945,7 @@ function ModuleGallery() {
 						</li>
 						<li>
 							<code className="font-mono text-foreground">lib/constants</code> —— 三个全局常量:
-							<code className="font-mono">PLACEHOLDER_EMPTY</code>("-")、<code className="font-mono">PAGE_SIZES</code>、
+							<code className="font-mono">PLACEHOLDER_EMPTY</code>("—")、<code className="font-mono">PAGE_SIZES</code>、
 							<code className="font-mono">THEME_STORAGE_KEY</code>(与 <code className="font-mono">__root.tsx</code>{" "}
 							的首屏脚本共用,别改单边)。
 						</li>

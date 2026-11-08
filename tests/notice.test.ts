@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { eq, inArray } from "drizzle-orm";
-import { sysMenu, sysNotice, sysUser } from "../src/db/data-base-schema.ts";
+import { eq, inArray, like } from "drizzle-orm";
+import { sysMenu, sysNotification, sysNotificationDelivery, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
@@ -24,7 +24,15 @@ before(async () => {
 
 after(async () => {
 	await db.delete(sysUser).where(eq(sysUser.id, OTHER.id));
-	await db.delete(sysNotice).where(inArray(sysNotice.user_id, [TEST_USER.id, OTHER.id]));
+	const rows = await db
+		.select({ id: sysNotification.id })
+		.from(sysNotification)
+		.where(like(sysNotification.title, `%${SUFFIX}`));
+	if (rows.length) {
+		const ids = rows.map((row) => row.id);
+		await db.delete(sysNotificationDelivery).where(inArray(sysNotificationDelivery.notification_id, ids));
+		await db.delete(sysNotification).where(inArray(sysNotification.id, ids));
+	}
 	await closeDb();
 });
 
@@ -34,6 +42,10 @@ describe("通知", () => {
 		const nobody = createCallerFactory(trpcRouter)({ user: { id: `notice-nobody-${SUFFIX}`, name: "无权用户" } });
 		await nobody.notice.list({ limit: 1 });
 		await assertRejects(() => nobody.notice.create({ userIds: ["x"], title: "不该发出" }), "没有权限");
+		// 现在由 `PERM_BY_PATH` 的 `sys:notice:history` 拦截(未配置权限时 resolver 兜底失败关闭),
+		// 两条路径的错误文案不同,所以只断言共同前缀
+		await assertRejects(() => nobody.notice.history(), "没有权限");
+		await assertRejects(() => nobody.notice.attempts({ id: "unknown" }), "没有权限");
 	});
 
 	it("发一条 → 能查到,未读数 +1", async () => {
@@ -45,6 +57,7 @@ describe("通知", () => {
 		assert.ok(hit, "列表里应当能找到刚发的那条");
 		assert.equal(hit.read, false);
 		assert.equal(hit.path, "/settings/files");
+		assert.ok((await caller.notice.history({ limit: 100 })).some((row) => row.id === hit.id));
 	});
 
 	it("标一条已读 → 未读数 -1、read 变 true", async () => {
@@ -123,11 +136,16 @@ describe("通知", () => {
 			assert.ok(row, `应当写入(只是 path 被丢):${title}`);
 			assert.equal(row.path, null, `不该存下 ${title} 的非法路径`);
 		}
-		// 库里也确实没有脏值
-		const rows = await db.select().from(sysNotice).where(eq(sysNotice.user_id, TEST_USER.id));
+		const rows = await db
+			.select({ payload: sysNotification.payload })
+			.from(sysNotificationDelivery)
+			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
+			.where(eq(sysNotificationDelivery.recipient_id, TEST_USER.id));
 		assert.ok(
-			rows.every((row) => row.path === null || row.path.startsWith("/")),
-			"库里所有 path 都必须是站内路径",
+			rows.every((row) => {
+				const data = row.payload ? JSON.parse(row.payload) : {};
+				return data.path == null || (data.path.startsWith("/") && !data.path.startsWith("//"));
+			}),
 		);
 	});
 });

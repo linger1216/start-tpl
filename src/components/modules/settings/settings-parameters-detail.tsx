@@ -3,6 +3,7 @@ import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { PARA_TYPE, PARA_TYPE_META } from "#/lib/para-spec";
 import type { ParameterRow } from "./settings-parameters-table";
 
@@ -55,10 +56,10 @@ export function SettingsParametersDetail({
 							<span className="font-mono text-xs">{row.key}</span>
 						</DetailRow>
 						<DetailRow label="类型">{PARA_TYPE_META[row.type].label}</DetailRow>
-						<DetailRow label="分组">{row.group || "—"}</DetailRow>
+						<DetailRow label="分组">{row.group || PLACEHOLDER_EMPTY}</DetailRow>
 						<DetailRow label="可编辑">{row.editable ? "允许" : "已锁定,不可修改或删除"}</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-sm">{row.remark || "—"}</span>
+							<span className="text-sm">{row.remark || PLACEHOLDER_EMPTY}</span>
 						</DetailRow>
 					</div>
 					<div className="space-y-1.5">

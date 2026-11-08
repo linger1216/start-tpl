@@ -18,7 +18,7 @@ type LogFields = Record<string, unknown>;
 export type LogLine = { ts: string; level: LogLevel; event: string } & LogFields;
 
 /** 需要脱敏的字段名(子串匹配,大小写不敏感);同时给 pino redact 用 */
-const SECRET_KEY_PATTERN = /(token|secret|password|passwd|authorization|cookie|apikey|api_key|credential)/i;
+const SECRET_KEY_PATTERN = /(token|secret|password|passwd|authorization|cookie|apikey|api_key|credential|fileBase64)/i;
 const REDACT_PATHS = [
 	"*.token",
 	"*.secret",

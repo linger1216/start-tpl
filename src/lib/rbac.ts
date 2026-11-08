@@ -161,7 +161,7 @@ async function computeMenuAccess(userId: string | null): Promise<MenuAccess> {
 		const rows = navigable(all);
 		const perms = [
 			...new Set([
-				...rows.flatMap((row) => (row.perm ? [row.perm] : [])),
+				...all.flatMap((row) => (row.perm ? [row.perm] : [])),
 				...rows.flatMap((row) => (row.path?.startsWith("/") ? [pagePermOf(row.path)] : [])),
 			]),
 		];
@@ -295,6 +295,11 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"dict.list": pagePermOf("/settings/dictionary"),
 	// 菜单(菜单页 / 角色页的授权树)
 	"menu.list": [pagePermOf("/settings/menus"), pagePermOf("/settings/roles")],
+	"scheduler.list": pagePermOf("/settings/scheduler"),
+	"scheduler.executions": pagePermOf("/settings/scheduler"),
+	"scheduler.setEnabled": "sys:scheduler:manage",
+	"scheduler.configure": "sys:scheduler:manage",
+	"scheduler.trigger": "sys:scheduler:manage",
 	// 参数(参数页;`para.byKey` 是外壳偏好,见 UNMAPPED_QUERIES)
 	"para.list": pagePermOf("/settings/parameters"),
 	// 访客令牌(用户管理页的「访客管理」Tab —— 页面码沿用用户管理,不另造页面)
@@ -306,6 +311,10 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"log.list": "sys:log:list",
 	// 站内通知(读自己的不需要权限点;替别人发才需要)
 	"notice.create": "sys:notice:add",
+	// 投递管理读的是**跨用户**数据(收件人姓名、渠道状态、服务商错误原文),不能随铃铛开放。
+	// 未配置权限时中间件会放行,resolver 内另有一道失败关闭的兜底(见 routers/notice.ts)。
+	"notice.history": "sys:notice:history",
+	"notice.attempts": "sys:notice:history",
 	// Demo 网格履职
 	"demoGrid.list": pagePermOf("/demo/grid"),
 	"demoGrid.create": "sys:grid:add",
@@ -383,6 +392,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"department.tree",
 	"department.members",
 	"notice.list",
+	"notice.history",
+	"notice.attempts",
 	"tag.list",
 	// 类别 1:外壳级 —— 「我的任务」侧栏红点(待办数 + 未读任务通知,都按 me 自限,不涉数据范围)
 	"taskClose.menuBadge",
@@ -391,6 +402,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"role.list",
 	"dict.list",
 	"dict.byCode",
+	"scheduler.list",
+	"scheduler.executions",
 	"para.list",
 	"para.byKey",
 	// 类别 2:访客令牌清单 —— 「全系统一份」的配置,不看部门(见 doc/外链分享.md)
@@ -420,10 +433,17 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 那套「我 + 我的角色 + 我的部门 + 子孙」表达不了「我创建 + 我是成员」。行级口径写在 resolver 里:
 	// `taskList` 的 `mine` 是 `creator_id ∪ tc_member`,其余按 `taskId` 直读(天生自限范围)。
 	"taskClose.workflowList",
+	"taskClose.contentHistory",
+	"taskClose.reportTemplateList",
+	"taskClose.reportGet",
+	"taskClose.reportBatchList",
+	"taskClose.reportBatchGet",
+	"taskClose.reportBatchSummary",
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionList",
 	"taskClose.actionMine",
+	"taskClose.actionUrgeHistory",
 	"taskClose.commentList",
 	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
 	"taskClose.logList",
@@ -452,6 +472,17 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	// (创建者 / 参与者 / 执行者的角色存在 `tc_member`,RBAC 的角色模型表达不了)。
 	// 等菜单建起来、权限点收窄到「谁能进任务页」时,再按页面码挪进 `PERM_BY_PATH`。
 	"taskClose.taskCreate",
+	"taskClose.reportTemplateCreate",
+	"taskClose.reportTemplatePublish",
+	"taskClose.reportBind",
+	"taskClose.reportSaveDraft",
+	"taskClose.reportSubmit",
+	"taskClose.reportReturn",
+	"taskClose.reportBatchCreate",
+	"taskClose.reportBatchClose",
+	"taskClose.reportExcelDownload",
+	"taskClose.reportExcelPreview",
+	"taskClose.reportBatchExcelExport",
 	"taskClose.taskUpdate",
 	"taskClose.taskRemove",
 	"taskClose.taskTransit",
@@ -459,6 +490,9 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.memberRemove",
 	"taskClose.taskTransfer",
 	"taskClose.actionCreate",
+	"taskClose.actionView",
+	"taskClose.actionUrge",
+	"taskClose.actionWithdraw",
 	"taskClose.actionRespond",
 	// 回复征询:`who` 判据 = 被征询的人(handle_id),与 actionRespond 同理
 	"taskClose.actionReply",
@@ -486,6 +520,8 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"menu.mine",
 	// 类别 1:外壳级 —— 顶栏铃铛在每个页面都有;SQL 按 `user_id` 自限(见 doc/通知中心.md)
 	"notice.list",
+	// 投递管理(`notice.history` / `notice.attempts`)不在这里:读的是跨用户数据,
+	// 已登记进 `PERM_BY_PATH` 的 `sys:notice:history`。
 	// 类别 1:外壳级 —— 侧栏模式 / 树展开 / 页大小 / 列偏好,每个页面都在用
 	"para.byKey",
 	// 类别 1:外壳级 —— 侧边栏「我的任务」的红点徽标,和铃铛一个性质(要登录,不用授权)
@@ -510,10 +546,19 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	// `workflowList` 供**建任务选模板**与「我的任务」页共用,跨页面,不锁到流程模板页面码
 	// (锁了会把「有任务页、没模板页」的人拦死);流程模板页自己的 `workflowGet` 走页面码。
 	"taskClose.workflowList",
+	// 说明历史在 resolver 内校验任务成员关系。
+	"taskClose.contentHistory",
+	// 填报读取在 resolver 中按任务成员关系授权；模板用于任务创建和详情。
+	"taskClose.reportTemplateList",
+	"taskClose.reportGet",
+	"taskClose.reportBatchList",
+	"taskClose.reportBatchGet",
+	"taskClose.reportBatchSummary",
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionList",
 	"taskClose.actionMine",
+	"taskClose.actionUrgeHistory",
 	"taskClose.commentList",
 	// 活动日志(只读):同「任务可见即可读」,不做页面码 —— 它与详情页一体,锁了会把详情页打死
 	"taskClose.logList",

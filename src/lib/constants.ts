@@ -8,7 +8,7 @@
 // ─── 展示层 ────────────────────────────────────────────
 
 /** 空值占位符:列表/详情里 null|undefined 统一显示 —(与各模块详情页既有展示一致) */
-export const PLACEHOLDER_EMPTY = "-";
+export const PLACEHOLDER_EMPTY = "—";
 
 /** 分页每页可选条数 */
 export const PAGE_SIZES = [10, 20, 50, 100] as const;

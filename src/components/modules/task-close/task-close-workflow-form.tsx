@@ -25,7 +25,13 @@ import { cn } from "#/lib/utils";
 type WorkflowWho = "creator" | "participant" | "executor" | "any";
 
 /** 一条状态转移边 —— 与 `tc_workflow.payload.edges` 同形(`who` 见 `doc/task-close.md` 的 who 协议) */
-export type WorkflowEdgeInput = { from: string; to: string; who: WorkflowWho[]; via: "direct" | "action" };
+export type WorkflowEdgeInput = {
+	from: string;
+	to: string;
+	who: WorkflowWho[];
+	via: "direct" | "action";
+	guard?: "report_submitted";
+};
 
 /** 编辑态回填的整份模板定义(新建时为 null) */
 export type WorkflowEditing = {
@@ -53,7 +59,7 @@ const BLANK: Omit<WorkflowEditing, "id"> = {
 	statuses: [
 		{ value: "open", label: "进行中" },
 		{ value: "done", label: "待核验" },
-		{ value: "closed", label: "已关闭" },
+		{ value: "closed", label: "已关闭", terminal: true },
 	],
 	initial: "open",
 	edges: [
@@ -239,6 +245,14 @@ export function TaskCloseWorkflowForm({
 										className="h-8 w-40 text-sm"
 										onChange={(event) => patchStatus(index, { label: event.target.value })}
 									/>
+									<span className="flex items-center gap-1.5 text-xs">
+										<Checkbox
+											aria-label={`第 ${index + 1} 个状态为结束状态`}
+											checked={status.terminal === true}
+											onCheckedChange={(checked) => patchStatus(index, { terminal: checked })}
+										/>
+										结束状态
+									</span>
 									<ActionButton tone="danger" disabled={statuses.length <= 1} onClick={() => removeStatus(index)}>
 										删除
 									</ActionButton>
@@ -279,7 +293,7 @@ export function TaskCloseWorkflowForm({
 							</p>
 						) : (
 							<p className="text-xs text-muted-foreground">
-								「审批动作」的边会先进入系统的锁态「待审批」（pending），答复通过后再落到目标状态。想让某对状态
+								审批期间任务状态保持不变，全部通过后才进入目标状态。想让某对状态
 								<span className="font-medium text-foreground">必须</span>
 								走审批,就只留审批边、别加对应的直接边。
 							</p>
@@ -359,7 +373,7 @@ export function TaskCloseWorkflowForm({
 												</SelectContent>
 											</Select>
 											{edge.via === "action" ? (
-												<span className="text-xs text-muted-foreground">发起后经「待审批」再结算</span>
+												<span className="text-xs text-muted-foreground">全部通过后推进状态</span>
 											) : null}
 											{/* `who` 的含义随 via 变:直接改是"谁能改",审批是"谁能发起" */}
 											<span className="text-xs text-muted-foreground">
@@ -382,6 +396,16 @@ export function TaskCloseWorkflowForm({
 													</button>
 												</span>
 											))}
+											<span className="flex items-center gap-1.5 text-xs">
+												<Checkbox
+													aria-label="要求有效填报提交"
+													checked={edge.guard === "report_submitted"}
+													onCheckedChange={(checked) =>
+														patchEdge(edge.key, { guard: checked ? "report_submitted" : undefined })
+													}
+												/>
+												要求有效填报提交
+											</span>
 										</div>
 									</div>
 								))}
@@ -400,7 +424,13 @@ export function TaskCloseWorkflowForm({
 								name: name.trim(),
 								statuses,
 								initial,
-								edges: edges.map((edge) => ({ from: edge.from, to: edge.to, who: edge.who, via: edge.via })),
+								edges: edges.map((edge) => ({
+									from: edge.from,
+									to: edge.to,
+									who: edge.who,
+									via: edge.via,
+									guard: edge.guard,
+								})),
 							})
 						}
 					>

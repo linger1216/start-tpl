@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
-import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
+import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
 import {
@@ -14,8 +14,11 @@ import {
 	type TaskFormPayload,
 } from "#/components/modules/task-close/task-close-form";
 import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
+import { TaskCloseUrge } from "#/components/modules/task-close/task-close-urge";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
 import { TaskContentBlocks } from "#/components/modules/task-close/task-content-blocks";
+import { TaskContentHistory } from "#/components/modules/task-close/task-content-history";
+import { TaskReport } from "#/components/modules/task-close/task-report";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -36,6 +39,7 @@ import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
@@ -57,11 +61,11 @@ import { TaskActionDialog } from "./task-action-dialog";
  * `permissions` 派生(见 doc/task-close.md 的「按钮去向」):
  *   · 发起审批 —— `permissions.actionTargets`(模板里当前状态出发、我有权发起的 `via=action` 边);
  *     多个候选就在弹窗里选,再选「交给谁」,提交 `actionCreate`(带目标状态 → 任务锁定)。
- *   · 改状态 —— 非管理员只列 `permissions.transitions`(我能直改的 `direct` 边);管理员可选模板里全部状态。
+ *   · 改状态 —— 所有用户只列服务端返回的 `permissions.transitions`。
  *     提交 `taskTransit`。
- *   · 锁定期(`permissions.locked`,即状态 = `pending`)两个按钮都不出现 —— 与服务端锁守卫同形。
+ *   · 锁定期(`permissions.locked`,由审批动作决定)两个按钮都不出现 —— 与服务端锁守卫同形。
  *
- * 与状态无关的动作同样在右上角:转交(选参与人员 → `taskTransfer`)、发起征询(选参与人员 →
+ * 与状态无关的动作同样在右上角:转交(选成员 → `taskTransfer`)、发起征询(选成员 →
  * `actionCreate({toStatus: null})`)、编辑 / 删除 / 刷新,外加一颗 ⓘ 解释器。
  *
  * 视觉:色相只留三处 —— `primary`(在跑的状态节点 / 人头像)、`warn`(等你答复 / 锁定)、
@@ -96,10 +100,13 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 弹窗里选的:目标状态(审批用)+ 交给谁 */
 	const [actionTo, setActionTo] = useState("");
 	const [actionHandle, setActionHandle] = useState("");
+	const [nextHandles, setNextHandles] = useState<string[]>([]);
+	const [nextHandle, setNextHandle] = useState("");
+	const [consultMode, setConsultMode] = useState<"serial" | "parallel">("serial");
 	/** 转交弹窗:转给谁 */
 	const [transferOpen, setTransferOpen] = useState(false);
 	const [transferTo, setTransferTo] = useState("");
-	/** 管理员「改状态」弹窗:直接跳到模板里的任意状态 */
+	/** 「改状态」弹窗:选择允许的直接转移 */
 	const [statusOpen, setStatusOpen] = useState(false);
 	const [statusTo, setStatusTo] = useState("");
 	/** 驳回弹窗:动作 id + 原因(驳回必须写原因,服务端也会拒空的) */
@@ -125,6 +132,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			onSuccess: async (_data, variables) => {
 				await invalidate();
 				setActionMode(null);
+				setNextHandles([]);
+				setNextHandle("");
 				toast.success(variables.toStatus ? "已发起审批" : "已发起征询");
 			},
 			onError: toastApiError,
@@ -139,7 +148,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
-	/** 管理员「改状态」—— 直接跳到模板里的任意状态(服务端对管理员开了旁路) */
+	/** 「改状态」—— 沿模板直接转移边执行 */
 	const transitMutation = useMutation(
 		trpc.taskClose.taskTransit.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setStatusOpen(false), message: () => "状态已更新" }),
@@ -148,6 +157,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	);
 
 	/** 答复动作(通过 / 驳回)—— 只有指派人本人能答;驳回要写原因(服务端也会拒空的) */
+	const viewMutation = useMutation(trpc.taskClose.actionView.mutationOptions({ onError: toastApiError }));
 	const respondMutation = useMutation(
 		trpc.taskClose.actionRespond.mutationOptions({
 			onSuccess: async (_data, variables) => {
@@ -201,7 +211,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				close: () => {
 					setMemberOpen(false);
 					setNewMemberId("");
-					setNewMemberRole("executor");
+					setNewMemberRole("participant");
 				},
 				message: () => "已加入成员",
 			}),
@@ -238,7 +248,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	 *
 	 * 与状态有关的两个按钮**不在这里判**:它们按「事项流程」(任务快照的模板)派生,见下面的
 	 * `canApprove` / `canSetStatus` —— 「发起审批」看当前状态有没有我能发起的 action 边,
-	 * 「改状态」看我能直改的 direct 边(只有管理员例外,可任意状态)。这样换模板不用改前端。
+	 * 「改状态」看我能直改的 direct 边。这样换模板不用改前端。
 	 *
 	 * 非状态按钮的角色口径(用户给定):
 	 *   · 管理员(admin)           → 转交 / 发起征询 / 编辑 / 删除 / 刷新
@@ -263,14 +273,15 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		const isAdmin = myRole === "admin";
 		return {
 			transfer: isAdmin || myRole === "executor",
-			consult: myRole !== null,
+			consult: detailQuery.data?.permissions.canInitiateConsult ?? false,
 			edit: isAdmin || myRole === "creator",
 			remove: isAdmin || myRole === "creator",
 			refresh: myRole !== null,
+			/** 加成员:服务端 `assertTaskParticipant` 同判据 —— 创建者 / 管理员 / 当前成员;旁观者不能 */
 			addMember: myRole !== null,
 			manageMembers: isAdmin || myRole === "creator",
 		};
-	}, [myRole]);
+	}, [myRole, detailQuery.data?.permissions.canInitiateConsult]);
 
 	/** 这条 id 在库里已经不存在了(被删 / 别人删了 / 手输错了) */
 	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
@@ -321,6 +332,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	}
 
 	const { task, content, attachments, members, permissions, meId } = detailQuery.data;
+	/**
+	 * `payload.type` 是业务场景标签,编辑界面不编辑它 —— 但保存时**必须原样带回**,
+	 * 否则 `taskUpdate` 整块替换 payload 会把它抹掉(设置页的类型筛选随之失效)。
+	 */
+	const payloadType = (task.payload as { type?: string } | null)?.type;
 	// 状态图快照:状态清单(value+label)从这里取(展示一律用 label)
 	const workflow = task.workflow as { statuses?: WorkflowStatus[]; initial?: string } | null;
 	const statuses = workflow?.statuses ?? [];
@@ -342,19 +358,15 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	}));
 
 	/**
-	 * 「改状态」弹窗的候选:管理员 → 模板里的**全部**状态(去当前态);其他人 → `permissions.transitions`
+	 * 「改状态」弹窗的候选由 `permissions.transitions` 提供
 	 * (模板里他能直改的那几条 `direct` 边)。多个就让人在弹窗里选。
 	 */
-	const statusOptions = (
-		permissions.isAdmin
-			? statuses.map((status) => ({ value: status.value, label: status.label }))
-			: permissions.transitions.map((value) => ({ value, label: statusLabelOf(statuses, value) }))
-	).filter((option) => option.value !== task.status);
+	const statusOptions = permissions.transitions.map((value) => ({ value, label: statusLabelOf(statuses, value) }));
 
 	/**
 	 * 状态类按钮的候选 —— **全部由服务端 permissions 派生**,前端不自己解释 who / edges:
 	 *   · `actionTargets` → 发起审批(会锁任务,还要选交给谁);
-	 *   · `transitions` → 直接改;管理员例外,弹窗里可选模板里的**全部**状态。
+	 *   · `transitions` → 直接改。
 	 * 锁定期(`permissions.locked`)两个按钮都不出现 —— 与服务端锁守卫同形。
 	 *
 	 * 位置:回到**记录头右上角**的动作组(用户要求)。流程脊只画状态,不放动作。
@@ -375,15 +387,19 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	}
 
 	/** 「轮到你了」的待办 —— 指给我的、还没结的动作;`toStatus` 为空 = 征询(不摊通过 / 驳回) */
-	const todoItems: TodoItem[] = myPendingActions.map((row) => ({
-		id: row.id,
-		title: row.toStatus
-			? `${row.createdName ?? "—"} 发起 ${statusLabelOf(statuses, row.fromStatus ?? "")} → ${statusLabelOf(statuses, row.toStatus)}`
-			: `${row.createdName ?? "—"} 发起征询`,
-		stateLabel: row.status === "active" ? "待答复" : "已发起",
-		actionable: row.status === "active",
-		consult: row.toStatus === null,
-	}));
+	const todoItems: TodoItem[] = myPendingActions.map((row) => {
+		const root = detailQuery.data.actions.find((item) => item.id === row.serialNo);
+		return {
+			id: row.id,
+			title:
+				row.isLocking && root?.toStatus
+					? `${row.createdName ?? PLACEHOLDER_EMPTY} 发起 ${statusLabelOf(statuses, root.fromStatus ?? "")} → ${statusLabelOf(statuses, root.toStatus)}`
+					: `${row.createdName ?? PLACEHOLDER_EMPTY} 发起征询`,
+			stateLabel: row.status === "active" ? "待答复" : "已发起",
+			actionable: row.status === "active",
+			consult: !row.isLocking,
+		};
+	});
 
 	/**
 	 * 头部那颗 ⓘ 的文案 —— 把「当前身份 + 事项流程给这个身份的边」摊开,让用户自己核对按钮为什么是这几个。
@@ -394,13 +410,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const tipLines = [
 		`状态:${statusLabelOf(statuses, task.status)}`,
 		`发起审批:${actionTargetOptions.length > 0 ? `→ ${actionTargetOptions.map((option) => option.label).join(" / ")}` : "无"}`,
-		`直接改状态:${
-			permissions.isAdmin
-				? "任意状态(管理员)"
-				: statusOptions.length > 0
-					? `→ ${statusOptions.map((option) => option.label).join(" / ")}`
-					: "无"
-		}`,
+		`直接改状态:${statusOptions.length > 0 ? `→ ${statusOptions.map((option) => option.label).join(" / ")}` : "无"}`,
 		...(permissions.locked ? ["任务被审批动作锁住,状态类按钮暂不可用"] : []),
 	];
 
@@ -464,7 +474,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								<span>
 									创建于
 									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
-										{task.createdAt ? formatLocalMinute(task.createdAt) : "—"}
+										{task.createdAt ? formatLocalMinute(task.createdAt) : PLACEHOLDER_EMPTY}
 									</strong>
 								</span>
 								<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
@@ -504,6 +514,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									onClick={() => {
 										setActionTo(actionTargetOptions[0]?.value ?? "");
 										setActionHandle("");
+										setNextHandles([]);
+										setNextHandle("");
 										setActionMode("approve");
 									}}
 								>
@@ -512,7 +524,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							) : canSetStatus ? (
 								<Button
 									size="sm"
-									title={permissions.isAdmin ? "直接把任务改到任意状态(管理员)" : "按事项流程直接改状态"}
+									title="按事项流程直接改状态"
 									onClick={() => {
 										setStatusTo(statusOptions[0]?.value ?? "");
 										setStatusOpen(true);
@@ -525,11 +537,13 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								<Button
 									variant="outline"
 									size="sm"
-									title="请某位参与人员给意见(不改状态、不锁任务)"
+									title="请某位成员给意见(不改状态、不锁任务)"
 									disabled={peopleOptions.length === 0}
 									onClick={() => {
 										setActionTo("");
 										setActionHandle("");
+										setNextHandles([]);
+										setNextHandle("");
 										setActionMode("consult");
 									}}
 								>
@@ -614,17 +628,23 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						items={todoItems}
 						busy={respondMutation.isPending}
 						replyBusy={replyMutation.isPending}
-						// @选单候选 = 参与人名册(创建者 + 成员,去掉自己);taskGet 同键缓存,零额外请求
+						// @选单候选 = 成员名册(创建者 + 成员,去掉自己);taskGet 同键缓存,零额外请求
 						participants={[
 							{ id: task.creatorId, name: task.creatorName ?? "" },
 							...members.map((member) => ({ id: member.userId, name: member.name ?? "" })),
 						].filter((person) => person.id !== meId && person.name)}
+						onView={async (id) => {
+							await viewMutation.mutateAsync({ id });
+							await invalidate();
+						}}
 						onApprove={(id) => respondMutation.mutate({ id, approved: true })}
 						onReject={(id) => {
 							setRejectReason("");
 							setRejectId(id);
 						}}
-						onReply={(id, content, attachments) => replyMutation.mutate({ id, content, attachments })}
+						onReply={(id, content, attachments, mentionIds) =>
+							replyMutation.mutate({ id, content, attachments, mentionIds })
+						}
 					/>
 				</section>
 			) : null}
@@ -637,9 +657,21 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					<section className="grid gap-3">
 						<header className="flex items-center justify-between">
 							<h2 className="text-base font-semibold tracking-tight text-foreground">任务内容</h2>
+							{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
+								<TaskContentHistory taskId={task.id} onOpenAttachment={setPreviewAttachment} />
+							)}
 						</header>
 						<TaskContentBlocks content={content} />
 					</section>
+
+					{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
+						<section className="grid gap-3 pt-6">
+							<header className="border-b border-dashed border-border pb-2">
+								<h2 className="text-base font-semibold tracking-tight text-foreground">结构化填报</h2>
+							</header>
+							<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
+						</section>
+					)}
 
 					{/* 附件 block */}
 					<section className="grid gap-3 pt-6">
@@ -686,11 +718,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				{/* 右 检查器 —— 两块合成**一张面板**:内部用 inset 细线分组,不再每块各画一条虚线 */}
 				<aside className="sticky top-18 self-start">
 					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
-						{/* 参与人员 */}
+						{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
 						<section className="grid gap-2 p-3.5">
 							<header className="flex items-center justify-between">
 								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
-									参与人员{" "}
+									参与人{" "}
 									<span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
 								</h2>
 								{can.addMember ? (
@@ -700,7 +732,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								) : null}
 							</header>
 							<ul className="grid gap-0.5">
-								<PeopleRow roleLabel="创建人" name={task.creatorName ?? "—"} main={false} />
+								<PeopleRow roleLabel="创建人" name={task.creatorName ?? PLACEHOLDER_EMPTY} main={false} />
 								{members.map((m) => (
 									<PeopleRow
 										key={`${m.userId}-${m.role}`}
@@ -725,6 +757,14 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								) : null}
 							</ul>
 						</section>
+
+						<TaskCloseUrge
+							actions={detailQuery.data.actions.filter(
+								(action) =>
+									action.status === "active" &&
+									(meId === task.creatorId || meId === action.createdId || permissions.isAdmin),
+							)}
+						/>
 
 						{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
 						<section className="grid gap-2 border-t border-border p-3.5">
@@ -760,7 +800,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						description: payload.description,
 						dueAt: payload.dueAt,
 						priority: payload.priority,
-						payload: { content: payload.content, attachments: payload.attachments },
+						payload: { type: payloadType, content: payload.content, attachments: payload.attachments },
 					})
 				}
 			/>
@@ -781,7 +821,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					if (!next) setPendingRemoveMember(null);
 				}}
 				title="移出成员"
-				description={`把「${pendingRemoveMember?.name ?? "—"}」从这条任务移出?TA 将失去推进 / 答复的权限(已发的评论与历史保留)。`}
+				description={`把「${pendingRemoveMember?.name ?? PLACEHOLDER_EMPTY}」从这条任务移出?TA 将失去推进 / 答复的权限(已发的评论与历史保留)。`}
 				isPending={memberRemoveMutation.isPending}
 				confirmText="移出"
 				pendingText="移出中…"
@@ -794,12 +834,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				}}
 			/>
 
-			{/* 改状态(创建者 / 管理员)—— 直接跳到模板里的任意状态 */}
+			{/* 改状态 —— 按模板允许的转移执行 */}
 			<TaskActionDialog
 				open={statusOpen}
 				onOpenChange={setStatusOpen}
 				title="改状态"
-				description="直接把任务改到流程模板里的任意状态,不建审批动作、也不要求走模板的边。"
+				description="按流程模板允许的直接转移边修改状态。"
 				pending={transitMutation.isPending}
 				confirmDisabled={!statusTo}
 				confirmText="保存"
@@ -826,12 +866,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</DetailRow>
 			</TaskActionDialog>
 
-			{/* 转交执行人 —— 选一位参与人员,原执行人自动降为参与者 */}
+			{/* 转交执行人 —— 选一位成员,原执行人自动降为参与者 */}
 			<TaskActionDialog
 				open={transferOpen}
 				onOpenChange={setTransferOpen}
 				title="转交执行人"
-				description="把执行人身份交给同为参与人员的另一个人;原执行人会改为参与者。"
+				description="把执行人身份交给同为成员的另一个人;原执行人会改为参与者。"
 				pending={transferMutation.isPending}
 				confirmDisabled={!transferTo}
 				confirmText="转交"
@@ -844,7 +884,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						value={transferTo}
 						onValueChange={setTransferTo}
 						options={transferOptions}
-						placeholder="从参与人员里选一个"
+						placeholder="从成员里选一个"
 					/>
 				</DetailRow>
 			</TaskActionDialog>
@@ -858,7 +898,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				title={actionMode === "approve" ? "发起审批" : "发起征询"}
 				description={
 					actionMode === "approve"
-						? "目标状态只能从流程模板里、当前状态出发的「审批」边里选;发起后任务锁定,等对方答复。"
+						? "审批人全部通过后推进状态；任一人驳回则退回原状态。"
 						: "征询不改状态、也不锁任务,只是请对方给个意见。"
 				}
 				pending={actionMutation.isPending}
@@ -870,6 +910,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						taskId: task.id,
 						toStatus: actionMode === "approve" ? actionTo : null,
 						handleId: actionHandle,
+						nextHandleIds: nextHandles,
+						flowMode: consultMode,
 					})
 				}
 			>
@@ -899,10 +941,74 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						aria-label="交给谁"
 						value={actionHandle}
 						onValueChange={setActionHandle}
-						options={peopleOptions}
-						placeholder="从参与人员里选一个"
+						options={peopleOptions.filter((person) => !nextHandles.includes(person.value))}
+						placeholder="从成员里选一个"
 					/>
 				</DetailRow>
+				{actionMode ? (
+					<DetailRow label="处理方式" align="center">
+						<Select
+							items={[
+								{ value: "serial", label: "串行" },
+								{ value: "parallel", label: "并行" },
+							]}
+							value={consultMode}
+							onValueChange={(next) => setConsultMode(next === "parallel" ? "parallel" : "serial")}
+						>
+							<SelectTrigger className="w-full" aria-label="处理方式">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="serial">串行</SelectItem>
+								<SelectItem value="parallel">并行</SelectItem>
+							</SelectContent>
+						</Select>
+					</DetailRow>
+				) : null}
+				{actionMode ? (
+					<DetailRow label="其他处理人" align="center">
+						<div className="space-y-2">
+							{nextHandles.map((id, index) => (
+								<div key={id} className="flex items-center justify-between gap-2">
+									<span>
+										{index + 2}. {peopleOptions.find((person) => person.value === id)?.label ?? id}
+									</span>
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										onClick={() => setNextHandles(nextHandles.filter((item) => item !== id))}
+									>
+										移除
+									</Button>
+								</div>
+							))}
+							<div className="flex gap-2">
+								<SearchSelect
+									label="其他处理人"
+									value={nextHandle}
+									onValueChange={setNextHandle}
+									options={peopleOptions.filter(
+										(person) => person.value !== actionHandle && !nextHandles.includes(person.value),
+									)}
+									placeholder="按顺序添加"
+								/>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									disabled={!nextHandle}
+									onClick={() => {
+										setNextHandles([...nextHandles, nextHandle]);
+										setNextHandle("");
+									}}
+								>
+									添加
+								</Button>
+							</div>
+						</div>
+					</DetailRow>
+				) : null}
 			</TaskActionDialog>
 
 			<TaskActionDialog
@@ -933,7 +1039,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</DetailRow>
 				<DetailRow label="角色" align="center">
 					<Select
-						items={ROLE_OPTIONS}
+						items={
+							members.some((member) => member.role === "executor")
+								? ROLE_OPTIONS.filter((item) => item.value !== "executor")
+								: ROLE_OPTIONS
+						}
 						value={newMemberRole}
 						onValueChange={(next) => setNewMemberRole(next ? String(next) : "participant")}
 					>
@@ -941,7 +1051,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							{ROLE_OPTIONS.map((item) => (
+							{ROLE_OPTIONS.filter(
+								(item) => item.value !== "executor" || !members.some((member) => member.role === "executor"),
+							).map((item) => (
 								<SelectItem key={item.value} value={item.value}>
 									{item.label}
 								</SelectItem>
@@ -969,7 +1081,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						description: task.description,
 						dueAt: task.dueAt,
 						priority: task.priority,
-						payload: { content, attachments: draftAttachments.map((file) => file.id) },
+						payload: { type: payloadType, content, attachments: draftAttachments.map((file) => file.id) },
 					})
 				}
 			>
@@ -1042,7 +1154,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 /** ⓘ 里「为什么有这些按钮」的一句话 —— 与 `doc/task-close.md` 的「头部按钮(按事项流程派生)」同口径 */
 const ROLE_WHY: Record<string, string> = {
-	admin: "系统管理员:不受事项流程限制,可直接改到任意状态。",
+	admin: "系统管理员:按流程模板与条件执行状态转移。",
 	creator: "任务创建人:编辑 / 删除 / 发起征询按身份;状态类按钮按模板里 who 含 creator 的边。",
 	executor: "执行者:转交 / 发起征询按身份;状态类按钮按模板里 who 含 executor 的边。",
 	participant: "参与者:发起征询按身份;状态类按钮按模板里 who 含 participant 的边。",
@@ -1050,7 +1162,7 @@ const ROLE_WHY: Record<string, string> = {
 };
 
 /**
- * 参与人员块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
+ * 参与人块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
  *
  * 头像与「评论与回复」`TaskCloseComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
  * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。

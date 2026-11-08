@@ -28,6 +28,7 @@ import { useFileUpload } from "#/hooks/use-file-upload";
 export type UserFormPayload = {
 	name: string;
 	email: string;
+	phone: string;
 	/** 只有新建时有意义;编辑时改密码走 Better Auth 自己的流程 */
 	password: string;
 	image: string;
@@ -73,6 +74,7 @@ export function SettingsUsersForm({
 }) {
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
+	const [phone, setPhone] = useState("");
 	const [password, setPassword] = useState("");
 	const [image, setImage] = useState("");
 	const [avatarUploading, setAvatarUploading] = useState(false);
@@ -114,6 +116,7 @@ export function SettingsUsersForm({
 		if (!open) return;
 		setName(user?.name ?? "");
 		setEmail(user?.email ?? "");
+		setPhone(user?.phone ?? "");
 		setPassword("");
 		setImage(user?.image ?? "");
 		setEmailVerified(user?.emailVerified ?? false);
@@ -128,6 +131,7 @@ export function SettingsUsersForm({
 		onSubmit({
 			name: name.trim(),
 			email: email.trim(),
+			phone: phone.trim(),
 			password,
 			image: image.trim(),
 			emailVerified,
@@ -186,6 +190,18 @@ export function SettingsUsersForm({
 									onChange={(event) => setName(event.target.value)}
 								/>
 							</DetailRow>
+							{!creating ? (
+								<DetailRow label="联系电话" htmlFor="user-form-phone">
+									<Input
+										id="user-form-phone"
+										type="tel"
+										value={phone}
+										placeholder="用于短信通知"
+										className="h-8 text-sm"
+										onChange={(event) => setPhone(event.target.value)}
+									/>
+								</DetailRow>
+							) : null}
 							<DetailRow label="邮箱(登录名)" htmlFor="user-form-email">
 								<Input
 									id="user-form-email"

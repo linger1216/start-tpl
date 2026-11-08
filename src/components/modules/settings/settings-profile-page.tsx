@@ -13,6 +13,7 @@ import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { authClient } from "#/lib/auth-client";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { formatLocalMinute } from "#/lib/time";
 
 /**
@@ -199,7 +200,7 @@ export function SettingsProfilePage() {
 									<span>{profile.depts.map((dept) => dept.name).join("、")}</span>
 								)}
 							</DetailRow>
-							<DetailRow label="创建时间">{formatLocalMinute(profile.createTime) || "—"}</DetailRow>
+							<DetailRow label="创建时间">{formatLocalMinute(profile.createTime) || PLACEHOLDER_EMPTY}</DetailRow>
 						</>
 					)}
 				</CardContent>

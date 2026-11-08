@@ -1,5 +1,6 @@
 /**
- * 任务闭环(tc_close)的常量真源 —— 只放「router、种子脚本、测试都要用」的字面量。
+ * 任务闭环(tc_close)的常量真源 —— 放「router、种子脚本、测试都要用」的字面量,
+ * 以及只依赖这些字面量的一行取用函数(`statusLabelOf` / `priorityLabelOf` / `taskPathOf`)。
  *
  * 单独一个文件(而不是从 `routers/task-close.ts` 导出):那个 router 会连带拉起
  * `../init`(`@tanstack/react-start/server` 等),而 `scripts/seed-task-close.ts`
@@ -14,7 +15,10 @@ export const DEFAULT_WORKFLOW_ID = "wf-default";
  *
  * **UI 一律显示 `label`**,`value` 只在落库与边(`edges.from/to`)里用;不在这里放任何"中文映射表"。
  */
-export type WorkflowStatus = { value: string; label: string };
+export type WorkflowStatus = { value: string; label: string; terminal?: boolean };
+
+/** 同一动作两次手动催办的最短间隔。 */
+export const TASK_URGE_COOLDOWN_MINUTES = 30;
 
 /** 从状态清单取展示名;取不到就回退 `value`(不抛错) */
 export function statusLabelOf(statuses: readonly WorkflowStatus[] | undefined, value: string): string {
@@ -46,4 +50,11 @@ export function priorityLabelOf(priority: number | string | null | undefined): s
 	if (priority === null || priority === undefined || priority === "") return "未设置";
 	const n = typeof priority === "string" ? Number(priority) : priority;
 	return TASK_PRIORITY_LABEL[n as TaskPriority] ?? "未设置";
+}
+
+/** 任务详情页路径前缀 —— 只给下面的 `taskPathOf` 用,不外传。 */
+const TASK_PATH_PREFIX = "/task-close/";
+
+export function taskPathOf(taskId: string): string {
+	return `${TASK_PATH_PREFIX}${taskId}`;
 }

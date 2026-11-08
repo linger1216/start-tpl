@@ -20,6 +20,8 @@ type MailMessage = {
 	text: string;
 	/** 邮件里的主链接(验证 / 重置密码);开发态单独打一行,方便直接点 */
 	link?: string;
+	/** 稳定投递标识，供 SMTP 接收方识别重复邮件。 */
+	messageId?: string;
 };
 
 /** 开发态驱动名;`MAIL_DRIVER=…` 换成真实驱动时,记得在下面加对应分支 */
@@ -34,7 +36,7 @@ const SMTP_DRIVER = "smtp";
  */
 let smtpTransport: Promise<Transporter> | null = null;
 
-export async function sendMail(message: MailMessage): Promise<void> {
+export async function sendMail(message: MailMessage): Promise<{ messageId?: string }> {
 	const driver = process.env.MAIL_DRIVER ?? DEV_DRIVER;
 
 	if (driver === DEV_DRIVER) {
@@ -45,12 +47,11 @@ export async function sendMail(message: MailMessage): Promise<void> {
 		if (message.link) lines.push(`[mail] 链接:${message.link}`);
 		lines.push("[mail] (开发态:没有真发,换服务商见 lib/mailer.ts)\n");
 		console.log(lines.join("\n"));
-		return;
+		return {};
 	}
 
 	if (driver === SMTP_DRIVER) {
-		await sendViaSmtp(message);
-		return;
+		return sendViaSmtp(message);
 	}
 
 	throw new Error(`未实现的邮件驱动:${driver}(在 src/lib/mailer.ts 的 sendMail 里加一个分支)`);
@@ -63,7 +64,7 @@ export async function sendMail(message: MailMessage): Promise<void> {
  * 而 `sendMail` 还挂在 BA 的启动路径上(`lib/auth.ts` 静态 import 本文件)—— 不发信的部署
  * 不该为它买单,构建也不该把它拖进不需要它的 chunk。跟 `xlsx` 只在点按钮时 `import()` 同一个道理。
  */
-async function sendViaSmtp(message: MailMessage): Promise<void> {
+async function sendViaSmtp(message: MailMessage): Promise<{ messageId?: string }> {
 	const from = process.env.MAIL_FROM?.trim();
 	if (!from) throw new Error("MAIL_DRIVER=smtp 时必须配 MAIL_FROM(收件人看到的发件人)");
 
@@ -80,13 +81,16 @@ async function sendViaSmtp(message: MailMessage): Promise<void> {
 	 * 静默失败会让人一直等一封永远不会来的信。所以这里只记日志、**继续抛**。
 	 */
 	try {
-		await transport.sendMail({
+		const info = await transport.sendMail({
 			from,
 			to: message.to,
 			subject: message.subject,
 			text: message.text,
+			messageId: message.messageId ? `<${message.messageId}@notifications.local>` : undefined,
 		});
 		logger.info("mail.sent", { to: message.to, subject: message.subject });
+		// Nodemailer 自己生成的 Message-ID —— 投递记录用它与服务商侧对账
+		return { messageId: info.messageId };
 	} catch (error) {
 		logger.error("mail.smtp_failed", {
 			to: message.to,

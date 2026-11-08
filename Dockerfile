@@ -58,6 +58,12 @@ ENV NODE_ENV=development
 EXPOSE 3000
 CMD ["pnpm", "dev"]
 
+# 独立调度 / 投递进程，需要源码和 tsx 执行注册的处理器。
+FROM deps AS worker
+COPY . .
+ENV NODE_ENV=production
+CMD ["node", "--import", "tsx", "scripts/worker.ts"]
+
 # ── 生产镜像 ───────────────────────────────────────────────────────
 FROM base AS runtime
 ENV NODE_ENV=production

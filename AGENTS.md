@@ -37,13 +37,14 @@ Before editing files for a substantial task:
 
 ```bash
 pnpm dev              # 开发服务器,固定 3000 端口
+pnpm worker           # 独立调度和通知投递进程
 pnpm typecheck        # tsc --noEmit —— 改完必跑,只报告不写文件
 pnpm check            # biome check --write —— 格式化 + lint + 整理 import,会写回文件
 pnpm generate-routes  # 改过 src/routes/ 之后必跑(routeTree.gen.ts 是生成物,不要手改)
 pnpm build            # 生产构建 → .output/(不是 dist/)
 pnpm test             # 直调 tRPC procedure 的集成测试(要 .env.local 指向的库)
-pnpm db:create        # 建系统表 28 张(21 张 sys_* + demo_grid + 6 张 tc_*;幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
-pnpm db:dm:create-ba  # 达梦线:建 18 张表(逐张清单见 doc/达梦支持.md,幂等)
+pnpm db:create        # 建系统、通知、调度与任务闭环表(幂等;建完顺带对齐注释 / 索引名 / 旧列列型)
+pnpm db:dm:create-ba  # 达梦线:建系统、通知、调度与任务闭环表(见 doc/达梦支持.md,幂等)
 pnpm db:sync:meta     # 对齐表 / 列注释与索引名(幂等,唯一真源)
 pnpm db:seed:menus / :dicts / :paras / :tags / :rbac / :demo   # 六个种子都幂等「只补不覆盖」
 pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期

@@ -7,6 +7,7 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
+import { TaskReportBatchDialog } from "#/components/modules/task-close/task-report-batches";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
@@ -18,7 +19,7 @@ import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { PAGE_SIZES } from "#/lib/constants";
+import { PAGE_SIZES, PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { priorityLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
 
@@ -118,6 +119,7 @@ export function TaskCloseCardsPage() {
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />
+						<TaskReportBatchDialog />
 						<Button onClick={() => setCreateOpen(true)}>
 							<Plus className="size-4" />
 							新建任务
@@ -202,7 +204,7 @@ export function TaskCloseCardsPage() {
 								<div className="mt-auto flex flex-wrap items-center gap-1.5">
 									<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
 										<User className="size-3" />
-										{item.creatorName ?? "—"}
+										{item.creatorName ?? PLACEHOLDER_EMPTY}
 									</span>
 									<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
 										<CalendarClock className="size-3" />

@@ -4,9 +4,7 @@
  * 为什么单独一个文件(而不是留在 `lib/rbac.ts`):「权限码怎么写、怎么比」是**语法**,
  * 「这个用户实际有哪些码」是**计算**。功能权限的引擎(`lib/casbin.ts`)与菜单并集的计算
  * (`lib/rbac.ts`)都要用这套语法,而它俩互相引用 —— 语法抽到最底层,两边都往下依赖,没有环。
- *
- * `lib/rbac.ts` 会把这里的东西**原样再导出**(`PERM_FORMAT` / `permMatches` / `pagePermOf`),
- * 所以老调用方(`routers/menu.ts` / `trpc/init.ts` / `tests/*`)一行都不用改。
+ * 各消费方(`routers/menu.ts` / `trpc/init.ts` / `tests/*`)**直接从本文件 import**。
  */
 
 /**

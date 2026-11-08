@@ -1,86 +1,40 @@
-# 任务插件化:内容块 + 作答(设计蓝,未实施)
+# 任务填报设计
 
-> 状态:**设计定稿,等待拍板实施**;实施前本文件只作设计依据。
-> 定稿后按 §6 顺序实施;本文件是单一设计真源,改动先改这里再动代码。
-> 背景与驱动的第一场景见上;现有「内容块注册表」雏形(`lib/task-content.ts` + `task-content-blocks`)。
-> 与本模板的关系:任务闭环其它能力(流程脊/动作/评论/日志)**不在本插件体系内**。
+> 内容块就地作答及把答案存入 `tc_task.draft/answer` 的旧方案已废止。独立填报、批次、汇总与受限 Excel 均已落地，界面接入任务详情、设计器与批次页。
 
-**只有一种插件**。内容块的「定义 / 展示 / 作答交互」三张脸由同个插件负责;内核不解释任何具体块语义;
-"回复区"不是独立二插,它是插件的**作答面**(渲染在内容区)。
+## 边界
 
-```ts
-type TaskFormPlugin<K, V> = {
-	kind: string; label: string; icon: LucideIcon;
-	blockSchema: z.ZodType<K>;      // 定义面
-	blank: () => K;
-	definitionEditor: (ctx) => ReactNode;
-	valueSchema: z.ZodType<V>;      // 作答面
-	blankValue: (block) => V;
-	answerEditor: (ctx) => ReactNode;   // 内容区就地作答;他人= view readonly
-	view: (ctx: { block, value, mode: "inline"|"report" }) => ReactNode;
-	summary: (v) => string;
-	confirm: (v) => string | null;  // 提交门槛(必答校验)
-};
-```
+任务说明 `TaskContent` 使用现有内容块，只供阅读；自由回复 `TaskComment` 保存文字、附件及 @。可选的 `TaskReport` 独立保存结构化填报，不把评论或任务 payload 当作正式提交。
 
-## 数据(内核不解释,按块 id 对准)
+一个任务最多一个有效执行人，执行权随转交改变，草稿和提交仍属于任务。流程模板在创建任务时复制快照；填报模板发布后版本不可变，每份任务填报绑定确定的版本。表单提交不自动完成任务，完成条件由流程动作和守卫决定。
 
-| 位置 | 内容 | 谁写 |
+## 目标模型
+
+| 业务对象 | 计划存储 | 职责 |
 | --- | --- | --- |
-| `tc_task.payload.content` | 带id信封 `{ id, kind, value }`(旧数据兼容) | 创建者/管理员(taskUpdate 口径不动) |
-| `tc_task.draft` JSON NULL | 作答草稿 `{ blocks: { [blockId]: 值 } }` | 可作答者,`taskSaveDraft` **静默** |
-| `tc_task.answer` JSON NULL | 正式作答(带一层格式: `{blocks: ...}`) | 可作答者,`taskSubmitAnswer`(**审计1行**+ tc_log `answer.submit` + notify 创建者) |
+| `TaskReportTemplate` | `tc_report_template` | 模板名称和管理信息 |
+| `TaskReportTemplateVersion` | `tc_report_template_version` | 不可变的发布结构 |
+| `TaskReport` / `TaskReportDraft` | `tc_task_report` | 单任务填报、草稿 revision 和当前有效提交指针 |
+| `TaskReportSubmission` | `tc_report_submission` | 每次正式提交的不可变快照 |
+| `TaskReportBatch` | `tc_report_batch` | 征集活动、版本、截止时间和汇总规则 |
+| `TaskReportBatchTask` | `tc_report_batch_task` | 批次与独立任务的关联；一个任务最多属于一个批次 |
 
-未知 kind 三层降级:定义侧占位块 / 作答侧提示缺插件 / 提交校验**跳过**;
-作答者口径(内核判):执行人 + 管理员,他人只读渲染 view(mode:"inline")。
+批次不是父任务，不影响各任务状态。批次创建在单一事务中完成，按创建人和请求键幂等；失败时整体回滚，可使用同一请求键重试。关闭批次或超过截止时间后不接受新的正式提交，已提交的任务和历史保留。汇总按当前有效提交确定性计算，不持久化重复的汇总真源；支持追加行、按业务键合并并提示冲突、指定数值字段的求和、计数和平均，保留提交人、任务及行来源。
 
-## 内核 API(共 3 个)
+**批次三处接口的可见口径一致**：`reportBatchList` / `reportBatchGet` / `getBatchSummary` 都放行「创建人本人 **或** 管理员」。列表若只按 `creator_id = me` 筛，管理员能按 id 打开任意批次却在列表里找不到入口，是同一份权限判据的三处漂移。
 
-| Process | 语义 | 日志/通知 |
-| --- | --- | --- |
-| `taskSaveDraft({ taskId, blocks })` | 逐项/整批存草稿;守卫=可作答者 | 静默 |
-| `taskSubmitAnswer({ taskId })` | draft→answer;逐块 valueSchema + confirm 校验 | 审计1行 + tc_log + notify 创建者 |
-| 读 | draft/answer 并入 taskGet(附带 canAnswer 能力位) | — |
+**批次详情与汇总对软删任务的口径不同，且是有意为之**：`reportBatchGet` 返回的 `tasks` **不筛** `alive`，已软删的任务仍以 `deletedAt` 标出并保留在列表里，方便追溯「这批当时发给了谁、谁的任务后来被删了」；统计「已提交 X/Y」时也只按未删任务计入分子（见界面 `task-report-batches.tsx`）。而 `getBatchSummary` **筛** `alive`，因为汇总是对现存有效提交做运算。**不要「顺手」给 `reportBatchGet` 补 `alive` 过滤器** —— 那会让已删任务从进度视图里消失，与历史记录口径不符。
 
-**提交不自动推状态**——执行人走流程边(「发起完成」action);报告不锁在作答里,可「另存为内容块」归档。
+## 数据与交互
 
-## 场景回放(检查企业安全清单)
-创建者拼清单 → 执行人在内容区就地 ✓/✗ + 拍照(debounce→draft)→ 提交(必答校验)→ 创建者 report 核验
-(驳回走 action)→ 「报告另存为内容块」归档;报告视图 = `view(mode:"report")`,打印 `@media print`。
+模板以稳定 schema 标识定义一个或多个 OBJECT / TABLE 数据集，服务端负责字段类型、默认值、必填、条件和跨字段校验。草稿以 revision 乐观锁保存；提交完整校验后新增快照，退回允许重新编辑而不覆盖历史。模板、草稿、提交和批次操作均需任务级或批次级授权，并在事务内记录关键业务日志。
 
-## 首批插件
+重复提交（同一 revision 且已是 `submitted`）只在**提交人仍是自己**时按幂等成功返回原来的 `submissionId`；换了执行人（`taskTransfer` 后）再拿旧 revision 重放会得到 `CONFLICT`「该版本已由其他执行人提交」。否则别人的草稿版本号会被当成本人的已提交，提交人归属就错了。
 
-- **`checklist`(首选)** — 检查企业清单直接服务;定义面逐项 label+required;作答面逐项 pass/note/photoIds;
-  拍照复用 file.presign/confirm + useFileUpload(两阶段链),attachmentUrl 守卫**同步扩展**(draft/answer 的 file id 也算"挂在任务上");
-- **`survey`(第二块验证轨)** — 题干/单选/多选/必答;多人答案 v1 **不做**(一人一表的假设不进内核)。
+二维表格提供增删行、上下方向键在行间移动、从电子表格整块粘贴（按起始格铺开，超出表格范围丢弃）、错误定位到行与字段，以及受限 Excel 导入导出。导入只接受平台模板并限制文件大小、工作表和行列数量，提供映射、校验、预览；导出时防范公式注入。附件如纳入填报，复用既有文件鉴权链路。
 
-## Registry 与派生
+Excel 使用 [SheetJS 官方发布的 0.20.3](https://docs.sheetjs.com/docs/getting-started/installation/frameworks/)，不再使用 npm 上的 0.18.5；后者受 [GHSA-4r6h-8v6p-xvw6](https://github.com/advisories/GHSA-4r6h-8v6p-xvw6) 影响。导入前使用 yauzl 逐条读取压缩包并累计实际解压字节，上限为 5 MB 文件、20 MB 解压数据、150 个条目、一个工作表、100 列和 10000 行；拒绝宏、外链、公式、嵌入对象和 XML 外部实体。导入仅产生预览，确认后进入草稿，不自动提交。第一行是稳定字段标识，第二行是标题；列映射不完整时须手动指定并重新校验。批次汇总可导出全部当前结果及冲突与来源。
 
-- `lib/task-forms/registry.ts` = `registryOf([checklist, survey, ...内置4块])`;CONTENT_KIND* 四张壳表退役;
-- **服务端校验只用插件的 zod**(blockSchema/valueSchema),不进渲染面(React 不进服务端,与 para-spec 拆分纪律同源);
-- 派生接法:`task-forms/enterprise-check.ts` 追加块注册即可,内核零改动;payload.type 不解释,当场景标签。
+## 实施顺序
 
-## 风险备忘(写 进 来 防 忘)
-- taskSaveDraft **不进审计**是刻意的(一次勾选一行会刷爆;责任链由提交行承担);
-- 管理员代答覆盖草稿:前端确认,内核不拦;
-- 旧任务 payload 无块id → 内核 taskUpdate 时补;
-- **DDL 三处同步**:`create-system-tables.ts` / `sync-table-meta.ts` / `doc/数据库与认证.md`;
-- `tc_log` 新 `answer.submit`:词链(常量/label/详情类型/界面注册/列注释/doc)一条龙同步;
-- 评论与作答零耦合;@提及/通知/红点只服务"有人说话"。
-
-## 实施顺序(定稿后按)
-
-1. 块 id 信封迁移(旧形状兼容、taskUpdate 补 id);
-2. registry 收编内置 4 块(text/table/ref/link)+ 壳表退役;
-3. DDL 列(draft/answer)×3 同步;
-4. taskSaveDraft / taskSubmitAnswer(含守卫/审计/词链);
-5. 前端作答丝路(详情内容区分流 + debounce 存草稿 + 「作答中」标签);
-6. attachmentUrl 守卫扩展;
-7. checklist 插件全套;
-8. survey(可选并行)。
-
-## 待拍板三件
-
-1. 提交后**通知创建者**?(默认:是)
-2. 参与人**只读实时可见**,看不到 draft?(默认:是)
-3. 证据照片**仅随作答值**(不单列到 sys_file 品控表)?(默认:是)
+先收紧单执行人、任务动作守卫及串并行流程；再实现模板版本与草稿/提交/退回；随后实现批次、来源可追溯汇总与 Excel；最后接入任务详情、设计器和批次界面，并验证并发、权限和数据库方言。

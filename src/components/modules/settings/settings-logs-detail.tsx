@@ -3,6 +3,7 @@ import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 
 /** 入参快照是 JSON 文本 —— 能解析就格式化渲染;解析不了的(脏数据/空)退回原样展示 */
 export function tryParseJson(input: string | null): unknown {
@@ -46,11 +47,11 @@ export function SettingsLogsDetail({
 		>
 			{row ? (
 				<>
-					<DetailRow label="动作">{row.label ?? "—"}</DetailRow>
+					<DetailRow label="动作">{row.label ?? PLACEHOLDER_EMPTY}</DetailRow>
 					<DetailRow label="接口路径">
 						<span className="font-mono text-xs">{row.path}</span>
 					</DetailRow>
-					<DetailRow label="类型">{row.type ?? "—"}</DetailRow>
+					<DetailRow label="类型">{row.type ?? PLACEHOLDER_EMPTY}</DetailRow>
 					<DetailRow label="操作人">
 						{row.operatorName ? (
 							<>
@@ -61,21 +62,21 @@ export function SettingsLogsDetail({
 							<span className="text-muted-foreground">系统 / 脚本(无请求上下文)</span>
 						)}
 					</DetailRow>
-					<DetailRow label="目标">{row.target ?? "—"}</DetailRow>
-					<DetailRow label="耗时">{row.durationMs === null ? "—" : `${row.durationMs} ms`}</DetailRow>
+					<DetailRow label="目标">{row.target ?? PLACEHOLDER_EMPTY}</DetailRow>
+					<DetailRow label="耗时">{row.durationMs === null ? PLACEHOLDER_EMPTY : `${row.durationMs} ms`}</DetailRow>
 					<DetailRow label="来源 IP">
-						<span className="font-mono text-xs">{row.ip ?? "—"}</span>
+						<span className="font-mono text-xs">{row.ip ?? PLACEHOLDER_EMPTY}</span>
 					</DetailRow>
 					<DetailRow label="追踪号">
-						<span className="font-mono text-xs">{row.traceId ?? "—"}</span>
+						<span className="font-mono text-xs">{row.traceId ?? PLACEHOLDER_EMPTY}</span>
 						<span className="ml-2 text-xs text-muted-foreground">与后端 stdout 日志同值,可串起一次调用的全部日志</span>
 					</DetailRow>
 					{row.status === 0 ? (
 						<>
 							<DetailRow label="错误码">
-								<span className="font-mono text-xs">{row.errorCode ?? "—"}</span>
+								<span className="font-mono text-xs">{row.errorCode ?? PLACEHOLDER_EMPTY}</span>
 							</DetailRow>
-							<DetailRow label="错误信息">{row.errorMessage ?? "—"}</DetailRow>
+							<DetailRow label="错误信息">{row.errorMessage ?? PLACEHOLDER_EMPTY}</DetailRow>
 						</>
 					) : null}
 					<div className="space-y-1 py-2">

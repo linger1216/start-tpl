@@ -5,6 +5,7 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Skeleton, SkeletonTable } from "#/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import type { TableRowData } from "#/lib/table";
 import { createAppColumnHelper, type useAppTable } from "#/lib/table";
 import { formatLocalMinute } from "#/lib/time";
@@ -221,7 +222,7 @@ export function actionsColumn<TRow extends TableRowData>({
 
 /** 单值文本单元格:空值统一显示 `—` */
 export function TextCell({ value, truncate = false }: { value: unknown; truncate?: boolean }) {
-	const text = value === undefined || value === null || value === "" ? "—" : String(value);
+	const text = value === undefined || value === null || value === "" ? PLACEHOLDER_EMPTY : String(value);
 	if (!truncate) return <>{text}</>;
 	return (
 		<span className="block max-w-[280px] truncate" title={text}>

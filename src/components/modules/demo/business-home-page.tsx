@@ -5,6 +5,7 @@ import { PageHeader } from "#/components/layout/page-header";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { useTRPC } from "#/integrations/trpc/react";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { noticeLevelStyle } from "#/lib/notice-levels";
 import { formatLocalMinute } from "#/lib/time";
 
@@ -143,7 +144,7 @@ export function BusinessHomeDemo() {
 									}) => (
 										<li key={item.id} className="flex items-baseline justify-between gap-2 py-2 text-sm">
 											<span className="truncate">
-												<span className="font-medium text-foreground">{item.operatorName ?? "—"}</span>
+												<span className="font-medium text-foreground">{item.operatorName ?? PLACEHOLDER_EMPTY}</span>
 												<span className="ml-1.5 text-muted-foreground">{item.label}</span>
 											</span>
 											<span className="shrink-0 text-xs text-muted-foreground">

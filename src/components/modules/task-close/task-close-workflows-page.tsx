@@ -24,6 +24,7 @@ import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -374,7 +375,7 @@ function WorkflowCard({
 			<div className="mt-auto flex flex-wrap items-center gap-1.5">
 				<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
 					<Clock className="size-3" />
-					{item.updatedAt ? `更新于 ${formatLocalMinute(item.updatedAt)}` : "—"}
+					{item.updatedAt ? `更新于 ${formatLocalMinute(item.updatedAt)}` : PLACEHOLDER_EMPTY}
 				</span>
 			</div>
 		</Card>

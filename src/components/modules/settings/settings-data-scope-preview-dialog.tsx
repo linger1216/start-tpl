@@ -8,6 +8,7 @@ import { Tag } from "#/components/ui/tag";
 import { useStableKeys } from "#/hooks/use-stable-keys";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 
 /**
  * 一行规则的「预览」弹窗 —— **这条规则上线之后,当前身份在这张表上能看见哪些行**。
@@ -51,7 +52,7 @@ const EFFECT_META: Record<RuleEffect, { label: string; tone: string }> = {
 };
 
 function cellText(value: unknown): string {
-	if (value === null || value === undefined) return "—";
+	if (value === null || value === undefined) return PLACEHOLDER_EMPTY;
 	if (typeof value === "boolean") return value ? "是" : "否";
 	return String(value);
 }
@@ -198,8 +199,13 @@ export function SettingsDataScopePreviewDialog({
 								<span className="text-xs text-muted-foreground">/ {data.total} 行可见</span>
 							</div>
 							<div className="text-xs text-muted-foreground">
-								现在 <span className="font-semibold tabular-nums text-foreground">{nowRows ?? "—"}</span> 行{" → "}
-								上线后 <span className="font-semibold tabular-nums text-foreground">{after?.visible ?? "—"}</span> 行
+								现在 <span className="font-semibold tabular-nums text-foreground">{nowRows ?? PLACEHOLDER_EMPTY}</span>{" "}
+								行{" → "}
+								上线后{" "}
+								<span className="font-semibold tabular-nums text-foreground">
+									{after?.visible ?? PLACEHOLDER_EMPTY}
+								</span>{" "}
+								行
 								{delta !== undefined && delta !== 0 ? (
 									<span className={delta > 0 ? "text-hue-teal-fg" : "text-hue-amber-fg"}>
 										(这条规则{delta > 0 ? "多放行" : "少放行"} {Math.abs(delta)} 行)
@@ -232,7 +238,7 @@ export function SettingsDataScopePreviewDialog({
 							<div className="flex min-w-0 flex-col gap-1.5">
 								<span className="text-xs font-medium text-muted-foreground">数据判断依据</span>
 								<span translate="no" className="font-mono text-xs break-all text-foreground">
-									{row ? ruleShapeText(row) : "—"}
+									{row ? ruleShapeText(row) : PLACEHOLDER_EMPTY}
 								</span>
 								<span className="text-xs text-muted-foreground">
 									按 <span className="text-foreground">{data.userName}</span>

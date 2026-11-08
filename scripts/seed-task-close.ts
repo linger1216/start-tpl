@@ -25,14 +25,13 @@ const rows = [
 			// 状态 = { value 落库/引用, label 展示名 };UI 只显示 label
 			statuses: [
 				{ value: "open", label: "进行中" },
-				{ value: "pending", label: "待审批" },
 				{ value: "done", label: "待核验" },
-				{ value: "closed", label: "已关闭" },
-				{ value: "archived", label: "已归档" },
+				{ value: "closed", label: "已关闭", terminal: true },
+				{ value: "archived", label: "已归档", terminal: true },
 			],
 			initial: "open",
 			edges: [
-				// 完成待核验:执行者和创建者都能发起(会锁任务 → pending,答复后落到 done)
+				// 完成待核验:执行者和创建者都能发起，全部通过后落到 done
 				{ from: "open", to: "done", who: ["creator", "executor"], via: "action" },
 				// 下面四条都是创建者直改,不经过 action
 				{ from: "done", to: "closed", who: ["creator"], via: "direct" },
@@ -48,9 +47,8 @@ const rows = [
 			name: "安全检查流程",
 			statuses: [
 				{ value: "open", label: "进行中" },
-				{ value: "pending", label: "待审批" },
 				{ value: "done", label: "待核验" },
-				{ value: "closed", label: "已关闭" },
+				{ value: "closed", label: "已关闭", terminal: true },
 			],
 			initial: "open",
 			edges: [

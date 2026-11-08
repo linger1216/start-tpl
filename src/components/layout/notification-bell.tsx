@@ -68,7 +68,7 @@ export function NotificationBell() {
 		if (!item.read) await readMutation.mutateAsync({ id: item.id }).catch(() => {});
 		if (!item.path) return;
 		try {
-			await router.navigate({ to: item.path as never });
+			await router.navigate({ to: item.path });
 		} catch {
 			// `path` 是可以被数据携带的:校验在写入时就做了,这里只是兜底,别白屏
 			toast.error("这条通知的跳转地址已失效", { description: item.path });

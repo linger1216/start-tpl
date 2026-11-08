@@ -3,7 +3,7 @@ import { Paperclip, Trash2, X } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { TaskAttachmentPreview } from "#/components/modules/task-close/task-close-attachment-preview";
+import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
 import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { ActionIconButton } from "#/components/ui/action-button";
@@ -14,6 +14,7 @@ import { useFileUpload } from "#/hooks/use-file-upload";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import type { TaskAttachment } from "#/lib/task-content";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -65,7 +66,7 @@ export function TaskCloseComments({
 	const [pendingRemove, setPendingRemove] = useState<{ id: string; authorName: string | null } | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
-	// 参与人名单(创建者 + 成员,去掉自己)供 @选单过滤 —— 用 taskGet(详情页同键,缓存共享,不多打一次)
+	// 成员名单(创建者 + 成员,去掉自己)供 @选单过滤 —— 用 taskGet(详情页同键,缓存共享,不多打一次)
 	const taskQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
 	const participants: Participant[] | undefined = (() => {
 		const detail = taskQuery.data;
@@ -85,6 +86,7 @@ export function TaskCloseComments({
 			onSuccess: writeSuccess(invalidate, {
 				close: () => {
 					setContent("");
+					mention.reset();
 					setAttachments([]);
 				},
 			}),
@@ -126,6 +128,7 @@ export function TaskCloseComments({
 			taskId,
 			content: content.trim(),
 			attachments: attachments.map((f) => f.id),
+			mentionIds: mention.mentionIds,
 		});
 	}
 
@@ -162,7 +165,7 @@ export function TaskCloseComments({
 						<MentionList
 							options={mention.options}
 							highlight={mention.highlight}
-							onPick={(person) => mention.insert(person.name, content)}
+							onPick={(person) => mention.insert(person, content)}
 						/>
 					) : null}
 					{attachments.length > 0 ? (
@@ -201,7 +204,7 @@ export function TaskCloseComments({
 								variant="ghost"
 								size="sm"
 								aria-label="提及成员"
-								title="提及参与人(在光标处插入 @)"
+								title="提及成员(在光标处插入 @)"
 								disabled={uploading}
 								onClick={() => mention.insertAtCursor(content)}
 							>
@@ -233,7 +236,7 @@ export function TaskCloseComments({
 								{/* 名字 + 时间 + 删除同一行:删除是**纯图标**(ActionIconButton 的行内规格),
 								    紧跟在日期右侧、与文字同一视觉水平;悬停/键盘聚焦才显形 */}
 								<div className="inline-flex items-baseline gap-2 text-sm flex-wrap">
-									<strong className="font-semibold text-foreground">{item.authorName ?? "—"}</strong>
+									<strong className="font-semibold text-foreground">{item.authorName ?? PLACEHOLDER_EMPTY}</strong>
 									{item.createdAt ? (
 										<span className="text-xs text-muted-foreground">{formatLocalMinute(item.createdAt)}</span>
 									) : null}
@@ -279,7 +282,7 @@ export function TaskCloseComments({
 					if (!next) setPendingRemove(null);
 				}}
 				title="删除评论"
-				description={`删除「${pendingRemove?.authorName ?? "—"}」的这条评论?删除后讨论流里不再显示。`}
+				description={`删除「${pendingRemove?.authorName ?? PLACEHOLDER_EMPTY}」的这条评论?删除后讨论流里不再显示。`}
 				isPending={removeMutation.isPending}
 				onConfirm={() => {
 					if (!pendingRemove) return;

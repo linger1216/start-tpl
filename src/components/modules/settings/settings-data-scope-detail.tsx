@@ -2,6 +2,7 @@ import { PolicyStatusTag } from "#/components/modules/settings/policy-status-tag
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { type DataScopeRow, ruleShapeText } from "./settings-data-scope-table";
 
 /**
@@ -85,7 +86,7 @@ export function SettingsDataScopeDetail({
 						)}
 					</DetailRow>
 					<DetailRow label="说明">
-						<span className="text-sm">{row.remark || "—"}</span>
+						<span className="text-sm">{row.remark || PLACEHOLDER_EMPTY}</span>
 					</DetailRow>
 					{/* 创建 / 更新时间由 DetailDialog 的 meta 统一渲染 —— 别在这里重复(files-detail 同款坑) */}
 				</div>

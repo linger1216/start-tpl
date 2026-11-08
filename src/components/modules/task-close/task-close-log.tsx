@@ -15,14 +15,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
-import {
-	describeLog,
-	logCategoryOf,
-	logStatusLabel,
-	type TaskLogCategory,
-	type TaskLogItem,
-} from "#/lib/task-close-log";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { describeLog, logCategoryOf, type TaskLogCategory, type TaskLogItem } from "#/lib/task-close-log";
+import { statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -38,11 +33,15 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"action.create": Send,
 	"action.respond": CheckCheck,
 	"action.reply": MessageSquareReply,
+	"action.withdraw": MessageSquareX,
 	"comment.create": MessageSquare,
 	"comment.remove": MessageSquareX,
 	"member.add": UserPlus,
 	"member.remove": UserMinus,
 	"member.transfer": ArrowRightLeft,
+	"report.bind": FilePlus2,
+	"report.submit": Send,
+	"report.return": MessageSquareReply,
 };
 
 /**
@@ -108,7 +107,7 @@ export function TaskCloseLogList({
 			{items.map((item) => {
 				const Icon = TASK_LOG_ICON[item.event] ?? FileQuestion;
 				const { title, note } = describeLog(item, {
-					statusLabel: (value) => logStatusLabel(statuses, value),
+					statusLabel: (value) => statusLabelOf(statuses, value),
 					roleLabel,
 				});
 				return (
@@ -129,7 +128,7 @@ export function TaskCloseLogList({
 									<span className="ms-1">{title}</span>
 								</span>
 								<span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-									{item.createdAt ? formatLocalMinute(item.createdAt) : "—"}
+									{item.createdAt ? formatLocalMinute(item.createdAt) : PLACEHOLDER_EMPTY}
 								</span>
 							</div>
 							{note ? <p className="mt-0.5 wrap-break-word text-xs text-muted-foreground">{note}</p> : null}

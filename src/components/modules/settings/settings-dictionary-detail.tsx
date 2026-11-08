@@ -2,6 +2,7 @@ import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import type { SettingsDictRow } from "./settings-dictionary-table";
 
 /**
@@ -50,7 +51,7 @@ export function SettingsDictionaryDetail({
 							</Tag>
 						</DetailRow>
 						<DetailRow label="说明">
-							<span className="text-sm">{row.remark || "—"}</span>
+							<span className="text-sm">{row.remark || PLACEHOLDER_EMPTY}</span>
 						</DetailRow>
 					</div>
 					<div className="space-y-1.5">

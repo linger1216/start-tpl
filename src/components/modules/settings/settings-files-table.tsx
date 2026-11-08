@@ -3,6 +3,7 @@ import { useState } from "react";
 import { actionsColumn, selectColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { filePreviewKind } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
 import { createAppColumnHelper } from "#/lib/table";
@@ -124,7 +125,7 @@ export function fileColumns({
 			size: 80,
 			cell: (ctx) => (
 				<Tag variant="outline" className="font-mono text-xs">
-					{ctx.getValue() || "—"}
+					{ctx.getValue() || PLACEHOLDER_EMPTY}
 				</Tag>
 			),
 		}),

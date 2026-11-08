@@ -10,11 +10,32 @@
  */
 
 import type { KeyboardEvent, RefObject } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { cn } from "#/lib/utils";
 
 export type Participant = { id: string; name: string };
+type MentionRange = { id: string; start: number; end: number };
+
+/** 文本编辑使被改动的提及失效，其他提及按位置移动。 */
+export function updateMentionRanges(previous: string, next: string, ranges: readonly MentionRange[]): MentionRange[] {
+	let prefix = 0;
+	while (prefix < previous.length && prefix < next.length && previous[prefix] === next[prefix]) prefix += 1;
+	let suffix = 0;
+	while (
+		suffix < previous.length - prefix &&
+		suffix < next.length - prefix &&
+		previous[previous.length - 1 - suffix] === next[next.length - 1 - suffix]
+	)
+		suffix += 1;
+	const oldEnd = previous.length - suffix;
+	const delta = next.length - previous.length;
+	return ranges.flatMap((range) => {
+		if (prefix >= range.end) return [range];
+		if (oldEnd <= range.start) return [{ ...range, start: range.start + delta, end: range.end + delta }];
+		return [];
+	});
+}
 
 /** 一屏最多给 6 个候选(键盘 ↑↓ 都能摸得到) */
 const MAX_OPTIONS = 6;
@@ -26,6 +47,20 @@ export function useMentionPicker(
 ) {
 	const [state, setState] = useState<{ start: number; fragment: string } | null>(null);
 	const [highlight, setHighlight] = useState(0);
+	const [mentions, setMentions] = useState<MentionRange[]>([]);
+	const previousText = useRef("");
+
+	function syncMentions(value: string) {
+		const previous = previousText.current;
+		previousText.current = value;
+		setMentions((ranges) => updateMentionRanges(previous, value, ranges));
+	}
+
+	function reset() {
+		previousText.current = "";
+		setMentions([]);
+		setState(null);
+	}
 
 	const options = useMemo(() => {
 		if (!state) return [];
@@ -37,6 +72,7 @@ export function useMentionPicker(
 
 	/** 在光标前找「`@` + 词」;找到就开着选单(state.start = @ 在全文的下标;fragment = @ 与光标之间的词) */
 	function track(value: string, caret: number | null): void {
+		syncMentions(value);
 		const end = caret ?? value.length;
 		const match = /@([^\s@]*)$/.exec(value.slice(0, end));
 		if (!match) {
@@ -48,11 +84,14 @@ export function useMentionPicker(
 	}
 
 	/** 把「@片段」替换成「@姓名 」—— 正文、光标位一并算好,等下一帧把焦点和光标放回去 */
-	function insert(name: string, value: string): void {
+	function insert(person: Participant, value: string): void {
 		if (!state) return;
-		const token = `@${name} `;
+		const token = `@${person.name} `;
 		const end = state.start + 1 + state.fragment.length;
-		setText(`${value.slice(0, state.start)}${token}${value.slice(end)}`);
+		const next = `${value.slice(0, state.start)}${token}${value.slice(end)}`;
+		syncMentions(next);
+		setMentions((ranges) => [...ranges, { id: person.id, start: state.start, end: state.start + token.length - 1 }]);
+		setText(next);
 		setState(null);
 		const caret = state.start + token.length;
 		requestAnimationFrame(() => {
@@ -86,7 +125,7 @@ export function useMentionPicker(
 			const chosen = options[highlight];
 			if (chosen) {
 				event.preventDefault();
-				insert(chosen.name, event.currentTarget.value);
+				insert(chosen, event.currentTarget.value);
 				return true;
 			}
 		}
@@ -103,13 +142,25 @@ export function useMentionPicker(
 		if (!el) return;
 		const at = el.selectionStart ?? value.length;
 		const next = `${value.slice(0, at)}@${value.slice(el.selectionEnd ?? at)}`;
+		syncMentions(next);
 		setText(next);
 		setState({ start: at, fragment: "" });
 		setHighlight(0);
 		requestAnimationFrame(() => el.focus());
 	}
 
-	return { state, options, highlight, track, onKeyDown, insert, insertAtCursor, close: () => setState(null) };
+	return {
+		state,
+		options,
+		highlight,
+		track,
+		onKeyDown,
+		insert,
+		insertAtCursor,
+		reset,
+		mentionIds: [...new Set(mentions.map((mention) => mention.id))],
+		close: () => setState(null),
+	};
 }
 
 /** 候选单 —— 浮在输入框正下方(常规流);点击不偷焦点(`onMouseDown` 抢先拦掉) */

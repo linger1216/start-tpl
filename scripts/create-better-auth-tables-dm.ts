@@ -34,11 +34,83 @@ const S = `"${SCHEMA}"`;
  * 表名带 `sys_` 前缀(认证是系统内部服务);better-auth 按 `src/lib/auth.ts` 里的**映射键名**找模型,表名随便。
  */
 const STATEMENTS: string[] = [
+	// ── 系统设置基础表 ────────────────────────────────────────
+	`create table if not exists ${S}."sys_menu" (
+      "id" varchar(32) not null,
+      "parent_id" varchar(32) default null,
+      "name" varchar(32) not null,
+      "path" varchar(128) not null,
+      "icon" varchar(32) default null,
+      "sort" int not null default 0,
+      "visible" tinyint not null default 1,
+      "status" tinyint not null default 1,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      "deleted_at" datetime default null,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_sys_menu_path" on ${S}."sys_menu" ("path")`,
+	`create index if not exists "idx_sys_menu_parent_sort" on ${S}."sys_menu" ("parent_id", "sort")`,
+	`create table if not exists ${S}."sys_dict" (
+      "id" varchar(32) not null,
+      "code" varchar(64) not null,
+      "name" varchar(32) not null,
+      "items" text default null,
+      "remark" varchar(255) default null,
+      "status" tinyint not null default 1,
+      "created_at" datetime default current_timestamp,
+      "updated_at" datetime default current_timestamp,
+      "deleted_at" datetime default null,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_sys_dict_code" on ${S}."sys_dict" ("code")`,
+	`create table if not exists ${S}."sys_para" (
+      "id" varchar(32) not null,
+      "para_key" varchar(64) not null,
+      "para_value" text not null,
+      "para_type" tinyint not null,
+      "para_group" varchar(32) default null,
+      "status" tinyint not null default 1,
+      "remark" varchar(255) default null,
+      "editable" tinyint not null default 1,
+      "created_at" datetime default current_timestamp,
+      "updated_at" datetime default current_timestamp,
+      "deleted_at" datetime default null,
+      primary key ("para_key")
+    )`,
+	`create index if not exists "idx_para_group" on ${S}."sys_para" ("para_group")`,
+	`create table if not exists ${S}."sys_tag" (
+      "id" varchar(32) not null,
+      "parent_id" varchar(32) default null,
+      "label" varchar(32) not null,
+      "value" varchar(32) default null,
+      "desc" text default null,
+      "sort" int not null default 0,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      "deleted_at" datetime default null,
+      primary key ("id")
+    )`,
+	`create index if not exists "idx_sys_tag_parent_sort" on ${S}."sys_tag" ("parent_id", "sort")`,
+	`create table if not exists ${S}."sys_tag_relation" (
+      "id" varchar(32) not null,
+      "tag_id" varchar(32) not null,
+      "obj_id" varchar(32) not null,
+      "obj_type" tinyint not null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_tag_rel_unique" on ${S}."sys_tag_relation" ("tag_id", "obj_type", "obj_id")`,
+	`create index if not exists "idx_tag_rel_tag" on ${S}."sys_tag_relation" ("tag_id")`,
+	`create index if not exists "idx_tag_rel_obj" on ${S}."sys_tag_relation" ("obj_type", "obj_id")`,
+
 	// ── user ──────────────────────────────────────────────────────────────
 	`create table if not exists ${S}."sys_user" (
 		"id" varchar(36) not null,
 		"name" varchar(128) not null,
 		"email" varchar(255) not null,
+		"phone" varchar(32),
 		"email_verified" tinyint default 0 not null,
 		"image" varchar(512),
 		"created_at" datetime default current_timestamp not null,
@@ -232,19 +304,30 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_sys_log_time" on ${S}."sys_log" ("created_at")`,
 	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "created_at")`,
 	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "created_at")`,
-	// ── sys_notice(站内通知;一条一个收件人,见 doc/通知中心.md)────────────
-	`create table if not exists ${S}."sys_notice" (
-      "id" varchar(32) not null,
-      "user_id" varchar(32) not null,
-      "title" varchar(128) not null,
-      "body" varchar(255),
-      "path" varchar(255),
-      "level" varchar(16) default 'info' not null,
-      "read_at" datetime,
-      "created_at" datetime default current_timestamp not null,
-      primary key ("id")
-    )`,
-	`create index if not exists "idx_sys_notice_user" on ${S}."sys_notice" ("user_id", "read_at", "created_at")`,
+	`create table if not exists ${S}."sys_notification" (
+        "id" varchar(32) not null primary key, "type" varchar(64) not null, "source_type" varchar(64), "source_id" varchar(191), "title" varchar(128) not null, "content" text, "payload" text, "dedupe_key" varchar(191) not null, "created_at" datetime not null
+  )`,
+	`create unique index if not exists "uk_notification_dedupe" on ${S}."sys_notification" ("dedupe_key")`,
+	`create index if not exists "idx_notification_source" on ${S}."sys_notification" ("source_type", "source_id", "type", "created_at")`,
+	`create table if not exists ${S}."sys_notification_delivery" (
+        "id" varchar(32) not null primary key, "notification_id" varchar(32) not null, "recipient_id" varchar(36) not null, "channel" varchar(16) not null, "target" varchar(255), "status" varchar(16) not null, "read_at" datetime, "attempts" int not null default 0, "next_attempt_at" datetime, "locked_until" datetime, "lock_token" varchar(32), "provider" varchar(64), "provider_message_id" varchar(255), "sent_at" datetime, "last_error" text, "created_at" datetime not null, "updated_at" datetime not null
+  )`,
+	`create unique index if not exists "uk_notification_recipient_channel" on ${S}."sys_notification_delivery" ("notification_id","recipient_id","channel")`,
+	`create index if not exists "idx_delivery_recipient" on ${S}."sys_notification_delivery" ("recipient_id","channel","read_at","created_at")`,
+	`create index if not exists "idx_delivery_pending" on ${S}."sys_notification_delivery" ("status","next_attempt_at","locked_until")`,
+	`create table if not exists ${S}."sys_notification_attempt" (
+        "id" varchar(32) not null primary key, "delivery_id" varchar(32) not null, "attempt_no" int not null, "status" varchar(16) not null, "provider" varchar(64), "error" text, "started_at" datetime not null, "finished_at" datetime
+  )`,
+	`create unique index if not exists "uk_delivery_attempt" on ${S}."sys_notification_attempt" ("delivery_id","attempt_no")`,
+	`create table if not exists ${S}."sys_scheduled_job" (
+        "id" varchar(32) not null primary key, "name" varchar(128) not null, "handler" varchar(128) not null, "interval_seconds" int not null, "cron_expression" varchar(128), "timezone" varchar(64) default 'UTC' not null, "timeout_seconds" int not null default 60, "max_attempts" int not null default 3, "retry_delay_seconds" int not null default 30, "enabled" tinyint not null default 1, "next_run_at" datetime not null, "locked_until" datetime, "lock_token" varchar(32), "attempts" int not null default 0, "created_at" datetime not null, "updated_at" datetime not null
+  )`,
+	`create unique index if not exists "uk_scheduled_job_name" on ${S}."sys_scheduled_job" ("name")`,
+	`create index if not exists "idx_job_due" on ${S}."sys_scheduled_job" ("enabled","next_run_at","locked_until")`,
+	`create table if not exists ${S}."sys_job_execution" (
+        "id" varchar(32) not null primary key, "job_id" varchar(32) not null, "started_at" datetime not null, "finished_at" datetime, "status" varchar(16) not null, "error" text, "duration_ms" int
+  )`,
+	`create index if not exists "idx_execution_job" on ${S}."sys_job_execution" ("job_id","started_at")`,
 	// ── demo_grid(Demo:综合网格履职)──────────────────
 	`create table if not exists ${S}."demo_grid" (
       "id" varchar(32) not null,
@@ -303,6 +386,181 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
 	`create unique index if not exists "uk_sys_data_plugin_key" on ${S}."sys_data_plugin" ("plugin_key")`,
+
+	// ── 任务闭环 ───────────────────────────────────────────────
+	`create table if not exists ${S}."tc_report_template" (
+      "id" varchar(32) not null,
+      "name" varchar(255) not null,
+      "creator_id" varchar(36) not null,
+      "created_at" datetime default current_timestamp,
+      "updated_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create table if not exists ${S}."tc_report_template_version" (
+      "id" varchar(32) not null,
+      "template_id" varchar(32) not null,
+      "version" int not null,
+      "schema" text not null,
+      "created_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_report_template_version" on ${S}."tc_report_template_version" ("template_id", "version")`,
+	`create table if not exists ${S}."tc_task_report" (
+      "id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "version_id" varchar(32) not null,
+      "status" varchar(16) not null,
+      "draft" text default null,
+      "revision" int not null default 0,
+      "current_submission_id" varchar(32) default null,
+      "created_at" datetime default current_timestamp,
+      "updated_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_task_report_task" on ${S}."tc_task_report" ("task_id")`,
+	`create index if not exists "idx_task_report_version" on ${S}."tc_task_report" ("version_id")`,
+	`create table if not exists ${S}."tc_report_submission" (
+      "id" varchar(32) not null,
+      "report_id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "version_id" varchar(32) not null,
+      "submitter_id" varchar(36) not null,
+      "revision" int not null,
+      "payload" text not null,
+      "created_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_report_submission_revision" on ${S}."tc_report_submission" ("report_id", "revision")`,
+	`create index if not exists "idx_report_submission_task" on ${S}."tc_report_submission" ("task_id", "created_at")`,
+	`create table if not exists ${S}."tc_report_batch" (
+      "id" varchar(32) not null,
+      "creator_id" varchar(36) not null,
+      "request_id" varchar(64) not null,
+      "request_hash" varchar(64) not null,
+      "name" varchar(255) not null,
+      "version_id" varchar(32) not null,
+      "workflow_id" varchar(191) not null,
+      "status" varchar(16) not null,
+      "due_at" datetime default null,
+      "created_at" datetime default current_timestamp,
+      "updated_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_report_batch_request" on ${S}."tc_report_batch" ("creator_id", "request_id")`,
+	`create index if not exists "idx_report_batch_creator" on ${S}."tc_report_batch" ("creator_id", "created_at")`,
+	`create table if not exists ${S}."tc_report_batch_task" (
+      "id" varchar(32) not null,
+      "batch_id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "target_user_id" varchar(36) not null,
+      "created_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_report_batch_task" on ${S}."tc_report_batch_task" ("task_id")`,
+	`create unique index if not exists "uk_report_batch_target" on ${S}."tc_report_batch_task" ("batch_id", "target_user_id")`,
+	`create table if not exists ${S}."tc_content_revision" (
+      "id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "revision" int not null,
+      "description" text default null,
+      "payload" text default null,
+      "actor_id" varchar(36) not null,
+      "created_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_content_revision_task" on ${S}."tc_content_revision" ("task_id", "revision")`,
+	`create table if not exists ${S}."tc_workflow" (
+      "id" varchar(191) not null,
+      "payload" text not null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      "deleted_at" datetime default null,
+      primary key ("id")
+    )`,
+	`create table if not exists ${S}."tc_task" (
+      "id" varchar(191) not null,
+      "name" varchar(255) not null,
+      "description" text default null,
+      "status" varchar(32) not null,
+      "creator_id" varchar(191) not null,
+      "due_at" datetime default null,
+      "priority" tinyint default null,
+      "payload" text default null,
+      "workflow" text not null,
+      "deleted_at" datetime default null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create index if not exists "idx_task_status_created" on ${S}."tc_task" ("status")`,
+	`create index if not exists "idx_task_creator_status" on ${S}."tc_task" ("creator_id", "status")`,
+	`create table if not exists ${S}."tc_action" (
+      "id" varchar(191) not null,
+      "task_id" varchar(191) not null,
+      "serial_no" varchar(191) not null,
+      "parent_action_id" varchar(191) default null,
+      "is_locking" tinyint not null,
+      "from_status" varchar(32) default null,
+      "to_status" varchar(32) default null,
+      "sequence" int not null,
+      "created_id" varchar(191) not null,
+      "handle_id" varchar(191) not null,
+      "status" varchar(16) not null,
+      "viewed_at" datetime default null,
+      "activated_at" datetime default null,
+      "last_urged_at" datetime default null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create index if not exists "idx_action_task_serial" on ${S}."tc_action" ("task_id", "serial_no", "sequence")`,
+	`create index if not exists "idx_action_handle_status" on ${S}."tc_action" ("handle_id", "status")`,
+	`create index if not exists "idx_action_parent" on ${S}."tc_action" ("parent_action_id")`,
+	`create index if not exists "idx_action_unviewed" on ${S}."tc_action" ("status", "viewed_at", "activated_at")`,
+	`create table if not exists ${S}."tc_member" (
+      "id" varchar(191) not null,
+      "task_id" varchar(191) not null,
+      "user_id" varchar(36) not null,
+      "role" varchar(16) not null,
+      "is_primary" tinyint not null default 0,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_member_unique" on ${S}."tc_member" ("task_id", "user_id", "role")`,
+	`create index if not exists "idx_member_user_role" on ${S}."tc_member" ("user_id", "role")`,
+	`create index if not exists "idx_member_task_role" on ${S}."tc_member" ("task_id", "role")`,
+	`create index if not exists "idx_member_task_primary" on ${S}."tc_member" ("task_id", "is_primary")`,
+	`create table if not exists ${S}."tc_comment" (
+      "id" varchar(191) not null,
+      "task_id" varchar(191) not null,
+      "author_id" varchar(36) not null,
+      "content" text not null,
+      "attachments" text default null,
+      "deleted_at" datetime default null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create index if not exists "idx_comment_task_created" on ${S}."tc_comment" ("task_id", "created_at")`,
+	`create index if not exists "idx_comment_author" on ${S}."tc_comment" ("author_id")`,
+	`create table if not exists ${S}."tc_log" (
+      "id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "event" varchar(48) not null,
+      "from_status" varchar(32) default null,
+      "to_status" varchar(32) default null,
+      "target_id" varchar(191) default null,
+      "actor_id" varchar(36) not null,
+      "actor_name" varchar(64) default null,
+      "detail" text default null,
+      "created_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create index if not exists "idx_log_task_created" on ${S}."tc_log" ("task_id", "created_at")`,
+	`create index if not exists "idx_log_task_event" on ${S}."tc_log" ("task_id", "event", "created_at")`,
+	`create index if not exists "idx_log_actor" on ${S}."tc_log" ("actor_id", "created_at")`,
+	`create index if not exists "idx_log_target" on ${S}."tc_log" ("target_id", "created_at")`,
 
 	// ── todos(模板示例表,删 demo 时可一并删)──────────────────────────────
 	`create table if not exists ${S}."todos" (
@@ -402,6 +660,15 @@ async function main() {
 
 	// ── 老库补列:`create table if not exists` 不会给已存在的表加列,新增列要在这里登记(幂等)──
 	const columnUpgrades: Array<{ table: string; column: string; ddl: string }> = [
+		{ table: "sys_user", column: "phone", ddl: "varchar(32)" },
+		{ table: "tc_action", column: "viewed_at", ddl: "datetime" },
+		{ table: "tc_action", column: "activated_at", ddl: "datetime" },
+		{ table: "tc_action", column: "last_urged_at", ddl: "datetime" },
+		{ table: "sys_scheduled_job", column: "cron_expression", ddl: "varchar(128)" },
+		{ table: "sys_scheduled_job", column: "timezone", ddl: "varchar(64) default 'UTC' not null" },
+		{ table: "sys_scheduled_job", column: "timeout_seconds", ddl: "int default 60 not null" },
+		{ table: "sys_scheduled_job", column: "max_attempts", ddl: "int default 3 not null" },
+		{ table: "sys_scheduled_job", column: "retry_delay_seconds", ddl: "int default 30 not null" },
 		{ table: "sys_menu", column: "type", ddl: "tinyint default 2 not null" },
 		{ table: "sys_menu", column: "perm", ddl: "varchar(64)" },
 		// v2 (m20034):「输出值」搬到插件表(达梦没有 json 类型,落 text)

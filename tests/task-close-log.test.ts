@@ -2,18 +2,13 @@
  * 活动日志的**纯文本**用例 —— 不碰库、不起 tRPC。
  *
  * `describeLog()` 是「事件码 → 人话」的唯一出口,所以两件事必须钉住:
- * 认不出的 `event` 要降级(界面可能比后端旧)、状态 value 要能翻成展示名(含框架锁定态 `pending`)。
+ * 认不出的 `event` 要降级(界面可能比后端旧)、状态 value 要能按模板翻成展示名。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-	describeLog,
-	logCategoryOf,
-	logMovedStatus,
-	logStatusLabel,
-	type TaskLogItem,
-} from "../src/lib/task-close-log.ts";
+import { describeLog, logCategoryOf, logMovedStatus, type TaskLogItem } from "../src/lib/task-close-log.ts";
+import { statusLabelOf } from "../src/lib/task-close-spec.ts";
 
 const statuses = [
 	{ value: "open", label: "进行中" },
@@ -22,7 +17,7 @@ const statuses = [
 
 const ROLE_TEXT = { creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>;
 const ctx = {
-	statusLabel: (value: string) => logStatusLabel(statuses, value),
+	statusLabel: (value: string) => statusLabelOf(statuses, value),
 	roleLabel: (role: string) => ROLE_TEXT[role] ?? role,
 };
 
@@ -44,10 +39,10 @@ function item(part: Partial<TaskLogItem>): TaskLogItem {
 }
 
 describe("活动日志文本", () => {
-	it("状态 value → 展示名;框架锁定态 pending 有兜底名", () => {
-		assert.equal(logStatusLabel(statuses, "open"), "进行中");
-		assert.equal(logStatusLabel(statuses, "pending"), "待审批", "模板没声明 pending 也不能显示英文");
-		assert.equal(logStatusLabel(statuses, "weird"), "weird", "都查不到就回退 value");
+	it("状态 value → 模板展示名", () => {
+		assert.equal(statusLabelOf(statuses, "open"), "进行中");
+		assert.equal(statusLabelOf(statuses, "pending"), "pending", "未配置的状态回退 value");
+		assert.equal(statusLabelOf(statuses, "weird"), "weird", "都查不到就回退 value");
 	});
 
 	it("改状态 / 发起审批 / 发起征询 / 答复:标题与附注", () => {
@@ -57,10 +52,8 @@ describe("活动日志文本", () => {
 		const approved = describeLog(
 			item({
 				event: "action.create",
-				fromStatus: "open",
-				toStatus: "pending",
 				targetName: "李四",
-				detail: { intendedTo: "done", handleId: "u2", isLocking: true },
+				detail: { intendedFrom: "open", intendedTo: "done", handleId: "u2", isLocking: true },
 			}),
 			ctx,
 		);
@@ -81,13 +74,11 @@ describe("活动日志文本", () => {
 		const rejected = describeLog(
 			item({
 				event: "action.respond",
-				fromStatus: "pending",
-				toStatus: "open",
 				detail: { approved: false, reason: "证据不足", actionStatus: "rejected" },
 			}),
 			ctx,
 		);
-		assert.equal(rejected.title, "答复审批:驳回(待审批 → 进行中)");
+		assert.equal(rejected.title, "答复审批:驳回");
 		assert.equal(rejected.note, "驳回原因:证据不足");
 	});
 

@@ -1,5 +1,7 @@
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { NOTICE_LEVEL_SHORT_LABEL } from "#/lib/notice-levels";
 import { createAppColumnHelper } from "#/lib/table";
 
@@ -22,7 +24,13 @@ const columnHelper = createAppColumnHelper<NoticeRow>();
  * 行操作只有「打开」:通知没有编辑 / 删除入口(已读由点开或「全部已读」完成),
  * 没有 `path` 的通知打开不了 —— 那种行的「打开」**禁用**(而不是隐藏,藏了会让人以为没这功能)。
  */
-export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) {
+export function noticeColumns({
+	onOpen,
+	onDetail,
+}: {
+	onOpen: (row: NoticeRow) => void;
+	onDetail: (row: NoticeRow) => void;
+}) {
 	return columnHelper.columns([
 		columnHelper.accessor("read", {
 			header: "状态",
@@ -53,11 +61,14 @@ export function noticeColumns({ onOpen }: { onOpen: (row: NoticeRow) => void }) 
 		columnHelper.accessor("path", {
 			header: "跳转路径",
 			size: 180,
-			cell: (ctx) => <span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? "—"}</span>,
+			cell: (ctx) => (
+				<span className="font-mono text-xs text-muted-foreground">{ctx.getValue() ?? PLACEHOLDER_EMPTY}</span>
+			),
 		}),
 		timeColumn<NoticeRow>("createTime", { header: "时间" }),
 		actionsColumn<NoticeRow>({
-			size: 90,
+			size: 140,
+			extra: (row) => <ActionButton onClick={() => onDetail(row)}>详情</ActionButton>,
 			onView: onOpen,
 			viewLabel: "打开",
 			viewDisabled: (row) => !row.path,

@@ -19,6 +19,7 @@
     "test": "LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --test --test-reporter=spec tests/*.test.ts",
     "test:cov": "LOG_SILENT=1 dotenv -e .env.local -- node --import tsx --experimental-test-coverage --test tests/*.test.ts",
     "start": "node .output/server/index.mjs",
+    "worker": "dotenv -e .env.local -- tsx scripts/worker.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -63,6 +64,7 @@
     "casbin": "^5.51.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "croner": "^11.0.0",
     "date-fns": "^4.4.0",
     "dmdb": "^1.0.52452",
     "drizzle-orm": "^0.45.1",
@@ -82,7 +84,8 @@
     "tailwind-merge": "^3.0.2",
     "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.3.6",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yauzl": "^3.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -93,6 +96,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^6.0.1",
     "dotenv": "^17.3.1",
     "dotenv-cli": "^11.0.0",
