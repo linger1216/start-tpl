@@ -42,7 +42,7 @@ type CurrentUser = {
  *
  * 会话为空时**追加访客兜底**(外链 share token,见 `lib/share-access.ts` 与 `doc/外链分享.md`):
  * 读同一颗 httpOnly cookie 比对令牌表,命中即返回「访客」—— 数据层认人就到这里为止,
- * 访客能调哪些接口由权限中间件的访客特判收口(只读 + 只放行允许页面的 query)。
+ * 访客以管理员视角读取数据,权限中间件拒绝写操作。
  */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
 	try {

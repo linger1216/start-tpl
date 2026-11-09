@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -21,13 +22,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { partitionReportRows, type ReportDistributionValue } from "#/lib/task-report-distribution";
 import { downloadReportWorkbook } from "#/lib/task-report-download";
 import { taskReportSchema } from "#/lib/task-report-spec";
 import type { TaskReportSummaryOptions } from "#/lib/task-report-summary";
 import { formatLocalMinute } from "#/lib/time";
 
-export function TaskReportBatchDialog() {
+function formatConditionValue(value: ReportDistributionValue): string {
+	if (value === null) return "空值";
+	if (value === "") return "空字符串";
+	if (typeof value === "boolean") return value ? "是" : "否";
+	return String(value);
+}
+
+export function TaskReportBatchDialog({
+	source,
+	disabled = false,
+}: {
+	source?: { taskId: string; taskName: string; versionId: string };
+	disabled?: boolean;
+} = {}) {
 	const trpc = useTRPC();
+	const { user } = useRouteContext({ from: "/(main)" });
 	const client = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [creating, setCreating] = useState(false);
@@ -36,7 +52,11 @@ export function TaskReportBatchDialog() {
 	const [workflowId, setWorkflowId] = useState("");
 	const [versionId, setVersionId] = useState("");
 	const [targets, setTargets] = useState<string[]>([]);
-	const [candidate, setCandidate] = useState("");
+	const [sourceTaskId, setSourceTaskId] = useState("");
+	const [sourceKeyword, setSourceKeyword] = useState("");
+	const [distributionField, setDistributionField] = useState("");
+	const [distributionValues, setDistributionValues] = useState<Record<string, string>>({});
+	const [distributionFieldsByUser, setDistributionFieldsByUser] = useState<Record<string, string>>({});
 	const [due, setDue] = useState("");
 	const [requestId, setRequestId] = useState("");
 	const [confirmClose, setConfirmClose] = useState(false);
@@ -47,6 +67,21 @@ export function TaskReportBatchDialog() {
 	const [page, setPage] = useState(1);
 	const batches = useQuery({ ...trpc.taskClose.reportBatchList.queryOptions(), enabled: open });
 	const templates = useQuery({ ...trpc.taskClose.reportTemplateList.queryOptions(), enabled: open || creating });
+	const sourceTasks = useQuery({
+		...trpc.taskClose.taskList.queryOptions({
+			mine: true,
+			keyword: sourceKeyword.trim() || undefined,
+			page: 1,
+			pageSize: 100,
+		}),
+		enabled: creating,
+	});
+	const sourceReport = useQuery({
+		...trpc.taskClose.reportGet.queryOptions({ taskId: sourceTaskId }),
+		enabled: creating && !!sourceTaskId,
+		staleTime: 0,
+		refetchOnMount: "always",
+	});
 	const workflows = useQuery({ ...trpc.taskClose.workflowList.queryOptions(), enabled: creating });
 	const users = useQuery({ ...trpc.user.list.queryOptions(), enabled: open || creating });
 	const batch = useQuery({
@@ -74,7 +109,10 @@ export function TaskReportBatchDialog() {
 				void invalidate();
 				toast.success("批次已创建");
 			},
-			onError: toastApiError,
+			onError: (error) => {
+				toastApiError(error);
+				if (sourceTaskId) void client.invalidateQueries(trpc.taskClose.reportGet.queryFilter({ taskId: sourceTaskId }));
+			},
 		}),
 	);
 	const close = useMutation(
@@ -93,7 +131,9 @@ export function TaskReportBatchDialog() {
 			onError: toastApiError,
 		}),
 	);
-	const userOptions = (users.data ?? []).map((user) => ({ value: user.id, label: user.name }));
+	const userOptions = (users.data ?? [])
+		.filter((item) => item.id !== user.id)
+		.map((item) => ({ value: item.id, label: item.name }));
 	const templateOptions = (templates.data ?? []).flatMap((template) =>
 		template.versions.map((version) => ({
 			value: version.id,
@@ -109,21 +149,79 @@ export function TaskReportBatchDialog() {
 	const numberOptions = fields
 		.filter((field) => field.type === "integer" || field.type === "decimal")
 		.map((field) => ({ value: field.id, label: field.label }));
+	const sourceSchema = taskReportSchema.safeParse(sourceReport.data?.version.schema);
+	const sourceRows = Array.isArray(sourceReport.data?.report.draft) ? sourceReport.data.report.draft : [];
+	const distributionFields =
+		sourceSchema.success && sourceSchema.data.kind === "TABLE"
+			? sourceSchema.data.fields.filter((field) => field.type !== "multiselect")
+			: [];
+	const valuesByField = new Map<string, Map<string, number>>();
+	const valuesFor = (fieldId: string) => {
+		let counts = valuesByField.get(fieldId);
+		if (!counts) {
+			counts = new Map();
+			for (const row of sourceRows) {
+				const value =
+					row && typeof row === "object" && !Array.isArray(row)
+						? ((row as Record<string, unknown>)[fieldId] ?? null)
+						: null;
+				if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+					const key = JSON.stringify(value);
+					counts.set(key, (counts.get(key) ?? 0) + 1);
+				}
+			}
+			valuesByField.set(fieldId, counts);
+		}
+		return counts;
+	};
+	const matchingVersion = !sourceTaskId || sourceReport.data?.version.id === versionId;
+	const conditions = targets.flatMap((userId) => {
+		const field = distributionFieldsByUser[userId] || distributionField;
+		const value = distributionValues[userId];
+		return field && value !== undefined && valuesFor(field).has(value)
+			? [{ userId, field, value: JSON.parse(value) as ReportDistributionValue }]
+			: [];
+	});
+	const partition = partitionReportRows(sourceRows, conditions);
+	const unassignedRows = partition.unassigned.length;
+	const overlappingRows = partition.overlapping.length;
+	const emptyUsers = [...partition.byUser].filter(([, rows]) => rows.length === 0).map(([userId]) => userId);
+	const distributionReady =
+		!sourceTaskId ||
+		(!sourceReport.isFetching &&
+			matchingVersion &&
+			sourceRows.length > 0 &&
+			conditions.length === targets.length &&
+			unassignedRows === 0 &&
+			overlappingRows === 0 &&
+			emptyUsers.length === 0);
+	const sourceOptions = (sourceTasks.data?.items ?? []).map((task) => ({ value: task.id, label: task.name }));
+	if (source && !sourceOptions.some((option) => option.value === source.taskId))
+		sourceOptions.unshift({ value: source.taskId, label: source.taskName });
 	const showName = (id: string) => userOptions.find((item) => item.value === id)?.label ?? id;
 	const openCreate = () => {
-		setName("");
+		setName(source ? `${source.taskName.slice(0, 240)} · 填报` : "");
 		setWorkflowId("");
-		setVersionId("");
+		setVersionId(source?.versionId ?? "");
 		setTargets([]);
-		setCandidate("");
+		setSourceTaskId(source?.taskId ?? "");
+		setSourceKeyword("");
+		setDistributionField("");
+		setDistributionValues({});
+		setDistributionFieldsByUser({});
 		setDue("");
 		setRequestId(crypto.randomUUID());
 		setCreating(true);
 	};
 	return (
 		<>
-			<Button variant="outline" onClick={() => setOpen(true)}>
-				填报批次
+			<Button
+				variant="outline"
+				size={source ? "sm" : "default"}
+				disabled={disabled}
+				onClick={() => (source ? openCreate() : setOpen(true))}
+			>
+				{source ? "按条件分发" : "填报批次"}
 			</Button>
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
@@ -197,6 +295,15 @@ export function TaskReportBatchDialog() {
 															: task.reportStatus === "returned"
 																? "已退回"
 																: "待提交"}
+													{task.executorId !== task.targetUserId && (
+														<span className="text-muted-foreground">（原指派：{showName(task.targetUserId)}）</span>
+													)}
+													{task.distribution && (
+														<span className="block break-all text-xs text-muted-foreground">
+															初始范围：{task.distribution.fieldLabel} = {formatConditionValue(task.distribution.value)}{" "}
+															· {task.distribution.rowCount} 行
+														</span>
+													)}
 												</span>
 												{!task.deletedAt && (
 													<Link
@@ -377,7 +484,7 @@ export function TaskReportBatchDialog() {
 				title="新建填报批次"
 				description="每位执行人各生成一条独立任务；超时或关闭后不再接受新提交。"
 				pending={create.isPending}
-				confirmDisabled={!name.trim() || !workflowId || !versionId || !targets.length}
+				confirmDisabled={!name.trim() || !workflowId || !versionId || !targets.length || !distributionReady}
 				confirmText="创建批次"
 				pendingText="创建中…"
 				onConfirm={() =>
@@ -387,6 +494,14 @@ export function TaskReportBatchDialog() {
 						workflowId,
 						versionId,
 						targetUserIds: targets,
+						distribution: sourceTaskId
+							? {
+									sourceTaskId,
+									sourceRevision: sourceReport.data?.report.revision ?? 0,
+									field: distributionField,
+									assignments: conditions,
+								}
+							: undefined,
 						dueAt: due ? new Date(due).toISOString() : null,
 					})
 				}
@@ -426,38 +541,170 @@ export function TaskReportBatchDialog() {
 						</SelectContent>
 					</Select>
 				</DetailRow>
-				<DetailRow label="执行人">
+				<DetailRow label="源任务数据">
 					<div className="grid gap-2">
-						<div className="flex gap-2">
-							<SearchSelect
-								label="选择执行人"
-								value={candidate}
-								onValueChange={setCandidate}
-								options={userOptions.filter((user) => !targets.includes(user.value))}
-								placeholder="选择执行人"
-							/>
+						<Input
+							aria-label="搜索源任务"
+							placeholder="按任务名称搜索"
+							value={sourceKeyword}
+							onChange={(event) => setSourceKeyword(event.target.value)}
+						/>
+						<SearchSelect
+							label="源任务"
+							value={sourceTaskId}
+							onValueChange={(value) => {
+								setSourceTaskId(value);
+								setDistributionField("");
+								setDistributionValues({});
+								setDistributionFieldsByUser({});
+							}}
+							options={sourceOptions}
+							placeholder="可选：选择已填好数据的任务"
+						/>
+						{sourceTaskId && (
 							<Button
-								variant="outline"
 								size="sm"
-								disabled={!candidate || targets.length >= 100}
+								variant="ghost"
 								onClick={() => {
-									setTargets([...targets, candidate]);
-									setCandidate("");
+									setSourceTaskId("");
+									setDistributionField("");
+									setDistributionValues({});
+									setDistributionFieldsByUser({});
 								}}
 							>
-								添加
+								清除源任务
 							</Button>
-						</div>
-						{targets.map((id) => (
-							<div key={id} className="flex items-center justify-between text-sm">
-								<span>{showName(id)}</span>
-								<Button variant="ghost" size="sm" onClick={() => setTargets(targets.filter((item) => item !== id))}>
-									移除
-								</Button>
-							</div>
-						))}
+						)}
+						{(sourceTasks.data?.total ?? 0) > 100 && (
+							<p className="text-sm text-muted-foreground">结果超过 100 条，请输入更具体的任务名称。</p>
+						)}
+						{sourceTaskId && sourceReport.isFetching && (
+							<p className="text-sm text-muted-foreground">正在读取源任务…</p>
+						)}
+						{sourceTaskId && sourceReport.isError && (
+							<p role="alert" className="text-sm text-destructive">
+								无法读取源任务填报，请选择有权访问的任务。
+							</p>
+						)}
+						{sourceTaskId && !sourceReport.isFetching && !sourceReport.isError && !matchingVersion && (
+							<p className="text-sm text-destructive">源任务必须使用所选的表格模板版本。</p>
+						)}
+						{sourceTaskId && !sourceReport.isFetching && !sourceReport.isError && matchingVersion && (
+							<p className="text-sm text-muted-foreground">
+								源数据 {sourceRows.length} 行。选择默认字段，再为每位执行人设置字段和值；所有行必须且只能分配一次。
+							</p>
+						)}
+						{sourceTaskId && !sourceReport.isFetching && !sourceReport.isError && matchingVersion && (
+							<Select
+								items={distributionFields.map((field) => ({ value: field.id, label: field.label }))}
+								value={distributionField}
+								onValueChange={(value) => {
+									setDistributionField(value ?? "");
+									setDistributionValues({});
+									setDistributionFieldsByUser({});
+								}}
+							>
+								<SelectTrigger aria-label="默认筛选字段">
+									<SelectValue placeholder="选择划分字段" />
+								</SelectTrigger>
+								<SelectContent>
+									{distributionFields.map((field) => (
+										<SelectItem key={field.id} value={field.id}>
+											{field.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
 					</div>
 				</DetailRow>
+
+				<DetailRow label="执行人">
+					<div className="grid gap-2">
+						<MultiSelect
+							options={userOptions}
+							value={targets}
+							onChange={(next) => {
+								if (next.length > 100) {
+									toast.error("最多选择 100 位执行人");
+									return;
+								}
+								setTargets(next);
+							}}
+							placeholder="搜索执行人"
+							maxHeight={120}
+						/>
+
+						{sourceTaskId &&
+							distributionField &&
+							targets.map((id) => {
+								const field = distributionFieldsByUser[id] || distributionField;
+								const values = [...valuesFor(field)];
+								return (
+									<div key={id} className="grid min-w-0 grid-cols-2 gap-2 border-t border-border pt-2">
+										<span className="col-span-2 break-words text-sm font-medium">{showName(id)}</span>
+										<Select
+											items={distributionFields.map((item) => ({ value: item.id, label: item.label }))}
+											value={field}
+											onValueChange={(value) => {
+												setDistributionFieldsByUser((current) => ({ ...current, [id]: value ?? "" }));
+												setDistributionValues((current) => {
+													const next = { ...current };
+													delete next[id];
+													return next;
+												});
+											}}
+										>
+											<SelectTrigger className="w-full min-w-0" aria-label={`${showName(id)}的筛选字段`}>
+												<SelectValue placeholder="选择字段" />
+											</SelectTrigger>
+											<SelectContent>
+												{distributionFields.map((item) => (
+													<SelectItem key={item.id} value={item.id}>
+														{item.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<Select
+											items={values.map(([value]) => ({
+												value,
+												label: formatConditionValue(JSON.parse(value) as ReportDistributionValue),
+											}))}
+											value={distributionValues[id] ?? ""}
+											onValueChange={(value) => setDistributionValues((current) => ({ ...current, [id]: value ?? "" }))}
+										>
+											<SelectTrigger className="w-full min-w-0" aria-label={`${showName(id)}的数据范围`}>
+												<SelectValue placeholder="选择等于的值" />
+											</SelectTrigger>
+											<SelectContent>
+												{values.map(([value, count]) => (
+													<SelectItem key={value} value={value}>
+														{formatConditionValue(JSON.parse(value) as ReportDistributionValue)}（{count} 行）
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									</div>
+								);
+							})}
+					</div>
+				</DetailRow>
+				{sourceTaskId && distributionField && (
+					<div className="space-y-1 text-sm" aria-live="polite">
+						<p className="text-muted-foreground">
+							已配置 {conditions.length} / {targets.length} 位执行人的条件，{unassignedRows} 行未分配，{overlappingRows}{" "}
+							行重复命中。
+						</p>
+						{overlappingRows > 0 && (
+							<p className="text-destructive">部分数据同时命中多个条件，请调整以确保每行只分配一次。</p>
+						)}
+						{unassignedRows > 0 && <p className="text-destructive">请为所有数据行分配执行人。</p>}
+						{unassignedRows === 0 && overlappingRows === 0 && emptyUsers.length > 0 && (
+							<p className="text-destructive">{emptyUsers.map(showName).join("、")}没有匹配的数据行。</p>
+						)}
+					</div>
+				)}
 				<DetailRow label="截止时间">
 					<Input
 						aria-label="截止时间"

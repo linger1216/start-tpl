@@ -669,7 +669,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<header className="border-b border-dashed border-border pb-2">
 								<h2 className="text-base font-semibold tracking-tight text-foreground">结构化填报</h2>
 							</header>
-							<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
+							<TaskReport
+								taskId={task.id}
+								taskName={task.name}
+								canManage={task.creatorId === meId || permissions.isAdmin}
+							/>
 						</section>
 					)}
 

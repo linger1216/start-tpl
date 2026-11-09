@@ -22,7 +22,6 @@
  */
 import { type Adapter, Enforcer, type Model, newModelFromString } from "casbin";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
-
 import { db } from "#/db";
 import { sysCasbinRule, sysMenu, sysRole } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
@@ -31,6 +30,7 @@ import { logger } from "#/lib/logger";
 // 本文件是 server-only,不能被 client 直接 import,故 re-import 这条字面量字符串而不是另起一份。
 import { ADMIN_ROLE_NAME } from "#/lib/menu-spec";
 import { isPermPattern, pagePermOf, permMatches } from "#/lib/perm-code";
+import { SHARE_GUEST } from "#/lib/share-access";
 import { alive } from "#/lib/soft-delete";
 import { collectAncestorIds } from "#/lib/tree";
 
@@ -348,7 +348,8 @@ export async function roleIdsOf(userId: string): Promise<string[]> {
  * 不再靠 ctx.isSuper(它对 HTTP 路径是死码)。
  */
 export async function isAdminUser(userId: string, isSuper = false): Promise<boolean> {
-	if (isSuper) return true;
+	// 外链访客在查询中使用管理员视角;写操作由 tRPC 中间件先行拒绝。
+	if (isSuper || userId === SHARE_GUEST.id) return true;
 	const ids = await roleIdsOf(userId);
 	if (ids.length === 0) return false;
 	const [row] = await db

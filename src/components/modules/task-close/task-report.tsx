@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { TaskReportBatchDialog } from "#/components/modules/task-close/task-report-batches";
 import { TaskReportDesigner } from "#/components/modules/task-close/task-report-designer";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { Button } from "#/components/ui/button";
@@ -17,7 +18,7 @@ import { toastApiError } from "#/lib/api/error";
 import { pasteReportGrid, type TaskReportSchema, taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
 
 /** 填报与说明、自由回复独立，数据和授权都由服务端提供。 */
-export function TaskReport({ taskId, canManage }: { taskId: string; canManage: boolean }) {
+export function TaskReport({ taskId, taskName, canManage }: { taskId: string; taskName: string; canManage: boolean }) {
 	const trpc = useTRPC();
 	const client = useQueryClient();
 	const report = useQuery(trpc.taskClose.reportGet.queryOptions({ taskId }));
@@ -67,13 +68,21 @@ export function TaskReport({ taskId, canManage }: { taskId: string; canManage: b
 	const schema = taskReportSchema.safeParse(report.data.version?.schema);
 	if (!schema.success) return <p className="text-sm text-destructive">填报模板无效，请联系管理员。</p>;
 	return (
-		<TaskReportEditor
-			key={`${report.data.report.id}:${report.data.report.status}`}
-			taskId={taskId}
-			canManage={canManage}
-			schema={schema.data}
-			data={report.data}
-		/>
+		<>
+			{canManage && (
+				<div className="mb-3">
+					<TaskReportDesigner />
+				</div>
+			)}
+			<TaskReportEditor
+				key={`${report.data.report.id}:${report.data.report.status}:${report.data.version.id}`}
+				taskId={taskId}
+				taskName={taskName}
+				canManage={canManage}
+				schema={schema.data}
+				data={report.data}
+			/>
+		</>
 	);
 }
 
@@ -83,11 +92,13 @@ type ReportData = NonNullable<inferRouterOutputs<TRPCRouter>["taskClose"]["repor
 
 function TaskReportEditor({
 	taskId,
+	taskName,
 	canManage,
 	schema,
 	data,
 }: {
 	taskId: string;
+	taskName: string;
 	canManage: boolean;
 	schema: TaskReportSchema;
 	data: ReportData;
@@ -105,6 +116,13 @@ function TaskReportEditor({
 	const [blocked, setBlocked] = useState(false);
 	const [confirm, setConfirm] = useState(false);
 	const [reason, setReason] = useState("");
+	const [changeVersion, setChangeVersion] = useState("");
+	const [confirmChange, setConfirmChange] = useState(false);
+	const [confirmRemove, setConfirmRemove] = useState(false);
+	const templates = useQuery({
+		...trpc.taskClose.reportTemplateList.queryOptions(),
+		enabled: canManage && data.canRebind,
+	});
 	const [issues, setIssues] = useState<ReturnType<typeof validateTaskReport>>([]);
 	const refresh = () => client.invalidateQueries(trpc.taskClose.pathFilter());
 	const save = useMutation(
@@ -119,6 +137,17 @@ function TaskReportEditor({
 				setBlocked(true);
 				toastApiError(error);
 			},
+		}),
+	);
+	const rebind = useMutation(
+		trpc.taskClose.reportBind.mutationOptions({
+			onSuccess: (_result, variables) => {
+				setConfirmChange(false);
+				setConfirmRemove(false);
+				toast.success(variables.versionId === null ? "已移除填报" : "已更换填报模板");
+				void client.invalidateQueries(trpc.taskClose.pathFilter());
+			},
+			onError: toastApiError,
 		}),
 	);
 	const submit = useMutation(
@@ -204,6 +233,84 @@ function TaskReportEditor({
 					</span>
 				)}
 			</div>
+			{canManage && !data.canRebind && (
+				<p className="text-xs text-muted-foreground">批次任务或已有正式提交的填报不能更换或移除。</p>
+			)}
+			{canManage && data.canRebind && (
+				<div className="flex flex-wrap items-center gap-2">
+					<Select
+						items={(templates.data ?? []).flatMap((template) =>
+							template.versions
+								.filter((version) => version.id !== data.version.id)
+								.map((version) => ({ value: version.id, label: `${template.name} · v${version.version}` })),
+						)}
+						value={changeVersion}
+						onValueChange={(value) => setChangeVersion(value ?? "")}
+					>
+						<SelectTrigger className="min-w-52" aria-label="更换填报模板">
+							<SelectValue placeholder="选择其他模板版本" />
+						</SelectTrigger>
+						<SelectContent>
+							{(templates.data ?? []).flatMap((template) =>
+								template.versions
+									.filter((version) => version.id !== data.version.id)
+									.map((version) => (
+										<SelectItem key={version.id} value={version.id}>
+											{template.name} · v{version.version}
+										</SelectItem>
+									)),
+							)}
+						</SelectContent>
+					</Select>
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={!changeVersion || dirty || blocked || save.isPending || rebind.isPending}
+						onClick={() => setConfirmChange(true)}
+					>
+						更换模板
+					</Button>
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={dirty || blocked || save.isPending || rebind.isPending}
+						onClick={() => setConfirmRemove(true)}
+					>
+						移除填报
+					</Button>
+					<span className="text-xs text-muted-foreground">更换会清空当前草稿，已提交或属于批次的填报不可更换。</span>
+				</div>
+			)}
+			<ConfirmDialog
+				open={confirmChange}
+				onOpenChange={setConfirmChange}
+				title="更换填报模板"
+				description="更换后当前草稿会被清空，且无法恢复。确认继续？"
+				confirmText="更换模板"
+				pendingText="更换中…"
+				confirmVariant="default"
+				isPending={rebind.isPending}
+				onConfirm={() => rebind.mutate({ taskId, versionId: changeVersion, expectedRevision: revision })}
+			/>
+			<ConfirmDialog
+				open={confirmRemove}
+				onOpenChange={setConfirmRemove}
+				title="移除任务填报"
+				description="移除后当前草稿将被清空，且无法恢复。此任务可以重新配置填报。"
+				confirmText="移除填报"
+				pendingText="移除中…"
+				isPending={rebind.isPending}
+				onConfirm={() => rebind.mutate({ taskId, versionId: null, expectedRevision: revision })}
+			/>
+			{canManage && schema.kind === "TABLE" && (
+				<div className="flex flex-wrap items-center gap-2">
+					<TaskReportBatchDialog
+						source={{ taskId, taskName, versionId: data.version.id }}
+						disabled={dirty || blocked || save.isPending || !Array.isArray(draft) || draft.length === 0}
+					/>
+					<span className="text-xs text-muted-foreground">先保存草稿，再按字段分配给多位执行人。</span>
+				</div>
+			)}
 			<TaskReportExcel
 				taskId={taskId}
 				schema={schema}
@@ -341,9 +448,11 @@ function TaskReportEditor({
 					>
 						保存草稿
 					</Button>
-					<Button size="sm" disabled={dirty || blocked || save.isPending || submit.isPending} onClick={validate}>
-						提交填报
-					</Button>
+					{data.canSubmit && (
+						<Button size="sm" disabled={dirty || blocked || save.isPending || submit.isPending} onClick={validate}>
+							提交填报
+						</Button>
+					)}
 				</div>
 			)}
 			{canManage && data.report.status === "submitted" && (

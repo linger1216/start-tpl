@@ -306,6 +306,8 @@ async function main() {
 		await upsertButton(流程模板MenuId, "修改模板", "sys:tcWorkflow:edit", 91);
 		await upsertButton(流程模板MenuId, "删除模板", "sys:tcWorkflow:remove", 92);
 	}
+	const 任务MenuId = byPath.get("/task-close")?.id;
+	if (任务MenuId) await upsertButton(任务MenuId, "删除填报模板", "sys:tc_report_template:remove", 90);
 	console.log(`  本次新增 ${created.menu} 个按钮权限点`);
 
 	console.log("── 运维权限点(隐藏分组,type = 3)──");

@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { inArray, like } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { sysAccount, sysAccountLockout, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { auth } from "../src/lib/auth.ts";
@@ -125,10 +125,9 @@ test("hooks.after 接通:错密码登录 → 失败计数 +1", async () => {
 		});
 	}, "错密码应抛错");
 
-	// 等 hooks.after 的 fire-and-forget 落库(实测 100ms 内)
-	await new Promise((r) => setTimeout(r, 100));
-	const status = await isAccountLocked(email);
-	if (status.locked) throw new Error("只失败 1 次不应锁住");
+	const [row] = await db.select().from(sysAccountLockout).where(eq(sysAccountLockout.email, email));
+	assert.equal(row?.failedAttempts, 1, "登录返回时失败次数已落库");
+	assert.equal((await isAccountLocked(email)).locked, false);
 });
 
 test("hooks.before 接通:账号被锁后,正确密码也被拦", async () => {

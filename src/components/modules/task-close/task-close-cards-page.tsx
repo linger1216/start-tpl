@@ -101,6 +101,7 @@ export function TaskCloseCardsPage() {
 			dueAt: payload.dueAt,
 			priority: payload.priority,
 			workflowId: payload.workflowId,
+			reportVersionId: payload.reportVersionId ?? undefined,
 			payload: { content: payload.content, attachments: payload.attachments },
 			members: payload.executorId
 				? [{ userId: payload.executorId, role: "executor" as const, isPrimary: true }]

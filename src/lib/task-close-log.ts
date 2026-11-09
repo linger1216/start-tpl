@@ -9,7 +9,7 @@
  * 见 `components/modules/task-close/task-close-log.tsx` 的注册表。
  */
 
-/** 16 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
+/** 17 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
 export const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -25,6 +25,7 @@ export const TASK_LOG_EVENTS = [
 	"member.remove",
 	"member.transfer",
 	"report.bind",
+	"report.distribute",
 	"report.submit",
 	"report.return",
 ] as const;
@@ -47,6 +48,7 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"member.remove": "移出成员",
 	"member.transfer": "转交",
 	"report.bind": "配置填报",
+	"report.distribute": "分发填报数据",
 	"report.submit": "提交填报",
 	"report.return": "退回填报",
 };
@@ -217,7 +219,17 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 			};
 		}
 		case "report.bind":
-			return { title: TASK_LOG_LABEL["report.bind"], note: null };
+			return {
+				title:
+					detail.versionId === null
+						? "移除填报"
+						: detail.previousVersionId
+							? "更换填报模板"
+							: TASK_LOG_LABEL["report.bind"],
+				note: null,
+			};
+		case "report.distribute":
+			return { title: TASK_LOG_LABEL["report.distribute"], note: null };
 		case "report.submit":
 			return { title: TASK_LOG_LABEL["report.submit"], note: null };
 		case "report.return": {

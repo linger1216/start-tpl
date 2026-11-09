@@ -340,6 +340,7 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"taskClose.workflowCreate": "sys:tcWorkflow:add",
 	"taskClose.workflowUpdate": "sys:tcWorkflow:edit",
 	"taskClose.workflowRemove": "sys:tcWorkflow:remove",
+	"taskClose.reportTemplateRemove": "sys:tc_report_template:remove",
 };
 
 /**

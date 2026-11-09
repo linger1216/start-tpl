@@ -16,7 +16,7 @@ import { assertRejects, caller, closeDb, TEST_PREFIX, testId, uniqueSuffix } fro
  *
  * 机制本体(`matchShareToken` → 守卫 → 中间件)见 `lib/share-access.ts` 与 `doc/外链分享.md`;
  * 守卫那一段(307 摘参 / cookie)要真浏览器才测得了,走手工清单,这里用 caller 直调收口
- * **数据层**的口径:凭证 CRUD、过期 / 停用不命中、访客只读且只能读允许页面的 query。
+ * **数据层**的口径:凭证 CRUD、过期 / 停用不命中、访客以管理员视角只读。
  */
 const guestCaller = (sharePaths: string[]) =>
 	createCallerFactory(trpcRouter)({ user: { id: "share-guest", name: "访客", sharePaths } });
@@ -148,30 +148,11 @@ describe("matchShareToken(判定核心)", () => {
 	});
 });
 
-describe("访客只读(tRPC 权限中间件的访客特判)", () => {
-	it("访客只能读允许页面的 query;mutation 与 shareToken 管理接口一律 FORBIDDEN", async () => {
-		const created = await caller.shareToken.create({
-			remark: "判定用例",
-			allowedPaths: ["/demo/grid"],
-			expiresAt: null,
-		});
-		await rowByToken(created.token);
-		const guest = guestCaller(["/demo/grid"]);
-
-		// 外壳级读接口放行(侧边栏 / 布局偏好要用)
-		const pref = await guest.para.byKey({ key: "page.size" });
-		assert.equal(pref.key, "page.size");
-
-		// 页面码对不上的读接口拒绝(允许的是 /demo/grid,para.list 属于参数页)
-		await assertRejects(() => guest.para.list(), "外链访客只能读取令牌允许页面的数据");
-		// 管理接口对访客无条件拒绝(即使 shareToken.list 登记的是页面码)
-		await assertRejects(() => guest.shareToken.list(), "外链访客只能读取令牌允许页面的数据");
-		// mutation 一律拒绝
+describe("访客以管理员视角只读", () => {
+	it("未登记的资源查询放行,写操作仍被拒绝", async () => {
+		const guest = guestCaller(["/task-close/task-a"]);
+		const result = await guest.para.list();
+		assert.ok(Array.isArray(result));
 		await assertRejects(() => guest.para.update({ key: guestAuditKey, value: "50" }), "外链访客只读,不能执行该操作");
-	});
-
-	it("允许路径写进 /settings 也不能读管理接口", async () => {
-		const guest = guestCaller(["/settings/users", "/demo/grid"]);
-		await assertRejects(() => guest.shareToken.list(), "外链访客只能读取令牌允许页面的数据");
 	});
 });

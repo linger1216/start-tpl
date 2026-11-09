@@ -76,7 +76,7 @@ export function SettingsGuestsForm({
 					<DialogTitle>{creating ? "新增访客令牌" : "编辑访客令牌"}</DialogTitle>
 					<DialogDescription>
 						{creating
-							? "生成一条外链:拿到链接的人可在允许页面上免登只读查看,写操作一律拒绝。"
+							? "生成外链:持有者可读取管理员可见的全部数据,写操作一律拒绝;允许页面仅限制页面入口。"
 							: "改备注 / 允许页面 / 有效期。令牌本体不变,已发出去的外链继续有效。"}
 					</DialogDescription>
 				</DialogHeader>

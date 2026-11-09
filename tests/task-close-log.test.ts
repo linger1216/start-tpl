@@ -141,7 +141,7 @@ describe("活动日志文本", () => {
 	});
 
 	it("填报事件有专属文案,退回带原因", () => {
-		for (const event of ["report.bind", "report.submit", "report.return"] as const)
+		for (const event of ["report.bind", "report.distribute", "report.submit", "report.return"] as const)
 			assert.notEqual(describeLog(item({ event }), ctx).note, "未知事件类型", `${event} 要有专属分支`);
 		const returned = describeLog(item({ event: "report.return", detail: { reason: "数字不对" } }), ctx);
 		assert.equal(returned.title, "退回填报");

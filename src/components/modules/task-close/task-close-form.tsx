@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
 import { TaskContentEditor } from "#/components/modules/task-close/task-content-editor";
+import { TaskReportDesigner } from "#/components/modules/task-close/task-report-designer";
 import { Button } from "#/components/ui/button";
 import { DatePicker } from "#/components/ui/date-picker";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -19,6 +21,7 @@ import { Input } from "#/components/ui/input";
 import { SearchSelect, type SearchSelectOption } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
+import { useTRPC } from "#/integrations/trpc/react";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task-close-spec";
 import type { TaskAttachment, TaskContentBlock } from "#/lib/task-content";
 import { formatLocalDate } from "#/lib/time";
@@ -58,6 +61,7 @@ export type TaskFormPayload = {
 	/** 提交时:`null` = 没选,`0|1|2` = 选定档;接口上 `undefined` 表示「不动旧值」,**这里**总是显式传值 */
 	priority: number | null;
 	workflowId: string;
+	reportVersionId: string | null;
 	executorId: string | null;
 	content: TaskContentBlock[];
 	/** 附件 id 列表(`sys_file.id`) */
@@ -90,6 +94,9 @@ export function TaskCloseForm({
 	userOptions: Option[];
 	onSubmit: (payload: TaskFormPayload) => void;
 }) {
+	const trpc = useTRPC();
+	const templates = useQuery({ ...trpc.taskClose.reportTemplateList.queryOptions(), enabled: open && !editing });
+	const [reportVersionId, setReportVersionId] = useState("");
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [due, setDue] = useState("");
@@ -109,6 +116,7 @@ export function TaskCloseForm({
 		setPriority(editing?.priority ?? null);
 		setWorkflowId(editing ? "" : (workflowOptions[0]?.value ?? ""));
 		setExecutorId("");
+		setReportVersionId("");
 		setContent(editing?.content ?? []);
 		setAttachments(editing?.attachments ?? []);
 	}, [open, editing, workflowOptions]);
@@ -158,6 +166,45 @@ export function TaskCloseForm({
 								</Select>
 							</DetailRow>
 
+							<DetailRow label="填报模板">
+								<div className="flex flex-wrap items-center gap-2">
+									<Select
+										value={reportVersionId || null}
+										onValueChange={(value) => setReportVersionId(value ?? "")}
+										items={(templates.data ?? []).flatMap((template) =>
+											template.versions.map((version) => ({
+												value: version.id,
+												label: `${template.name} · v${version.version}`,
+											})),
+										)}
+									>
+										<SelectTrigger className="min-w-48 flex-1" aria-label="填报模板">
+											<SelectValue placeholder="不配置填报" />
+										</SelectTrigger>
+										<SelectContent>
+											{(templates.data ?? []).flatMap((template) =>
+												template.versions.map((version) => (
+													<SelectItem key={version.id} value={version.id}>
+														{template.name} · v{version.version}
+													</SelectItem>
+												)),
+											)}
+										</SelectContent>
+									</Select>
+									{reportVersionId && (
+										<Button size="sm" variant="ghost" onClick={() => setReportVersionId("")}>
+											清除
+										</Button>
+									)}
+									<TaskReportDesigner />
+								</div>
+							</DetailRow>
+
+							{reportVersionId && (
+								<p className="text-sm text-muted-foreground">
+									创建人可在任务详情准备草稿，再按街镇等字段分发；正式提交由执行人完成。
+								</p>
+							)}
 							<DetailRow label="执行人">
 								<SearchSelect
 									value={executorId}
@@ -233,6 +280,7 @@ export function TaskCloseForm({
 								dueAt: fromDateInput(due),
 								priority,
 								workflowId,
+								reportVersionId: reportVersionId || null,
 								executorId: executorId || null,
 								content,
 								attachments: attachments.map((file) => file.id),

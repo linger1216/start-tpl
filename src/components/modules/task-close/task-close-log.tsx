@@ -40,6 +40,7 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"member.remove": UserMinus,
 	"member.transfer": ArrowRightLeft,
 	"report.bind": FilePlus2,
+	"report.distribute": FilePlus2,
 	"report.submit": Send,
 	"report.return": MessageSquareReply,
 };

@@ -28,18 +28,20 @@
  * 这套用例走真实 DB(建账号 + 真登录);邮箱一律 `__test__captcha_*`,`after` 一次性清干净。
  */
 import assert from "node:assert/strict";
+import { randomInt } from "node:crypto";
 import { after, before, test } from "node:test";
 
 import { createChallenge, verifyCaptcha } from "captchakit/server";
 import { inArray, like } from "drizzle-orm";
-import { sysAccount, sysAccountLockout, sysPara, sysSession, sysUser } from "../src/db/data-base-schema.ts";
+import { sysAccount, sysAccountLockout, sysSession, sysUser } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { auth } from "../src/lib/auth.ts";
+import { createAuth } from "../src/lib/auth.ts";
+import { recordSignInFailure } from "../src/lib/auth-lockout.ts";
 import { ensureCaptchaSecret } from "../src/lib/captcha-secret.ts";
-import { newId } from "../src/lib/ids.ts";
-import { CAPTCHA_ENABLED_KEY, PARA_TYPE } from "../src/lib/para-spec.ts";
-import { clearParaCache } from "../src/lib/sys-para.ts";
 import { closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+
+let captchaEnabled = true;
+const auth = createAuth({ captchaEnabled: async () => captchaEnabled });
 
 const PASSWORD = "Passw0rd!123";
 const NAME = "验证码测试";
@@ -124,10 +126,10 @@ async function signIn(
  *
  * 限流桶按 IP + 路径分:各条用例各拿一个 IP,彼此的 60 秒 5 次额度互不干扰。
  */
-let ipCounter = 0;
+let ipCounter = randomInt(0, 2 ** 24 - 100);
 function freshIp(): string {
 	ipCounter += 1;
-	return `10.99.${Math.floor(ipCounter / 250)}.${ipCounter % 250}`;
+	return `10.${(ipCounter >> 16) & 255}.${(ipCounter >> 8) & 255}.${ipCounter & 255}`;
 }
 
 /**
@@ -237,36 +239,9 @@ test("proof token 是一次性的:同一个 token 提交第二次必须失败", 
 	assert.equal(replay.message, "人机验证失败,请重试");
 });
 
-/**
- * 改「人机验证」开关并**清掉参数缓存**。
- *
- * `getParaBool` 带 30 秒缓存(`lib/sys-para.ts`),不清缓存就会读到旧值 —— 症状是
- * 「参数明明改成 false 了,登录还是被 400 挡下」。断言失败时先怀疑这一步。
- */
-async function setCaptchaEnabled(enabled: boolean): Promise<void> {
-	const value = String(enabled);
-	await db
-		.insert(sysPara)
-		.values({
-			id: newId(),
-			para_key: CAPTCHA_ENABLED_KEY,
-			para_value: value,
-			para_type: PARA_TYPE.BOOL,
-			para_group: "登录",
-		})
-		.onDuplicateKeyUpdate({ set: { para_value: value } });
-	clearParaCache();
-}
-
-/**
- * 7. **开关关掉后,不带 token 也能登录** —— 参数 `login.captcha_enabled`(默认 `true`)。
- *
- * 这里只测**服务端那一半**(`lib/auth.ts` 的 `/sign-in/email` 钩子);前端画不画验证码栏在
- * `routes/login.tsx`,由同一个参数经 `createServerFn` 拿值。用例收尾必须还原成 `true`。
- */
 test("开关关掉:login.captcha_enabled=false 时,不带 proof token 也能登录", async () => {
 	const email = await makeUser(`off_${uniqueSuffix()}`);
-	await setCaptchaEnabled(false);
+	captchaEnabled = false;
 	try {
 		const res = await signIn(email, PASSWORD, freshIp());
 		assert.equal(
@@ -275,7 +250,10 @@ test("开关关掉:login.captcha_enabled=false 时,不带 proof token 也能登�
 			`关掉人机验证后不带 token 也该放行,实际 ${res.status} ${res.message}` +
 				"(若仍是 400「请先完成人机验证」,先确认 setCaptchaEnabled 里的 clearParaCache 生效了)",
 		);
+		for (let i = 0; i < 5; i++) await recordSignInFailure(email, null);
+		const locked = await signIn(email, PASSWORD, freshIp());
+		assert.equal(locked.status, 429, "关闭验证码不能绕过账号锁定");
 	} finally {
-		await setCaptchaEnabled(true);
+		captchaEnabled = true;
 	}
 });

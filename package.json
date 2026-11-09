@@ -37,6 +37,7 @@
     "db:minio:init": "dotenv -e .env.local -- tsx scripts/init-minio.ts",
     "db:seed:tags": "dotenv -e .env.local -- tsx scripts/seed-tags.ts",
     "db:seed:rbac": "dotenv -e .env.local -- tsx scripts/seed-rbac.ts",
+    "db:add:task-report-permission": "dotenv -e .env.local -- tsx scripts/add-task-report-permission.ts",
     "check:legacy": "node scripts/check-legacy.mjs",
     "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts",
     "db:seed:demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts",

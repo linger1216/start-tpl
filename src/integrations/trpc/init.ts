@@ -9,7 +9,7 @@ import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
 import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
-import { guestMayQuery, SHARE_GUEST, SHARE_GUEST_SHELL_QUERIES } from "#/lib/share-access";
+import { SHARE_GUEST } from "#/lib/share-access";
 
 const t = initTRPC.create({
 	transformer: superjson,
@@ -171,19 +171,12 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
  */
 const permMiddleware = t.middleware(async ({ ctx, path, type, next }) => {
 	const user = (ctx as { user?: InjectedUser | null }).user ?? null;
-	// 访客特判(外链 share token,见 `lib/share-access.ts` 与 doc/外链分享.md):
-	// **只读** + 只放行「令牌允许页面」的读接口。必须抢在 `!mapped` 早退**之前** ——
-	// 对访客,"登录即可"不等于"访客即可",未登记的接口一律拒绝(否则 user.list 这类外壳读口全开)。
+	// 外链访客拥有管理员读视角,但不能执行任何 mutation 或 subscription。
 	if (user?.id === SHARE_GUEST.id) {
 		if (type !== "query") {
 			throw new TRPCError({ code: "FORBIDDEN", message: "外链访客只读,不能执行该操作" });
 		}
-		// 外壳级读接口放行;页面数据按实际登记的页面路径和令牌前缀共同判定。
-		if (SHARE_GUEST_SHELL_QUERIES.includes(path)) return next();
-		if (guestMayQuery(user.sharePaths ?? [], path)) {
-			return next();
-		}
-		throw new TRPCError({ code: "FORBIDDEN", message: "外链访客只能读取令牌允许页面的数据" });
+		return next();
 	}
 	const mapped = PERM_BY_PATH[path];
 	if (!mapped) return next();
@@ -227,7 +220,7 @@ const dataScopeMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	// 同时保证 admin 看数据范围预览面板也是「全部」,不是他本人的部门子集。
 	// `user.isSuper` 与 `permMiddleware` 同口径:测试通道的短路,生产里 ctx.user 没这字段。
 	// 访客与 admin 同口径放行:它没有角色没有部门,部门口径只会把允许页面筛成空 ——
-	// 行级收口对访客没有意义(它进得来哪个页面,守卫和 permMiddleware 已经管过了)。
+	// 访客的查询使用管理员数据范围;页面路径只限制入口,不限制数据接口。
 	const adminBypass = user
 		? user.isSuper === true || user.id === SHARE_GUEST.id || (await isAdminUser(user.id))
 		: false;

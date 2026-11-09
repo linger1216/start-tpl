@@ -70,6 +70,7 @@ const ACTION: Record<string, string> = {
 	reportBatchExcelExport: "导出批次汇总",
 	reportTemplateCreate: "创建填报模板",
 	reportTemplatePublish: "发布填报模板版本",
+	reportTemplateRemove: "删除填报模板",
 	reportBind: "配置填报",
 	reportSaveDraft: "保存填报草稿",
 	reportSubmit: "提交填报",

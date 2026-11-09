@@ -1,15 +1,17 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { taskReportSchema } from "#/lib/task-report-spec";
+import { type TaskReportSchema, taskReportSchema } from "#/lib/task-report-spec";
 
 const FIELD_TYPES = [
 	{ value: "text", label: "文本" },
@@ -22,7 +24,15 @@ const FIELD_TYPES = [
 	{ value: "boolean", label: "是否" },
 ] as const;
 type FieldType = (typeof FIELD_TYPES)[number]["value"];
-type Field = { key: string; id: string; label: string; type: FieldType; required: boolean; options: string };
+type Field = {
+	key: string;
+	id: string;
+	label: string;
+	type: FieldType;
+	required: boolean;
+	options: string;
+	original?: TaskReportSchema["fields"][number];
+};
 const newField = (n: number): Field => ({
 	key: crypto.randomUUID(),
 	id: `field${n}`,
@@ -36,6 +46,12 @@ export function TaskReportDesigner() {
 	const trpc = useTRPC();
 	const client = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const [confirmRemove, setConfirmRemove] = useState(false);
+	const canRemove = useHasPerm("sys:tc_report_template:remove");
+	const [templateId, setTemplateId] = useState("");
+	const [baseVersionId, setBaseVersionId] = useState("");
+	const [baseSchema, setBaseSchema] = useState<TaskReportSchema | null>(null);
+	const templates = useQuery({ ...trpc.taskClose.reportTemplateList.queryOptions(), enabled: open });
 	const [name, setName] = useState("");
 	const [kind, setKind] = useState<"OBJECT" | "TABLE">("OBJECT");
 	const [fields, setFields] = useState<Field[]>([]);
@@ -50,23 +66,81 @@ export function TaskReportDesigner() {
 			onError: toastApiError,
 		}),
 	);
+	const publish = useMutation(
+		trpc.taskClose.reportTemplatePublish.mutationOptions({
+			onSuccess: () => {
+				setOpen(false);
+				void client.invalidateQueries(trpc.taskClose.reportTemplateList.queryFilter());
+				toast.success("新版本已发布，已有任务仍使用原版本");
+			},
+			onError: toastApiError,
+		}),
+	);
+	const remove = useMutation(
+		trpc.taskClose.reportTemplateRemove.mutationOptions({
+			onSuccess: () => {
+				setConfirmRemove(false);
+				selectTemplate("");
+				void client.invalidateQueries(trpc.taskClose.reportTemplateList.queryFilter());
+				toast.success("模板已删除，已有任务保留原版本");
+			},
+			onError: toastApiError,
+		}),
+	);
+	const selectTemplate = (id: string) => {
+		setTemplateId(id);
+		setBaseVersionId("");
+		setError("");
+		if (!id) {
+			setName("");
+			setKind("OBJECT");
+			setBaseSchema(null);
+			setFields([newField(1)]);
+			return;
+		}
+		setBaseSchema(null);
+		const template = templates.data?.find((item) => item.id === id && item.canManage);
+		const parsed = taskReportSchema.safeParse(template?.versions[0]?.schema);
+		if (!template || !parsed.success) {
+			setError("模板结构无效，无法编辑");
+			return;
+		}
+		setName(template.name);
+		setBaseVersionId(template.versions[0].id);
+		setKind(parsed.data.kind);
+		setBaseSchema(parsed.data);
+		setFields(
+			parsed.data.fields.map((field) => ({
+				key: crypto.randomUUID(),
+				id: field.id,
+				label: field.label,
+				type: field.type,
+				required: field.required,
+				options: field.options?.join("，") ?? "",
+				original: field,
+			})),
+		);
+	};
 	const update = (key: string, patch: Partial<Field>) =>
 		setFields((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
 	const submit = () => {
 		const result = taskReportSchema.safeParse({
-			id: "report",
+			...(baseSchema ?? { id: "report" }),
 			kind,
 			fields: fields.map((field) => ({
+				...field.original,
 				id: field.id.trim(),
 				label: field.label.trim(),
 				type: field.type,
 				required: field.required,
 				options:
 					field.type === "select" || field.type === "multiselect"
-						? field.options
-								.split(/[,，\n]/)
-								.map((item) => item.trim())
-								.filter(Boolean)
+						? field.original?.options && field.options === field.original.options.join("，")
+							? field.original.options
+							: field.options
+									.split(/[,，\n]/)
+									.map((item) => item.trim())
+									.filter(Boolean)
 						: undefined,
 			})),
 		});
@@ -79,7 +153,9 @@ export function TaskReportDesigner() {
 			return;
 		}
 		setError("");
-		create.mutate({ name: name.trim(), schema: result.data });
+		if (templateId)
+			publish.mutate({ id: templateId, name: name.trim(), expectedVersionId: baseVersionId, schema: result.data });
+		else create.mutate({ name: name.trim(), schema: result.data });
 	};
 	return (
 		<>
@@ -87,26 +163,56 @@ export function TaskReportDesigner() {
 				size="sm"
 				variant="outline"
 				onClick={() => {
-					setName("");
-					setKind("OBJECT");
-					setFields([newField(1)]);
-					setError("");
+					selectTemplate("");
 					setOpen(true);
 				}}
 			>
-				新建填报模板
+				管理填报模板
 			</Button>
 			<TaskActionDialog
 				open={open}
 				onOpenChange={setOpen}
-				title="新建填报模板"
-				description="发布后的字段结构不会影响已绑定任务。"
-				pending={create.isPending}
-				confirmDisabled={create.isPending}
+				title="管理填报模板"
+				description="选择已有模板可发布新版本，已绑定的任务继续使用原版本。"
+				pending={create.isPending || publish.isPending}
+				confirmDisabled={create.isPending || publish.isPending || (!!templateId && !baseSchema)}
 				confirmText="发布模板"
 				pendingText="发布中…"
 				onConfirm={submit}
 			>
+				<DetailRow label="选择模板">
+					<Select
+						items={[
+							{ value: "new", label: "新增模板" },
+							...(templates.data ?? [])
+								.filter((template) => template.canManage)
+								.map((template) => ({ value: template.id, label: template.name })),
+						]}
+						value={templateId || "new"}
+						onValueChange={(value) => selectTemplate(value === "new" ? "" : (value ?? ""))}
+					>
+						<SelectTrigger aria-label="选择模板">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="new">新增模板</SelectItem>
+							{(templates.data ?? [])
+								.filter((template) => template.canManage)
+								.map((template) => (
+									<SelectItem key={template.id} value={template.id}>
+										{template.name}
+									</SelectItem>
+								))}
+						</SelectContent>
+					</Select>
+				</DetailRow>
+				{templateId && canRemove && (
+					<DetailRow label="删除模板">
+						<Button type="button" variant="destructive" size="sm" onClick={() => setConfirmRemove(true)}>
+							删除模板
+						</Button>
+					</DetailRow>
+				)}
 				<DetailRow label="模板名称">
 					<Input aria-label="模板名称" value={name} onChange={(event) => setName(event.target.value)} />
 				</DetailRow>
@@ -210,6 +316,14 @@ export function TaskReportDesigner() {
 					</p>
 				)}
 			</TaskActionDialog>
+			<ConfirmDialog
+				open={confirmRemove}
+				onOpenChange={setConfirmRemove}
+				title="删除填报模板"
+				description={`确定删除“${name}”？删除后无法用于新任务，已绑定的任务和填报数据会保留。`}
+				isPending={remove.isPending}
+				onConfirm={() => remove.mutate({ id: templateId })}
+			/>
 		</>
 	);
 }

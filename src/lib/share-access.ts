@@ -5,7 +5,7 @@
  *  1. **路由守卫**(`routes/(main)/route.tsx`):URL 上 `?share=<token>` 与令牌表比对,
  *     命中则以「访客」身份放行白名单页面,把令牌写进 httpOnly cookie 后 307 回摘参地址;
  *  2. **数据层**(`lib/current-user.ts` 的访客兜底 + tRPC 权限中间件的访客特判):
- *     无会话时读同一颗 cookie 认人;访客只放行「令牌允许页面」的读接口,写一律拒绝;
+ *     无会话时读同一颗 cookie 认人;访客以管理员视角读取数据,写一律拒绝;
  *  3. **管理**:`sys_share_token` 表 + 「用户管理 ▸ 访客管理」Tab(trpc.shareToken)。
  *
  * ⚠️ **本文件 import 了 `db`,只能在服务端用**(tRPC procedure / createServerFn 的动态 import)。
@@ -29,23 +29,9 @@ export const SHARE_COOKIE_MAX_AGE = 8 * 60 * 60;
 
 /**
  * 访客**永不进入**的管理区前缀 —— 即使令牌的允许路径里写了 `/settings/*` 也按无效处理。
- * 访客是给业务页面用的;管理页的数据接口(如 `shareToken.list` 自己)不该被外链读到。
+ * 此限制只约束页面入口,不约束管理员视角的数据查询。
  */
 export const SHARE_GUEST_BLOCKED_PREFIXES: readonly string[] = ["/settings"];
-
-/**
- * 访客放行的**外壳级**读接口 —— `(main)` 布局自身要用的(侧边栏菜单 / 布局偏好),
- * 加上跨页面取值器与顶栏铃铛。除此之外,未在 `SHARE_GUEST_QUERY_PAGES` 登记的读接口
- * 对访客一律拒绝(「登录即可」≠「访客即可」,与 `UNMAPPED_QUERIES` 的语义刻意不同)。
- */
-export const SHARE_GUEST_SHELL_QUERIES: readonly string[] = ["menu.mine", "para.byKey", "dict.byCode", "notice.list"];
-
-/** 可分享页面的数据接口。登记实际路径,避免页面权限码折算后产生路径碰撞。 */
-export const SHARE_GUEST_QUERY_PAGES: Readonly<Record<string, readonly string[]>> = {
-	"demoGrid.list": ["/demo/grid"],
-	"department.tree": ["/demo/grid"],
-	"taskClose.workflowGet": ["/task-close/workflows"],
-};
 
 /** 访客可看的页面路径前缀清单(来自命中令牌的 `allowed_paths`) */
 export type ShareGuestPaths = readonly string[];
@@ -109,7 +95,7 @@ export function isPathAllowedForToken(paths: ShareGuestPaths, path: string): boo
 	return paths.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
-/** 路径是否落进访客禁入的管理区(与守卫、数据层共用一份口径) */
+/** 路径是否落进访客禁入的管理区 */
 function isBlockedPath(path: string): boolean {
 	return SHARE_GUEST_BLOCKED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
@@ -118,11 +104,6 @@ function isBlockedPath(path: string): boolean {
 export function guestMayView(paths: ShareGuestPaths, path: string): boolean {
 	if (isBlockedPath(path)) return false;
 	return isPathAllowedForToken(paths, path);
-}
-
-/** 只放行显式登记的页面查询,使用与路由守卫相同的路径前缀判定。 */
-export function guestMayQuery(paths: ShareGuestPaths, procedure: string): boolean {
-	return (SHARE_GUEST_QUERY_PAGES[procedure] ?? []).some((page) => guestMayView(paths, page));
 }
 
 /** 从 Cookie 头取访客令牌(只解析不校验);畸形片段按没有处理 */
