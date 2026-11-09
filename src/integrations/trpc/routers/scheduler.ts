@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import { sysJobExecution, sysScheduledJob } from "#/db/data-base-schema";
@@ -44,7 +44,8 @@ export const schedulerRouter = createTRPCRouter({
 				throw new TRPCError({ code: "BAD_REQUEST", message: "调度表达式、时区或间隔无效" });
 			}
 			const now = new Date();
-			// 先查再写:`affectedRows` 是「实际改了行」而非「匹配到行」,重复提交同一份配置会得 0
+			// 先查再写:`affectedRows` 是「实际改了行」而非「匹配到行」,重复提交同一份配置会得 0。
+			// WHERE 里的锁条件仍保留 —— 它是并发守卫,只是不再拿它当「存在性」判据。
 			const [job] = await db
 				.select({ id: sysScheduledJob.id, lockedUntil: sysScheduledJob.locked_until })
 				.from(sysScheduledJob)
@@ -53,7 +54,7 @@ export const schedulerRouter = createTRPCRouter({
 			if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
 			if (job.lockedUntil && job.lockedUntil > now)
 				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "任务正在执行" });
-			await db
+			const updated = await db
 				.update(sysScheduledJob)
 				.set({
 					interval_seconds: input.mode === "interval" ? (input.intervalSeconds ?? 0) : 0,
@@ -63,7 +64,15 @@ export const schedulerRouter = createTRPCRouter({
 					attempts: 0,
 					updated_at: now,
 				})
-				.where(eq(sysScheduledJob.id, input.id));
+				.where(
+					and(
+						eq(sysScheduledJob.id, input.id),
+						or(isNull(sysScheduledJob.locked_until), lte(sysScheduledJob.locked_until, now)),
+					),
+				);
+			// 0 行 = 上面查完之后才被别的进程抢走锁,不是「不存在」
+			if (updated[0].affectedRows === 0)
+				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "任务刚刚开始执行,请稍后重试" });
 			return { ok: true };
 		}),
 	executions: protectedProcedure.input(idInput).query(async ({ input }) => {
@@ -97,7 +106,7 @@ export const schedulerRouter = createTRPCRouter({
 	}),
 	trigger: protectedProcedure.input(idInput).mutation(async ({ input }) => {
 		const now = new Date();
-		// 同 `configure`:先查再写。`affectedRows` 算的是真改了几行,连点两次会得 0 而不是报错
+		// 同 `configure`:先查后写。WHERE 里保留状态守卫防并发,但不拿 `affectedRows` 当存在性判据
 		const [job] = await db
 			.select({
 				id: sysScheduledJob.id,
@@ -111,10 +120,18 @@ export const schedulerRouter = createTRPCRouter({
 		if (!job.enabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "调度任务已停用" });
 		if (job.lockedUntil && job.lockedUntil > now)
 			throw new TRPCError({ code: "PRECONDITION_FAILED", message: "调度任务正在执行" });
-		await db
+		const updated = await db
 			.update(sysScheduledJob)
 			.set({ next_run_at: new Date(Math.floor(now.getTime() / 1000) * 1000), attempts: 0, updated_at: now })
-			.where(eq(sysScheduledJob.id, input.id));
+			.where(
+				and(
+					eq(sysScheduledJob.id, input.id),
+					eq(sysScheduledJob.enabled, true),
+					or(isNull(sysScheduledJob.locked_until), lte(sysScheduledJob.locked_until, now)),
+				),
+			);
+		if (updated[0].affectedRows === 0)
+			throw new TRPCError({ code: "PRECONDITION_FAILED", message: "调度任务刚刚开始执行,请稍后重试" });
 		return { ok: true };
 	}),
 });

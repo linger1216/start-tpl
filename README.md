@@ -546,6 +546,7 @@ pnpm check
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
 - `doc/task-close.md` —— 任务闭环业务示例:三页、`tc_*` 表与 `who` 协议、状态机与活动日志
 - `doc/task-forms.md` —— 结构化填报:模板版本、草稿 / 提交 / 退回、批次与汇总、受限 Excel
+- `doc/任务闭环设计详解.md` —— 按 13 张 `tc_*` 表展开的设计架构与实现细节(给要改这个模块的人)
 - `doc/任务插件化设计.md` —— **已废止的历史草案**(就地作答写 `tc_task.payload`),仅供追溯,不要照此实现
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
