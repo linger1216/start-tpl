@@ -2,8 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { TaskReportBatchDialog } from "#/components/modules/task-close/task-report-batches";
-import { TaskReportDesigner } from "#/components/modules/task-close/task-report-designer";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -18,7 +16,7 @@ import { toastApiError } from "#/lib/api/error";
 import { pasteReportGrid, type TaskReportSchema, taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
 
 /** 填报与说明、自由回复独立，数据和授权都由服务端提供。 */
-export function TaskReport({ taskId, taskName, canManage }: { taskId: string; taskName: string; canManage: boolean }) {
+export function TaskReport({ taskId, canManage }: { taskId: string; canManage: boolean }) {
 	const trpc = useTRPC();
 	const client = useQueryClient();
 	const report = useQuery(trpc.taskClose.reportGet.queryOptions({ taskId }));
@@ -26,7 +24,7 @@ export function TaskReport({ taskId, taskName, canManage }: { taskId: string; ta
 		...trpc.taskClose.reportTemplateList.queryOptions(),
 		enabled: canManage && report.data === null,
 	});
-	const [versionId, setVersionId] = useState("");
+	const [templateId, setTemplateId] = useState("");
 	const bind = useMutation(
 		trpc.taskClose.reportBind.mutationOptions({
 			onSuccess: () => {
@@ -40,14 +38,12 @@ export function TaskReport({ taskId, taskName, canManage }: { taskId: string; ta
 	if (report.isError) return <p className="text-sm text-muted-foreground">无法加载填报。</p>;
 	if (!report.data) {
 		if (!canManage) return <p className="text-sm text-muted-foreground">此任务没有配置填报。</p>;
-		const options = (templates.data ?? []).flatMap((template) =>
-			template.versions.map((version) => ({ value: version.id, label: `${template.name} · v${version.version}` })),
-		);
+		const options = (templates.data ?? []).map((template) => ({ value: template.id, label: template.name }));
 		return (
 			<div className="flex flex-wrap items-center gap-2">
-				<Select items={options} value={versionId} onValueChange={(value) => setVersionId(value ?? "")}>
+				<Select items={options} value={templateId} onValueChange={(value) => setTemplateId(value ?? "")}>
 					<SelectTrigger className="w-64" aria-label="填报模板">
-						<SelectValue placeholder="选择填报模板版本" />
+						<SelectValue placeholder="选择填报模板" />
 					</SelectTrigger>
 					<SelectContent>
 						{options.map((option) => (
@@ -57,32 +53,27 @@ export function TaskReport({ taskId, taskName, canManage }: { taskId: string; ta
 						))}
 					</SelectContent>
 				</Select>
-				<Button size="sm" disabled={!versionId || bind.isPending} onClick={() => bind.mutate({ taskId, versionId })}>
+				<Button
+					size="sm"
+					disabled={!templateId || bind.isPending}
+					onClick={() => bind.mutate({ taskId, reportId: templateId })}
+				>
 					配置填报
 				</Button>
-				<TaskReportDesigner />
 				{options.length === 0 && <span className="text-sm text-muted-foreground">暂无已发布的填报模板。</span>}
 			</div>
 		);
 	}
-	const schema = taskReportSchema.safeParse(report.data.version?.schema);
+	const schema = taskReportSchema.safeParse(report.data.template?.payload);
 	if (!schema.success) return <p className="text-sm text-destructive">填报模板无效，请联系管理员。</p>;
 	return (
-		<>
-			{canManage && (
-				<div className="mb-3">
-					<TaskReportDesigner />
-				</div>
-			)}
-			<TaskReportEditor
-				key={`${report.data.report.id}:${report.data.report.status}:${report.data.version.id}`}
-				taskId={taskId}
-				taskName={taskName}
-				canManage={canManage}
-				schema={schema.data}
-				data={report.data}
-			/>
-		</>
+		<TaskReportEditor
+			key={`${report.data.report.id}:${report.data.report.status}:${report.data.template.id}`}
+			taskId={taskId}
+			canManage={canManage}
+			schema={schema.data}
+			data={report.data}
+		/>
 	);
 }
 
@@ -92,13 +83,11 @@ type ReportData = NonNullable<inferRouterOutputs<TRPCRouter>["taskClose"]["repor
 
 function TaskReportEditor({
 	taskId,
-	taskName,
 	canManage,
 	schema,
 	data,
 }: {
 	taskId: string;
-	taskName: string;
 	canManage: boolean;
 	schema: TaskReportSchema;
 	data: ReportData;
@@ -116,7 +105,7 @@ function TaskReportEditor({
 	const [blocked, setBlocked] = useState(false);
 	const [confirm, setConfirm] = useState(false);
 	const [reason, setReason] = useState("");
-	const [changeVersion, setChangeVersion] = useState("");
+	const [changeTemplate, setChangeTemplate] = useState("");
 	const [confirmChange, setConfirmChange] = useState(false);
 	const [confirmRemove, setConfirmRemove] = useState(false);
 	const templates = useQuery({
@@ -144,7 +133,7 @@ function TaskReportEditor({
 			onSuccess: (_result, variables) => {
 				setConfirmChange(false);
 				setConfirmRemove(false);
-				toast.success(variables.versionId === null ? "已移除填报" : "已更换填报模板");
+				toast.success(variables.reportId === null ? "已移除填报" : "已更换填报模板");
 				void client.invalidateQueries(trpc.taskClose.pathFilter());
 			},
 			onError: toastApiError,
@@ -239,33 +228,29 @@ function TaskReportEditor({
 			{canManage && data.canRebind && (
 				<div className="flex flex-wrap items-center gap-2">
 					<Select
-						items={(templates.data ?? []).flatMap((template) =>
-							template.versions
-								.filter((version) => version.id !== data.version.id)
-								.map((version) => ({ value: version.id, label: `${template.name} · v${version.version}` })),
-						)}
-						value={changeVersion}
-						onValueChange={(value) => setChangeVersion(value ?? "")}
+						items={(templates.data ?? [])
+							.filter((template) => template.id !== data.template.id)
+							.map((template) => ({ value: template.id, label: template.name }))}
+						value={changeTemplate}
+						onValueChange={(value) => setChangeTemplate(value ?? "")}
 					>
 						<SelectTrigger className="min-w-52" aria-label="更换填报模板">
-							<SelectValue placeholder="选择其他模板版本" />
+							<SelectValue placeholder="选择其他模板" />
 						</SelectTrigger>
 						<SelectContent>
-							{(templates.data ?? []).flatMap((template) =>
-								template.versions
-									.filter((version) => version.id !== data.version.id)
-									.map((version) => (
-										<SelectItem key={version.id} value={version.id}>
-											{template.name} · v{version.version}
-										</SelectItem>
-									)),
-							)}
+							{(templates.data ?? [])
+								.filter((template) => template.id !== data.template.id)
+								.map((template) => (
+									<SelectItem key={template.id} value={template.id}>
+										{template.name}
+									</SelectItem>
+								))}
 						</SelectContent>
 					</Select>
 					<Button
 						size="sm"
 						variant="outline"
-						disabled={!changeVersion || dirty || blocked || save.isPending || rebind.isPending}
+						disabled={!changeTemplate || dirty || blocked || save.isPending || rebind.isPending}
 						onClick={() => setConfirmChange(true)}
 					>
 						更换模板
@@ -290,7 +275,7 @@ function TaskReportEditor({
 				pendingText="更换中…"
 				confirmVariant="default"
 				isPending={rebind.isPending}
-				onConfirm={() => rebind.mutate({ taskId, versionId: changeVersion, expectedRevision: revision })}
+				onConfirm={() => rebind.mutate({ taskId, reportId: changeTemplate, expectedRevision: revision })}
 			/>
 			<ConfirmDialog
 				open={confirmRemove}
@@ -300,16 +285,12 @@ function TaskReportEditor({
 				confirmText="移除填报"
 				pendingText="移除中…"
 				isPending={rebind.isPending}
-				onConfirm={() => rebind.mutate({ taskId, versionId: null, expectedRevision: revision })}
+				onConfirm={() => rebind.mutate({ taskId, reportId: null, expectedRevision: revision })}
 			/>
 			{canManage && schema.kind === "TABLE" && (
-				<div className="flex flex-wrap items-center gap-2">
-					<TaskReportBatchDialog
-						source={{ taskId, taskName, versionId: data.version.id }}
-						disabled={dirty || blocked || save.isPending || !Array.isArray(draft) || draft.length === 0}
-					/>
-					<span className="text-xs text-muted-foreground">先保存草稿，再按字段分配给多位执行人。</span>
-				</div>
+				<p className="text-xs text-muted-foreground">
+					需要把这张表分给多位执行人?在「填报模板」页用相同结构另建任务,并为每人配置数据规则。
+				</p>
 			)}
 			<TaskReportExcel
 				taskId={taskId}
@@ -499,18 +480,6 @@ function ReportField({
 	disabled: boolean;
 	onChange: (value: Value) => void;
 }) {
-	if (field.type === "boolean")
-		return (
-			<span className="flex items-center gap-2 text-sm">
-				<Checkbox
-					aria-label={field.label}
-					checked={value === true}
-					disabled={disabled}
-					onCheckedChange={(checked) => onChange(checked)}
-				/>
-				是
-			</span>
-		);
 	if (field.type === "multiselect")
 		return (
 			<div className="flex flex-wrap gap-3">

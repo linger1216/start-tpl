@@ -295,7 +295,7 @@ function WorkflowCard({
 			{/* 顶行:图标块(左) + 状态徽章 / 行内动作(右) */}
 			<div className="mb-4 flex items-start justify-between gap-2">
 				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
-					<Workflow className="size-[18px]" />
+					<Workflow className="size-4.5" />
 				</div>
 				<div className="flex items-center gap-1.5">
 					{item.builtin ? (

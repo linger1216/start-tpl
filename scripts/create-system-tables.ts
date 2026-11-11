@@ -461,32 +461,22 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_report_template",
 		ddl: `create table if not exists \`tc_report_template\` (
-    \`id\` varchar(32) not null,
-    \`name\` varchar(255) not null,
-    \`creator_id\` varchar(36) not null,
-    \`created_at\` datetime default current_timestamp,
-    \`updated_at\` datetime default current_timestamp,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`name\` varchar(255) collate utf8mb4_unicode_ci not null,
+    \`creator_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`payload\` json default null,
+    \`shared\` tinyint not null default 0,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+    \`deleted_at\` datetime default null,
     primary key (\`id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
-	},
-	{
-		name: "tc_report_template_version",
-		ddl: `create table if not exists \`tc_report_template_version\` (
-    \`id\` varchar(32) not null,
-    \`template_id\` varchar(32) not null,
-    \`version\` int not null,
-    \`schema\` json not null,
-    \`created_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_report_template_version\` (\`template_id\`, \`version\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)'`,
 	},
 	{
 		name: "tc_task_report",
 		ddl: `create table if not exists \`tc_task_report\` (
     \`id\` varchar(32) not null,
     \`task_id\` varchar(191) not null,
-    \`version_id\` varchar(32) not null,
     \`status\` varchar(16) not null,
     \`draft\` json default null,
     \`revision\` int not null default 0,
@@ -494,8 +484,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`created_at\` datetime default current_timestamp,
     \`updated_at\` datetime default current_timestamp,
     primary key (\`id\`),
-    unique key \`uk_task_report_task\` (\`task_id\`),
-    key \`idx_task_report_version\` (\`version_id\`)
+    unique key \`uk_task_report_task\` (\`task_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
@@ -504,7 +493,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`id\` varchar(32) not null,
     \`report_id\` varchar(32) not null,
     \`task_id\` varchar(191) not null,
-    \`version_id\` varchar(32) not null,
     \`submitter_id\` varchar(36) not null,
     \`revision\` int not null,
     \`payload\` json not null,
@@ -512,38 +500,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     primary key (\`id\`),
     unique key \`uk_report_submission_revision\` (\`report_id\`, \`revision\`),
     key \`idx_report_submission_task\` (\`task_id\`, \`created_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
-	},
-	{
-		name: "tc_report_batch",
-		ddl: `create table if not exists \`tc_report_batch\` (
-    \`id\` varchar(32) not null,
-    \`creator_id\` varchar(36) not null,
-    \`request_id\` varchar(64) not null,
-    \`request_hash\` varchar(64) not null,
-    \`name\` varchar(255) not null,
-    \`version_id\` varchar(32) not null,
-    \`workflow_id\` varchar(191) not null,
-    \`status\` varchar(16) not null,
-    \`due_at\` datetime default null,
-    \`created_at\` datetime default current_timestamp,
-    \`updated_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_report_batch_request\` (\`creator_id\`, \`request_id\`),
-    key \`idx_report_batch_creator\` (\`creator_id\`, \`created_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
-	},
-	{
-		name: "tc_report_batch_task",
-		ddl: `create table if not exists \`tc_report_batch_task\` (
-    \`id\` varchar(32) not null,
-    \`batch_id\` varchar(32) not null,
-    \`task_id\` varchar(191) not null,
-    \`target_user_id\` varchar(36) not null,
-    \`created_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_report_batch_task\` (\`task_id\`),
-    unique key \`uk_report_batch_target\` (\`batch_id\`, \`target_user_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
@@ -580,16 +536,19 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`due_at\` datetime default null,
-    \`priority\` tinyint default null,
     \`payload\` json default null,
     \`workflow\` json not null,
+    \`workflow_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`parent_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`report\` json default null,
     \`deleted_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
     primary key (\`id\`),
     key \`idx_task_status_created\` (\`status\`),
-    key \`idx_task_creator_status\` (\`creator_id\`, \`status\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)'`,
+    key \`idx_task_creator_status\` (\`creator_id\`, \`status\`),
+    key \`idx_task_parent\` (\`parent_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;parent_id/report 承载父子填报;软删走 deleted_at)'`,
 	},
 	{
 		name: "tc_action",
@@ -767,6 +726,39 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		column: "deleted_at",
 		ddl: "datetime default null",
 	},
+	// 流程模板来源(「我的任务」按模板筛):v1 起写入;旧任务 null(快照里没有模板 id,无法回填)
+	{
+		table: "tc_task",
+		column: "workflow_id",
+		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+	},
+	// 父子任务 + 填报规则(批次退役):parent_id 指向父任务;report 存 { reportId, filter }
+	{
+		table: "tc_task",
+		column: "parent_id",
+		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+	},
+	{
+		table: "tc_task",
+		column: "report",
+		ddl: "json default null",
+	},
+	// 填报模板合并版本表:schema → payload(结构搬进模板行)+ shared 可见性标志
+	{
+		table: "tc_report_template",
+		column: "payload",
+		ddl: "json default null",
+	},
+	{
+		table: "tc_report_template",
+		column: "shared",
+		ddl: "tinyint not null default 0",
+	},
+	{
+		table: "tc_report_template",
+		column: "deleted_at",
+		ddl: "datetime default null",
+	},
 	{
 		table: "sys_dict",
 		column: "deleted_at",
@@ -830,6 +822,20 @@ for (const upgrade of COLUMN_UPGRADES) {
 	}
 	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add column \`${upgrade.column}\` ${upgrade.ddl}`));
 	console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}`);
+}
+
+/**
+ * **填报批次退役** —— 版本表已并入模板(上一轮已删),批次两张表一并删除:
+ * `tc_report_batch` / `tc_report_batch_task` 是过程性簿记,不迁移;开发库删掉重来。
+ */
+{
+	const batchTables = (await db.execute(sql`show tables like 'tc_report_batch%'`))[0] as unknown as Array<
+		Record<string, unknown>
+	>;
+	if (batchTables.length > 0) {
+		await db.execute(sql`drop table \`tc_report_batch_task\`, \`tc_report_batch\``);
+		console.log(`✓ 已删除 tc_report_batch / tc_report_batch_task(批次概念退役,数据规则并入建任务)`);
+	}
 }
 
 /**
@@ -929,6 +935,9 @@ for (const ren of COLUMN_RENAMES) {
  */
 const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }> = [
 	{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+	// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
+	{ table: "tc_task_report", column: "version_id" },
+	{ table: "tc_report_submission", column: "version_id" },
 	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 	{ table: "sys_data_plugin", column: "produces" },
 	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃

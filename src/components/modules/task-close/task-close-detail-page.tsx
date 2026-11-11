@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, CornerLeftUp, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,10 +16,11 @@ import {
 import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
 import { TaskCloseUrge } from "#/components/modules/task-close/task-close-urge";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
-import { TaskContentBlocks } from "#/components/modules/task-close/task-content-blocks";
 import { TaskContentHistory } from "#/components/modules/task-close/task-content-history";
+import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { TaskReport } from "#/components/modules/task-close/task-report";
 import { Button } from "#/components/ui/button";
+import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -41,7 +42,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
-import type { TaskAttachment } from "#/lib/task-content";
+import type { TaskAttachment } from "#/lib/task-payload";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 import { TaskActionDialog } from "./task-action-dialog";
@@ -331,7 +332,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		);
 	}
 
-	const { task, content, attachments, members, permissions, meId } = detailQuery.data;
+	const { task, links, attachments, children, members, permissions, meId } = detailQuery.data;
 	/**
 	 * `payload.type` 是业务场景标签,编辑界面不编辑它 —— 但保存时**必须原样带回**,
 	 * 否则 `taskUpdate` 整块替换 payload 会把它抹掉(设置页的类型筛选随之失效)。
@@ -340,6 +341,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	// 状态图快照:状态清单(value+label)从这里取(展示一律用 label)
 	const workflow = task.workflow as { statuses?: WorkflowStatus[]; initial?: string } | null;
 	const statuses = workflow?.statuses ?? [];
+	const labelOf = (value: string) => statuses.find((status) => status.value === value)?.label ?? value;
 
 	/** 被驳回过的审批边(`from->to`)—— 流程脊在箭头上挂小红章,"这一步被批回过"一眼可见 */
 	const rejectedEdges = new Set(
@@ -436,7 +438,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		description: task.description,
 		dueAt: task.dueAt,
 		priority: task.priority,
-		content,
+		links,
 		attachments,
 	};
 
@@ -649,19 +651,66 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</section>
 			) : null}
 
-			{/* ─── main:左 画布(内容 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
+			{/* 子任务详情:给一个回父任务的入口(执行人从"我的任务"进来时也能看到上下文) */}
+			{task.parentId ? (
+				<Link
+					to="/task-close/$taskId"
+					params={{ taskId: task.parentId }}
+					className="mx-8 mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+				>
+					<CornerLeftUp className="size-3.5" />
+					返回父任务
+				</Link>
+			) : null}
+
+			{/* ─── main:左 画布(链接 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
 			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
 				{/* 左 main */}
 				<section className="grid gap-6 min-w-0">
-					{/* 任务内容 block —— 文本 / 表格 / 引用 / 外链,按注册表渲染(未知块降级成占位,不崩) */}
+					{/* 子任务(fan-out 出来的):点卡片进那条子任务自己的详情 */}
+					{children.length > 0 ? (
+						<section className="grid gap-3">
+							<header className="border-b border-dashed border-border pb-2">
+								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+									子任务
+									<span className="text-xs font-medium tabular-nums text-muted-foreground">{children.length}</span>
+								</h2>
+							</header>
+							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+								{children.map((child) => (
+									<Link
+										key={child.id}
+										to="/task-close/$taskId"
+										params={{ taskId: child.id }}
+										className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25"
+									>
+										<Card className="flex h-full flex-col gap-0 p-4 transition-[border-color] hover:border-primary/50">
+											<div className="mb-2 flex items-start justify-between gap-2">
+												<h3 className="line-clamp-1 text-sm font-semibold text-foreground">{child.name}</h3>
+												<Tag variant="outline">{labelOf(child.status)}</Tag>
+											</div>
+											<span className="mt-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+												<CalendarClock className="size-3" />
+												{child.dueAt
+													? `截止 ${formatLocalMinute(child.dueAt)}`
+													: `建于 ${formatLocalMinute(child.createdAt)}`}
+											</span>
+										</Card>
+									</Link>
+								))}
+							</div>
+						</section>
+					) : null}
+
+					{/* 任务链接块 —— 内部页面 / 外部链接,按注册表渲染(未知块降级成占位,不崩) */}
 					<section className="grid gap-3">
 						<header className="flex items-center justify-between">
-							<h2 className="text-base font-semibold tracking-tight text-foreground">任务内容</h2>
+							<h2 className="text-base font-semibold tracking-tight text-foreground">任务链接</h2>
 							{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
 								<TaskContentHistory taskId={task.id} onOpenAttachment={setPreviewAttachment} />
 							)}
 						</header>
-						<TaskContentBlocks content={content} />
+						<TaskLinkBlocks links={links} />
 					</section>
 
 					{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
@@ -669,11 +718,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<header className="border-b border-dashed border-border pb-2">
 								<h2 className="text-base font-semibold tracking-tight text-foreground">结构化填报</h2>
 							</header>
-							<TaskReport
-								taskId={task.id}
-								taskName={task.name}
-								canManage={task.creatorId === meId || permissions.isAdmin}
-							/>
+							<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
 						</section>
 					)}
 
@@ -804,7 +849,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						description: payload.description,
 						dueAt: payload.dueAt,
 						priority: payload.priority,
-						payload: { type: payloadType, content: payload.content, attachments: payload.attachments },
+						payload: { type: payloadType, links: payload.links, attachments: payload.attachments },
 					})
 				}
 			/>
@@ -1085,7 +1130,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						description: task.description,
 						dueAt: task.dueAt,
 						priority: task.priority,
-						payload: { type: payloadType, content, attachments: draftAttachments.map((file) => file.id) },
+						payload: { type: payloadType, links, attachments: draftAttachments.map((file) => file.id) },
 					})
 				}
 			>

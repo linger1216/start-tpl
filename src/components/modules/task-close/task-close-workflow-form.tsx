@@ -22,7 +22,7 @@ import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { cn } from "#/lib/utils";
 
 /** `who` 协议的取值(与 `doc/task-close.md` 的 who 协议一致;`[]` 是系统自带,编辑器不产出) */
-type WorkflowWho = "creator" | "participant" | "executor" | "any";
+type WorkflowWho = "creator" | "participant" | "executor";
 
 /** 一条状态转移边 —— 与 `tc_workflow.payload.edges` 同形(`who` 见 `doc/task-close.md` 的 who 协议) */
 export type WorkflowEdgeInput = {
@@ -30,7 +30,6 @@ export type WorkflowEdgeInput = {
 	to: string;
 	who: WorkflowWho[];
 	via: "direct" | "action";
-	guard?: "report_submitted";
 };
 
 /** 编辑态回填的整份模板定义(新建时为 null) */
@@ -72,7 +71,6 @@ const WHO_OPTIONS: { value: WorkflowWho; label: string }[] = [
 	{ value: "creator", label: "创建者" },
 	{ value: "participant", label: "参与者" },
 	{ value: "executor", label: "执行者" },
-	{ value: "any", label: "任意" },
 ];
 
 const VIA_OPTIONS: { value: "direct" | "action"; label: string }[] = [
@@ -230,7 +228,7 @@ export function TaskCloseWorkflowForm({
 								每行:标识(英文,落库与边引用用)+ 展示名(界面只显示它)。改标识会把边与初始态一起改名。
 							</p>
 							{statuses.map((status, index) => (
-								<div key={statusKeys[index]} className="flex flex-wrap items-center gap-1.5">
+								<div key={statusKeys[index]} className="flex flex-wrap items-center gap-3">
 									<Input
 										value={status.value}
 										aria-label={`第 ${index + 1} 个状态标识`}
@@ -293,7 +291,7 @@ export function TaskCloseWorkflowForm({
 							</p>
 						) : (
 							<p className="text-xs text-muted-foreground">
-								审批期间任务状态保持不变，全部通过后才进入目标状态。想让某对状态
+								想让某对状态
 								<span className="font-medium text-foreground">必须</span>
 								走审批,就只留审批边、别加对应的直接边。
 							</p>
@@ -372,9 +370,6 @@ export function TaskCloseWorkflowForm({
 													))}
 												</SelectContent>
 											</Select>
-											{edge.via === "action" ? (
-												<span className="text-xs text-muted-foreground">全部通过后推进状态</span>
-											) : null}
 											{/* `who` 的含义随 via 变:直接改是"谁能改",审批是"谁能发起" */}
 											<span className="text-xs text-muted-foreground">
 												{edge.via === "action" ? "谁可发起审批" : "谁可直接改"}
@@ -396,16 +391,6 @@ export function TaskCloseWorkflowForm({
 													</button>
 												</span>
 											))}
-											<span className="flex items-center gap-1.5 text-xs">
-												<Checkbox
-													aria-label="要求有效填报提交"
-													checked={edge.guard === "report_submitted"}
-													onCheckedChange={(checked) =>
-														patchEdge(edge.key, { guard: checked ? "report_submitted" : undefined })
-													}
-												/>
-												要求有效填报提交
-											</span>
 										</div>
 									</div>
 								))}
@@ -429,7 +414,6 @@ export function TaskCloseWorkflowForm({
 									to: edge.to,
 									who: edge.who,
 									via: edge.via,
-									guard: edge.guard,
 								})),
 							})
 						}

@@ -107,8 +107,8 @@ export function createReportWorkbook(schema: TaskReportSchema, data: unknown = [
 				? [data]
 				: [];
 	if (rows.length > MAX_ROWS || schema.fields.length > MAX_COLUMNS) throw new Error("导出数据超过限制");
+	// 表头只写**中文名**:字段英文 id 是内部标识,不外泄也不要求填表人理解
 	const values = [
-		schema.fields.map((field) => field.id),
 		schema.fields.map((field) => field.label),
 		...rows.map((row) => schema.fields.map((field) => cellValue((row as Record<string, unknown>)[field.id]))),
 	];
@@ -156,11 +156,7 @@ export function createSummaryWorkbook(
 	return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }) as Buffer;
 }
 
-export async function previewReportWorkbook(
-	schema: TaskReportSchema,
-	fileBase64: string,
-	mapping?: Record<string, number>,
-) {
+export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64: string) {
 	if (fileBase64.length > Math.ceil(MAX_FILE / 3) * 4 + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64))
 		throw new Error("文件编码或大小无效");
 	const buffer = Buffer.from(fileBase64, "base64");
@@ -185,23 +181,41 @@ export async function previewReportWorkbook(
 		if (!address.startsWith("!") && (cell.f || cell.F || cell.l)) throw new Error("不支持公式或链接单元格");
 	const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: true });
 	const header = matrix[0] ?? [];
-	const selected = mapping ?? Object.fromEntries(schema.fields.map((field) => [field.id, header.indexOf(field.id)]));
+	/** 在一行里按某个键(中文名 / 英文 id)找每个字段的列 */
+	const match = (row: unknown[], key: "label" | "id") =>
+		Object.fromEntries(
+			schema.fields.map((field) => [
+				field.id,
+				row.findIndex((cell) => String(cell ?? "").trim() === (key === "label" ? field.label : field.id)),
+			]),
+		);
+	const complete = (columns: Record<string, number>) => schema.fields.every((field) => (columns[field.id] ?? -1) >= 0);
+
+	// 表头按**中文名**认(模版下载出来的就是中文);对不上再认英文 id ——
+	// 老格式是"首行英文 id + 第二行中文名",那一档数据从第 3 行起
+	let selected = match(header, "label");
+	let dataStart = 1;
+	if (!complete(selected)) {
+		const byId = match(header, "id");
+		if (complete(byId)) {
+			const labelsBelow = match(matrix[1] ?? [], "label");
+			if (complete(labelsBelow)) {
+				selected = labelsBelow;
+				dataStart = 2;
+			} else {
+				selected = byId;
+			}
+		}
+	}
 	const positions = schema.fields.map((field) => selected[field.id]);
 	if (
 		positions.some((position) => !Number.isInteger(position) || position < 0 || position >= header.length) ||
 		new Set(positions).size !== positions.length
 	)
-		return {
-			headers: header.map((item) => String(item ?? "")),
-			mapping: selected,
-			value: null,
-			issues: [],
-			mappingError: "列映射不完整或重复",
-			rowNumbers: [] as number[],
-		};
+		throw new Error("文件表头对不上模板字段 —— 请用「下载模版」填写后再导入");
 	const rows = matrix
-		.slice(2)
-		.map((row, index) => ({ row, excelRow: index + 3 }))
+		.slice(dataStart)
+		.map((row, index) => ({ row, excelRow: index + dataStart + 1 }))
 		.filter(({ row }) => row.some((value) => value !== null && value !== ""));
 	if (schema.kind === "OBJECT" && rows.length > 1) throw new Error("表单只允许一行数据");
 	const parsed = rows.map(({ row }) =>
@@ -213,9 +227,6 @@ export async function previewReportWorkbook(
 				else if ((field.type === "integer" || field.type === "decimal") && typeof value === "string" && value.trim()) {
 					const number = Number(value);
 					if (Number.isFinite(number)) value = number;
-				} else if (field.type === "boolean" && typeof value === "string") {
-					if (["true", "是", "1"].includes(value.trim().toLowerCase())) value = true;
-					else if (["false", "否", "0"].includes(value.trim().toLowerCase())) value = false;
 				} else if (field.type === "multiselect" && typeof value === "string")
 					value = value
 						.split(/[;；]/)
@@ -232,14 +243,11 @@ export async function previewReportWorkbook(
 	);
 	const value = schema.kind === "TABLE" ? parsed : (parsed[0] ?? {});
 	return {
-		headers: header.map((item) => String(item ?? "")),
-		mapping: selected,
 		value,
+		/** 逐字段校验结果,`excelRow` 是它在文件里的行号(报"第几行错了"用) */
 		issues: validateTaskReport(schema, value).map((issue) => ({
 			...issue,
 			excelRow: rows[issue.row ?? 0]?.excelRow ?? null,
 		})),
-		mappingError: null,
-		rowNumbers: rows.map((row) => row.excelRow),
 	};
 }

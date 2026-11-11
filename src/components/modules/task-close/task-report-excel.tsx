@@ -1,33 +1,36 @@
 import { useMutation } from "@tanstack/react-query";
+import { Download, FileSpreadsheet, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
-import {
-	DIALOG_FIT,
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { downloadReportWorkbook } from "#/lib/task-report-download";
 import type { TaskReportSchema } from "#/lib/task-report-spec";
 
+/** 一次导入的结果:成功 / 失败条数 + 失败原因(最多列前几条) */
+type ImportOutcome = { ok: number; failed: number; messages: string[] };
+
+/**
+ * Excel 导入 / 导出 —— 两种视角共用一个组件:
+ * - `taskId`:任务详情里的填报(可导出当前数据);
+ * - `reportId`:建任务前先拿模板填数据(只能下载模版 + 导入)。
+ *
+ * **交互**:「下载 Excel 模版」拿到单行中文表头的模版;「文件导入」直接开系统文件框,
+ * 选完即解析 —— 通过就落值并报「成功 N 条 · 失败 M 条」,有失败行则整批不落值并列出原因。
+ * 文件内容只在当前请求内解析,不落库。
+ */
 export function TaskReportExcel({
 	taskId,
+	reportId,
 	schema,
 	canEdit,
 	disabled,
 	onImport,
 }: {
-	taskId: string;
+	taskId?: string;
+	reportId?: string;
 	schema: TaskReportSchema;
 	canEdit: boolean;
 	disabled: boolean;
@@ -35,26 +38,46 @@ export function TaskReportExcel({
 }) {
 	const trpc = useTRPC();
 	const inputRef = useRef<HTMLInputElement>(null);
-	const [open, setOpen] = useState(false);
-	const [fileBase64, setFileBase64] = useState("");
-	const [mapping, setMapping] = useState<Record<string, number>>({});
-	const download = useMutation(
+	const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
+
+	/** 服务端只认一个:任务视角或模板视角(调用点保证传了其中之一) */
+	const source = taskId ? { taskId } : { reportId: reportId ?? "" };
+	const downloadTemplate = useMutation(
 		trpc.taskClose.reportExcelDownload.mutationOptions({
-			onSuccess: (result, variables) => {
-				downloadReportWorkbook(result.fileBase64, variables.templateOnly ? "填报模板.xlsx" : "填报数据.xlsx");
-			},
+			onSuccess: (result) => downloadReportWorkbook(result.fileBase64, "填报模版.xlsx"),
+			onError: toastApiError,
+		}),
+	);
+	const exportData = useMutation(
+		trpc.taskClose.reportExcelDownload.mutationOptions({
+			onSuccess: (result) => downloadReportWorkbook(result.fileBase64, "填报数据.xlsx"),
 			onError: toastApiError,
 		}),
 	);
 	const preview = useMutation(
 		trpc.taskClose.reportExcelPreview.mutationOptions({
 			onSuccess: (result) => {
-				setMapping(result.mapping);
-				setOpen(true);
+				const rows = Array.isArray(result.value) ? result.value.length : result.value ? 1 : 0;
+				const failedRows = new Set(result.issues.map((issue) => issue.row).filter((row) => row !== null));
+				const failed = failedRows.size;
+				setOutcome({
+					ok: rows - failed,
+					failed,
+					messages: result.issues.slice(0, 5).map((issue) => {
+						const field = schema.fields.find((item) => item.id === issue.field)?.label ?? issue.field;
+						return `${issue.excelRow ? `第 ${issue.excelRow} 行 · ` : ""}${field}${field ? ":" : ""}${issue.message}`;
+					}),
+				});
+				// 有失败行就整批不落值,改好文件再选一次
+				if (failed === 0) onImport(result.value);
 			},
-			onError: toastApiError,
+			onError: (error) => {
+				setOutcome(null);
+				toastApiError(error);
+			},
 		}),
 	);
+
 	const chooseFile = async (file: File | undefined) => {
 		if (!file) return;
 		if (file.size > 5 * 1024 * 1024) {
@@ -65,167 +88,73 @@ export function TaskReportExcel({
 		let raw = "";
 		for (let offset = 0; offset < bytes.length; offset += 32768)
 			raw += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
-		const encoded = btoa(raw);
-		setFileBase64(encoded);
-		preview.mutate({ taskId, fileBase64: encoded });
+		setOutcome(null);
+		preview.mutate({ ...source, fileBase64: btoa(raw) });
 	};
-	const columns = (preview.data?.headers ?? []).map((header, index) => ({
-		value: String(index),
-		label: `${index + 1}. ${header || "空列"}`,
-	}));
-	const previewRows =
-		preview.data?.value == null
-			? []
-			: (Array.isArray(preview.data.value) ? preview.data.value : [preview.data.value])
-					.slice(0, 20)
-					.map((row, index) => ({ row, rowNumber: preview.data?.rowNumbers[index] ?? 0 }));
+
 	return (
-		<>
+		<div className="space-y-1.5">
 			<div className="flex flex-wrap items-center gap-2">
 				<Button
 					size="sm"
 					variant="outline"
-					disabled={download.isPending}
-					onClick={() => download.mutate({ taskId, templateOnly: true })}
+					disabled={downloadTemplate.isPending}
+					onClick={() => downloadTemplate.mutate({ ...source, templateOnly: true })}
 				>
-					下载 Excel 模板
+					<Download className="size-3.5" />
+					下载 Excel 模版
 				</Button>
-				<Button
-					size="sm"
-					variant="outline"
-					disabled={download.isPending || disabled}
-					onClick={() => download.mutate({ taskId, templateOnly: false })}
-				>
-					导出当前填报
-				</Button>
-				{canEdit && (
-					<>
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={preview.isPending || disabled}
-							onClick={() => inputRef.current?.click()}
-						>
-							导入 Excel
-						</Button>
-						<Input
-							ref={inputRef}
-							type="file"
-							accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-							className="hidden"
-							onChange={(event) => {
-								void chooseFile(event.target.files?.[0]);
-								event.target.value = "";
-							}}
-						/>
-					</>
+				{taskId && (
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={exportData.isPending || disabled}
+						onClick={() => exportData.mutate({ taskId, templateOnly: false })}
+					>
+						<Upload className="size-3.5" />
+						导出当前填报
+					</Button>
 				)}
+				{canEdit && (
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={disabled || preview.isPending}
+						onClick={() => inputRef.current?.click()}
+					>
+						<FileSpreadsheet className="size-3.5" />
+						{preview.isPending ? "解析中…" : "文件导入"}
+					</Button>
+				)}
+				<Input
+					ref={inputRef}
+					type="file"
+					accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+					className="hidden"
+					onChange={(event) => {
+						void chooseFile(event.target.files?.[0]);
+						event.target.value = "";
+					}}
+				/>
 			</div>
-			<Dialog open={open} onOpenChange={setOpen}>
-				<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
-					<DialogHeader>
-						<DialogTitle>导入预览</DialogTitle>
-						<DialogDescription>核对列映射和数据；确认后写入草稿，正式提交仍需单独确认。</DialogDescription>
-					</DialogHeader>
-					<DialogBody className="space-y-4">
-						{preview.data && (
-							<>
-								<div className="grid gap-2">
-									{schema.fields.map((field) => (
-										<div key={field.id} className="flex items-center gap-3">
-											<span className="w-36 shrink-0 text-sm">{field.label}</span>
-											<Select
-												items={columns}
-												value={mapping[field.id] >= 0 ? String(mapping[field.id]) : ""}
-												onValueChange={(value) => setMapping({ ...mapping, [field.id]: Number(value) })}
-											>
-												<SelectTrigger aria-label={`${field.label} 对应列`}>
-													<SelectValue placeholder="选择列" />
-												</SelectTrigger>
-												<SelectContent>
-													{columns.map((column) => (
-														<SelectItem key={column.value} value={column.value}>
-															{column.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</div>
-									))}
-								</div>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={preview.isPending}
-									onClick={() => preview.mutate({ taskId, fileBase64, mapping })}
-								>
-									重新校验映射
-								</Button>
-								{preview.data.mappingError && <p className="text-sm text-destructive">{preview.data.mappingError}</p>}
-								{preview.data.issues.map((issue) => (
-									<p key={`${issue.excelRow}-${issue.field}-${issue.message}`} className="text-sm text-destructive">
-										{issue.excelRow ? `第 ${issue.excelRow} 行 · ` : ""}
-										{schema.fields.find((field) => field.id === issue.field)?.label ?? issue.field}：{issue.message}
-									</p>
-								))}
-								{preview.data.value !== null && (
-									<div className="overflow-x-auto">
-										<table className="w-full min-w-max border-collapse text-sm">
-											<thead>
-												<tr>
-													{schema.fields.map((field) => (
-														<th key={field.id} className="border border-border p-2 text-left">
-															{field.label}
-														</th>
-													))}
-												</tr>
-											</thead>
-											<tbody>
-												{previewRows.map(({ row, rowNumber }) => (
-													<tr key={rowNumber}>
-														{schema.fields.map((field) => (
-															<td key={field.id} className="border border-border p-2">
-																{Array.isArray(row[field.id])
-																	? (row[field.id] as unknown[]).join("、")
-																	: String(row[field.id] ?? PLACEHOLDER_EMPTY)}
-															</td>
-														))}
-													</tr>
-												))}
-											</tbody>
-										</table>
-										<p className="mt-2 text-xs text-muted-foreground">最多预览前 20 行。</p>
-									</div>
-								)}
-							</>
-						)}
-					</DialogBody>
-					<DialogFooter>
-						<Button variant="ghost" onClick={() => setOpen(false)}>
-							取消
-						</Button>
-						<Button
-							disabled={
-								preview.isPending ||
-								!preview.data ||
-								preview.data.value === null ||
-								!!preview.data.mappingError ||
-								preview.data.issues.length > 0 ||
-								JSON.stringify(mapping) !== JSON.stringify(preview.data.mapping)
-							}
-							onClick={() => {
-								if (preview.data?.value != null) {
-									onImport(preview.data.value);
-									setOpen(false);
-									toast.success("已导入草稿");
-								}
-							}}
-						>
-							确认导入
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-		</>
+			{outcome ? (
+				<div className="space-y-1 rounded-lg border border-border bg-secondary/40 p-2.5 text-xs">
+					<div className="font-medium text-foreground">
+						成功 <span className="text-success-fg">{outcome.ok}</span> 条 · 失败{" "}
+						<span className={outcome.failed > 0 ? "text-danger" : "text-muted-foreground"}>{outcome.failed}</span> 条
+					</div>
+					{outcome.messages.map((message) => (
+						<p key={message} className="flex items-start gap-1 text-danger">
+							<TriangleAlert className="mt-0.5 size-3 shrink-0" />
+							<span>{message}</span>
+						</p>
+					))}
+					{outcome.failed > 0 ? <p className="text-muted-foreground">改好文件再选一次。</p> : null}
+				</div>
+			) : null}
+			{schema.fields.length > 0 ? (
+				<p className="text-xs text-muted-foreground">列顺序:{schema.fields.map((field) => field.label).join(" / ")}</p>
+			) : null}
+		</div>
 	);
 }

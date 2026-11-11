@@ -945,6 +945,20 @@ export const taskCloseTask = mysqlTable(
 		priority: tinyint("priority"),
 		payload: json("payload"),
 		workflow: json("workflow").notNull(),
+		/**
+		 * → `tc_workflow.id`(任务的流程模板来源)。
+		 * v1 起才记录:**旧任务为 null**(快照 JSON 里没有模板 id,无法回填)——
+		 * 「我的任务」按流程模板筛选靠它;模板后续怎么改都不影响已建任务(快照不变)。
+		 */
+		workflow_id: varchar("workflow_id", { length: 191 }),
+		/** → `tc_task.id`(父任务)。null = 本身不是子任务;多执行人 + 填报模板建任务时 fan-out 产生 */
+		parent_id: varchar("parent_id", { length: 191 }),
+		/**
+		 * 填报规则:`{ reportId: → tc_report_template.id, filter?: [{ field, value }] }`。
+		 * 父任务只存 `{ reportId }`(母版);子任务带 `filter` —— 看到的填报数据 = 父任务表格草稿按条件过滤。
+		 * null = 该任务未绑定填报。
+		 */
+		report: json("report"),
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -953,6 +967,7 @@ export const taskCloseTask = mysqlTable(
 		// DB 现状:`idx_task_status_created` 只索引 status(单列);`idx_task_creator_status` 双列索引保留
 		index("idx_task_status_created").on(table.status),
 		index("idx_task_creator_status").on(table.creator_id, table.status),
+		index("idx_task_parent").on(table.parent_id),
 	],
 );
 
@@ -1108,35 +1123,31 @@ export const taskCloseLog = mysqlTable(
 	],
 );
 
-/** 可复用的填报模板；发布版本单独保存。 */
+/**
+ * 可复用的填报模板 —— **单版本**:编辑即覆盖 `payload`(原「版本表」已并入本表,不再保留历史)。
+ * `shared = 1` 全员可见,`0` 仅创建人与管理员;绑定它的任务按 `tc_task_report.version_id`(历史列名,存模板 id)回查。
+ * 软删:删除模板后已绑定任务仍能读 payload(历史填报),但不能再用于新任务/绑定。
+ */
 export const taskReportTemplate = mysqlTable("tc_report_template", {
 	id: varchar("id", { length: 32 }).primaryKey(),
 	name: varchar("name", { length: 255 }).notNull(),
 	creator_id: varchar("creator_id", { length: 36 }).notNull(),
+	/** 表单结构(kind / fields / rules),即原版本表里的 `schema` 列 */
+	payload: json("payload"),
+	/** 1 = 分享(所有人可见)/ 0 = 仅自己可见(创建人与管理员始终可见) */
+	shared: tinyint("shared").notNull().default(0),
 	created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 	updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	/** 软删除时间(null = 未删除);删除后历史填报仍可读,只是不能再绑定 */
+	deleted_at: datetime("deleted_at", { mode: "date" }),
 });
 
-/** 发布后只增不改；任务绑定明确版本。 */
-export const taskReportTemplateVersion = mysqlTable(
-	"tc_report_template_version",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		template_id: varchar("template_id", { length: 32 }).notNull(),
-		version: int("version").notNull(),
-		schema: json("schema").notNull(),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [uniqueIndex("uk_report_template_version").on(table.template_id, table.version)],
-);
-
-/** 一任务一份填报；草稿与当前有效提交指针独立。 */
+/** 一任务一份填报；草稿与当前有效提交指针独立。模板引用走 `tc_task.report.reportId`。 */
 export const taskReport = mysqlTable(
 	"tc_task_report",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		task_id: varchar("task_id", { length: 191 }).notNull(),
-		version_id: varchar("version_id", { length: 32 }).notNull(),
 		status: varchar("status", { length: 16 }).notNull(),
 		draft: json("draft"),
 		revision: int("revision").notNull().default(0),
@@ -1144,20 +1155,16 @@ export const taskReport = mysqlTable(
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
-	(table) => [
-		uniqueIndex("uk_task_report_task").on(table.task_id),
-		index("idx_task_report_version").on(table.version_id),
-	],
+	(table) => [uniqueIndex("uk_task_report_task").on(table.task_id)],
 );
 
-/** 正式提交快照不可变，不以草稿或评论代替。 */
+/** 正式提交快照不可变，不以草稿或评论代替。模板以提交当时 `tc_task.report` 为准。 */
 export const taskReportSubmission = mysqlTable(
 	"tc_report_submission",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		report_id: varchar("report_id", { length: 32 }).notNull(),
 		task_id: varchar("task_id", { length: 191 }).notNull(),
-		version_id: varchar("version_id", { length: 32 }).notNull(),
 		submitter_id: varchar("submitter_id", { length: 36 }).notNull(),
 		revision: int("revision").notNull(),
 		payload: json("payload").notNull(),
@@ -1166,44 +1173,6 @@ export const taskReportSubmission = mysqlTable(
 	(table) => [
 		uniqueIndex("uk_report_submission_revision").on(table.report_id, table.revision),
 		index("idx_report_submission_task").on(table.task_id, table.created_at),
-	],
-);
-
-/** 一次批量征集；request_id 与创建人共同保证重试幂等。 */
-export const taskReportBatch = mysqlTable(
-	"tc_report_batch",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		creator_id: varchar("creator_id", { length: 36 }).notNull(),
-		request_id: varchar("request_id", { length: 64 }).notNull(),
-		request_hash: varchar("request_hash", { length: 64 }).notNull(),
-		name: varchar("name", { length: 255 }).notNull(),
-		version_id: varchar("version_id", { length: 32 }).notNull(),
-		workflow_id: varchar("workflow_id", { length: 191 }).notNull(),
-		status: varchar("status", { length: 16 }).notNull(),
-		due_at: datetime("due_at", { mode: "date" }),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_report_batch_request").on(table.creator_id, table.request_id),
-		index("idx_report_batch_creator").on(table.creator_id, table.created_at),
-	],
-);
-
-/** 一个任务只属于一个批次，一个批次对每个执行人只生成一个任务。 */
-export const taskReportBatchTask = mysqlTable(
-	"tc_report_batch_task",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		batch_id: varchar("batch_id", { length: 32 }).notNull(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		target_user_id: varchar("target_user_id", { length: 36 }).notNull(),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_report_batch_task").on(table.task_id),
-		uniqueIndex("uk_report_batch_target").on(table.batch_id, table.target_user_id),
 	],
 );
 

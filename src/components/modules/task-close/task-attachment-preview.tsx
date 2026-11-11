@@ -16,7 +16,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { filePreviewKind, TEXT_PREVIEW_MAX_BYTES } from "#/lib/file-preview";
 import { formatBytes } from "#/lib/format";
-import type { TaskAttachment } from "#/lib/task-content";
+import type { TaskAttachment } from "#/lib/task-payload";
 
 /** 从文件名取小写后缀 */
 function extOf(name: string): string {

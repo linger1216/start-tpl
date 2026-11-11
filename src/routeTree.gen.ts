@@ -37,6 +37,7 @@ import { Route as mainSettingsTagsRouteImport } from './routes/(main)/settings/t
 import { Route as mainSettingsUsersRouteImport } from './routes/(main)/settings/users'
 import { Route as mainTaskCloseIndexRouteImport } from './routes/(main)/task-close/index'
 import { Route as mainTaskCloseTaskIdRouteImport } from './routes/(main)/task-close/$taskId'
+import { Route as mainTaskCloseReportTemplatesRouteImport } from './routes/(main)/task-close/report-templates'
 import { Route as mainTaskCloseWorkflowsRouteImport } from './routes/(main)/task-close/workflows'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
@@ -182,6 +183,12 @@ const mainTaskCloseTaskIdRoute = mainTaskCloseTaskIdRouteImport.update({
   path: '/task-close/$taskId',
   getParentRoute: () => mainRouteRoute,
 } as any)
+const mainTaskCloseReportTemplatesRoute =
+  mainTaskCloseReportTemplatesRouteImport.update({
+    id: '/task-close/report-templates',
+    path: '/task-close/report-templates',
+    getParentRoute: () => mainRouteRoute,
+  } as any)
 const mainTaskCloseWorkflowsRoute = mainTaskCloseWorkflowsRouteImport.update({
   id: '/task-close/workflows',
   path: '/task-close/workflows',
@@ -234,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
@@ -268,6 +276,7 @@ export interface FileRoutesByTo {
   '/settings/tags': typeof mainSettingsTagsRoute
   '/settings/users': typeof mainSettingsUsersRoute
   '/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
@@ -304,6 +313,7 @@ export interface FileRoutesById {
   '/(main)/settings/tags': typeof mainSettingsTagsRoute
   '/(main)/settings/users': typeof mainSettingsUsersRoute
   '/(main)/task-close/$taskId': typeof mainTaskCloseTaskIdRoute
+  '/(main)/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/(main)/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
@@ -340,6 +350,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/settings/users'
     | '/task-close/$taskId'
+    | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/settings/tags'
     | '/settings/users'
     | '/task-close/$taskId'
+    | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
@@ -409,6 +421,7 @@ export interface FileRouteTypes {
     | '/(main)/settings/tags'
     | '/(main)/settings/users'
     | '/(main)/task-close/$taskId'
+    | '/(main)/task-close/report-templates'
     | '/(main)/task-close/workflows'
     | '/api/auth/$'
     | '/api/sse/notice'
@@ -625,6 +638,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof mainTaskCloseTaskIdRouteImport
       parentRoute: typeof mainRouteRoute
     }
+    '/(main)/task-close/report-templates': {
+      id: '/(main)/task-close/report-templates'
+      path: '/task-close/report-templates'
+      fullPath: '/task-close/report-templates'
+      preLoaderRoute: typeof mainTaskCloseReportTemplatesRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
     '/(main)/task-close/workflows': {
       id: '/(main)/task-close/workflows'
       path: '/task-close/workflows'
@@ -687,6 +707,7 @@ interface mainRouteRouteChildren {
   mainSettingsTagsRoute: typeof mainSettingsTagsRoute
   mainSettingsUsersRoute: typeof mainSettingsUsersRoute
   mainTaskCloseTaskIdRoute: typeof mainTaskCloseTaskIdRoute
+  mainTaskCloseReportTemplatesRoute: typeof mainTaskCloseReportTemplatesRoute
   mainTaskCloseWorkflowsRoute: typeof mainTaskCloseWorkflowsRoute
   mainSettingsIndexRoute: typeof mainSettingsIndexRoute
   mainTaskCloseIndexRoute: typeof mainTaskCloseIndexRoute
@@ -717,6 +738,7 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainSettingsTagsRoute: mainSettingsTagsRoute,
   mainSettingsUsersRoute: mainSettingsUsersRoute,
   mainTaskCloseTaskIdRoute: mainTaskCloseTaskIdRoute,
+  mainTaskCloseReportTemplatesRoute: mainTaskCloseReportTemplatesRoute,
   mainTaskCloseWorkflowsRoute: mainTaskCloseWorkflowsRoute,
   mainSettingsIndexRoute: mainSettingsIndexRoute,
   mainTaskCloseIndexRoute: mainTaskCloseIndexRoute,

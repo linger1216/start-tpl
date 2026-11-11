@@ -11,10 +11,11 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
-import * as XLSX from "xlsx";
 
 import {
+	sysCasbinRule,
 	sysFile,
+	sysMenu,
 	sysNotification,
 	sysNotificationAttempt,
 	sysNotificationDelivery,
@@ -27,14 +28,11 @@ import {
 	taskCloseTask,
 	taskCloseWorkflow,
 	taskReport,
-	taskReportBatch,
-	taskReportBatchTask,
 	taskReportSubmission,
 	taskReportTemplate,
-	taskReportTemplateVersion,
 } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { addUserRole, removeAllRolesOfUser } from "../src/lib/casbin.ts";
+import { addUserRole, clearCasbinCache, removeAllRolesOfUser } from "../src/lib/casbin.ts";
 import { bucketFor } from "../src/lib/storage.ts";
 import { checkActionReminder } from "../src/lib/task-close-reminders.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
@@ -66,7 +64,8 @@ let workflowId = "";
 /** 用例自建的流程模板 id —— `after` 里物理清(`tc_workflow` 没有 name 列,只能按 id 认领) */
 const createdWorkflowIds: string[] = [];
 const createdReportTemplateIds: string[] = [];
-const createdBatchIds: string[] = [];
+/** 给测试用户临时授「填报模板」页面的 casbin p 行 —— after 里清 */
+const createdCasbinRowIds: string[] = [];
 const extraTestUserIds: string[] = [];
 /** 评论 / 征询用的**真实**附件夹具(status=1 的 sys_file 行;2026-10 起附件 id 要真实存在) */
 const ATTACH_FILE_ID = `file-cmnt-${suffix}`;
@@ -103,6 +102,10 @@ before(async () => {
 
 after(async () => {
 	await purgeTestAuditRows([A.id, B.id, C.id]);
+	if (createdCasbinRowIds.length > 0) {
+		await db.delete(sysCasbinRule).where(inArray(sysCasbinRule.id, createdCasbinRowIds));
+		clearCasbinCache();
+	}
 	const ids = (
 		await db
 			.select({ id: taskCloseTask.id })
@@ -153,14 +156,9 @@ after(async () => {
 		await db.delete(taskCloseContentRevision).where(inArray(taskCloseContentRevision.task_id, ids));
 		await db.delete(taskReportSubmission).where(inArray(taskReportSubmission.task_id, ids));
 		await db.delete(taskReport).where(inArray(taskReport.task_id, ids));
-		await db.delete(taskReportBatchTask).where(inArray(taskReportBatchTask.task_id, ids));
 		await db.delete(taskCloseTask).where(inArray(taskCloseTask.id, ids));
 	}
-	if (createdBatchIds.length) await db.delete(taskReportBatch).where(inArray(taskReportBatch.id, createdBatchIds));
 	if (createdReportTemplateIds.length) {
-		await db
-			.delete(taskReportTemplateVersion)
-			.where(inArray(taskReportTemplateVersion.template_id, createdReportTemplateIds));
 		await db.delete(taskReportTemplate).where(inArray(taskReportTemplate.id, createdReportTemplateIds));
 	}
 	if (createdWorkflowIds.length > 0) {
@@ -207,9 +205,9 @@ describe("任务闭环", () => {
 		await assertRejects(() => asB().taskClose.actionReply({ id: action.id, content: "迟到" }), "已经回复过");
 		await assertRejects(() => asA().taskClose.actionCreate({ taskId: task.id, handleId: B.id }), "任务已结束");
 	});
-	it("流程守卫限制动作展示和执行，并在审批时重新检查", async () => {
+	it("旧流程的任意角色与填报条件按新规则解释", async () => {
 		const workflow = await caller.taskClose.workflowCreate({
-			name: `${TEST_PREFIX}守卫-${suffix}`,
+			name: `${TEST_PREFIX}旧流程-${suffix}`,
 			statuses: [
 				{ value: "open", label: "进行中" },
 				{ value: "done", label: "完成" },
@@ -217,39 +215,39 @@ describe("任务闭环", () => {
 			],
 			initial: "open",
 			edges: [
-				{ from: "open", to: "done", who: ["executor"], via: "action", guard: "report_submitted" },
-				{ from: "done", to: "closed", who: ["creator"], via: "direct", guard: "report_submitted" },
+				{ from: "open", to: "done", who: ["executor"], via: "action" },
+				{ from: "done", to: "closed", who: ["creator"], via: "direct" },
 			],
 		});
 		createdWorkflowIds.push(workflow.id);
+		const [row] = await db.select().from(taskCloseWorkflow).where(eq(taskCloseWorkflow.id, workflow.id));
+		const legacy = {
+			...(row.payload as object),
+			edges: [
+				{ from: "open", to: "done", who: ["any"], via: "action", guard: "report_submitted" },
+				{ from: "done", to: "closed", who: ["any"], via: "direct", guard: "report_submitted" },
+			],
+		};
+		await db.update(taskCloseWorkflow).set({ payload: legacy }).where(eq(taskCloseWorkflow.id, workflow.id));
+		const detail = await caller.taskClose.workflowGet({ id: workflow.id });
+		assert.deepEqual(detail.edges[0].who, ["creator", "participant", "executor"]);
+		assert.ok(!("guard" in detail.edges[0]));
 		const task = await asA().taskClose.taskCreate({
-			name: taskName("流程守卫"),
+			name: taskName("旧流程兼容"),
 			workflowId: workflow.id,
 			members: [{ userId: B.id, role: "executor" }],
 		});
-		const template = await asA().taskClose.reportTemplateCreate({
-			name: "守卫填报",
-			schema: { id: "report", kind: "OBJECT", fields: [{ id: "name", label: "名称", type: "text", required: true }] },
-		});
-		createdReportTemplateIds.push(template.id);
-		await asA().taskClose.reportBind({ taskId: task.id, versionId: template.versionId });
-		assert.deepEqual((await asB().taskClose.taskGet({ id: task.id })).permissions.actionTargets, []);
+		await db.update(taskCloseTask).set({ workflow: legacy }).where(eq(taskCloseTask.id, task.id));
 		await assertRejects(
-			() => asB().taskClose.actionCreate({ taskId: task.id, handleId: B.id, toStatus: "done" }),
-			"未满足流程条件",
+			() => asC().taskClose.actionCreate({ taskId: task.id, handleId: B.id, toStatus: "done" }),
+			"没有权限",
 		);
-		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 0, draft: { name: "初次" } });
-		await asB().taskClose.reportSubmit({ taskId: task.id, revision: 1 });
+		assert.deepEqual((await asA().taskClose.taskGet({ id: task.id })).permissions.actionTargets, ["done"]);
 		assert.deepEqual((await asB().taskClose.taskGet({ id: task.id })).permissions.actionTargets, ["done"]);
-		const action = await asB().taskClose.actionCreate({ taskId: task.id, handleId: B.id, toStatus: "done" });
-		await asA().taskClose.reportReturn({ taskId: task.id, reason: "需要补充" });
-		await assertRejects(() => asB().taskClose.actionRespond({ id: action.id, approved: true }), "未满足流程条件");
-		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 2, draft: { name: "补充" } });
-		await asB().taskClose.reportSubmit({ taskId: task.id, revision: 3 });
-		await asB().taskClose.actionRespond({ id: action.id, approved: true });
-		await asA().taskClose.reportReturn({ taskId: task.id, reason: "再次补充" });
-		assert.deepEqual((await asA().taskClose.taskGet({ id: task.id })).permissions.transitions, []);
-		await assertRejects(() => asA().taskClose.taskTransit({ id: task.id, to: "closed" }), "未满足流程条件");
+		const action = await asB().taskClose.actionCreate({ taskId: task.id, handleId: A.id, toStatus: "done" });
+		await asA().taskClose.actionRespond({ id: action.id, approved: true });
+		await assertRejects(() => asC().taskClose.taskTransit({ id: task.id, to: "closed" }), "没有权限");
+		await asA().taskClose.taskTransit({ id: task.id, to: "closed" });
 	});
 	it("串行多人审批逐步激活，全部通过后才推进", async () => {
 		const taskId = await newTask("串行多人审批");
@@ -341,9 +339,9 @@ describe("任务闭环", () => {
 		await assertRejects(() => asC().taskClose.actionRespond({ id: second.id, approved: true }), "已经答复过");
 	});
 	it("新建任务时绑定填报版本并初始化草稿", async () => {
-		const template = await asA().taskClose.reportTemplateCreate({
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "创建时配置填报",
-			schema: {
+			payload: {
 				id: "setup",
 				kind: "OBJECT",
 				fields: [{ id: "town", label: "街镇", type: "text", defaultValue: "示例街镇" }],
@@ -353,21 +351,21 @@ describe("任务闭环", () => {
 		const created = await asA().taskClose.taskCreate({
 			name: taskName("创建填报"),
 			workflowId,
-			reportVersionId: template.versionId,
+			report: { reportId: template.id },
 			members: [{ userId: B.id, role: "executor" }],
 		});
 		const report = await asB().taskClose.reportGet({ taskId: created.id });
-		assert.equal(report?.version.id, template.versionId);
+		assert.equal(report?.template.id, template.id);
 		assert.deepEqual(report?.report.draft, { town: "示例街镇" });
 	});
 	it("未提交的普通任务可更换填报模板并防止覆盖并发修改", async () => {
-		const old = await asA().taskClose.reportTemplateCreate({
+		const old = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "原填报",
-			schema: { id: "old", kind: "OBJECT", fields: [{ id: "name", label: "名称", type: "text" }] },
+			payload: { id: "old", kind: "OBJECT", fields: [{ id: "name", label: "名称", type: "text" }] },
 		});
-		const next = await asA().taskClose.reportTemplateCreate({
+		const next = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "新填报",
-			schema: {
+			payload: {
 				id: "next",
 				kind: "OBJECT",
 				fields: [{ id: "town", label: "街镇", type: "text", defaultValue: "新值" }],
@@ -377,29 +375,28 @@ describe("任务闭环", () => {
 		const task = await asA().taskClose.taskCreate({
 			name: taskName("更换填报"),
 			workflowId,
-			reportVersionId: old.versionId,
+			report: { reportId: old.id },
 		});
 		const saved = await asA().taskClose.reportSaveDraft({ taskId: task.id, revision: 0, draft: { name: "旧草稿" } });
 		await assertRejects(
-			() =>
-				asB().taskClose.reportBind({ taskId: task.id, versionId: next.versionId, expectedRevision: saved.revision }),
+			() => asB().taskClose.reportBind({ taskId: task.id, reportId: next.id, expectedRevision: saved.revision }),
 			"只有任务创建人或管理员",
 		);
 		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: task.id, versionId: next.versionId, expectedRevision: 0 }),
+			() => asA().taskClose.reportBind({ taskId: task.id, reportId: next.id, expectedRevision: 0 }),
 			"填报已变化",
 		);
 		assert.deepEqual((await asA().taskClose.reportGet({ taskId: task.id }))?.report.draft, { name: "旧草稿" });
-		await asA().taskClose.reportBind({ taskId: task.id, versionId: next.versionId, expectedRevision: saved.revision });
+		await asA().taskClose.reportBind({ taskId: task.id, reportId: next.id, expectedRevision: saved.revision });
 		const report = await asA().taskClose.reportGet({ taskId: task.id });
-		assert.equal(report?.version.id, next.versionId);
+		assert.equal(report?.template.id, next.id);
 		assert.equal(report?.report.revision, saved.revision + 1);
 		assert.deepEqual(report?.report.draft, { town: "新值" });
 		await assertRejects(
 			() => asA().taskClose.reportSaveDraft({ taskId: task.id, revision: saved.revision, draft: { name: "过期草稿" } }),
 			"草稿已被修改",
 		);
-		await asA().taskClose.reportBind({ taskId: task.id, versionId: null, expectedRevision: saved.revision + 1 });
+		await asA().taskClose.reportBind({ taskId: task.id, reportId: null, expectedRevision: saved.revision + 1 });
 		assert.equal(await asA().taskClose.reportGet({ taskId: task.id }), null);
 		await assertRejects(
 			() => asA().taskClose.reportExcelDownload({ taskId: task.id, templateOnly: true }),
@@ -410,7 +407,7 @@ describe("任务闭环", () => {
 				asA().taskClose.reportSaveDraft({ taskId: task.id, revision: saved.revision + 1, draft: { town: "旧页面" } }),
 			"任务没有填报",
 		);
-		await asA().taskClose.reportBind({ taskId: task.id, versionId: old.versionId });
+		await asA().taskClose.reportBind({ taskId: task.id, reportId: old.id });
 		const restored = await asA().taskClose.reportGet({ taskId: task.id });
 		assert.equal(restored?.report.revision, saved.revision + 3);
 		await assertRejects(
@@ -419,333 +416,202 @@ describe("任务闭环", () => {
 			"草稿已被修改",
 		);
 	});
-	it("按源任务街镇划分数据,每人只获得自己的行", async () => {
-		const template = await asA().taskClose.reportTemplateCreate({
-			name: "街镇分发",
-			schema: {
-				id: "towns",
+	it("带数下发:report.rows 直带行,数据规则过滤初始草稿,模板视角可下载模版再导入", async () => {
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: "带数下发",
+			payload: {
+				id: "rows",
 				kind: "TABLE",
 				fields: [
 					{ id: "town", label: "街镇", type: "text" },
 					{ id: "value", label: "数值", type: "integer" },
-					{ id: "area", label: "区域", type: "text" },
 				],
 			},
+			shared: true,
 		});
 		createdReportTemplateIds.push(template.id);
-		const source = await asA().taskClose.taskCreate({
-			name: taskName("源数据"),
+		const rows = [
+			{ town: "甲镇", value: 1 },
+			{ town: "甲镇", value: 2 },
+			{ town: "乙镇", value: 3 },
+		];
+		const task = await asA().taskClose.taskCreate({
+			name: taskName("带行"),
 			workflowId,
-			reportVersionId: template.versionId,
+			report: { reportId: template.id, rows, filter: [{ field: "town", value: "甲镇" }] },
+			members: [{ userId: B.id, role: "executor" }],
 		});
-		assert.equal((await asA().taskClose.reportGet({ taskId: source.id }))?.canEdit, true);
-		await asA().taskClose.reportSaveDraft({
-			taskId: source.id,
-			revision: 0,
-			draft: [
-				{ town: "甲镇", value: 1, area: "西" },
-				{ town: " 乙镇 ", value: 1, area: "东" },
-				{ town: "甲镇", value: 3, area: "西" },
-			],
+		assert.deepEqual((await asB().taskClose.reportGet({ taskId: task.id }))?.report.draft, [
+			{ town: "甲镇", value: 1 },
+			{ town: "甲镇", value: 2 },
+		]);
+		const formTemplate = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: "带数下发-表单",
+			payload: { id: "form_only", kind: "OBJECT", fields: [{ id: "town", label: "街镇", type: "text" }] },
 		});
-		const input = {
-			name: taskName("分发"),
-			requestId: `split-${suffix}`,
-			workflowId,
-			versionId: template.versionId,
-			targetUserIds: [B.id, C.id],
-			distribution: {
-				sourceTaskId: source.id,
-				sourceRevision: 1,
-				field: "town",
-				assignments: [
-					{ userId: B.id, value: "甲镇" },
-					{ userId: C.id, field: "area", value: "东" },
-				],
-			},
-		};
+		createdReportTemplateIds.push(formTemplate.id);
 		await assertRejects(
 			() =>
-				asA().taskClose.reportBatchCreate({
-					...input,
-					distribution: {
-						...input.distribution,
-						assignments: [
-							{ userId: B.id, value: "甲镇" },
-							{ userId: C.id, value: "丙镇" },
-						],
-					},
+				asA().taskClose.taskCreate({
+					name: taskName("表单带行"),
+					workflowId,
+					report: { reportId: formTemplate.id, rows },
 				}),
-			"未分配",
+			"数据规则只支持表格形式模板",
 		);
-		await assertRejects(
-			() => asA().taskClose.reportBatchCreate({ ...input, distribution: { ...input.distribution, sourceRevision: 0 } }),
-			"源任务草稿已变更",
-		);
-		await assertRejects(
-			() =>
-				asA().taskClose.reportBatchCreate({
-					...input,
-					distribution: {
-						...input.distribution,
-						assignments: [
-							{ userId: B.id, value: "甲镇" },
-							{ userId: C.id, field: "value", value: 1 },
-						],
-					},
-				}),
-			"重复分配",
-		);
-		const batch = await asA().taskClose.reportBatchCreate(input);
-		createdBatchIds.push(batch.id);
-		const tasks = (await asA().taskClose.reportBatchGet({ id: batch.id })).tasks;
-		const b = tasks.find((task) => task.targetUserId === B.id)?.taskId;
-		const c = tasks.find((task) => task.targetUserId === C.id)?.taskId;
-		assert.ok(b && c);
-		const assignedB = tasks.find((task) => task.targetUserId === B.id)?.distribution;
-		const assignedC = tasks.find((task) => task.targetUserId === C.id)?.distribution;
-		assert.deepEqual(assignedB, {
-			sourceTaskId: source.id,
-			sourceRevision: 1,
-			field: "town",
-			fieldLabel: "街镇",
-			value: "甲镇",
-			rowCount: 2,
+		// 单执行人:范围也可以挂在执行人身上(界面上的「数据范围」)
+		const viaMember = await asA().taskClose.taskCreate({
+			name: taskName("按人配范围"),
+			workflowId,
+			report: { reportId: template.id, rows },
+			members: [{ userId: B.id, role: "executor", filter: [{ field: "town", value: "乙镇" }] }],
 		});
-		assert.deepEqual(assignedC, {
-			sourceTaskId: source.id,
-			sourceRevision: 1,
-			field: "area",
-			fieldLabel: "区域",
-			value: "东",
-			rowCount: 1,
+		assert.deepEqual((await asB().taskClose.reportGet({ taskId: viaMember.id }))?.report.draft, [
+			{ town: "乙镇", value: 3 },
+		]);
+		// 建任务前的模板视角:下载模版 → 解析回来(与任务视角同一套接口)
+		const modelFile = await asA().taskClose.reportExcelDownload({ reportId: template.id });
+		assert.ok(modelFile.fileBase64.length > 0);
+		const imported = await asA().taskClose.reportExcelPreview({
+			reportId: template.id,
+			fileBase64: modelFile.fileBase64,
 		});
-		const ownEvent = (await asB().taskClose.logList({ taskId: b })).items.find(
-			(item) => item.event === "report.distribute",
-		);
-		assert.deepEqual(ownEvent?.detail, assignedB);
-		const otherEvent = (await asC().taskClose.logList({ taskId: b })).items.find(
-			(item) => item.event === "report.distribute",
-		);
-		assert.equal(otherEvent?.detail, null, "非任务相关方不可读取分发条件");
-
-		assert.deepEqual((await asB().taskClose.reportGet({ taskId: b }))?.report.draft, [
-			{ town: "甲镇", value: 1, area: "西" },
-			{ town: "甲镇", value: 3, area: "西" },
-		]);
-		assert.deepEqual((await asC().taskClose.reportGet({ taskId: c }))?.report.draft, [
-			{ town: " 乙镇 ", value: 1, area: "东" },
-		]);
-		await assertRejects(() => asB().taskClose.reportGet({ taskId: c }), "无权查看");
+		assert.deepEqual(imported.value, [], "空模版(只有表头)解析出 0 行");
+		// shared 模板对非管理员也开放模板导入
+		assert.ok((await asB().taskClose.reportExcelDownload({ reportId: template.id })).fileBase64.length > 0);
 	});
-	it("十四个街镇分别分发给十四位执行人", async () => {
-		const userIds = Array.from({ length: 14 }, (_, index) => testId("u", `town${index}`, suffix, 36));
-		extraTestUserIds.push(...userIds);
-		await db.insert(sysUser).values(
-			userIds.map((id, index) => ({
-				id,
-				name: `${TEST_PREFIX}街镇执行人${index}-${suffix}`,
-				email: `${id}@test.local`,
-			})),
-		);
-		const template = await asA().taskClose.reportTemplateCreate({
-			name: `${TEST_PREFIX}街镇模板-${suffix}`,
-			schema: {
-				id: "town_batch",
+	it("多执行人 + 填报模板 fan-out 为一个父任务多个子任务,子草稿按各自过滤规则切片", async () => {
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: "fanout 分发",
+			payload: {
+				id: "fanout",
 				kind: "TABLE",
-				fields: [
-					{ id: "town", label: "街镇", type: "text" },
-					{ id: "count", label: "数量", type: "integer" },
-				],
+				fields: [{ id: "town", label: "街镇", type: "text" }],
 			},
 		});
 		createdReportTemplateIds.push(template.id);
-		const source = await asA().taskClose.taskCreate({
-			name: taskName("十四镇源"),
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("fanout"),
 			workflowId,
-			reportVersionId: template.versionId,
-		});
-		const rows = userIds.map((_, index) => ({ town: `街镇${index + 1}`, count: index + 1 }));
-		await asA().taskClose.reportSaveDraft({ taskId: source.id, revision: 0, draft: rows });
-		const batch = await asA().taskClose.reportBatchCreate({
-			name: taskName("十四镇分发"),
-			workflowId,
-			versionId: template.versionId,
-			requestId: `town14-${suffix}`,
-			targetUserIds: userIds,
-			distribution: {
-				sourceTaskId: source.id,
-				sourceRevision: 1,
-				field: "town",
-				assignments: userIds.map((userId, index) => ({ userId, value: rows[index].town })),
+			report: {
+				reportId: template.id,
+				rows: [{ town: "甲镇" }, { town: "乙镇" }],
 			},
-		});
-		createdBatchIds.push(batch.id);
-		const tasks = (await asA().taskClose.reportBatchGet({ id: batch.id })).tasks;
-		assert.equal(tasks.length, 14);
-		for (const [index, userId] of userIds.entries()) {
-			const task = tasks.find((item) => item.targetUserId === userId);
-			assert.ok(task);
-			const recipient = callerAs({ id: userId, name: `${TEST_PREFIX}街镇执行人` });
-			assert.deepEqual((await recipient.taskClose.reportGet({ taskId: task.taskId }))?.report.draft, [rows[index]]);
-			assert.equal(task.distribution?.rowCount, 1);
-			const other = tasks.find((item) => item.targetUserId !== userId);
-			assert.ok(other);
-			await assertRejects(() => recipient.taskClose.reportGet({ taskId: other.taskId }), "无权查看");
-		}
-	});
-	it("批次创建幂等、任务隔离，汇总只读取有效提交", async () => {
-		const schema = {
-			id: "survey",
-			kind: "OBJECT" as const,
-			fields: [
-				{ id: "key", label: "单位", type: "text" as const, required: true },
-				{ id: "amount", label: "数量", type: "decimal" as const, required: true },
+			members: [
+				{ userId: B.id, role: "executor", filter: [{ field: "town", value: "甲镇" }] },
+				{ userId: C.id, role: "executor", filter: [{ field: "town", value: "乙镇" }] },
 			],
-		};
-		const template = await asA().taskClose.reportTemplateCreate({ name: "批次模板", schema });
-		createdReportTemplateIds.push(template.id);
-		const input = {
-			name: taskName("批次"),
-			requestId: `batch-${suffix}`,
-			workflowId,
-			versionId: template.versionId,
-			targetUserIds: [B.id, C.id],
-		};
-		const results = await Promise.all([
-			asA().taskClose.reportBatchCreate(input),
-			asA().taskClose.reportBatchCreate(input),
+		});
+		const [parent] = await db.select().from(taskCloseTask).where(eq(taskCloseTask.id, parentId));
+		assert.equal(parent?.parent_id, null);
+		assert.deepEqual(parent?.report, { reportId: template.id });
+		const children = await db.select().from(taskCloseTask).where(eq(taskCloseTask.parent_id, parentId));
+		assert.equal(children.length, 2);
+		const childB = children.find(
+			(row) => (row.report as { filter?: Array<{ value: string }> }).filter?.[0]?.value === "甲镇",
+		);
+		const childC = children.find(
+			(row) => (row.report as { filter?: Array<{ value: string }> }).filter?.[0]?.value === "乙镇",
+		);
+		assert.ok(childB && childC);
+		const reportB = await asB().taskClose.reportGet({ taskId: childB.id });
+		assert.equal(reportB?.template.id, template.id);
+		assert.deepEqual(reportB?.report.draft, [{ town: "甲镇" }]);
+		const reportC = await asC().taskClose.reportGet({ taskId: childC.id });
+		assert.deepEqual(reportC?.report.draft, [{ town: "乙镇" }]);
+		// 父任务按创建人视角读填报;子任务草稿独立修订
+		assert.deepEqual((await asA().taskClose.reportGet({ taskId: parentId }))?.report.draft, [
+			{ town: "甲镇" },
+			{ town: "乙镇" },
 		]);
-		assert.equal(results[0].id, results[1].id);
-		assert.equal(results.filter((result) => result.created).length, 1);
-		const batchId = results[0].id;
-		createdBatchIds.push(batchId);
-		await assertRejects(() => asA().taskClose.reportBatchCreate({ ...input, name: "不同内容" }), "不同批次");
-		await assertRejects(() => asB().taskClose.reportBatchGet({ id: batchId }), "无权查看");
-		const batch = await asA().taskClose.reportBatchGet({ id: batchId });
-		assert.equal(batch.tasks.length, 2);
-		assert.equal(batch.expired, false, "未设截止时间的批次不算过期");
-		const taskB = batch.tasks.find((task) => task.targetUserId === B.id)?.taskId;
-		const taskC = batch.tasks.find((task) => task.targetUserId === C.id)?.taskId;
-		assert.ok(taskB && taskC && taskB !== taskC);
-		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: taskB, versionId: template.versionId, expectedRevision: 0 }),
-			"批次任务不能单独更换",
-		);
-		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: taskB, versionId: null, expectedRevision: 0 }),
-			"批次任务不能单独更换",
-		);
-		await assertRejects(
-			() => asB().taskClose.reportSaveDraft({ taskId: taskC, revision: 0, draft: { key: "甲", amount: 1 } }),
-			"当前执行人",
-		);
-		for (const [caller, taskId, amount] of [
-			[asB(), taskB, 1],
-			[asC(), taskC, 3],
-		] as const) {
-			const saved = await caller.taskClose.reportSaveDraft({ taskId, revision: 0, draft: { key: "同一单位", amount } });
-			await caller.taskClose.reportSubmit({ taskId, revision: saved.revision });
-		}
-		const append = await asA().taskClose.reportBatchSummary({ id: batchId, options: { strategy: "APPEND_ROWS" } });
-		assert.equal(append.total, 2);
-		assert.deepEqual(
-			new Set(append.rows.flatMap((row) => row.sources.map((source) => source.taskId))),
-			new Set([taskB, taskC]),
-		);
-		const merge = await asA().taskClose.reportBatchSummary({
-			id: batchId,
-			options: { strategy: "MERGE_BY_KEY", keys: ["key"] },
+	});
+	it("多执行人建任务 = 父 + N 子;我的任务列表只列父,执行人自己能直接看到子任务", async () => {
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("无模板分发"),
+			workflowId,
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
 		});
-		assert.equal(merge.total, 1);
-		assert.equal(merge.conflicts.length, 1);
-		await assertRejects(
-			() => asB().taskClose.reportBatchExcelExport({ id: batchId, options: { strategy: "APPEND_ROWS" } }),
-			"无权查看",
-		);
-		const exported = await asA().taskClose.reportBatchExcelExport({
-			id: batchId,
-			options: { strategy: "MERGE_BY_KEY", keys: ["key"] },
-		});
-		const workbook = XLSX.read(Buffer.from(exported.fileBase64, "base64"), { type: "buffer" });
-		assert.deepEqual(workbook.SheetNames, ["汇总", "冲突"]);
-		const aggregate = await asA().taskClose.reportBatchSummary({
-			id: batchId,
-			options: {
-				strategy: "AGGREGATE",
-				keys: ["key"],
-				metrics: [
-					{ field: "amount", operation: "sum" },
-					{ field: "amount", operation: "average" },
-					{ field: "amount", operation: "count" },
-				],
-			},
-		});
-		assert.equal(aggregate.rows[0].values.amount_sum, 4);
-		assert.equal(aggregate.rows[0].values.amount_average, 2);
-		assert.equal(aggregate.rows[0].values.amount_count, 2, "count 数的是非空值个数");
-		await asA().taskClose.reportReturn({ taskId: taskB, reason: "补充数据" });
-		assert.equal(
-			(await asA().taskClose.reportBatchSummary({ id: batchId, options: { strategy: "APPEND_ROWS" } })).total,
-			1,
-		);
-		await asA().taskClose.reportBatchClose({ id: batchId });
-		await assertRejects(() => asB().taskClose.reportSubmit({ taskId: taskB, revision: 2 }), "批次已关闭");
-		// 管理员能在列表里看到别人建的批次 —— 与 `reportBatchGet` / 汇总同口径
+		const children = await db.select().from(taskCloseTask).where(eq(taskCloseTask.parent_id, parentId));
+		assert.equal(children.length, 2, "两个执行人各一条子任务");
 		assert.ok(
-			!(await asB().taskClose.reportBatchList()).some((row) => row.id === batchId),
-			"非管理员的列表里不该出现别人的批次",
+			children.every((child) => child.report === null),
+			"没绑填报模板时子任务也没有填报规则",
 		);
-		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
-		try {
-			assert.ok(
-				(await asC().taskClose.reportBatchList()).some((row) => row.id === batchId),
-				"管理员应当能看到全部批次",
-			);
-		} finally {
-			await removeAllRolesOfUser(C.id);
-		}
+		const detail = await asA().taskClose.taskGet({ id: parentId });
+		assert.equal(detail.children.length, 2, "父任务详情带出子任务");
+		assert.equal(detail.members.filter((member) => member.role === "executor").length, 0, "父任务本身不设执行人");
+
+		// 创建人:列表只有父任务(子任务挂在父里),父任务卡片带 childCount
+		const mine = await asA().taskClose.taskList({ mine: true, pageSize: 100 });
+		const parentRow = mine.items.find((item) => item.id === parentId);
+		assert.equal(parentRow?.childCount, 2);
+		const childIds = new Set(children.map((child) => child.id));
+		assert.ok(!mine.items.some((item) => childIds.has(item.id)), "创建人的列表里不再单独列出子任务");
+
+		// 执行人:自己的那条子任务必须在列表里(否则没入口干活),父任务看不到
+		const childMembers = await db
+			.select()
+			.from(taskCloseMember)
+			.where(inArray(taskCloseMember.task_id, [...childIds]));
+		const bChild = children.find((child) =>
+			childMembers.some(
+				(member) => member.task_id === child.id && member.user_id === B.id && member.role === "executor",
+			),
+		);
+		assert.ok(bChild, "B 是其中一条子任务的执行人");
+		const asBList = await asB().taskClose.taskList({ mine: true, pageSize: 100 });
+		assert.ok(
+			asBList.items.some((item) => item.id === bChild.id),
+			"执行人能在「我的任务」里看到自己那条子任务",
+		);
+		assert.ok(!asBList.items.some((item) => item.id === parentId), "执行人看不到父任务");
 	});
 	it("填报版本、并发草稿、转交和退回重提保持独立历史", async () => {
 		const taskId = await newTask("填报生命周期");
-		const schema = {
+		const payload = {
 			id: "inspection",
 			kind: "OBJECT" as const,
 			fields: [{ id: "name", label: "名称", type: "text" as const, required: true }],
 		};
-		const template = await asA().taskClose.reportTemplateCreate({ name: "检查填报", schema });
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: "检查填报",
+			payload,
+		});
 		createdReportTemplateIds.push(template.id);
-		await asA().taskClose.reportBind({ taskId, versionId: template.versionId });
+		await asA().taskClose.reportBind({ taskId, reportId: template.id });
 		const excel = await asB().taskClose.reportExcelDownload({ taskId, templateOnly: true });
 		await assertRejects(
 			() => asC().taskClose.reportExcelPreview({ taskId, fileBase64: excel.fileBase64 }),
 			"当前执行人",
 		);
 		const preview = await asB().taskClose.reportExcelPreview({ taskId, fileBase64: excel.fileBase64 });
-		assert.equal(preview.mappingError, null);
-		await asA().taskClose.reportTemplatePublish({
+		assert.deepEqual(preview.value, {}, "空模版(只有表头)解析成空表单");
+		await callerAs({ ...A, isSuper: true }).taskClose.reportTemplatePublish({
 			id: template.id,
-			schema: { ...schema, fields: [{ id: "other", label: "新版", type: "text" }] },
+			payload: { ...payload, fields: [{ id: "other", label: "新版", type: "text" }] },
 		});
 		await assertRejects(() => asC().taskClose.reportGet({ taskId }), "无权查看");
 		const guest = callerAs({ id: "share-guest", name: "访客" });
 		assert.ok(await guest.taskClose.reportGet({ taskId }));
-		const prepared = await asA().taskClose.reportSaveDraft({ taskId, revision: 0, draft: { name: "准备数据" } });
+		const prepared = await asA().taskClose.reportSaveDraft({ taskId, revision: 0, draft: { other: "准备数据" } });
 		assert.equal(prepared.revision, 1);
 		assert.equal((await asA().taskClose.reportGet({ taskId }))?.canSubmit, false);
 
 		const saves = await Promise.allSettled([
-			asB().taskClose.reportSaveDraft({ taskId, revision: 1, draft: { name: "第一次" } }),
-			asB().taskClose.reportSaveDraft({ taskId, revision: 1, draft: { name: "并发" } }),
+			asB().taskClose.reportSaveDraft({ taskId, revision: 1, draft: { other: "第一次" } }),
+			asB().taskClose.reportSaveDraft({ taskId, revision: 1, draft: { other: "并发" } }),
 		]);
 		assert.equal(saves.filter((result) => result.status === "fulfilled").length, 1);
 		const first = await asB().taskClose.reportSubmit({ taskId, revision: 2 });
 		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId, versionId: template.versionId, expectedRevision: 2 }),
+			() => asA().taskClose.reportBind({ taskId, reportId: template.id, expectedRevision: 2 }),
 			"已有正式提交",
 		);
 		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId, versionId: null, expectedRevision: 2 }),
+			() => asA().taskClose.reportBind({ taskId, reportId: null, expectedRevision: 2 }),
 			"已有正式提交",
 		);
 		assert.equal((await asB().taskClose.reportSubmit({ taskId, revision: 2 })).id, first.id);
@@ -756,11 +622,11 @@ describe("任务闭环", () => {
 			() => asB().taskClose.reportSaveDraft({ taskId, revision: 3, draft: { name: "旧执行人" } }),
 			"当前执行人",
 		);
-		const saved = await asC().taskClose.reportSaveDraft({ taskId, revision: 3, draft: { name: "第二次" } });
+		const saved = await asC().taskClose.reportSaveDraft({ taskId, revision: 3, draft: { other: "第二次" } });
 		const second = await asC().taskClose.reportSubmit({ taskId, revision: saved.revision });
 		assert.notEqual(first.id, second.id);
 		const report = await asA().taskClose.reportGet({ taskId });
-		assert.equal(report?.version?.id, template.versionId);
+		assert.equal(report?.template.id, template.id);
 		assert.equal(report?.submissions.length, 2);
 		assert.equal(report?.report.current_submission_id, second.id);
 		assert.notDeepEqual(report?.submissions[0].payload, report?.submissions[1].payload);
@@ -768,14 +634,17 @@ describe("任务闭环", () => {
 
 	it("幂等重提只对上一位提交人生效 —— 换人后旧 revision 不能被当成本人的已交", async () => {
 		const id = await newTask("幂等重提换人");
-		const schema = {
+		const payload = {
 			id: "idem_report",
 			kind: "OBJECT" as const,
 			fields: [{ id: "name", label: "名称", type: "text" as const }],
 		};
-		const template = await asA().taskClose.reportTemplateCreate({ name: `幂等模板-${suffix}`, schema });
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: `幂等模板-${suffix}`,
+			payload,
+		});
 		createdReportTemplateIds.push(template.id);
-		await asA().taskClose.reportBind({ taskId: id, versionId: template.versionId });
+		await asA().taskClose.reportBind({ taskId: id, reportId: template.id });
 		const saved = await asB().taskClose.reportSaveDraft({ taskId: id, revision: 0, draft: { name: "乙交的" } });
 		const submitting = await asB().taskClose.reportSubmit({ taskId: id, revision: saved.revision });
 		assert.ok(submitting.id);
@@ -868,18 +737,9 @@ describe("任务闭环", () => {
 		assert.ok(rejected && rejected.status === "rejected" && String(rejected.reason).includes("已有执行人"));
 		const members = (await asA().taskClose.taskGet({ id })).members;
 		assert.equal(members.filter((member) => member.role === "executor").length, 1);
-		await assertRejects(
-			() =>
-				asA().taskClose.taskCreate({
-					name: taskName("多执行人"),
-					workflowId,
-					members: [
-						{ userId: B.id, role: "executor" },
-						{ userId: C.id, role: "executor" },
-					],
-				}),
-			"只能有一个执行人",
-		);
+		// 多层指派依然每股只有一个执行人;而**建任务时**给多个执行人 = fan-out(见下一条用例)
+		const members2 = (await asA().taskClose.taskGet({ id })).members;
+		assert.equal(members2.filter((member) => member.role === "executor").length, 1);
 	});
 
 	it("撤回与回复竞争时不能复活已撤回的征询", async () => {
@@ -1108,17 +968,17 @@ describe("任务闭环", () => {
 		await asA().taskClose.taskUpdate({
 			id,
 			name: "payload 保留",
-			payload: { type: "internal", content: [{ kind: "text", text: "原始说明" }] },
+			payload: { type: "internal", links: [{ kind: "link", url: "/tasks" }] },
 		});
 		// 只改名字,不带 payload
 		await asA().taskClose.taskUpdate({ id, name: "改了名字" });
 		let detail = await asA().taskClose.taskGet({ id });
-		assert.equal(detail.content[0]?.kind, "text", "不传 payload 不能把内容清空");
+		assert.equal(detail.links[0]?.url, "/tasks", "不传 payload 不能把链接清空");
 		assert.equal((detail.task.payload as { type?: string }).type, "internal", "type 也要保住");
 		// 显式 null 才是清空
 		await asA().taskClose.taskUpdate({ id, name: "改了名字", payload: null });
 		detail = await asA().taskClose.taskGet({ id });
-		assert.equal(detail.content.length, 0, "payload: null 才清空");
+		assert.equal(detail.links.length, 0, "payload: null 才清空");
 	});
 
 	it("taskUpdate 不传 description / dueAt 时保留旧值,传 null 才是清空", async () => {
@@ -1642,7 +1502,7 @@ describe("任务闭环", () => {
 });
 
 /** `who` 取值(与 `doc/task-close.md` 的 who 协议一致)—— 帮调用点把字面量收敛成联合类型 */
-type Who = "creator" | "participant" | "executor" | "any";
+type Who = "creator" | "participant" | "executor";
 const edge = (from: string, to: string, who: Who[], via: "direct" | "action") => ({ from, to, who, via });
 
 /** 状态字面量 → `{ value, label }`(默认 label = value;要断言"UI 显示 label"就显式给中文) */
@@ -1781,17 +1641,20 @@ describe("流程模板", () => {
  */
 describe("任务闭环 · 只读接口", () => {
 	it("删除模板保留已有填报，但阻止再次绑定和分发", async () => {
-		const schema = {
+		const payload = {
 			id: "delete_template",
 			kind: "TABLE" as const,
 			fields: [{ id: "town", label: "街镇", type: "text" as const }],
 		};
-		const template = await asA().taskClose.reportTemplateCreate({ name: `${TEST_PREFIX}删除模板-${suffix}`, schema });
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: `${TEST_PREFIX}删除模板-${suffix}`,
+			payload,
+		});
 		createdReportTemplateIds.push(template.id);
 		const task = await asA().taskClose.taskCreate({
 			name: taskName("删除模板后保留填报"),
 			workflowId,
-			reportVersionId: template.versionId,
+			report: { reportId: template.id },
 			members: [{ userId: B.id, role: "executor" }],
 		});
 		await asA().taskClose.reportSaveDraft({ taskId: task.id, revision: 0, draft: [{ town: "甲镇" }] });
@@ -1802,29 +1665,20 @@ describe("任务闭环 · 只读接口", () => {
 			"只有模板创建人或管理员",
 		);
 		await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateRemove({ id: template.id });
-		assert.ok(!(await asA().taskClose.reportTemplateList()).some((item) => item.id === template.id));
+		assert.ok(
+			!(await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateList()).some((item) => item.id === template.id),
+		);
 		const saved = await asB().taskClose.reportGet({ taskId: task.id });
 		assert.deepEqual(saved?.report.draft, [{ town: "甲镇" }]);
-		assert.equal(saved?.version.id, template.versionId);
+		assert.equal(saved?.template.id, template.id);
 		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 1, draft: [{ town: "乙镇" }] });
 		await assertRejects(
-			() => asA().taskClose.taskCreate({ name: taskName("不应创建"), workflowId, reportVersionId: template.versionId }),
+			() => asA().taskClose.taskCreate({ name: taskName("不应创建"), workflowId, report: { reportId: template.id } }),
 			"填报模板已删除",
 		);
 		const unbound = await asA().taskClose.taskCreate({ name: taskName("不可绑定"), workflowId });
 		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: unbound.id, versionId: template.versionId }),
-			"填报模板已删除",
-		);
-		await assertRejects(
-			() =>
-				asA().taskClose.reportBatchCreate({
-					name: "不可分发",
-					workflowId,
-					versionId: template.versionId,
-					targetUserIds: [B.id],
-					requestId: testId("req", "remove", suffix, 32),
-				}),
+			() => asA().taskClose.reportBind({ taskId: unbound.id, reportId: template.id }),
 			"填报模板已删除",
 		);
 		await assertRejects(
@@ -1833,49 +1687,53 @@ describe("任务闭环 · 只读接口", () => {
 		);
 	});
 	it("reportTemplateList:版本按倒序挂在模板下,别家建的也看得到", async () => {
-		const schema = {
+		const payload = {
 			id: "list_template",
 			kind: "OBJECT" as const,
 			fields: [{ id: "name", label: "名称", type: "text" as const }],
 		};
-		const template = await asA().taskClose.reportTemplateCreate({ name: `${TEST_PREFIX}列表模板-${suffix}`, schema });
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: `${TEST_PREFIX}列表模板-${suffix}`,
+			payload,
+			shared: true,
+		});
 		createdReportTemplateIds.push(template.id);
-		await asA().taskClose.reportTemplatePublish({
+		await callerAs({ ...A, isSuper: true }).taskClose.reportTemplatePublish({
 			id: template.id,
 			name: `${TEST_PREFIX}更新模板-${suffix}`,
-			schema: { ...schema, fields: [{ id: "changed", label: "改过", type: "text" as const }] },
+			payload: { ...payload, fields: [{ id: "changed", label: "改过", type: "text" as const }] },
 		});
 
-		await assertRejects(
-			() =>
-				asA().taskClose.reportTemplatePublish({
-					id: template.id,
-					expectedVersionId: template.versionId,
-					name: "不应覆盖",
-					schema,
-				}),
-			"模板已有新版本",
-		);
+		await assertRejects(() => asC().taskClose.reportTemplatePublish({ id: template.id, payload }), "没有权限");
 
-		await assertRejects(
-			() => asC().taskClose.reportTemplatePublish({ id: template.id, schema }),
-			"只有模板创建人或管理员",
-		);
+		// 丙拿到「填报模板」的页面授权(casbin p 行挂菜单,装载时展开出 page:*:view)—— 但不是创建人
+		const [reportMenu] = await db
+			.select({ id: sysMenu.id })
+			.from(sysMenu)
+			.where(eq(sysMenu.path, "/task-close/report-templates"))
+			.limit(1);
+		assert.ok(reportMenu, "要先跑 `pnpm db:seed:menus` 才有「填报模板」菜单");
+		const casbinRowId = testId("cb", "rp", suffix);
+		createdCasbinRowIds.push(casbinRowId);
+		await db
+			.insert(sysCasbinRule)
+			.values({ id: casbinRowId, ptype: "p", v0: `user:${C.id}`, v1: `menu:${reportMenu.id}`, v2: "access" });
+		clearCasbinCache();
+
 		const list = await asC().taskClose.reportTemplateList();
 		const mine = list.find((row) => row.id === template.id);
-		assert.ok(mine, "丙没参与也能看到模板(列表是全局只读)");
+		assert.ok(mine, "有页面权限的人都能看到模板(列表全局只读)");
 		assert.equal(mine.name, `${TEST_PREFIX}更新模板-${suffix}`);
-		assert.equal(mine.canManage, false);
-		assert.equal((await asA().taskClose.reportTemplateList()).find((row) => row.id === template.id)?.canManage, true);
-		assert.deepEqual(
-			mine.versions.map((version) => version.version),
-			[2, 1],
-			"版本倒序,最新的在前",
+		assert.equal(mine.canManage, false, "丙不是创建人也不是管理员");
+		assert.equal(
+			(await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateList()).find((row) => row.id === template.id)
+				?.canManage,
+			true,
 		);
 		assert.equal(
-			(mine.versions[0]?.schema as { fields: Array<{ id: string }> }).fields[0]?.id,
+			(mine.payload as { fields: Array<{ id: string }> }).fields[0]?.id,
 			"changed",
-			"第一条是最新发布的结构",
+			"编辑保存后,payload 即最新发布的结构",
 		);
 	});
 
@@ -1909,6 +1767,53 @@ describe("任务闭环 · 只读接口", () => {
 			"status 过滤要真的生效",
 		);
 
+		// workflowId:按一个不存在的模板 id 筛必为空(三条任务都是 workflows[0] 的)
+		const byWorkflow = await asC().taskClose.taskList({ keyword, workflowId: "wf-not-exist" });
+		assert.equal(byWorkflow.items.length, 0, "按流程模板筛要真的生效");
+		assert.equal(byWorkflow.stats.total, 0, "统计跟随筛选");
+
+		// createdAfter + 统计:把第二条拨到 8 天前、再设一个已过的截止时间
+		await db
+			.update(taskCloseTask)
+			.set({
+				created_at: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+				due_at: new Date(Date.now() - 3 * 60 * 60 * 1000),
+			})
+			.where(eq(taskCloseTask.id, second.id));
+		const filtered = await asC().taskClose.taskList({ keyword });
+		assert.equal(filtered.stats.total, 3, "统计与列表同一筛选口径:total 与 total 一致");
+		assert.equal(filtered.stats.recentCreated, 2, "拨到 8 天前的那条掉出「近 7 天新建」");
+		assert.equal(filtered.stats.overdue, 1, "截止时间已过 → 已到期");
+		assert.equal(filtered.stats.dueSoon, 0, "没有设在未来截止的任务");
+		const byTime = await asC().taskClose.taskList({
+			keyword,
+			createdAfter: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+		});
+		assert.ok(!byTime.items.some((row) => row.id === second.id), "时间筛选要真的生效");
+		assert.equal(byTime.stats.total, 2, "统计跟随时间筛选");
+
+		// createdBefore 与组合区间:结束时间拨到 7 天前只剩第二条;开始+结束一起夹也只剩它
+		const beforeOnly = await asC().taskClose.taskList({
+			keyword,
+			createdBefore: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+		});
+		assert.deepEqual(
+			beforeOnly.items.map((row) => row.id),
+			[second.id],
+			"结束时间筛选要真的生效",
+		);
+		assert.equal(beforeOnly.stats.total, 1, "统计跟随结束时间筛选");
+		const windowed = await asC().taskClose.taskList({
+			keyword,
+			createdAfter: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+			createdBefore: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+		});
+		assert.deepEqual(
+			windowed.items.map((row) => row.id),
+			[second.id],
+			"开始 + 结束 的组合区间要真的生效",
+		);
+
 		// 分页:pageSize 2 → 第一页两条 / total 仍是 3
 		const paged = await asC().taskClose.taskList({ keyword, page: 1, pageSize: 2 });
 		assert.equal(paged.items.length, 2);
@@ -1920,7 +1825,7 @@ describe("任务闭环 · 只读接口", () => {
 		await asA().taskClose.taskUpdate({
 			id,
 			name: taskName("附件地址"),
-			payload: { content: [], attachments: [ATTACH_FILE_ID] },
+			payload: { links: [], attachments: [ATTACH_FILE_ID] },
 		});
 		await asC().taskClose.commentCreate({
 			taskId: id,
@@ -1953,7 +1858,7 @@ describe("任务闭环 · 只读接口", () => {
 		await asA().taskClose.taskUpdate({
 			id,
 			name: taskName("附件已删"),
-			payload: { content: [], attachments: [DELETED_FILE_ID] },
+			payload: { links: [], attachments: [DELETED_FILE_ID] },
 		});
 		await db.update(sysFile).set({ status: 2 }).where(eq(sysFile.id, DELETED_FILE_ID));
 		// 归属链仍然成立(payload 里还在),但状态挡住了
@@ -1965,14 +1870,17 @@ describe("任务闭环 · 只读接口", () => {
 			name: taskName("说明修订"),
 			workflowId,
 			description: "初版说明",
-			payload: { content: [{ kind: "text", text: "初版正文" }], attachments: [ATTACH_FILE_ID] },
+			payload: {
+				links: [{ kind: "link", url: "https://example.com/v1" }],
+				attachments: [ATTACH_FILE_ID],
+			},
 			members: [{ userId: B.id, role: "participant" }],
 		});
 		await asA().taskClose.taskUpdate({
 			id,
 			name: taskName("说明修订"),
 			description: "第二版说明",
-			payload: { content: [{ kind: "text", text: "第二版正文" }] },
+			payload: { links: [{ kind: "link", url: "https://example.com/v2" }] },
 		});
 
 		const history = await asA().taskClose.contentHistory({ taskId: id });
@@ -1982,7 +1890,7 @@ describe("任务闭环 · 只读接口", () => {
 			"修订号倒序",
 		);
 		assert.equal(history[0]?.description, "第二版说明");
-		assert.equal(history[0]?.content[0]?.kind, "text");
+		assert.equal(history[0]?.links[0]?.url, "https://example.com/v2");
 		assert.equal(history[0]?.attachments.length, 0, "第二版去掉了附件");
 		assert.equal(history[1]?.description, "初版说明");
 		assert.equal(history[1]?.attachments[0]?.id, ATTACH_FILE_ID, "旧修订的附件仍能解析");

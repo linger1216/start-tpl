@@ -32,12 +32,12 @@
         "tests/task-report-spec.test.ts",
         "tests/task-report-excel.test.ts",
         "src/lib/task-close-reminders.ts",
-        "src/lib/task-content.ts",
+        "src/lib/task-payload.ts",
         "scripts/seed-task-close.ts",
         "tests/task-close.test.ts",
         "tests/mention-ranges.test.ts",
         "tests/task-close-log.test.ts",
-        "tests/task-content.test.ts",
+        "tests/task-link.test.ts",
         "doc/task-close.md",
         "doc/task-forms.md",
         "doc/任务插件化设计.md"
@@ -48,7 +48,7 @@
         "#/components/modules/task-close",
         "#/lib/task-close-log",
         "#/lib/task-close-spec",
-        "#/lib/task-content"
+        "#/lib/task-payload"
       ],
       "rules": [
         { "file": "scripts/job-runner.ts", "kind": "imports", "from": ["../src/lib/task-close-reminders.ts"] },
@@ -107,14 +107,14 @@
           "file": "scripts/sync-table-meta.ts",
           "kind": "lines",
           "prefixes": [
-            "tc_content_revision:", "tc_report_batch:", "tc_report_batch_task:", "tc_report_template:", "tc_report_template_version:", "tc_task_report:", "tc_report_submission:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
+            "tc_content_revision:", "tc_report_template:", "tc_task_report:", "tc_report_submission:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
             "{ table: \"tc_", "// tc_", "// ── 任务闭环"
           ],
           "min": 40
         },
         { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:task-close"] }
       ],
-      "tables": ["tc_content_revision", "tc_report_batch", "tc_report_batch_task", "tc_report_template", "tc_report_template_version", "tc_task_report", "tc_report_submission", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
+      "tables": ["tc_content_revision", "tc_report_template", "tc_task_report", "tc_report_submission", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
       "seeds": [],
       "hints": [
         "`tc_*` 十三张表不再建;`pnpm db:create` 只建剩下的表",

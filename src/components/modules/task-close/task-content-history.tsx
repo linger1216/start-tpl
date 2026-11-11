@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
-import { TaskContentBlocks } from "#/components/modules/task-close/task-content-blocks";
+import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { Button } from "#/components/ui/button";
 import {
 	DIALOG_FIT,
@@ -14,7 +14,7 @@ import {
 } from "#/components/ui/dialog";
 import { useTRPC } from "#/integrations/trpc/react";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import type { TaskAttachment } from "#/lib/task-content";
+import type { TaskAttachment } from "#/lib/task-payload";
 import { formatLocalMinute } from "#/lib/time";
 
 export function TaskContentHistory({
@@ -66,7 +66,7 @@ export function TaskContentHistory({
 											{current.createdAt ? formatLocalMinute(current.createdAt) : PLACEHOLDER_EMPTY}
 										</p>
 										{current.description && <p className="whitespace-pre-wrap text-sm">{current.description}</p>}
-										<TaskContentBlocks content={current.content} />
+										<TaskLinkBlocks links={current.links} />
 										<TaskAttachmentList attachments={current.attachments} onOpen={onOpenAttachment} />
 									</>
 								)}

@@ -392,23 +392,16 @@ const STATEMENTS: string[] = [
       "id" varchar(32) not null,
       "name" varchar(255) not null,
       "creator_id" varchar(36) not null,
+      "payload" text,
+      "shared" tinyint default 0 not null,
       "created_at" datetime default current_timestamp,
       "updated_at" datetime default current_timestamp,
+      "deleted_at" datetime,
       primary key ("id")
     )`,
-	`create table if not exists ${S}."tc_report_template_version" (
-      "id" varchar(32) not null,
-      "template_id" varchar(32) not null,
-      "version" int not null,
-      "schema" text not null,
-      "created_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_report_template_version" on ${S}."tc_report_template_version" ("template_id", "version")`,
 	`create table if not exists ${S}."tc_task_report" (
       "id" varchar(32) not null,
       "task_id" varchar(191) not null,
-      "version_id" varchar(32) not null,
       "status" varchar(16) not null,
       "draft" text default null,
       "revision" int not null default 0,
@@ -418,12 +411,10 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
 	`create unique index if not exists "uk_task_report_task" on ${S}."tc_task_report" ("task_id")`,
-	`create index if not exists "idx_task_report_version" on ${S}."tc_task_report" ("version_id")`,
 	`create table if not exists ${S}."tc_report_submission" (
       "id" varchar(32) not null,
       "report_id" varchar(32) not null,
       "task_id" varchar(191) not null,
-      "version_id" varchar(32) not null,
       "submitter_id" varchar(36) not null,
       "revision" int not null,
       "payload" text not null,
@@ -432,32 +423,6 @@ const STATEMENTS: string[] = [
     )`,
 	`create unique index if not exists "uk_report_submission_revision" on ${S}."tc_report_submission" ("report_id", "revision")`,
 	`create index if not exists "idx_report_submission_task" on ${S}."tc_report_submission" ("task_id", "created_at")`,
-	`create table if not exists ${S}."tc_report_batch" (
-      "id" varchar(32) not null,
-      "creator_id" varchar(36) not null,
-      "request_id" varchar(64) not null,
-      "request_hash" varchar(64) not null,
-      "name" varchar(255) not null,
-      "version_id" varchar(32) not null,
-      "workflow_id" varchar(191) not null,
-      "status" varchar(16) not null,
-      "due_at" datetime default null,
-      "created_at" datetime default current_timestamp,
-      "updated_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_report_batch_request" on ${S}."tc_report_batch" ("creator_id", "request_id")`,
-	`create index if not exists "idx_report_batch_creator" on ${S}."tc_report_batch" ("creator_id", "created_at")`,
-	`create table if not exists ${S}."tc_report_batch_task" (
-      "id" varchar(32) not null,
-      "batch_id" varchar(32) not null,
-      "task_id" varchar(191) not null,
-      "target_user_id" varchar(36) not null,
-      "created_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_report_batch_task" on ${S}."tc_report_batch_task" ("task_id")`,
-	`create unique index if not exists "uk_report_batch_target" on ${S}."tc_report_batch_task" ("batch_id", "target_user_id")`,
 	`create table if not exists ${S}."tc_content_revision" (
       "id" varchar(32) not null,
       "task_id" varchar(191) not null,
@@ -487,6 +452,9 @@ const STATEMENTS: string[] = [
       "priority" tinyint default null,
       "payload" text default null,
       "workflow" text not null,
+      "workflow_id" varchar(191),
+      "parent_id" varchar(191),
+      "report" text,
       "deleted_at" datetime default null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
@@ -494,6 +462,7 @@ const STATEMENTS: string[] = [
     )`,
 	`create index if not exists "idx_task_status_created" on ${S}."tc_task" ("status")`,
 	`create index if not exists "idx_task_creator_status" on ${S}."tc_task" ("creator_id", "status")`,
+	`create index if not exists "idx_task_parent" on ${S}."tc_task" ("parent_id")`,
 	`create table if not exists ${S}."tc_action" (
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
@@ -684,6 +653,15 @@ async function main() {
 		{ table: "sys_dept", column: "deleted_at", ddl: "datetime" },
 		{ table: "sys_role", column: "deleted_at", ddl: "datetime" },
 		{ table: "demo_grid", column: "deleted_at", ddl: "datetime" },
+		// 填报模板合并版本表:schema → payload(结构搬进模板行)+ shared 可见性标志
+		{ table: "tc_report_template", column: "payload", ddl: "text" },
+		{ table: "tc_report_template", column: "shared", ddl: "tinyint default 0 not null" },
+		{ table: "tc_report_template", column: "deleted_at", ddl: "datetime" },
+		// 流程模板来源(「我的任务」按模板筛):v1 起写入;旧任务 null(快照里没有模板 id,无法回填)
+		{ table: "tc_task", column: "workflow_id", ddl: "varchar(191)" },
+		// 父子任务 + 填报规则(批次退役)
+		{ table: "tc_task", column: "parent_id", ddl: "varchar(191)" },
+		{ table: "tc_task", column: "report", ddl: "text" },
 		{ table: "sys_data_policy", column: "deleted_at", ddl: "datetime" },
 		{ table: "sys_data_plugin", column: "deleted_at", ddl: "datetime" },
 	];
@@ -704,12 +682,23 @@ async function main() {
 		}
 	}
 
+	// ── 填报模板 / 填报批次退役:版本表与批次两张表整体删除(开发库删掉重来,数据不迁移)──
+	for (const table of ["tc_report_template_version", "tc_report_batch_task", "tc_report_batch"]) {
+		if (existingTables.has(table)) {
+			await run(`drop table ${S}."${table}"`);
+			console.log(`✓ 已删除 ${table}(版本/批次概念退役)`);
+		}
+	}
+
 	// ── 老库删列:列被合并 / 废弃时在这里登记(幂等;删列前先删挂在它上面的外键)──
 	// 达梦老库列名变更(`code` → `fn`)不走本脚本 —— 达梦 `ALTER TABLE RENAME COLUMN` 在 8.1+
 	// 才有,且**必须在所有列 drop 前**跑,迁移时人工执行:
 	//   alter table "sys_data_plugin" rename column "code" to "fn";
 	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
 		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+		// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
+		{ table: "tc_task_report", column: "version_id" },
+		{ table: "tc_report_submission", column: "version_id" },
 		// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 		{ table: "sys_data_plugin", column: "produces" },
 		// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃

@@ -25,17 +25,18 @@ const rows = [
 			// 状态 = { value 落库/引用, label 展示名 };UI 只显示 label
 			statuses: [
 				{ value: "open", label: "进行中" },
-				{ value: "done", label: "待核验" },
-				{ value: "closed", label: "已关闭", terminal: true },
+				{ value: "done", label: "处置完成" },
+				// closed 不是结束态:关了还能重开,归档(archived)才是终点
+				{ value: "closed", label: "已关闭" },
 				{ value: "archived", label: "已归档", terminal: true },
 			],
 			initial: "open",
 			edges: [
-				// 完成待核验:执行者和创建者都能发起，全部通过后落到 done
+				// 处置完成:执行者和创建者都能发起，全部通过后落到 done
 				{ from: "open", to: "done", who: ["creator", "executor"], via: "action" },
-				// 下面四条都是创建者直改,不经过 action
+				// 下面四条都是直改,不经过 action(其中 done→open 执行者也能改)
 				{ from: "done", to: "closed", who: ["creator"], via: "direct" },
-				{ from: "done", to: "open", who: ["creator"], via: "direct" },
+				{ from: "done", to: "open", who: ["creator", "executor"], via: "direct" },
 				{ from: "closed", to: "open", who: ["creator"], via: "direct" },
 				{ from: "closed", to: "archived", who: ["creator"], via: "direct" },
 			],
@@ -47,8 +48,10 @@ const rows = [
 			name: "安全检查流程",
 			statuses: [
 				{ value: "open", label: "进行中" },
+				// pending 暂时是孤立状态(没有边引用它)—— 按库里现状保留
+				{ value: "pending", label: "待审批" },
 				{ value: "done", label: "待核验" },
-				{ value: "closed", label: "已关闭", terminal: true },
+				{ value: "closed", label: "已关闭" },
 			],
 			initial: "open",
 			edges: [

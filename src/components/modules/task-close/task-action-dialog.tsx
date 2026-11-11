@@ -30,6 +30,7 @@ export function TaskActionDialog({
 	pendingText,
 	onConfirm,
 	bodyClassName,
+	contentClassName,
 	children,
 }: {
 	open: boolean;
@@ -44,11 +45,13 @@ export function TaskActionDialog({
 	onConfirm: () => void;
 	/** 默认 `space-y-1 py-1`(Select / SearchSelect 行);Picker 类传空串吃掉默认 */
 	bodyClassName?: string;
+	/** 换弹窗宽度用(如 `sm:max-w-2xl`);默认 `sm:max-w-lg` */
+	contentClassName?: string;
 	children: ReactNode;
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className={`${DIALOG_FIT} sm:max-w-lg`}>
+			<DialogContent className={`${DIALOG_FIT} ${contentClassName ?? "sm:max-w-lg"}`}>
 				<DialogHeader>
 					<DialogTitle>{title}</DialogTitle>
 					{description ? <DialogDescription>{description}</DialogDescription> : null}

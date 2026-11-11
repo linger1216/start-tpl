@@ -8,7 +8,7 @@ const condition = z.object({ field: fieldId, equals: scalar });
 export const taskReportFieldSchema = z.object({
 	id: fieldId,
 	label: z.string().trim().min(1).max(100),
-	type: z.enum(["text", "integer", "decimal", "date", "datetime", "select", "multiselect", "boolean"]),
+	type: z.enum(["text", "integer", "decimal", "date", "datetime", "select", "multiselect"]),
 	required: z.boolean().default(false),
 	readOnly: z.boolean().default(false),
 	defaultValue: z.union([scalar, z.array(z.string().max(200)).max(100)]).optional(),
@@ -54,6 +54,12 @@ export type TaskReportIssue = { row: number | null; field: string; message: stri
 export type ReportValue = string | number | boolean | string[] | null;
 export type ReportRow = Record<string, ReportValue>;
 
+/** 一行填报数据的运行时形状(键 = 字段标识;值 = ReportValue)。建任务直带行(`report.rows`)时用它把关。 */
+export const reportRowSchema = z.record(
+	z.string(),
+	z.union([z.string().max(5000), z.number().finite(), z.boolean(), z.array(z.string().max(200)).max(100), z.null()]),
+);
+
 /** 剪贴板 TSV → 矩形网格;末尾空行丢掉(Excel 复制的尾换行不算一行)。 */
 export function parseClipboardGrid(text: string): string[][] {
 	const lines = text.replace(/\r\n?/g, "\n").split("\n");
@@ -71,8 +77,6 @@ function cellValue(field: TaskReportSchema["fields"][number], raw: string): Repo
 			const value = Number(text);
 			return Number.isFinite(value) ? value : text;
 		}
-		case "boolean":
-			return /^(true|1|是|y|yes)$/i.test(text);
 		case "multiselect":
 			return text
 				.split(/[,，]/)
@@ -139,9 +143,6 @@ export function validateTaskReport(schema: TaskReportSchema, value: unknown): Ta
 					break;
 				case "decimal":
 					valid = typeof value === "number" && Number.isFinite(value);
-					break;
-				case "boolean":
-					valid = typeof value === "boolean";
 					break;
 				case "select":
 					valid = typeof value === "string" && !!field.options?.includes(value);

@@ -340,6 +340,10 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"taskClose.workflowCreate": "sys:tcWorkflow:add",
 	"taskClose.workflowUpdate": "sys:tcWorkflow:edit",
 	"taskClose.workflowRemove": "sys:tcWorkflow:remove",
+	// 填报模板(「填报模板」页):列表按页面码,增 / 发布 / 删用按钮权限点(见 scripts/seed-rbac.ts)
+	"taskClose.reportTemplateList": pagePermOf("/task-close/report-templates"),
+	"taskClose.reportTemplateCreate": "sys:tc_report_template:add",
+	"taskClose.reportTemplatePublish": "sys:tc_report_template:edit",
 	"taskClose.reportTemplateRemove": "sys:tc_report_template:remove",
 };
 
@@ -409,6 +413,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"para.byKey",
 	// 类别 2:访客令牌清单 —— 「全系统一份」的配置,不看部门(见 doc/外链分享.md)
 	"shareToken.list",
+	// 类别 2:填报模板清单 —— 「全系统一份」的配置,不看部门(权限维度已在 PERM_BY_PATH 按页面码登记)
+	"taskClose.reportTemplateList",
 	// 类别 2:数据权限自己的配置 —— 规则 / 插件 / 资源元数据是"全系统一份",不存在"这一行归谁看"
 	"dataScope.list",
 	"dataScope.resources",
@@ -435,11 +441,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// `taskList` 的 `mine` 是 `creator_id ∪ tc_member`,其余按 `taskId` 直读(天生自限范围)。
 	"taskClose.workflowList",
 	"taskClose.contentHistory",
-	"taskClose.reportTemplateList",
+	// 填报读取在 resolver 中按任务成员关系授权;模板引用在 tc_task.report(「填报模板」页管理)
 	"taskClose.reportGet",
-	"taskClose.reportBatchList",
-	"taskClose.reportBatchGet",
-	"taskClose.reportBatchSummary",
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionList",
@@ -473,17 +476,12 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	// (创建者 / 参与者 / 执行者的角色存在 `tc_member`,RBAC 的角色模型表达不了)。
 	// 等菜单建起来、权限点收窄到「谁能进任务页」时,再按页面码挪进 `PERM_BY_PATH`。
 	"taskClose.taskCreate",
-	"taskClose.reportTemplateCreate",
-	"taskClose.reportTemplatePublish",
 	"taskClose.reportBind",
 	"taskClose.reportSaveDraft",
 	"taskClose.reportSubmit",
 	"taskClose.reportReturn",
-	"taskClose.reportBatchCreate",
-	"taskClose.reportBatchClose",
 	"taskClose.reportExcelDownload",
 	"taskClose.reportExcelPreview",
-	"taskClose.reportBatchExcelExport",
 	"taskClose.taskUpdate",
 	"taskClose.taskRemove",
 	"taskClose.taskTransit",
@@ -549,12 +547,8 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.workflowList",
 	// 说明历史在 resolver 内校验任务成员关系。
 	"taskClose.contentHistory",
-	// 填报读取在 resolver 中按任务成员关系授权；模板用于任务创建和详情。
-	"taskClose.reportTemplateList",
+	// 填报读取在 resolver 中按任务成员关系授权;模板清单已按页面码登记(「填报模板」页),见 PERM_BY_PATH
 	"taskClose.reportGet",
-	"taskClose.reportBatchList",
-	"taskClose.reportBatchGet",
-	"taskClose.reportBatchSummary",
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionList",

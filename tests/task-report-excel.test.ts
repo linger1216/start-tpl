@@ -86,17 +86,26 @@ describe("填报 Excel", () => {
 		assert.equal(result.issues[0].excelRow, 4);
 		assert.equal(result.issues[0].field, "quantity");
 	});
-	it("支持列映射且不接受重复列", async () => {
-		const encoded = workbook([
-			["列一", "列二"],
+	it("表头按中文名认(老格式的英文 id 表头也认),对不上就报错", async () => {
+		// 新模版:只有中文表头,数据从第 2 行起
+		const chinese = workbook([
 			["名称", "数量"],
 			["甲", "3"],
 		]).toString("base64");
-		assert.ok((await previewReportWorkbook(schema, encoded)).mappingError);
-		assert.deepEqual((await previewReportWorkbook(schema, encoded, { name: 0, quantity: 1 })).value, [
-			{ name: "甲", quantity: 3 },
-		]);
-		assert.ok((await previewReportWorkbook(schema, encoded, { name: 0, quantity: 0 })).mappingError);
+		assert.deepEqual((await previewReportWorkbook(schema, chinese)).value, [{ name: "甲", quantity: 3 }]);
+		// 老格式:首行英文 id + 第二行中文名,数据从第 3 行起
+		const legacy = workbook([
+			["name", "quantity"],
+			["名称", "数量"],
+			["乙", "4"],
+		]).toString("base64");
+		assert.deepEqual((await previewReportWorkbook(schema, legacy)).value, [{ name: "乙", quantity: 4 }]);
+		// 表头对不上模板字段:直接报错,不猜
+		const unknown = workbook([
+			["列一", "列二"],
+			["甲", "3"],
+		]).toString("base64");
+		await assert.rejects(() => previewReportWorkbook(schema, unknown), /表头/);
 	});
 	it("拒绝损坏文件、多工作表、公式、超大解压数据", async () => {
 		await assert.rejects(() => previewReportWorkbook(schema, Buffer.from("invalid").toString("base64")));
@@ -139,7 +148,8 @@ describe("填报 Excel", () => {
 	});
 	it("危险文本导出为安全字符串", () => {
 		const book = XLSX.read(createReportWorkbook(schema, [{ name: "=1+1", quantity: 1 }]), { type: "buffer" });
-		const cell = book.Sheets[book.SheetNames[0]].A3;
+		// 表头只有一行(中文名),数据从第 2 行起
+		const cell = book.Sheets[book.SheetNames[0]].A2;
 		assert.equal(cell.f, undefined);
 		assert.equal(cell.v, "'=1+1");
 	});

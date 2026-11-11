@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import type { WorkflowEdgeInput } from "#/components/modules/task-close/task-close-workflow-form";
+import { TaskCloseWorkflowGraph } from "#/components/modules/task-close/task-close-workflow-graph";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
@@ -22,7 +23,6 @@ const WHO_TEXT: Record<string, string> = {
 	creator: "创建者",
 	participant: "参与者",
 	executor: "执行者",
-	any: "任意",
 };
 
 const VIA_TEXT: Record<string, string> = { direct: "直接改", action: "审批动作" };
@@ -59,6 +59,10 @@ export function TaskCloseWorkflowDetail({
 				<p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>
 			) : (
 				<>
+					<div className="space-y-2">
+						<h3 className="text-sm font-medium">状态图</h3>
+						<TaskCloseWorkflowGraph statuses={detail.statuses} initial={detail.initial} edges={detail.edges} />
+					</div>
 					<DetailRow label="状态">
 						<TagList
 							values={detail.statuses.map((status) => (status.terminal ? `${status.label}（结束）` : status.label))}
@@ -82,7 +86,6 @@ export function TaskCloseWorkflowDetail({
 										<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
 										<span className="font-medium">{statusLabelOf(detail.statuses, edge.to)}</span>
 										<Tag variant="outline">{VIA_TEXT[edge.via] ?? edge.via}</Tag>
-										{edge.guard === "report_submitted" && <Tag variant="outline">要求有效填报提交</Tag>}
 										<span className="text-xs text-muted-foreground">
 											{edge.who.map((who) => WHO_TEXT[who] ?? who).join(" / ")} 可发起
 										</span>

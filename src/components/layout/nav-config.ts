@@ -155,6 +155,12 @@ export const NAV_NODES: NavNode[] = [
 				icon: "workflow",
 				description: "任务闭环的状态图模板:状态集合、初始态、状态转移边。",
 			},
+			{
+				name: "填报模板",
+				path: "/task-close/report-templates",
+				icon: "clipboard-list",
+				description: "任务的填报表单结构:字段集合与类型,发布后作为不可变版本。",
+			},
 		],
 	},
 	{

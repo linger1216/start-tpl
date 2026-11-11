@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import { formatBytes } from "#/lib/format";
-import type { TaskAttachment } from "#/lib/task-content";
+import type { TaskAttachment } from "#/lib/task-payload";
 
 /** 与后端 `taskPayloadSchema.attachments` 的 `.max(20)` 对齐 */
 const MAX_FILES = 20;

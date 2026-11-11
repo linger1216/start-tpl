@@ -15,7 +15,7 @@ import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import type { TaskAttachment } from "#/lib/task-content";
+import type { TaskAttachment } from "#/lib/task-payload";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
