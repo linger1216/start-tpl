@@ -1,4 +1,4 @@
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, Plus, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,8 +15,44 @@ const MAX_FILES = 20;
  *
  * 与评论附件**完全同一套路**(`task-close-comments.tsx` 是模板):一并传完大文件,点保存只是轻量写。
  * 私桶(`"private"`)—— 任务附件不该公开直链。
+ *
+ * 拆成两块是为了建任务弹窗:那边要把「+」放进折叠区标题行右上角,
+ * 所以 `TaskAttachmentAddButton` 与 `TaskAttachmentChips` 各自可单独摆。
  */
 export function TaskAttachmentPicker({
+	value,
+	onChange,
+	disabled,
+	onOpen,
+}: {
+	value: TaskAttachment[];
+	onChange: (next: TaskAttachment[]) => void;
+	disabled?: boolean;
+	/** 点了某个附件(调用方负责弹预览);不给就是不能点 */
+	onOpen?: (attachment: TaskAttachment) => void;
+}) {
+	return (
+		<div className="space-y-2">
+			<div className="flex items-center justify-between gap-2">
+				<p className="min-w-0 truncate text-xs text-muted-foreground">
+					{value.length === 0 ? "还没有附件。选完即传,保存只写一条轻量记录。" : `共 ${value.length} / ${MAX_FILES} 个`}
+				</p>
+				<TaskAttachmentAddButton value={value} onChange={onChange} disabled={disabled} />
+			</div>
+			{value.length > 0 ? (
+				<AttachmentChips
+					attachments={value}
+					onOpen={onOpen}
+					onRemove={(id) => onChange(value.filter((item) => item.id !== id))}
+					disabled={disabled}
+				/>
+			) : null}
+		</div>
+	);
+}
+
+/** 选文件 + 即传的图标按钮(带隐藏 input),上传态自己管 */
+export function TaskAttachmentAddButton({
 	value,
 	onChange,
 	disabled,
@@ -48,14 +84,22 @@ export function TaskAttachmentPicker({
 	}
 
 	return (
-		<div className="space-y-2">
-			{value.length > 0 ? (
-				<AttachmentChips
-					attachments={value}
-					onRemove={(id) => onChange(value.filter((item) => item.id !== id))}
-					disabled={disabled}
-				/>
-			) : null}
+		<>
+			<Button
+				type="button"
+				size="icon-sm"
+				variant="outline"
+				aria-label={uploading ? "上传中" : "添加附件"}
+				title={uploading ? "上传中…" : "添加附件"}
+				disabled={disabled || uploading || value.length >= MAX_FILES}
+				onClick={() => fileRef.current?.click()}
+			>
+				{uploading ? (
+					<span className="size-3.5 animate-pulse rounded-full bg-primary/60" />
+				) : (
+					<Plus className="size-4" />
+				)}
+			</Button>
 			<input
 				ref={fileRef}
 				type="file"
@@ -63,17 +107,7 @@ export function TaskAttachmentPicker({
 				className="hidden"
 				onChange={(event) => void pick(event.target.files)}
 			/>
-			<Button
-				type="button"
-				size="sm"
-				variant="outline"
-				disabled={disabled || uploading || value.length >= MAX_FILES}
-				onClick={() => fileRef.current?.click()}
-			>
-				<Paperclip className="size-3.5" />
-				{uploading ? "上传中…" : "添加附件"}
-			</Button>
-		</div>
+		</>
 	);
 }
 
@@ -91,7 +125,8 @@ export function TaskAttachmentList({
 	return <AttachmentChips attachments={attachments} onOpen={onOpen} />;
 }
 
-function AttachmentChips({
+/** 附件条目(名字 + 大小 + 可选删除)—— 编辑态与只读态共用 */
+export function AttachmentChips({
 	attachments,
 	onRemove,
 	onOpen,

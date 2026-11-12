@@ -455,6 +455,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.workflowGet",
 	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-close.ts)
 	"taskClose.attachmentUrl",
+	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
+	"taskClose.draftAttachmentUrl",
 ];
 
 /**
@@ -559,4 +561,6 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.logList",
 	// 类别 3:任务附件取地址(登录即可;内部再校验 fileId 挂在本任务上)
 	"taskClose.attachmentUrl",
+	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
+	"taskClose.draftAttachmentUrl",
 ];

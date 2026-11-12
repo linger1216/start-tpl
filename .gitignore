@@ -6,6 +6,10 @@ node_modules
 .pnp.js
 jspm_packages
 
+# ─── file-viewer 运行时资产 ─────────────────────────────
+# Worker / WASM / 字体共约 200MB,由 `pnpm file-viewer:assets` 生成,不入库
+public/file-viewer
+
 # ─── 构建产物 ───────────────────────────────────────────
 # Nitro 产物目录是 .output/,不是 dist/
 dist

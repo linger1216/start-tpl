@@ -39,6 +39,7 @@
     "db:seed:rbac": "dotenv -e .env.local -- tsx scripts/seed-rbac.ts",
     "db:add:task-report-permission": "dotenv -e .env.local -- tsx scripts/add-task-report-permission.ts",
     "check:legacy": "node scripts/check-legacy.mjs",
+    "file-viewer:assets": "file-viewer-copy-assets ./public/file-viewer",
     "db:dm:create-ba": "dotenv -e .env.local -- tsx scripts/create-better-auth-tables-dm.ts",
     "db:seed:demo": "dotenv -e .env.local -- tsx scripts/seed-demo.ts",
     "db:seed:task-close": "dotenv -e .env.local -- tsx scripts/seed-task-close.ts"
@@ -46,6 +47,7 @@
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@dagrejs/dagre": "^3.1.3",
+    "@file-viewer/react-full": "^3.3.3",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-devtools": "^0.10.12",
     "@tanstack/react-form": "^1.33.5",

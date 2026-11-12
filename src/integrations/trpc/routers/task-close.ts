@@ -651,6 +651,35 @@ async function insertTask(
 	});
 }
 
+/**
+ * 这个文件有没有被任何任务引用(任务 payload / 内容修订 / 评论附件)。
+ *
+ * 只给 `draftAttachmentUrl` 用:没有任何任务引用它 = 它还只是「刚传上来、还没归属」的草稿,
+ * 谁传的都能预览。`LIKE` 扫 JSON 文本是为了省一张存放归属关系的表 —— 每次预览最多扫三张表各一行。
+ */
+async function isFileReferenced(fileId: string): Promise<boolean> {
+	// id 是 nanoid(字母数字),不含 LIKE 通配符,直接拼 `%id%` 是安全的
+	const needle = `%${fileId}%`;
+	const [inTask] = await db
+		.select({ id: taskCloseTask.id })
+		.from(taskCloseTask)
+		.where(like(taskCloseTask.payload, needle))
+		.limit(1);
+	if (inTask) return true;
+	const [inRevision] = await db
+		.select({ id: taskCloseContentRevision.id })
+		.from(taskCloseContentRevision)
+		.where(like(taskCloseContentRevision.payload, needle))
+		.limit(1);
+	if (inRevision) return true;
+	const [inComment] = await db
+		.select({ id: taskCloseComment.id })
+		.from(taskCloseComment)
+		.where(like(taskCloseComment.attachments, needle))
+		.limit(1);
+	return inComment !== undefined;
+}
+
 /** 从 JSON 列里取附件 id 列表(容错:脏数据 / 老形状都退化成空数组,不抛) */
 function attachmentIdsOf(payload: unknown): string[] {
 	const attachments = (payload as { attachments?: unknown } | null)?.attachments;
@@ -1532,6 +1561,31 @@ export const taskCloseRouter = createTRPCRouter({
 				throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在或还没上传完成" });
 			}
 
+			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
+			return {
+				url,
+				originName: row.origin_name,
+				contentType: row.content_type,
+				size: row.size,
+				ext: row.ext,
+			};
+		}),
+
+	/**
+	 * 新建任务时**还没挂上任务**的附件取地址(选完即传,点预览要能看)。
+	 *
+	 * 与 `attachmentUrl` 的分工:那个要求文件已挂在本任务上;这里只放行**谁都还没引用过的**
+	 * 正常状态文件 —— 一旦某个任务引用它,就必须走 `attachmentUrl`,那边才有任务归属守卫。
+	 * 没有这道口子的话,「添加附件」之后点预览会一直 404。
+	 */
+	draftAttachmentUrl: protectedProcedure
+		.input(z.object({ fileId: z.string().min(1).max(32), download: z.boolean().optional() }))
+		.query(async ({ input }) => {
+			const [row] = await db.select().from(sysFile).where(eq(sysFile.id, input.fileId)).limit(1);
+			if (!row || Number(row.status) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在" });
+			if (await isFileReferenced(input.fileId)) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "附件已归属其它任务" });
+			}
 			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
 			return {
 				url,
