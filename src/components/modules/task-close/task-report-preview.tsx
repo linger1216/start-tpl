@@ -78,11 +78,18 @@ function PreviewControl({ field }: { field: TaskReportSchema["fields"][number] }
 			return <Input type="datetime-local" disabled className="h-8 max-w-48" />;
 		case "select":
 			return (
-				<Select items={(field.options ?? []).map((option) => ({ value: option, label: option }))} disabled>
+				<Select
+					items={[
+						...(field.allowEmpty ? [{ value: null, label: "（空）" }] : []),
+						...(field.options ?? []).map((option) => ({ value: option, label: option })),
+					]}
+					disabled
+				>
 					<SelectTrigger aria-label={`${field.label} 选项`} disabled className="h-8 max-w-48">
 						<SelectValue placeholder="从选项中选择" />
 					</SelectTrigger>
 					<SelectContent>
+						{field.allowEmpty && <SelectItem value={null}>（空）</SelectItem>}
 						{(field.options ?? []).map((option) => (
 							<SelectItem key={option} value={option}>
 								{option}

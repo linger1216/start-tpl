@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarClock, ChevronDown, CornerLeftUp, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ import {
 	type TaskFormPayload,
 } from "#/components/modules/task-close/task-close-form";
 import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
+import { TaskCardLink } from "#/components/modules/task-close/task-close-task-card";
 import { TaskCloseUrge } from "#/components/modules/task-close/task-close-urge";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
 import { TaskContentHistory } from "#/components/modules/task-close/task-content-history";
@@ -186,9 +187,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
-	/** 附件弹窗专用保存 —— 只改 `payload.attachments`;名称 / 描述 / 截止 / 优先级原样带回,别被清空 */
+	/** 附件弹窗专用保存 —— 只改 `payload.attachments`(任务相关方都能加;链接 / 说明服务端原样保留) */
 	const attachMutation = useMutation(
-		trpc.taskClose.taskUpdate.mutationOptions({
+		trpc.taskClose.taskAttach.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setAttachOpen(false), message: () => "附件已更新" }),
 			onError: toastApiError,
 		}),
@@ -332,7 +333,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		);
 	}
 
-	const { task, links, attachments, children, members, permissions, meId } = detailQuery.data;
+	const { task, links, attachments, own, children, members, permissions, meId } = detailQuery.data;
 	/**
 	 * `payload.type` 是业务场景标签,编辑界面不编辑它 —— 但保存时**必须原样带回**,
 	 * 否则 `taskUpdate` 整块替换 payload 会把它抹掉(设置页的类型筛选随之失效)。
@@ -438,8 +439,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		description: task.description,
 		dueAt: task.dueAt,
 		priority: task.priority,
-		links,
-		attachments,
+		// 编辑弹窗只带**本任务自己的**内容 —— 页面上的并集是展示用的,存回去会把别人的内容克隆一份
+		links: own.links,
+		attachments: own.attachments,
 	};
 
 	return (
@@ -651,18 +653,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</section>
 			) : null}
 
-			{/* 子任务详情:给一个回父任务的入口(执行人从"我的任务"进来时也能看到上下文) */}
-			{task.parentId ? (
-				<Link
-					to="/task-close/$taskId"
-					params={{ taskId: task.parentId }}
-					className="mx-8 mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-				>
-					<CornerLeftUp className="size-3.5" />
-					返回父任务
-				</Link>
-			) : null}
-
 			{/* ─── main:左 画布(链接 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
 			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
 				{/* 左 main */}
@@ -678,12 +668,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</header>
 							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 								{children.map((child) => (
-									<Link
-										key={child.id}
-										to="/task-close/$taskId"
-										params={{ taskId: child.id }}
-										className="rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25"
-									>
+									<TaskCardLink key={child.id} task={child}>
 										<Card className="flex h-full flex-col gap-0 p-4 transition-[border-color] hover:border-primary/50">
 											<div className="mb-2 flex items-start justify-between gap-2">
 												<h3 className="line-clamp-1 text-sm font-semibold text-foreground">{child.name}</h3>
@@ -696,7 +681,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 													: `建于 ${formatLocalMinute(child.createdAt)}`}
 											</span>
 										</Card>
-									</Link>
+									</TaskCardLink>
 								))}
 							</div>
 						</section>
@@ -729,13 +714,13 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								附件{" "}
 								<span className="text-xs font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
 							</h2>
-							{/* 新增附件:只有任务**创建人**能看到并使用(执行者 / 参与者 / 旁观者不显示) */}
-							{task.creatorId === meId ? (
+							{/* 新增附件:任务相关方都能加(执行人 / 参与者 / 创建人),旁观者不显示 */}
+							{myRole !== null ? (
 								<Button
 									variant="ghost"
 									size="sm"
 									onClick={() => {
-										setDraftAttachments(attachments);
+										setDraftAttachments(own.attachments);
 										setAttachOpen(true);
 									}}
 								>
@@ -1112,12 +1097,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				</DetailRow>
 			</TaskActionDialog>
 
-			{/* 新增附件 —— 创建人专用:选完即传,保存只改 `payload.attachments`(复用任务编辑的附件 picker) */}
+			{/* 新增附件 —— 任务相关方都能加:选完即传,保存只改 `payload.attachments`(复用任务编辑的附件 picker) */}
 			<TaskActionDialog
 				open={attachOpen}
 				onOpenChange={setAttachOpen}
 				title="附件"
-				description="选完即传;保存后随任务一起可见。"
+				description="选完即传;保存后随整棵树可见(父子任务都能看到)。"
 				pending={attachMutation.isPending}
 				confirmDisabled={false}
 				confirmText="保存"
@@ -1126,11 +1111,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				onConfirm={() =>
 					attachMutation.mutate({
 						id: task.id,
-						name: task.name,
-						description: task.description,
-						dueAt: task.dueAt,
-						priority: task.priority,
-						payload: { type: payloadType, links, attachments: draftAttachments.map((file) => file.id) },
+						attachments: draftAttachments.map((file) => file.id),
 					})
 				}
 			>

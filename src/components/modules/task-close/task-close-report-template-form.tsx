@@ -45,6 +45,8 @@ type Field = {
 	label: string;
 	type: FieldType;
 	required: boolean;
+	/** 单选:是否允许填「空」(下拉里多一个「（空）」项) */
+	allowEmpty: boolean;
 	/** 单选 / 多选的候选值(直接喂给 `ui/tag-input` 的 TagInput) */
 	options: string[];
 	original?: TaskReportSchema["fields"][number];
@@ -56,6 +58,7 @@ const newField = (): Field => ({
 	label: "",
 	type: "text",
 	required: false,
+	allowEmpty: false,
 	options: [],
 });
 
@@ -149,6 +152,7 @@ export function TaskCloseReportTemplateForm({
 				label: field.label,
 				type: field.type,
 				required: field.required,
+				allowEmpty: field.allowEmpty,
 				options: field.options ?? [],
 				original: field,
 			})),
@@ -181,6 +185,7 @@ export function TaskCloseReportTemplateForm({
 				label: field.label.trim(),
 				type: field.type,
 				required: field.required,
+				allowEmpty: field.type === "select" && field.allowEmpty,
 				options: field.type === "select" || field.type === "multiselect" ? field.options : undefined,
 			})),
 		});
@@ -304,10 +309,20 @@ export function TaskCloseReportTemplateForm({
 										<Checkbox
 											aria-label={`字段 ${index + 1} 必填`}
 											checked={field.required}
-											onCheckedChange={(required) => update(field.key, { required })}
+											onCheckedChange={(required) => update(field.key, { required, allowEmpty: false })}
 										/>
 										必填
 									</span>
+									{field.type === "select" && (
+										<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												aria-label={`字段 ${index + 1} 允许为空`}
+												checked={field.allowEmpty}
+												onCheckedChange={(allowEmpty) => update(field.key, { allowEmpty, required: false })}
+											/>
+											允许为空
+										</span>
+									)}
 									<ActionIconButton
 										label={`删除字段 ${index + 1}`}
 										tone="danger"

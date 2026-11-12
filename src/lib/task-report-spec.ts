@@ -10,6 +10,8 @@ export const taskReportFieldSchema = z.object({
 	label: z.string().trim().min(1).max(100),
 	type: z.enum(["text", "integer", "decimal", "date", "datetime", "select", "multiselect"]),
 	required: z.boolean().default(false),
+	/** 单选:是否允许填「空」。填报表单的下拉里因此多一个「（空）」项 */
+	allowEmpty: z.boolean().default(false),
 	readOnly: z.boolean().default(false),
 	defaultValue: z.union([scalar, z.array(z.string().max(200)).max(100)]).optional(),
 	options: z.array(z.string().trim().min(1).max(200)).max(100).optional(),

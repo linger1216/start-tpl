@@ -1142,7 +1142,12 @@ export const taskReportTemplate = mysqlTable("tc_report_template", {
 	deleted_at: datetime("deleted_at", { mode: "date" }),
 });
 
-/** 一任务一份填报；草稿与当前有效提交指针独立。模板引用走 `tc_task.report.reportId`。 */
+/**
+ * 一任务一行填报。**父子共享一份数据**:fan-out 时只有根任务那行有 `draft` 与 `revision`,
+ * 子任务那行的 `draft` 恒为 null、`revision` 恒为 0,只承载自己的 `status`。
+ * 读写一律经 `reportOwnerTaskId` 落到根任务那行(见 `routers/task-close.ts`)。
+ * 模板引用走 `tc_task.report.reportId`。
+ */
 export const taskReport = mysqlTable(
 	"tc_task_report",
 	{

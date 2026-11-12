@@ -17,7 +17,6 @@ import {
 	taskCloseTask,
 	taskCloseWorkflow,
 	taskReport,
-	taskReportSubmission,
 	taskReportTemplate,
 } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
@@ -35,7 +34,7 @@ import {
 } from "#/lib/task-close-spec";
 import { normalizePayload, parseBlocks, taskPayloadSchema } from "#/lib/task-payload";
 import { createReportWorkbook, previewReportWorkbook } from "#/lib/task-report-excel";
-import { reportRowSchema, taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
+import { reportRowSchema, taskReportSchema } from "#/lib/task-report-spec";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 /**
@@ -429,6 +428,67 @@ async function getTaskReportTemplate(reader: Reader | Tx, task: { report: unknow
 	return getReportTemplate(reader, reportId);
 }
 
+/** 填报的「数据范围」:子任务按 `tc_task.report.filter` 过滤;父任务(无 filter)= 全部行。 */
+type ScopeFilter = Array<{ field: string; value: unknown }>;
+
+/** 任务行上的数据范围。子任务带 filter,父任务没有(没有就是全部行)。 */
+function scopeFilterOf(task: { report: unknown }): ScopeFilter {
+	const report = (task.report ?? null) as { filter?: ScopeFilter } | null;
+	return Array.isArray(report?.filter) ? report.filter : [];
+}
+
+/** 一行是否落在范围内(规则 = 一组 field=value 的 AND;无规则 = 全部行)。 */
+function rowInScope(row: unknown, filter: ScopeFilter): boolean {
+	if (filter.length === 0) return true;
+	if (!row || typeof row !== "object") return false;
+	const record = row as Record<string, unknown>;
+	return filter.every((condition) => (record[condition.field] ?? null) === condition.value);
+}
+
+/**
+ * 填报数据集的持有任务 —— fan-out 出来的父任务与子任务共用**一份**数据:
+ * 数据存在根任务那行 `tc_task_report` 上,子任务只带自己的过滤范围。
+ * 沿 `parent_id` 上溯找根任务(层级只有两层,留个上限防脏数据成环)。
+ */
+async function reportOwnerTaskId(taskId: string, reader: Reader | Tx = db): Promise<string> {
+	let current = taskId;
+	for (let depth = 0; depth < 8; depth += 1) {
+		const [row] = await reader
+			.select({ id: taskCloseTask.id, parentId: taskCloseTask.parent_id })
+			.from(taskCloseTask)
+			.where(and(eq(taskCloseTask.id, current), alive(taskCloseTask)))
+			.limit(1);
+		// 自己这条还在,但父任务没了(历史数据;新删父会级联删子):数据随根任务一起消失,
+		// 不能回退到自己那行(draft 是 null),否则会把空表存成新数据
+		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
+		if (!row.parentId) return current;
+		current = row.parentId;
+	}
+	return current;
+}
+
+/** 数据集里落在本任务范围内的行(保持数据集顺序)。 */
+function scopedRows(draft: unknown, filter: ScopeFilter): unknown[] {
+	if (!Array.isArray(draft)) return [];
+	return draft.filter((row) => rowInScope(row, filter));
+}
+
+/**
+ * 任务树(根 + 它的全部子任务)。
+ *
+ * 内容区(链接 / 附件)**按整棵树取并集**:子任务传的附件 / 加的链接,父任务看得到,反之亦然。
+ * 填报数据是另一码事 —— 那个真共享同一行(见 `reportOwnerTaskId`)。
+ * 层级只有两层(见 `tc_task.parent_id` 注释),所以不用递归。
+ */
+async function familyTasks(task: TaskRow, reader: Reader | Tx = db): Promise<TaskRow[]> {
+	const rootId = task.parent_id ?? task.id;
+	return reader
+		.select()
+		.from(taskCloseTask)
+		.where(and(or(eq(taskCloseTask.id, rootId), eq(taskCloseTask.parent_id, rootId)), alive(taskCloseTask)))
+		.orderBy(asc(taskCloseTask.created_at));
+}
+
 /** 一批 user_id → 姓名。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */
 async function nameMapOf(ids: readonly string[]): Promise<Map<string, string>> {
 	const unique = [...new Set(ids.filter(Boolean))];
@@ -813,13 +873,20 @@ export const taskCloseRouter = createTRPCRouter({
 			}
 			const task = await getTaskRow(input.taskId ?? "");
 			await assertTaskParticipant(task, me.id, "无权导出填报");
-			const [report] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
-			if (!report || report.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+			const [own] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
+			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 			const template = await getTaskReportTemplate(db, task);
+			// 数据在根任务那行;子任务按自己的范围导出
+			const ownerId = await reportOwnerTaskId(task.id);
+			const [dataset] =
+				ownerId === task.id
+					? [own]
+					: await db.select().from(taskReport).where(eq(taskReport.task_id, ownerId)).limit(1);
+			if (!dataset || dataset.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+			const data =
+				template.schema.kind === "TABLE" ? scopedRows(dataset?.draft, scopeFilterOf(task)) : (dataset?.draft ?? null);
 			return {
-				fileBase64: createReportWorkbook(template.schema, input.templateOnly ? undefined : report.draft).toString(
-					"base64",
-				),
+				fileBase64: createReportWorkbook(template.schema, input.templateOnly ? undefined : data).toString("base64"),
 			};
 		}),
 	/** 解析上传的 Excel:任务视角校验填报可编辑;模板视角只校验模板可见(建任务前用)。 */
@@ -850,8 +917,7 @@ export const taskCloseRouter = createTRPCRouter({
 				if (!executor && !preparing)
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以导入" });
 				const [report] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
-				if (!report || report.status === "submitted" || report.status === "removed")
-					throw new TRPCError({ code: "BAD_REQUEST", message: "没有可编辑的填报" });
+				if (!report) throw new TRPCError({ code: "BAD_REQUEST", message: "没有可编辑的填报" });
 				const template = await getTaskReportTemplate(db, task);
 				return await previewReportWorkbook(template.schema, input.fileBase64);
 			} catch (error) {
@@ -953,121 +1019,87 @@ export const taskCloseRouter = createTRPCRouter({
 			canManage: isAdmin || template.creator_id === me.id,
 		}));
 	}),
-	reportBind: protectedProcedure
-		.input(z.object({ taskId: ID, reportId: ID.nullable(), expectedRevision: z.number().int().min(0).optional() }))
-		.mutation(async ({ ctx, input }) => {
-			const me = requireCurrentUser(ctx);
-			const admin = await isAdminUser(me.id);
-			return db.transaction(async (tx) => {
-				const task = await lockTask(tx, input.taskId);
-				if (task.creator_id !== me.id && !admin)
-					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或管理员可以配置填报" });
-				const [existing] = await tx
-					.select()
-					.from(taskReport)
-					.where(eq(taskReport.task_id, task.id))
-					.limit(1)
-					.for("update");
-				const currentReportId = (task.report as { reportId?: string } | null)?.reportId ?? null;
-				if (existing && existing.status !== "removed") {
-					if (input.expectedRevision === undefined || existing.revision !== input.expectedRevision)
-						throw new TRPCError({ code: "CONFLICT", message: "填报已变化，请刷新后重试" });
-					const [submission] = await tx
-						.select({ id: taskReportSubmission.id })
-						.from(taskReportSubmission)
-						.where(eq(taskReportSubmission.report_id, existing.id))
-						.limit(1);
-					if (submission || existing.status !== "draft")
-						throw new TRPCError({ code: "BAD_REQUEST", message: "已有正式提交的填报不能更换模板" });
-					if (currentReportId === input.reportId)
-						throw new TRPCError({ code: "BAD_REQUEST", message: "请选择其他模板" });
-				}
-				if (input.reportId === null) {
-					if (!existing || existing.status === "removed")
-						throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
-					await tx
-						.update(taskReport)
-						.set({ status: "removed", draft: null, revision: existing.revision + 1, updated_at: new Date() })
-						.where(eq(taskReport.id, existing.id));
-					await tx
-						.update(taskCloseTask)
-						.set({ report: null, updated_at: new Date() })
-						.where(eq(taskCloseTask.id, task.id));
-					await logTaskEvent(tx, {
-						taskId: task.id,
-						event: "report.bind",
-						actor: me,
-						targetId: existing.id,
-						detail: { reportId: null, previousReportId: currentReportId },
-					});
-					return { id: existing.id };
-				}
-				const template = await getAvailableReportTemplate(tx, input.reportId);
-				const schema = template.schema;
-				const initial =
-					schema.kind === "OBJECT"
-						? Object.fromEntries(
-								schema.fields
-									.filter((field) => field.defaultValue !== undefined)
-									.map((field) => [field.id, field.defaultValue]),
-							)
-						: [];
-				const id = existing?.id ?? newId();
-				if (existing) {
-					await tx
-						.update(taskReport)
-						.set({
-							status: "draft",
-							draft: initial,
-							revision: existing.revision + 1,
-							updated_at: new Date(),
-						})
-						.where(eq(taskReport.id, id));
-				} else {
-					await tx.insert(taskReport).values({ id, task_id: task.id, status: "draft", draft: initial, revision: 0 });
-				}
-				await tx
-					.update(taskCloseTask)
-					.set({ report: { reportId: template.id }, updated_at: new Date() })
-					.where(eq(taskCloseTask.id, task.id));
-				await logTaskEvent(tx, {
-					taskId: task.id,
-					event: "report.bind",
-					actor: me,
-					targetId: id,
-					detail: { reportId: template.id, previousReportId: currentReportId },
+	/**
+	 * 给**还没有填报**的任务首次绑定模板。
+	 *
+	 * 模板在创建任务时就定了:已绑定(或已有填报行)的任务一律不能再换、也不能移除 ——
+	 * 「结构化填报实时保存」意味着换模板等于丢数据,不做这种入口。
+	 */
+	reportBind: protectedProcedure.input(z.object({ taskId: ID, reportId: ID })).mutation(async ({ ctx, input }) => {
+		const me = requireCurrentUser(ctx);
+		const admin = await isAdminUser(me.id);
+		return db.transaction(async (tx) => {
+			const task = await lockTask(tx, input.taskId);
+			if (task.creator_id !== me.id && !admin)
+				throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或管理员可以配置填报" });
+			const [existing] = await tx
+				.select()
+				.from(taskReport)
+				.where(eq(taskReport.task_id, task.id))
+				.limit(1)
+				.for("update");
+			if (existing)
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "填报模板在创建任务时确定，不能更换或移除",
 				});
-				return { id };
+			const template = await getAvailableReportTemplate(tx, input.reportId);
+			const schema = template.schema;
+			const initial =
+				schema.kind === "OBJECT"
+					? Object.fromEntries(
+							schema.fields
+								.filter((field) => field.defaultValue !== undefined)
+								.map((field) => [field.id, field.defaultValue]),
+						)
+					: [];
+			const id = newId();
+			await tx.insert(taskReport).values({ id, task_id: task.id, status: "draft", draft: initial, revision: 0 });
+			await tx
+				.update(taskCloseTask)
+				.set({ report: { reportId: template.id }, updated_at: new Date() })
+				.where(eq(taskCloseTask.id, task.id));
+			await logTaskEvent(tx, {
+				taskId: task.id,
+				event: "report.bind",
+				actor: me,
+				targetId: id,
+				detail: { reportId: template.id },
 			});
-		}),
+			return { id };
+		});
+	}),
 	reportGet: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.taskId);
 		await assertTaskParticipant(task, me.id, "无权查看填报");
-		const [report] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
-		if (!report || report.status === "removed") return null;
+		const [own] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
+		if (!own) return null;
 		// 模板引用在任务的 report 规则里(单版本:模板 payload 即当前结构)
 		const boundReportId = (task.report as { reportId?: string } | null)?.reportId ?? null;
 		if (!boundReportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
 		const template = await getReportTemplate(db, boundReportId);
-		const submissions = await db
-			.select()
-			.from(taskReportSubmission)
-			.where(eq(taskReportSubmission.report_id, report.id))
-			.orderBy(desc(taskReportSubmission.created_at));
 		const members = await db
 			.select({ userId: taskCloseMember.user_id, role: taskCloseMember.role })
 			.from(taskCloseMember)
 			.where(eq(taskCloseMember.task_id, task.id));
 		const executor = members.some((member) => member.userId === me.id && member.role === "executor");
 		const preparing = task.creator_id === me.id;
+		// 共享数据集:数据存在根任务那行,子任务按自己的数据范围取视图
+		const ownerId = await reportOwnerTaskId(task.id);
+		const [dataset] =
+			ownerId === task.id ? [own] : await db.select().from(taskReport).where(eq(taskReport.task_id, ownerId)).limit(1);
+		if (!dataset || dataset.status === "removed") return null;
+		const filter = scopeFilterOf(task);
+		const visible = template.schema.kind === "TABLE" ? scopedRows(dataset.draft, filter) : dataset.draft;
 		return {
-			report,
+			// 本任务只承载自己的状态;数据与版本在根任务那行
+			report: { ...own, draft: visible, revision: dataset.revision },
 			template,
-			submissions,
-			canEdit: (executor || preparing) && report.status !== "submitted",
-			canRebind: submissions.length === 0 && report.status === "draft",
-			canSubmit: executor && report.status !== "submitted",
+			canEdit: executor || preparing,
+			/** 有数据范围 = 只改自己那几行(不能增删行、不能改范围字段) */
+			scoped: filter.length > 0,
+			scopeFields: filter.map((condition) => condition.field),
 		};
 	}),
 	reportSaveDraft: protectedProcedure
@@ -1075,7 +1107,7 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			if (JSON.stringify(input.draft).length > 2_000_000)
-				throw new TRPCError({ code: "BAD_REQUEST", message: "草稿过大" });
+				throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据过大" });
 			return db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.taskId);
 				const members = await tx
@@ -1086,16 +1118,21 @@ export const taskCloseRouter = createTRPCRouter({
 				const preparing = task.creator_id === me.id;
 				if (!executor && !preparing)
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以填写" });
-				const [report] = await tx
-					.select()
-					.from(taskReport)
-					.where(eq(taskReport.task_id, task.id))
-					.limit(1)
-					.for("update");
-				if (!report || report.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
-				if (report.status === "submitted") throw new TRPCError({ code: "BAD_REQUEST", message: "已提交，请先退回" });
-				if (report.revision !== input.revision)
-					throw new TRPCError({ code: "CONFLICT", message: "草稿已被修改，请刷新后重试" });
+				const [own] = await tx.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1).for("update");
+				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				// 共享数据集:数据在根任务那行,子任务只改自己范围内的那几行
+				const ownerId = await reportOwnerTaskId(task.id, tx);
+				const [dataset] =
+					ownerId === task.id
+						? [own]
+						: await tx.select().from(taskReport).where(eq(taskReport.task_id, ownerId)).limit(1).for("update");
+				if (!dataset || dataset.status === "removed")
+					throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				const filter = scopeFilterOf(task);
+				// 版本号只在「整份数据集」口径下挡覆盖:子任务按索引合并、行数不符另有守卫,
+				// 让两个互不相干的执行人共享一个全局版本号只会互相踩。
+				if (filter.length === 0 && dataset.revision !== input.revision)
+					throw new TRPCError({ code: "CONFLICT", message: "填报已被修改，请刷新后重试" });
 				const template = await getTaskReportTemplate(tx, task);
 				const schema = template.schema;
 				const rows = schema.kind === "TABLE" ? input.draft : [input.draft];
@@ -1104,7 +1141,7 @@ export const taskCloseRouter = createTRPCRouter({
 					rows.length > 10000 ||
 					rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))
 				)
-					throw new TRPCError({ code: "BAD_REQUEST", message: "草稿格式无效" });
+					throw new TRPCError({ code: "BAD_REQUEST", message: "填报格式无效" });
 				for (const row of rows)
 					for (const field of schema.fields.filter((f) => f.readOnly)) {
 						if (
@@ -1112,131 +1149,41 @@ export const taskCloseRouter = createTRPCRouter({
 						)
 							throw new TRPCError({ code: "BAD_REQUEST", message: `只读字段不可修改:${field.label}` });
 					}
+				let next: unknown = rows[0];
+				if (schema.kind === "TABLE") {
+					const stored = Array.isArray(dataset.draft) ? dataset.draft : [];
+					if (filter.length === 0) {
+						// 没有数据范围 = 这份数据就是它的(增删行也在内)
+						next = rows;
+					} else {
+						const indexes = stored
+							.map((row, index) => (rowInScope(row, filter) ? index : -1))
+							.filter((index) => index >= 0);
+						// 行数对不上 = 范围里的行被增删了(父任务整份覆盖过),内存里那份已经过时
+						if (indexes.length !== rows.length)
+							throw new TRPCError({ code: "CONFLICT", message: "数据范围已变化，请刷新后重试" });
+						const merged = stored.slice();
+						indexes.forEach((storedIndex, position) => {
+							const before = (stored[storedIndex] as Record<string, unknown>) ?? {};
+							const after = (rows[position] as Record<string, unknown>) ?? {};
+							// 范围字段是归属:改了这条行就不再属于本任务
+							for (const condition of filter) {
+								if ((before[condition.field] ?? null) !== (after[condition.field] ?? null))
+									throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围字段不可修改" });
+							}
+							merged[storedIndex] = rows[position];
+						});
+						next = merged;
+					}
+				}
+				// 子任务不带版本号(见上面的 filter 判据),这里不再按 revision 复核:
+				// 根 report 行由 `.for("update")` 锁住,提交期间不会被人改。
 				await tx
 					.update(taskReport)
-					.set({ draft: input.draft, revision: report.revision + 1, updated_at: new Date() })
-					.where(eq(taskReport.id, report.id));
-				return { revision: report.revision + 1 };
+					.set({ draft: next, revision: dataset.revision + 1, updated_at: new Date() })
+					.where(eq(taskReport.id, dataset.id));
+				return { revision: dataset.revision + 1 };
 			});
-		}),
-	reportSubmit: protectedProcedure
-		.input(z.object({ taskId: ID, revision: z.number().int().min(0) }))
-		.mutation(async ({ ctx, input }) => {
-			const me = requireCurrentUser(ctx);
-			let receiver: string | null = null;
-			const result = await db.transaction(async (tx) => {
-				const task = await lockTask(tx, input.taskId);
-				if (!(await memberRolesOf(task.id, me.id, tx)).includes("executor"))
-					throw new TRPCError({ code: "FORBIDDEN", message: "只有当前执行人可以提交" });
-				const [report] = await tx
-					.select()
-					.from(taskReport)
-					.where(eq(taskReport.task_id, task.id))
-					.limit(1)
-					.for("update");
-				if (!report || report.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
-				// 幂等重试:同一个 revision 的重复提交直接返回既有快照。
-				// **必须校验提交人** —— 换人(转交)后新执行人拿着旧 revision 再来一次,
-				// 否则会把上一位执行人的提交当成自己的「已提交」结果返回,前端据此认为已交。
-				if (report.status === "submitted" && report.revision === input.revision && report.current_submission_id) {
-					const [previous] = await tx
-						.select({ submitterId: taskReportSubmission.submitter_id })
-						.from(taskReportSubmission)
-						.where(eq(taskReportSubmission.id, report.current_submission_id))
-						.limit(1);
-					if (previous?.submitterId === me.id) return { id: report.current_submission_id };
-					throw new TRPCError({ code: "CONFLICT", message: "该版本已由其他执行人提交" });
-				}
-				if (report.status === "submitted" || report.revision !== input.revision)
-					throw new TRPCError({ code: "CONFLICT", message: "填报状态或版本已变化" });
-				const template = await getTaskReportTemplate(tx, task);
-				const issues = validateTaskReport(template.schema, report.draft);
-				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: JSON.stringify(issues) });
-				const id = newId();
-				await tx.insert(taskReportSubmission).values({
-					id,
-					report_id: report.id,
-					task_id: task.id,
-					submitter_id: me.id,
-					revision: report.revision,
-					payload: report.draft,
-				});
-				await tx
-					.update(taskReport)
-					.set({ status: "submitted", current_submission_id: id, updated_at: new Date() })
-					.where(eq(taskReport.id, report.id));
-				await logTaskEvent(tx, { taskId: task.id, event: "report.submit", actor: me, targetId: id });
-				if (task.creator_id !== me.id) {
-					await createNotification(tx, {
-						type: "report.submitted",
-						source: { type: "task", id: task.id },
-						title: `填报已提交:${task.name}`,
-						content: `${me.name || "执行人"} 已提交填报`,
-						payload: { path: taskPathOf(task.id), level: "info" },
-						dedupeKey: `report.submit:${id}`,
-						recipients: [{ userId: task.creator_id, channel: "in_app" }],
-					});
-					receiver = task.creator_id;
-				}
-				return { id };
-			});
-			if (receiver) publishMentions([receiver]);
-			return result;
-		}),
-	reportReturn: protectedProcedure
-		.input(z.object({ taskId: ID, reason: z.string().trim().min(1).max(2000) }))
-		.mutation(async ({ ctx, input }) => {
-			const me = requireCurrentUser(ctx);
-			const admin = await isAdminUser(me.id);
-			let receiver: string | null = null;
-			await db.transaction(async (tx) => {
-				const task = await lockTask(tx, input.taskId);
-				if (task.creator_id !== me.id && !admin)
-					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或管理员可以退回" });
-				const [report] = await tx
-					.select()
-					.from(taskReport)
-					.where(eq(taskReport.task_id, task.id))
-					.limit(1)
-					.for("update");
-				if (!report || report.status !== "submitted")
-					throw new TRPCError({ code: "BAD_REQUEST", message: "没有可退回的提交" });
-				await tx
-					.update(taskReport)
-					.set({
-						status: "returned",
-						current_submission_id: null,
-						revision: report.revision + 1,
-						updated_at: new Date(),
-					})
-					.where(eq(taskReport.id, report.id));
-				await logTaskEvent(tx, {
-					taskId: task.id,
-					event: "report.return",
-					actor: me,
-					targetId: report.current_submission_id,
-					detail: { reason: input.reason },
-				});
-				const [executor] = await tx
-					.select({ id: taskCloseMember.user_id })
-					.from(taskCloseMember)
-					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.role, "executor")))
-					.limit(1);
-				if (executor && executor.id !== me.id) {
-					await createNotification(tx, {
-						type: "report.returned",
-						source: { type: "task", id: task.id },
-						title: `填报已退回:${task.name}`,
-						content: input.reason,
-						payload: { path: taskPathOf(task.id), level: "info" },
-						dedupeKey: `report.return:${report.id}:${report.revision}`,
-						recipients: [{ userId: executor.id, channel: "in_app" }],
-					});
-					receiver = executor.id;
-				}
-			});
-			if (receiver) publishMentions([receiver]);
-			return { ok: true };
 		}),
 	// ────────────────────────────── 状态图模板 ──────────────────────────────
 
@@ -1494,10 +1441,19 @@ export const taskCloseRouter = createTRPCRouter({
 			...actionRows.flatMap((row) => [row.created_id, row.handle_id]),
 		]);
 
-		// 内容区(块)+ 附件区由 `task.payload` 派生:块做**容错解析**(未知 kind 交给前端占位),附件 join `sys_file`
-		const payload = (task.payload ?? null) as { links?: unknown } | null;
-		const links = parseBlocks(payload?.links);
-		const attachments = await resolveAttachments(attachmentIdsOf(task.payload));
+		// 内容区(块)+ 附件区**按整棵树取并集**:子任务传的附件 / 加的链接,父任务看得到,反之亦然。
+		// `own` 那两个只给编辑弹窗用 —— 弹窗存回去的是「这条任务自己的」,不把别人的内容克隆一份。
+		const family = await familyTasks(task);
+		const ownLinks = parseBlocks((task.payload as { links?: unknown } | null)?.links);
+		const ownAttachments = await resolveAttachments(attachmentIdsOf(task.payload));
+		const links = [
+			...new Map(
+				family
+					.flatMap((row) => parseBlocks((row.payload as { links?: unknown } | null)?.links))
+					.map((block) => [block.url, block]),
+			).values(),
+		];
+		const attachments = await resolveAttachments(family.flatMap((row) => attachmentIdsOf(row.payload)));
 
 		// 子任务(fan-out 出来的):详情页用卡片列出来,点进去就是那条子任务自己的详情
 		const childRows = await db
@@ -1506,12 +1462,36 @@ export const taskCloseRouter = createTRPCRouter({
 			.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)))
 			.orderBy(asc(taskCloseTask.created_at));
 		const childNameOf = await nameMapOf(childRows.map((row) => row.creator_id));
+		// 子任务也可能再 fan-out 出孙任务:一次 group by 拿到每个子任务自己的子任务数 ——
+		// 前端据此分流「点进去是卡片页(还有子任务)还是详情页(叶子)」
+		const grandCounts = childRows.length
+			? await db
+					.select({ parentId: taskCloseTask.parent_id, n: count() })
+					.from(taskCloseTask)
+					.where(
+						and(
+							inArray(
+								taskCloseTask.parent_id,
+								childRows.map((row) => row.id),
+							),
+							alive(taskCloseTask),
+						),
+					)
+					.groupBy(taskCloseTask.parent_id)
+			: [];
+		const grandCountOf = new Map(grandCounts.map((row) => [row.parentId ?? "", Number(row.n ?? 0)]));
 
 		return {
 			task: toTaskDetail(task, nameOf.get(task.creator_id) ?? null),
+			/** 整棵树并集(只读展示) */
 			links,
 			attachments,
-			children: childRows.map((row) => toTaskBrief(row, childNameOf.get(row.creator_id) ?? null)),
+			/** 这条任务**自己**的内容(编辑 / 附件弹窗回存用,别把兄弟任务的内容克隆过来) */
+			own: { links: ownLinks, attachments: ownAttachments },
+			children: childRows.map((row) => ({
+				...toTaskBrief(row, childNameOf.get(row.creator_id) ?? null),
+				childCount: grandCountOf.get(row.id) ?? 0,
+			})),
 			members: memberRows.map((row) => toMember(row, nameOf)),
 			actions: actionRows.map((row) => toAction(row, nameOf)),
 			permissions: await permissionsOf(task, me.id),
@@ -1524,15 +1504,17 @@ export const taskCloseRouter = createTRPCRouter({
 	 * 任务附件的取地址(预览 / 下载)—— **只放行挂在这条任务上的文件**。
 	 *
 	 * 为什么不复用 `file.url`:那个按 `/settings/files` 页面码授权,任务页调不到;若把它放开到任务页,
-	 * 又等于"任何登录用户凭 id 就能取任意文件"。所以这里先确认 `fileId` 确实挂在本任务上
+	 * 又等于"任何登录用户凭 id 就能取任意文件"。所以这里先确认 `fileId` 确实挂在**这棵任务树**上
 	 * (`payload.attachments` ∪ 评论附件),再签地址 —— 权限口径与「任务可见即可读」一致。
+	 * 树内并集是必须的:内容区按整棵树展示(见 `familyTasks`),父任务要能签子任务附件。
 	 * `download=true` 走预签名(带 `Content-Disposition`,按原始文件名下载)。
 	 */
 	attachmentUrl: protectedProcedure
 		.input(z.object({ taskId: ID, fileId: z.string().min(1).max(32), download: z.boolean().optional() }))
 		.query(async ({ ctx, input }) => {
 			const task = await getTaskRow(input.taskId);
-			let owned = attachmentIdsOf(task.payload).includes(input.fileId);
+			const family = await familyTasks(task);
+			let owned = family.some((row) => attachmentIdsOf(row.payload).includes(input.fileId));
 			if (!owned) {
 				const me = requireCurrentUser(ctx);
 				if (await isTaskParticipant(task, me.id)) {
@@ -1711,6 +1693,16 @@ export const taskCloseRouter = createTRPCRouter({
 				const executors = requestedMembers.filter((member) => member.role === "executor");
 				// 多执行人 = fan-out:**1 父 + N 子**(父不设执行人,每个执行人各拿一条子任务)
 				const fanout = executors.length >= 2;
+				// 两个人的数据范围完全相同 = 同一批行被两个人认领,先后保存互相覆盖且不报错。
+				// ponytail:只挡「完全相同」这条(含都不配 = 都是全部),规则嵌套包含的情况留给配的人看一眼。
+				if (fanout && template?.schema.kind === "TABLE") {
+					const rules = executors.map((member) => stableJson(member.filter ?? input.report?.filter ?? []));
+					if (new Set(rules).size !== rules.length)
+						throw new TRPCError({
+							code: "BAD_REQUEST",
+							message: "多个执行人的数据范围不能相同，否则同一批数据会被互相覆盖",
+						});
+				}
 
 				// 母版数据:建任务时文件导入带进来的初始行(仅表格模板)
 				const masterRows: Array<Record<string, unknown>> = (() => {
@@ -1769,22 +1761,25 @@ export const taskCloseRouter = createTRPCRouter({
 								id: childId,
 								parentId: id,
 								name: input.name,
+								// 子任务继承父任务创建时的说明与链接 / 附件 —— 除数据范围外,两边看到的一样
+								description: input.description,
 								dueAt: input.dueAt ? new Date(input.dueAt) : null,
 								priority: input.priority,
 								workflowId: input.workflowId,
 								workflow: snapshot,
+								payload: input.payload,
 								...(template ? { report: { reportId: template.id, filter } } : {}),
-								masterRows: rowsFor(filter),
 								members: [{ userId: member.userId, role: "executor", isPrimary: true }],
 							},
 							me,
 						);
 						if (template) {
+							// 数据只有一份(父任务那行);子任务这行只承载自己的提交状态
 							await tx.insert(taskReport).values({
 								id: newId(),
 								task_id: childId,
 								status: "draft",
-								draft: draftOf(filter),
+								draft: null,
 								revision: 0,
 							});
 						}
@@ -1924,7 +1919,70 @@ export const taskCloseRouter = createTRPCRouter({
 			return { ok: true };
 		}),
 
-	/** 软删任务，并在同一事务终止未完成动作和待发送通知。 */
+	/**
+	 * **给任务加附件**(执行人 / 参与者也能用,不必等创建人改整份 payload)。
+	 *
+	 * 只动 `payload.attachments`,`links` / `type` / 名称 / 描述原样保留 —— 服务端从库里取旧值再合并,
+	 * 前端传什么都不会覆盖别的字段。内容区按整棵树展示(见 `familyTasks`),所以子任务加的附件
+	 * 父任务那边同样看得到。
+	 */
+	taskAttach: protectedProcedure
+		.input(
+			z.object({
+				id: ID,
+				attachments: z.array(z.string().min(1).max(32)).max(20),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			await db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.id);
+				await assertTaskParticipant(task, me.id, "无权给这条任务加附件");
+				const nextPayload = await prepareTaskPayload(tx, {
+					...normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]),
+					attachments: input.attachments,
+				});
+				const changed = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
+				if (changed) {
+					// 与 `taskUpdate` 同口径:内容变了就落一条修订,「说明修订」弹窗里能看到是谁加的
+					const [latest] = await tx
+						.select({ revision: taskCloseContentRevision.revision })
+						.from(taskCloseContentRevision)
+						.where(eq(taskCloseContentRevision.task_id, task.id))
+						.orderBy(desc(taskCloseContentRevision.revision))
+						.limit(1)
+						.for("update");
+					await tx.insert(taskCloseContentRevision).values({
+						id: newId(),
+						task_id: task.id,
+						revision: (latest?.revision ?? 0) + 1,
+						description: task.description,
+						payload: nextPayload,
+						actor_id: me.id,
+						created_at: new Date(),
+					});
+				}
+				await tx
+					.update(taskCloseTask)
+					.set({ payload: nextPayload, updated_at: new Date() })
+					.where(eq(taskCloseTask.id, task.id));
+				if (changed)
+					await logTaskEvent(tx, {
+						taskId: task.id,
+						event: "task.update",
+						actor: me,
+						detail: { payloadChanged: true, attachments: input.attachments.length },
+					});
+			});
+			return { ok: true };
+		}),
+
+	/**
+	 * 软删任务，并在同一事务终止未完成动作和待发送通知。
+	 *
+	 * 删父任务连带删它的子任务:否则子任务还在执行人的「我的任务」里,
+	 * 但它共享的填报数据挂在已经软删的根任务上(`reportOwnerTaskId` 上溯不看 `alive`)。
+	 */
 	taskRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
@@ -1932,11 +1990,25 @@ export const taskCloseRouter = createTRPCRouter({
 		const now = new Date();
 		await db.transaction(async (tx) => {
 			await lockTask(tx, task.id);
+			const children = await tx
+				.select({ id: taskCloseTask.id })
+				.from(taskCloseTask)
+				.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)))
+				.for("update");
+			for (const row of children) await cancelLiveTaskActions(tx, row.id, now);
 			await cancelLiveTaskActions(tx, task.id, now);
 			await tx
 				.update(taskCloseTask)
 				.set({ ...softDeleted(), updated_at: now })
 				.where(eq(taskCloseTask.id, task.id));
+			if (children.length) {
+				await tx
+					.update(taskCloseTask)
+					.set({ ...softDeleted(), updated_at: now })
+					.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)));
+				for (const row of children)
+					await logTaskEvent(tx, { taskId: row.id, event: "task.remove", actor: me, at: now });
+			}
 			await logTaskEvent(tx, { taskId: task.id, event: "task.remove", actor: me, at: now });
 		});
 		return { ok: true };

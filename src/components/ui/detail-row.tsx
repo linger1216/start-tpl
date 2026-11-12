@@ -13,6 +13,7 @@
 import type * as React from "react";
 
 import { Label } from "#/components/ui/label";
+import { cn } from "#/lib/utils";
 
 export function DetailRow({
 	label,
@@ -20,6 +21,7 @@ export function DetailRow({
 	hint,
 	children,
 	align = "start",
+	className,
 }: {
 	label: React.ReactNode;
 	/** 表单里指到控件 id,点标签能聚焦(详情弹窗不用给) */
@@ -29,9 +31,11 @@ export function DetailRow({
 	children: React.ReactNode;
 	/** 标签与内容的竖直对齐:详情多行内容用 `start`(默认);单行控件(表单)用 `center` 更齐 */
 	align?: "start" | "center";
+	/** 挂在**整行**上 —— 用来给这行限宽(如宽弹窗里 `max-w-xl`),别用来改标签宽度 */
+	className?: string;
 }) {
 	return (
-		<div className={`flex gap-3 py-2 ${align === "center" ? "items-center" : "items-start"}`}>
+		<div className={cn("flex gap-3 py-2", align === "center" ? "items-center" : "items-start", className)}>
 			<Label htmlFor={htmlFor} className="w-25 shrink-0 text-xs font-normal leading-5 text-muted-foreground">
 				{label}
 			</Label>

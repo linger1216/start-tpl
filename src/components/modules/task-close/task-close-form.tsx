@@ -266,21 +266,6 @@ export function TaskCloseForm({
 		? executorIds.map((id) => ({ key: id, label: userOptions.find((option) => option.value === id)?.label ?? id }))
 		: [{ key: "", label: "本任务" }];
 
-	/** 页头摘要条:只列关键项,缺项用「形状 + 文字」标出(不只靠颜色) */
-	const summaryItems: Array<{ key: string; value: string; missing?: boolean }> = editing
-		? [
-				{ key: "名称", value: name.trim() ? "已填" : "未填", missing: !name.trim() },
-				{ key: "描述", value: description.trim() ? "已填" : "未填" },
-				{ key: "截止", value: due ? due.slice(5) : "未填" },
-			]
-		: [
-				{ key: "名称", value: name.trim() ? "已填" : "未填", missing: !name.trim() },
-				{ key: "流程模板", value: workflowId ? "已选" : "未选", missing: !workflowId },
-				{ key: "执行人", value: executorIds.length ? `${executorIds.length} 位` : "未指派" },
-				{ key: "填报", value: selectedTemplate?.name ?? "未配置" },
-				{ key: "截止", value: due ? due.slice(5) : "未填" },
-			];
-
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
@@ -291,18 +276,9 @@ export function TaskCloseForm({
 							? "可改名称 / 描述 / 截止时间 / 优先级;成员与状态走详情页。"
 							: "状态从模板的初始状态开始;执行人能发起「改状态」动作。"}
 					</DialogDescription>
-					<output className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-sm border border-border bg-secondary/40 px-3 py-2">
-						{summaryItems.map((item) => (
-							<span key={item.key} className="inline-flex items-baseline gap-1.5 text-xs leading-tight">
-								<span className="tracking-wider text-muted-foreground">{item.key}</span>
-								{item.missing ? <span aria-hidden="true" className="size-1 self-center rounded-sm bg-danger" /> : null}
-								<span className={item.missing ? "font-medium text-danger-fg" : "text-foreground"}>{item.value}</span>
-							</span>
-						))}
-					</output>
 				</DialogHeader>
 
-				<DialogBody className="space-y-1 py-1">
+				<DialogBody className="space-y-2 py-1">
 					{editing ? (
 						<Alert variant="danger" title="批注" className="mb-3">
 							本次修改只影响这条任务本身;流程模板与执行人是建任务时定的,到任务详情页调整。
@@ -310,11 +286,11 @@ export function TaskCloseForm({
 					) : null}
 
 					<section>
-						<h3 className="mb-1 flex items-baseline gap-2 font-heading text-base font-bold tracking-[-0.01em] text-foreground">
+						<h3 className="mb-1 flex max-w-xl items-baseline gap-2 font-heading text-base font-bold tracking-[-0.01em] text-foreground">
 							基本信息
 							<span className="flex-1 self-center border-t border-border" />
 						</h3>
-						<DetailRow label="任务名称" htmlFor="tc-name">
+						<DetailRow label="任务名称" htmlFor="tc-name" className="max-w-xl">
 							<Input
 								id="tc-name"
 								aria-required="true"
@@ -327,7 +303,7 @@ export function TaskCloseForm({
 
 						{editing ? null : (
 							<>
-								<DetailRow label="流程模板">
+								<DetailRow label="流程模板" className="max-w-xl">
 									<Select
 										items={workflowOptions}
 										value={workflowId || null}
@@ -345,7 +321,7 @@ export function TaskCloseForm({
 										</SelectContent>
 									</Select>
 								</DetailRow>
-								<DetailRow label="执行人">
+								<DetailRow label="执行人" className="max-w-xl">
 									<div className="space-y-1.5">
 										<MultiSelect
 											options={userOptions}
@@ -367,11 +343,11 @@ export function TaskCloseForm({
 								</DetailRow>
 							</>
 						)}
-						<DetailRow label="截止时间" htmlFor="tc-due">
+						<DetailRow label="截止时间" htmlFor="tc-due" className="max-w-xl">
 							<DatePicker id="tc-due" value={due} onChange={setDue} placeholder="选择日期" />
 						</DetailRow>
 
-						<DetailRow label="优先级">
+						<DetailRow label="优先级" className="max-w-xl">
 							<Select
 								items={PRIORITY_OPTIONS}
 								value={priority}
@@ -396,7 +372,7 @@ export function TaskCloseForm({
 						</DetailRow>
 
 						{/* 描述移到最后:前面几个字段填完通常已经想清楚了;多数任务描述很短,rows=2 够 */}
-						<DetailRow label="描述" htmlFor="tc-desc" hint="可空">
+						<DetailRow label="描述" htmlFor="tc-desc" hint="可空" className="max-w-xl">
 							<Textarea
 								id="tc-desc"
 								rows={2}

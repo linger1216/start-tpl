@@ -1,6 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { CalendarClock, CalendarPlus, CalendarX, ClipboardList, Network, Plus, User } from "lucide-react";
+import { CalendarClock, CalendarPlus, CalendarX, ClipboardList, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageFrame } from "#/components/layout/page-frame";
@@ -8,6 +7,7 @@ import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
+import { TaskCardLink, TaskCloseTaskCard } from "#/components/modules/task-close/task-close-task-card";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -16,14 +16,13 @@ import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
-import { Tag } from "#/components/ui/tag.tsx";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { PAGE_SIZES, PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
-import { formatLocalDate, formatLocalMinute } from "#/lib/time";
+import { PAGE_SIZES } from "#/lib/constants";
+import type { WorkflowStatus } from "#/lib/task-close-spec";
+import { formatLocalDate } from "#/lib/time";
 
 /** 快捷区间 → 往回推的天数(含今天):今天 0 天 / 近 7 天 6 天 / 近 30 天 29 天 */
 const PRESET_DAYS: Record<string, number> = { today: 0, "7d": 6, "30d": 29 };
@@ -319,46 +318,9 @@ export function TaskCloseCardsPage() {
 			) : (
 				<div className="flex flex-wrap gap-3">
 					{items.map((item) => (
-						<Link
-							key={item.id}
-							to="/task-close/$taskId"
-							params={{ taskId: item.id }}
-							className="block w-full max-w-sm rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25"
-						>
-							<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
-								{/* 顶行:图标块(左) + 状态徽章(右) —— 与「流程模板」卡片同形 */}
-								<div className="mb-4 flex items-start justify-between gap-2">
-									<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
-										{item.childCount > 0 ? <Network className="size-4.5" /> : <ClipboardList className="size-4.5" />}
-									</div>
-									{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}
-									<div className="flex flex-wrap items-center justify-end gap-1.5">
-										<Tag variant="secondary">{priorityLabelOf(item.priority)}</Tag>
-										<Tag variant="outline">{labelOf(item.status)}</Tag>
-									</div>
-								</div>
-								<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{item.name}</h3>
-								<p className="mb-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-									{item.description?.trim() || "（无描述）"}
-								</p>
-								<div className="mt-auto flex flex-wrap items-center gap-1.5">
-									{item.childCount > 0 ? (
-										<span className="inline-flex items-center gap-1 rounded-sm bg-brand-soft px-2 py-0.5 text-xs text-primary">
-											<Network className="size-3" />
-											{item.childCount} 个子任务
-										</span>
-									) : null}
-									<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-										<User className="size-3" />
-										{item.creatorName ?? PLACEHOLDER_EMPTY}
-									</span>
-									<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-										<CalendarClock className="size-3" />
-										{item.dueAt ? `截止 ${formatLocalMinute(item.dueAt)}` : `建于 ${formatLocalMinute(item.createdAt)}`}
-									</span>
-								</div>
-							</Card>
-						</Link>
+						<TaskCardLink key={item.id} task={item} className="block w-full max-w-sm">
+							<TaskCloseTaskCard task={item} statusLabel={labelOf} />
+						</TaskCardLink>
 					))}
 				</div>
 			)}

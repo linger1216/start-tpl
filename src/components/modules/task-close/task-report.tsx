@@ -5,15 +5,18 @@ import { toast } from "sonner";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import type { TRPCRouter } from "#/integrations/trpc/router";
 import { toastApiError } from "#/lib/api/error";
-import { pasteReportGrid, type TaskReportSchema, taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
+import {
+	pasteReportGrid,
+	type TaskReportSchema,
+	taskReportSchema,
+	type validateTaskReport,
+} from "#/lib/task-report-spec";
 
 /** 填报与说明、自由回复独立，数据和授权都由服务端提供。 */
 export function TaskReport({ taskId, canManage }: { taskId: string; canManage: boolean }) {
@@ -103,17 +106,7 @@ function TaskReportEditor({
 	const [revision, setRevision] = useState(data.report.revision);
 	const [dirty, setDirty] = useState(false);
 	const [blocked, setBlocked] = useState(false);
-	const [confirm, setConfirm] = useState(false);
-	const [reason, setReason] = useState("");
-	const [changeTemplate, setChangeTemplate] = useState("");
-	const [confirmChange, setConfirmChange] = useState(false);
-	const [confirmRemove, setConfirmRemove] = useState(false);
-	const templates = useQuery({
-		...trpc.taskClose.reportTemplateList.queryOptions(),
-		enabled: canManage && data.canRebind,
-	});
 	const [issues, setIssues] = useState<ReturnType<typeof validateTaskReport>>([]);
-	const refresh = () => client.invalidateQueries(trpc.taskClose.pathFilter());
 	const save = useMutation(
 		trpc.taskClose.reportSaveDraft.mutationOptions({
 			onSuccess: (result, variables) => {
@@ -128,40 +121,9 @@ function TaskReportEditor({
 			},
 		}),
 	);
-	const rebind = useMutation(
-		trpc.taskClose.reportBind.mutationOptions({
-			onSuccess: (_result, variables) => {
-				setConfirmChange(false);
-				setConfirmRemove(false);
-				toast.success(variables.reportId === null ? "已移除填报" : "已更换填报模板");
-				void client.invalidateQueries(trpc.taskClose.pathFilter());
-			},
-			onError: toastApiError,
-		}),
-	);
-	const submit = useMutation(
-		trpc.taskClose.reportSubmit.mutationOptions({
-			onSuccess: () => {
-				setConfirm(false);
-				toast.success("填报已提交");
-				void refresh();
-			},
-			onError: toastApiError,
-		}),
-	);
-	const returnReport = useMutation(
-		trpc.taskClose.reportReturn.mutationOptions({
-			onSuccess: () => {
-				setReason("");
-				toast.success("填报已退回");
-				void refresh();
-			},
-			onError: toastApiError,
-		}),
-	);
 	useEffect(() => {
 		if (!dirty || blocked || save.isPending || !data.canEdit) return;
-		const timer = window.setTimeout(() => save.mutate({ taskId, revision, draft }), 1200);
+		const timer = window.setTimeout(() => save.mutate({ taskId, revision, draft }), 600);
 		return () => window.clearTimeout(timer);
 	}, [dirty, blocked, save.isPending, data.canEdit, taskId, revision, draft, save.mutate]);
 	const rows =
@@ -172,32 +134,17 @@ function TaskReportEditor({
 		setDirty(true);
 		setIssues([]);
 	};
-	const validate = () => {
-		const errors = validateTaskReport(schema, draft);
-		setIssues(errors);
-		if (!errors.length) setConfirm(true);
-	};
 	return (
 		<div className="grid gap-4">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<span className="text-sm text-muted-foreground">
-					{data.report.status === "submitted"
-						? "已提交"
-						: data.report.status === "returned"
-							? "已退回，待重新填写"
-							: "草稿"}{" "}
-					· {data.submissions.length} 次提交
+					{data.scoped ? `共 ${rows.length} 条数据 · 只显示属于你的部分` : `共 ${rows.length} 条数据`}
 				</span>
 				{data.canEdit && (
 					<span className="flex items-center gap-2 text-xs text-muted-foreground">
-						{blocked
-							? "自动保存失败，请刷新后处理冲突"
-							: save.isPending
-								? "正在保存…"
-								: dirty
-									? "等待自动保存"
-									: "草稿已保存"}
-						{/* 冲突后 revision 落后 → 自动保存永远失败。点这里拉最新 revision 后重存本地草稿 */}
+						{blocked ? "保存失败，请刷新后处理冲突" : save.isPending ? "正在保存…" : dirty ? "等待保存" : "已保存"}
+						{/* 冲突后本地那份已经过时:一律拉服务端最新数据,本地改动丢弃。
+						    盲存旧数据会把别人刚写的行打回去(整份数据集口径下尤其致命) */}
 						{blocked && dirty && (
 							<Button
 								variant="link"
@@ -205,88 +152,33 @@ function TaskReportEditor({
 								className="h-auto p-0"
 								disabled={save.isPending}
 								onClick={async () => {
-									// 先拉服务端最新 revision 再存,否则存的还是落后那个,照样冲突
 									const fresh = await client.fetchQuery({
 										...trpc.taskClose.reportGet.queryOptions({ taskId }),
 										staleTime: 0,
 									});
-									const latest = fresh?.report.revision ?? revision;
-									setRevision(latest);
+									if (!fresh) return;
+									setRevision(fresh.report.revision);
+									setDraft(fresh.report.draft as Row | Row[]);
+									setRowKeys(
+										Array.isArray(fresh.report.draft) ? fresh.report.draft.map(() => crypto.randomUUID()) : [],
+									);
+									setDirty(false);
 									setBlocked(false);
-									save.mutate({ taskId, revision: latest, draft: draftRef.current });
+									toast.warning("数据已被他人更新,已载入最新内容,未保存的修改已丢弃");
 								}}
 							>
-								重试保存
+								载入最新数据
 							</Button>
 						)}
 					</span>
 				)}
 			</div>
-			{canManage && !data.canRebind && (
-				<p className="text-xs text-muted-foreground">批次任务或已有正式提交的填报不能更换或移除。</p>
+			{canManage && data.scoped && (
+				<p className="text-xs text-muted-foreground">这份填报与父任务共用数据，你只改属于自己的那几条。</p>
 			)}
-			{canManage && data.canRebind && (
-				<div className="flex flex-wrap items-center gap-2">
-					<Select
-						items={(templates.data ?? [])
-							.filter((template) => template.id !== data.template.id)
-							.map((template) => ({ value: template.id, label: template.name }))}
-						value={changeTemplate}
-						onValueChange={(value) => setChangeTemplate(value ?? "")}
-					>
-						<SelectTrigger className="min-w-52" aria-label="更换填报模板">
-							<SelectValue placeholder="选择其他模板" />
-						</SelectTrigger>
-						<SelectContent>
-							{(templates.data ?? [])
-								.filter((template) => template.id !== data.template.id)
-								.map((template) => (
-									<SelectItem key={template.id} value={template.id}>
-										{template.name}
-									</SelectItem>
-								))}
-						</SelectContent>
-					</Select>
-					<Button
-						size="sm"
-						variant="outline"
-						disabled={!changeTemplate || dirty || blocked || save.isPending || rebind.isPending}
-						onClick={() => setConfirmChange(true)}
-					>
-						更换模板
-					</Button>
-					<Button
-						size="sm"
-						variant="outline"
-						disabled={dirty || blocked || save.isPending || rebind.isPending}
-						onClick={() => setConfirmRemove(true)}
-					>
-						移除填报
-					</Button>
-					<span className="text-xs text-muted-foreground">更换会清空当前草稿，已提交或属于批次的填报不可更换。</span>
-				</div>
+			{!canManage && data.scoped && (
+				<p className="text-xs text-muted-foreground">这份填报与父任务共用数据，这里只显示属于执行人的那几条。</p>
 			)}
-			<ConfirmDialog
-				open={confirmChange}
-				onOpenChange={setConfirmChange}
-				title="更换填报模板"
-				description="更换后当前草稿会被清空，且无法恢复。确认继续？"
-				confirmText="更换模板"
-				pendingText="更换中…"
-				confirmVariant="default"
-				isPending={rebind.isPending}
-				onConfirm={() => rebind.mutate({ taskId, reportId: changeTemplate, expectedRevision: revision })}
-			/>
-			<ConfirmDialog
-				open={confirmRemove}
-				onOpenChange={setConfirmRemove}
-				title="移除任务填报"
-				description="移除后当前草稿将被清空，且无法恢复。此任务可以重新配置填报。"
-				confirmText="移除填报"
-				pendingText="移除中…"
-				isPending={rebind.isPending}
-				onConfirm={() => rebind.mutate({ taskId, reportId: null, expectedRevision: revision })}
-			/>
 			{canManage && schema.kind === "TABLE" && (
 				<p className="text-xs text-muted-foreground">
 					需要把这张表分给多位执行人?在「填报模板」页用相同结构另建任务,并为每人配置数据规则。
@@ -352,12 +244,13 @@ function TaskReportEditor({
 											<ReportField
 												field={field}
 												value={row[field.id]}
-												disabled={!data.canEdit || field.readOnly}
+												// 数据范围字段决定这条行归谁 —— 改了就把行交给别人了
+												disabled={!data.canEdit || field.readOnly || data.scopeFields.includes(field.id)}
 												onChange={(value) => update(index, field.id, value)}
 											/>
 										</td>
 									))}
-									{data.canEdit && (
+									{data.canEdit && !data.scoped && (
 										<td className="border border-border p-2">
 											<Button
 												variant="ghost"
@@ -401,7 +294,7 @@ function TaskReportEditor({
 			)}
 			{data.canEdit && (
 				<div className="flex flex-wrap gap-2">
-					{schema.kind === "TABLE" && (
+					{schema.kind === "TABLE" && !data.scoped && (
 						<Button
 							variant="outline"
 							size="sm"
@@ -421,50 +314,8 @@ function TaskReportEditor({
 							添加行
 						</Button>
 					)}
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={!dirty || save.isPending || blocked}
-						onClick={() => save.mutate({ taskId, revision, draft })}
-					>
-						保存草稿
-					</Button>
-					{data.canSubmit && (
-						<Button size="sm" disabled={dirty || blocked || save.isPending || submit.isPending} onClick={validate}>
-							提交填报
-						</Button>
-					)}
 				</div>
 			)}
-			{canManage && data.report.status === "submitted" && (
-				<div className="flex flex-wrap gap-2">
-					<Textarea
-						value={reason}
-						onChange={(event) => setReason(event.target.value)}
-						placeholder="填写退回原因"
-						className="min-h-16"
-					/>
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={!reason.trim() || returnReport.isPending}
-						onClick={() => returnReport.mutate({ taskId, reason })}
-					>
-						退回重填
-					</Button>
-				</div>
-			)}
-			<ConfirmDialog
-				open={confirm}
-				onOpenChange={setConfirm}
-				title="提交填报"
-				description="提交后将生成不可修改的快照，退回后可再次填写。"
-				confirmText="提交"
-				pendingText="提交中…"
-				confirmVariant="default"
-				isPending={submit.isPending}
-				onConfirm={() => submit.mutate({ taskId, revision })}
-			/>
 		</div>
 	);
 }
@@ -505,8 +356,11 @@ function ReportField({
 	if (field.type === "select")
 		return (
 			<Select
-				items={(field.options ?? []).map((option) => ({ value: option, label: option }))}
-				value={typeof value === "string" ? value : ""}
+				items={[
+					...(field.allowEmpty ? [{ value: null, label: "（空）" }] : []),
+					...(field.options ?? []).map((option) => ({ value: option, label: option })),
+				]}
+				value={typeof value === "string" ? value : null}
 				disabled={disabled}
 				onValueChange={(next) => onChange(next ?? null)}
 			>
@@ -514,6 +368,7 @@ function ReportField({
 					<SelectValue placeholder="请选择" />
 				</SelectTrigger>
 				<SelectContent>
+					{field.allowEmpty && <SelectItem value={null}>（空）</SelectItem>}
 					{field.options?.map((option) => (
 						<SelectItem key={option} value={option}>
 							{option}
