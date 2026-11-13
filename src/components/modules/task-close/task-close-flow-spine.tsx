@@ -147,8 +147,6 @@ export function TaskTodoStrip({
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const textRef = useRef<HTMLTextAreaElement | null>(null);
 	const [replyFor, setReplyFor] = useState<string | null>(null);
-	const [openAction, setOpenAction] = useState<string | null>(null);
-	const [opening, setOpening] = useState(false);
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<ReplyFile[]>([]);
 	const [uploading, setUploading] = useState(false);
@@ -161,6 +159,7 @@ export function TaskTodoStrip({
 	const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	function askApprove(id: string) {
+		markViewed(id);
 		if (confirmFor === id) {
 			setConfirmFor(null);
 			if (confirmTimer.current) clearTimeout(confirmTimer.current);
@@ -177,20 +176,9 @@ export function TaskTodoStrip({
 		if (confirmTimer.current) clearTimeout(confirmTimer.current);
 	}
 
-	async function openDetails(id: string) {
-		if (openAction === id) {
-			setOpenAction(null);
-			return;
-		}
-		setOpening(true);
-		try {
-			await onView(id);
-			setOpenAction(id);
-		} catch {
-			/* 调用方展示错误 */
-		} finally {
-			setOpening(false);
-		}
+	/** 动手之前顺手把"已查看"打上(未查看提醒按它去重),失败不拦动作 */
+	function markViewed(id: string) {
+		void onView(id).catch(() => undefined);
 	}
 
 	if (items.length === 0) return null;
@@ -255,18 +243,7 @@ export function TaskTodoStrip({
 								</span>
 								<span className="text-foreground">{item.title}</span>
 							</span>
-							{item.actionable ? (
-								<Button
-									variant="ghost"
-									size="sm"
-									disabled={opening}
-									aria-expanded={openAction === item.id}
-									onClick={() => void openDetails(item.id)}
-								>
-									{openAction === item.id ? "收起" : "查看"}
-								</Button>
-							) : null}
-							{item.actionable && openAction === item.id && !item.consult ? (
+							{item.actionable && !item.consult ? (
 								<span className="inline-flex items-center gap-2">
 									{/* 两段式:第一击进待确认态(按钮变「确认通过」),第二击才生效;2s 自动还原 */}
 									{confirmFor === item.id ? (
@@ -289,6 +266,7 @@ export function TaskTodoStrip({
 										disabled={busy}
 										onClick={() => {
 											resetConfirm();
+											markViewed(item.id);
 											onReject(item.id);
 										}}
 									>
@@ -296,15 +274,23 @@ export function TaskTodoStrip({
 									</ActionButton>
 								</span>
 							) : null}
-							{item.actionable && openAction === item.id && item.consult ? (
-								<Button size="sm" variant="outline" disabled={replyBusy} onClick={() => openReply(item.id)}>
+							{item.actionable && item.consult ? (
+								<Button
+									size="sm"
+									variant="outline"
+									disabled={replyBusy}
+									onClick={() => {
+										markViewed(item.id);
+										openReply(item.id);
+									}}
+								>
 									<ReplyIcon className="size-3.5" />
 									回复
 								</Button>
 							) : null}
 						</div>
 						{/* 征询的回复就一行:意见 + 附件 → 提交后意见落成一条评论,动作即结 */}
-						{item.actionable && openAction === item.id && item.consult && replyFor === item.id ? (
+						{item.actionable && item.consult && replyFor === item.id ? (
 							<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
 								<textarea
 									ref={textRef}

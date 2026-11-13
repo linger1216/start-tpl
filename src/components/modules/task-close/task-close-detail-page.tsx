@@ -1102,6 +1102,24 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
 				}
 			>
+				<DetailRow label="常见原因" align="center">
+					<div className="flex flex-wrap gap-1.5">
+						{REJECT_PRESETS.map((reason) => (
+							<Button
+								key={reason}
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() =>
+									// 点一下就进输入框:空的直接填,已经写了就接着补,别覆盖人家打的字
+									setRejectReason((prev) => (prev.trim() ? `${prev.trim()};${reason}` : reason))
+								}
+							>
+								{reason}
+							</Button>
+						))}
+					</div>
+				</DetailRow>
 				<DetailRow label="原因" align="center">
 					<Textarea
 						rows={3}
@@ -1127,6 +1145,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 function roleText(role: string): string {
 	return ({ creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>)[role] ?? role;
 }
+
+/** 驳回的常用原因 —— 点一下填进输入框,省得每次从零打字 */
+const REJECT_PRESETS = ["材料不完整", "数据有误", "不符合要求", "需补充说明"];
 
 /** 头部 ⓘ 用的身份名 —— 比 `roleText` 多「管理员 / 旁观」两种(那两个不是 `tc_member` 里的角色) */
 const ROLE_LABEL: Record<string, string> = {
