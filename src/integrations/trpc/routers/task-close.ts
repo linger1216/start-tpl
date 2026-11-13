@@ -302,6 +302,17 @@ async function assertTaskParticipant(task: TaskRow, meId: string, message: strin
 	if (!(await isTaskParticipant(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message });
 }
 
+/**
+ * 任务详情能不能看 —— 只对**任务相关方**开放:自己这条的创建人 / 成员 / 管理员;
+ * 再加一条「**父任务的参与者**能看子任务」(任务树向下可见;子任务看不到父任务)。
+ */
+async function isTaskReadable(task: TaskRow, meId: string): Promise<boolean> {
+	if (await isTaskParticipant(task, meId)) return true;
+	if (!task.parent_id) return false;
+	const [parent] = await db.select().from(taskCloseTask).where(eq(taskCloseTask.id, task.parent_id)).limit(1);
+	return parent ? isTaskParticipant(parent, meId) : false;
+}
+
 /** 这个人在这条任务上通过 `tc_member` 拿到的角色(不含 creator —— 那个是 `tc_task` 固有列) */
 async function memberRolesOf(taskId: string, userId: string, reader: Reader = db): Promise<string[]> {
 	const rows = await reader
@@ -1477,6 +1488,8 @@ export const taskCloseRouter = createTRPCRouter({
 	taskGet: protectedProcedure.input(z.object({ id: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
+		// 不是相关方(也不是父任务的参与者)连详情都不给 —— 直接访问 URL 也一样
+		if (!(await isTaskReadable(task, me.id))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看这条任务" });
 
 		const memberRows = await db
 			.select()

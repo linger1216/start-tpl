@@ -302,15 +302,17 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 	/** 这条 id 在库里已经不存在了(被删 / 别人删了 / 手输错了) */
 	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
+	/** 不是任务相关方(直接访问别人的任务 URL 也走这条) */
+	const taskForbidden = detailQuery.isError && isTaskForbidden(detailQuery.error);
 	const bouncedRef = useRef(false);
 
-	// 不存在的任务不留错误页:提示一声就回「我的任务」(replace —— 这条 URL 不该再进历史)
+	// 不存在 / 没权限都不留错误页:提示一声就回「我的任务」(replace —— 这条 URL 不该再进历史)
 	useEffect(() => {
-		if (!taskMissing || bouncedRef.current) return;
+		if (!(taskMissing || taskForbidden) || bouncedRef.current) return;
 		bouncedRef.current = true;
-		toast.error("任务不存在或已删除,已回到我的任务");
+		toast.error(taskForbidden ? "权限不足,已回到我的任务" : "任务不存在或已删除,已回到我的任务");
 		void navigate({ to: "/task-close", replace: true });
-	}, [taskMissing, navigate]);
+	}, [taskMissing, taskForbidden, navigate]);
 
 	if (detailQuery.isPending) {
 		return (
@@ -426,19 +428,23 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	const tipLines = [
 		`状态:${statusLabelOf(statuses, task.status)}`,
 		`发起审批:${actionTargetOptions.length > 0 ? `→ ${actionTargetOptions.map((option) => option.label).join(" / ")}` : "无"}`,
-		`直接改状态:${statusOptions.length > 0 ? `→ ${statusOptions.map((option) => option.label).join(" / ")}` : "无"}`,
+		`直接更改状态:${statusOptions.length > 0 ? `→ ${statusOptions.map((option) => option.label).join(" / ")}` : "无"}`,
 		...(permissions.locked ? ["任务被审批动作锁住,状态类按钮暂不可用"] : []),
 	];
 
-	/** 答复人 / 转交候选人 = 创建人 + 全部成员(去重;去掉自己 —— 不能指派给自己) */
+	/**
+	 * 答复人 / 转交候选人 = **任务内的人**:创建人 + 参与者 + 执行人(右侧标出角色)。
+	 * 不能选自己 —— 管理员除外(管理员本来就什么都能做)。父任务要找人,先自己加参与者。
+	 */
 	const peopleOptions = (() => {
 		const list = [
-			{ value: task.creatorId, label: task.creatorName ?? "创建人" },
-			...members.map((row) => ({ value: row.userId, label: row.name ?? row.userId })),
+			{ value: task.creatorId, label: task.creatorName ?? "创建人", hint: "创建人" },
+			...members.map((row) => ({ value: row.userId, label: row.name ?? row.userId, hint: roleText(row.role) })),
 		];
 		const seen = new Set<string>();
 		return list.filter((option) => {
-			if (option.value === meId || seen.has(option.value)) return false;
+			if (option.value === meId && !permissions.isAdmin) return false;
+			if (seen.has(option.value)) return false;
 			seen.add(option.value);
 			return true;
 		});
@@ -573,13 +579,13 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							) : canSetStatus ? (
 								<Button
 									size="sm"
-									title="按事项流程直接改状态"
+									title="按事项流程直接更改状态"
 									onClick={() => {
 										setStatusTo(statusOptions[0]?.value ?? "");
 										setStatusOpen(true);
 									}}
 								>
-									改状态
+									更改状态
 								</Button>
 							) : null}
 							{can.consult ? (
@@ -624,7 +630,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 													setStatusOpen(true);
 												}}
 											>
-												改状态
+												更改状态
 											</DropdownMenuItem>
 										) : null}
 										{(can.transfer || (canSetStatus && canApprove)) && (can.edit || can.remove) ? (
@@ -901,7 +907,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			<TaskActionDialog
 				open={statusOpen}
 				onOpenChange={setStatusOpen}
-				title="改状态"
+				title="更改状态"
 				description="按流程模板允许的直接转移边修改状态。"
 				pending={transitMutation.isPending}
 				confirmDisabled={!statusTo}
@@ -1278,6 +1284,16 @@ function PeopleRow({
  * 三种判据都认一遍:`data.code` 是字符串键 `"NOT_FOUND"`、`shape.code` 是数字码 `-32004`、`data.httpStatus` 是 404。
  * 都认不出来就当普通报错走错误页 —— 网络抖动之类不该把人踢回列表。
  */
+/** 权限不足 —— 服务端 FORBIDDEN(不是相关方);同样提示一声回列表,不留错误页 */
+function isTaskForbidden(error: unknown): boolean {
+	const err = error as {
+		data?: { code?: unknown; httpStatus?: unknown };
+		shape?: { code?: unknown; data?: { code?: unknown; httpStatus?: unknown } };
+	} | null;
+	const code = err?.data?.code ?? err?.shape?.data?.code;
+	return code === "FORBIDDEN" || err?.data?.httpStatus === 403;
+}
+
 function isTaskMissing(error: unknown): boolean {
 	const err = error as {
 		data?: { code?: unknown; httpStatus?: unknown };

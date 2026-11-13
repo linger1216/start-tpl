@@ -22,7 +22,8 @@ export type TaskCardItem = {
 	childCount: number;
 	/** 有审批 / 征询正轮到我处理 —— 列表卡右上角出「待你处理」 */
 	hasMyAction?: boolean;
-	/** 发给谁(执行人姓名)—— fan-out 的子任务一人一条,没这个就看不出是谁的活 */
+	/** 发给谁(执行人)—— fan-out 的子任务一人一条,没这个就看不出是谁的活 */
+	executorId?: string | null;
 	executorName?: string | null;
 };
 

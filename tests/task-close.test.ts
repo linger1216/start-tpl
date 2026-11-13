@@ -719,6 +719,50 @@ describe("任务闭环", () => {
 			"参与者能在「我的任务」里看到自己参与的子任务",
 		);
 	});
+	it("父任务先自己加参与者,再从任务内的角色里选审批人(不反向依赖子任务执行人)", async () => {
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("父任务审批人"),
+			workflowId,
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
+		});
+		const detail = await asA().taskClose.taskGet({ id: parentId });
+		assert.equal(detail.members.filter((member) => member.role === "executor").length, 0, "父任务不设执行人");
+		// 父任务要找人:**自己加参与者**,而不是反向依赖子任务的执行人
+		await asA().taskClose.memberAdd({ taskId: parentId, userId: B.id, role: "participant" });
+		const action = await asA().taskClose.actionCreate({ taskId: parentId, toStatus: "done", handleId: B.id });
+		const mine = await asB().taskClose.actionMine({ pageSize: 100 });
+		assert.ok(
+			mine.items.some((item) => item.id === action.id),
+			"加进来的参与者能在「待我处理」里看到审批",
+		);
+		await asB().taskClose.actionRespond({ id: action.id, approved: true });
+	});
+
+	it("任务详情只对相关方开放:陌生人 403;父任务参与者向下能看子任务,子任务看不到父任务", async () => {
+		// 1) 只有创建人、没有其他人的任务
+		const solo = await asA().taskClose.taskCreate({ name: taskName("只给相关方"), workflowId });
+		await assertRejects(() => asB().taskClose.taskGet({ id: solo.id }), "无权查看这条任务");
+
+		// 2) 父 + 两个子(fan-out);C 既是某个子任务的执行人,又加进父任务做参与者
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("树可见"),
+			workflowId,
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
+		});
+		const kids = await db.select().from(taskCloseTask).where(eq(taskCloseTask.parent_id, parentId));
+		assert.equal(kids.length, 2);
+		await asA().taskClose.memberAdd({ taskId: parentId, userId: C.id, role: "participant" });
+		// C:父任务参与者 → 父任务与两个子任务都能看(任务树向下可见)
+		for (const id of [parentId, ...kids.map((kid) => kid.id)]) await asC().taskClose.taskGet({ id });
+		// B:只是子任务的执行人,不是父任务的人 → 看不到父任务
+		await assertRejects(() => asB().taskClose.taskGet({ id: parentId }), "无权查看这条任务");
+	});
 	it("并发保存只有一个成功;转交后旧执行人写不进去", async () => {
 		const taskId = await newTask("填报生命周期");
 		const payload = {
