@@ -47,10 +47,8 @@ export function TaskCloseChildrenPage({ taskId }: { taskId: string }) {
 						<Button variant="outline" size="sm" disabled={detailQuery.isFetching} onClick={() => detailQuery.refetch()}>
 							{detailQuery.isFetching ? "重试中…" : "重试"}
 						</Button>
-						<Link to="/task-close">
-							<Button variant="ghost" size="sm">
-								返回我的任务
-							</Button>
+						<Link to="/task-close" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+							返回我的任务
 						</Link>
 					</div>
 				</div>

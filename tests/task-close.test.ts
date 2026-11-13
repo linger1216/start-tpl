@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, or } from "drizzle-orm";
 
 import {
 	sysCasbinRule,
@@ -458,7 +458,7 @@ describe("任务闭环", () => {
 		// shared 模板对非管理员也开放模板导入
 		assert.ok((await asB().taskClose.reportExcelDownload({ reportId: template.id })).fileBase64.length > 0);
 	});
-	it("多执行人 + 填报模板 fan-out:父子共享一份数据,子任务只看自己范围、继承父任务的说明与链接", async () => {
+	it("多执行人 + 填报模板 fan-out:子任务各拿一份副本、继承父任务的说明与链接,手动「保存」才同步回父任务", async () => {
 		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "fanout 分发",
 			payload: {
@@ -508,64 +508,73 @@ describe("任务闭环", () => {
 		}
 		const reportB = await asB().taskClose.reportGet({ taskId: childB.id });
 		assert.equal(reportB?.template.id, template.id);
-		assert.deepEqual(reportB?.report.draft, [{ town: "甲镇", value: 1 }]);
-		assert.equal(reportB?.scoped, true);
-		assert.deepEqual(reportB?.scopeFields, ["town"]);
+		assert.deepEqual(reportB?.report.draft, [{ town: "甲镇", value: 1 }], "子任务拿的是下发时复制的那一份");
+		assert.equal(reportB?.canSyncToParent, true);
 		const reportC = await asC().taskClose.reportGet({ taskId: childC.id });
 		assert.deepEqual(reportC?.report.draft, [{ town: "乙镇", value: 2 }]);
-		assert.equal(reportC?.scoped, true);
-		// 父任务视角看到全部
-		const before = await asA().taskClose.reportGet({ taskId: parentId });
-		assert.deepEqual(before?.report.draft, [
+		const parentView = await asA().taskClose.reportGet({ taskId: parentId });
+		assert.deepEqual(parentView?.report.draft, [
 			{ town: "甲镇", value: 1 },
 			{ town: "乙镇", value: 2 },
 		]);
-		assert.equal(before?.scoped, false);
-		// 子任务改自己那行 → 立刻反映到父任务;别人范围的行原样保留
-		const saved = await asB().taskClose.reportSaveDraft({
+		assert.equal(parentView?.canSyncToParent, false, "父任务本身就是数据源,没有父可同步");
+
+		// 自动保存只写自己那行:父任务不动,也没有跨任务锁
+		const savedB = await asB().taskClose.reportSaveDraft({
 			taskId: childB.id,
-			revision: before?.report.revision ?? 0,
+			revision: reportB?.report.revision ?? 0,
 			draft: [{ town: "甲镇", value: 10 }],
 		});
-		assert.equal(saved.revision, (before?.report.revision ?? 0) + 1);
-		assert.deepEqual((await asA().taskClose.reportGet({ taskId: parentId }))?.report.draft, [
-			{ town: "甲镇", value: 10 },
-			{ town: "乙镇", value: 2 },
-		]);
-		// 范围字段是归属,不能改
-		await assertRejects(
-			() =>
-				asB().taskClose.reportSaveDraft({
-					taskId: childB.id,
-					revision: saved.revision,
-					draft: [{ town: "乙镇", value: 10 }],
-				}),
-			"数据范围字段不可修改",
+		assert.equal(savedB.revision, (reportB?.report.revision ?? 0) + 1);
+		assert.deepEqual(
+			(await asA().taskClose.reportGet({ taskId: parentId }))?.report.draft,
+			[
+				{ town: "甲镇", value: 1 },
+				{ town: "乙镇", value: 2 },
+			],
+			"没点「保存」之前,父任务的数据不变",
 		);
-		// 范围外的旧页面提交 → 行数对不上,要求刷新
-		await assertRejects(
-			() =>
-				asB().taskClose.reportSaveDraft({
-					taskId: childB.id,
-					revision: saved.revision,
-					draft: [
-						{ town: "甲镇", value: 10 },
-						{ town: "乙镇", value: 2 },
-					],
-				}),
-			"数据范围已变化",
-		);
-		// 两个执行人改互不相干的行:落后的 revision 不挡路(版本号只对整份数据集口径生效)
-		const stale = await asC().taskClose.reportSaveDraft({
+		// 另一个执行人改自己那份:各自 revision,互不冲突
+		await asC().taskClose.reportSaveDraft({
 			taskId: childC.id,
-			revision: 0,
+			revision: reportC?.report.revision ?? 0,
 			draft: [{ town: "乙镇", value: 20 }],
 		});
-		assert.ok(stale.revision > saved.revision);
+		const savedB2 = await asB().taskClose.reportSaveDraft({
+			taskId: childB.id,
+			revision: savedB.revision,
+			draft: [{ town: "甲镇", value: 11 }],
+		});
+		assert.equal(savedB2.revision, savedB.revision + 1);
+
+		// 手动「保存」:把我这份切片整片同步到父任务(别人的行原样保留)
+		const synced = await asB().taskClose.reportSyncToParent({ taskId: childB.id });
+		assert.equal(synced.pushed, 1);
 		assert.deepEqual((await asA().taskClose.reportGet({ taskId: parentId }))?.report.draft, [
-			{ town: "甲镇", value: 10 },
-			{ town: "乙镇", value: 20 },
+			{ town: "乙镇", value: 2 },
+			{ town: "甲镇", value: 11 },
 		]);
+		// 回灌:我的视图 = 父数据按我的范围重算
+		const afterSync = await asB().taskClose.reportGet({ taskId: childB.id });
+		assert.deepEqual(afterSync?.report.draft, [{ town: "甲镇", value: 11 }]);
+		assert.equal(afterSync?.report.revision, synced.revision);
+
+		// 改范围字段:同步后这条行交给父任务,我这边按范围重算后就看不见了
+		await asB().taskClose.reportSaveDraft({
+			taskId: childB.id,
+			revision: synced.revision,
+			draft: [{ town: "丙镇", value: 11 }],
+		});
+		const moved = await asB().taskClose.reportSyncToParent({ taskId: childB.id });
+		assert.equal(moved.kept, 0, "移出我范围的行不再留在我的视图里");
+		assert.deepEqual((await asB().taskClose.reportGet({ taskId: childB.id }))?.report.draft, []);
+		assert.deepEqual((await asA().taskClose.reportGet({ taskId: parentId }))?.report.draft, [
+			{ town: "乙镇", value: 2 },
+			{ town: "丙镇", value: 11 },
+		]);
+
+		// 父任务没有父可同步
+		await assertRejects(() => asA().taskClose.reportSyncToParent({ taskId: parentId }), "只有子任务");
 		// 两个执行人的数据范围完全相同 → 建任务时就拦,不等到保存互相覆盖
 		await assertRejects(
 			() =>
@@ -1958,7 +1967,7 @@ describe("任务闭环 · 只读接口", () => {
 		await assertRejects(() => asA().taskClose.attachmentUrl({ taskId: id, fileId: DELETED_FILE_ID }), "还没上传完成");
 	});
 
-	it("contentHistory:创建即 revision 1,改动追加新修订,非参与者看不了", async () => {
+	it("说明修订不再对外提供,但修订快照仍写入(旧附件归属靠它)", async () => {
 		const { id } = await asA().taskClose.taskCreate({
 			name: taskName("说明修订"),
 			workflowId,
@@ -1976,21 +1985,21 @@ describe("任务闭环 · 只读接口", () => {
 			payload: { links: [{ kind: "link", url: "https://example.com/v2" }] },
 		});
 
-		const history = await asA().taskClose.contentHistory({ taskId: id });
+		// 界面入口已取消,但快照照写:旧修订里的附件仍算"被任务引用"(attachmentUrl 的归属链要用)
+		const revisions = await db
+			.select()
+			.from(taskCloseContentRevision)
+			.where(eq(taskCloseContentRevision.task_id, id))
+			.orderBy(desc(taskCloseContentRevision.revision));
 		assert.deepEqual(
-			history.map((row) => row.revision),
+			revisions.map((row) => row.revision),
 			[2, 1],
-			"修订号倒序",
+			"创建 = revision 1,改动追加一版",
 		);
-		assert.equal(history[0]?.description, "第二版说明");
-		assert.equal(history[0]?.links[0]?.url, "https://example.com/v2");
-		assert.equal(history[0]?.attachments.length, 0, "第二版去掉了附件");
-		assert.equal(history[1]?.description, "初版说明");
-		assert.equal(history[1]?.attachments[0]?.id, ATTACH_FILE_ID, "旧修订的附件仍能解析");
-		assert.equal(history[0]?.actorName, A.name);
-
-		// 成员能看;路人不给
-		assert.equal((await asB().taskClose.contentHistory({ taskId: id })).length, 2, "任务成员可读");
-		await assertRejects(() => asC().taskClose.contentHistory({ taskId: id }), "无权查看说明修订");
+		assert.equal(revisions[0]?.description, "第二版说明");
+		assert.equal(revisions[0]?.actor_id, A.id);
+		assert.ok(JSON.stringify(revisions[0]?.payload).includes("https://example.com/v2"));
+		assert.equal(revisions[1]?.description, "初版说明");
+		assert.ok(JSON.stringify(revisions[1]?.payload).includes(ATTACH_FILE_ID), "初版仍记着当时挂的附件");
 	});
 });

@@ -236,21 +236,16 @@ function ReportTemplateCard({
 }) {
 	const def = parsedReportTemplate(row);
 	return (
-		<Card
-			role="button"
-			tabIndex={0}
-			aria-label={`查看填报模板 ${row.name}`}
-			onClick={onView}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					onView();
-				}
-			}}
-			className="group flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-card p-5 outline-none transition-[border-color] hover:border-primary/50 focus-visible:ring-1 focus-visible:ring-ring/25"
-		>
+		<Card className="group relative flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
+			{/* 整卡可点:覆盖层按钮与操作按钮**同级**,不是父子 —— role="button" 的卡里再放 <button> 键盘焦点会重复 */}
+			<button
+				type="button"
+				aria-label={`查看填报模板 ${row.name}`}
+				onClick={onView}
+				className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+			/>
 			{/* 顶行:图标块(左) + 分享标识 / 行内动作(右) */}
-			<div className="mb-4 flex items-start justify-between gap-2">
+			<div className="relative mb-4 flex items-start justify-between gap-2">
 				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
 					<FileText className="size-4.5" />
 				</div>
@@ -263,7 +258,7 @@ function ReportTemplateCard({
 					) : (
 						<span className="flex h-7 items-center px-2 text-xs text-muted-foreground">仅自己</span>
 					)}
-					<div className="flex items-center gap-1">
+					<div className="relative z-10 flex items-center gap-1">
 						{canEdit ? (
 							<Button
 								variant="ghost"

@@ -10,11 +10,13 @@ import {
 	Pencil,
 	Send,
 	Trash2,
+	Upload,
 	UserMinus,
 	UserPlus,
 } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
+import { toApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { describeLog, logCategoryOf, type TaskLogCategory, type TaskLogItem } from "#/lib/task-close-log";
 import { statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
@@ -43,6 +45,7 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"report.distribute": FilePlus2,
 	"report.submit": Send,
 	"report.return": MessageSquareReply,
+	"report.sync": Upload,
 };
 
 /**
@@ -87,13 +90,30 @@ export function TaskCloseLogList({
 	statuses,
 	roleLabel,
 	loading,
+	error,
+	onRetry,
 }: {
 	items: TaskLogItem[];
 	statuses: WorkflowStatus[];
 	roleLabel: (role: string) => string;
 	/** 首次取数中 —— 别把「还没到」说成「没有」:空态与加载态是两回事 */
 	loading?: boolean;
+	/** 取数失败 —— 同理,别把「取不到」说成「没有」 */
+	error?: unknown;
+	onRetry?: () => void;
 }) {
+	if (error) {
+		return (
+			<div className="flex flex-wrap items-center gap-2 py-2 text-sm text-muted-foreground">
+				<span>{toApiError(error).message || "动态加载失败。"}</span>
+				{onRetry ? (
+					<Button variant="outline" size="xs" onClick={onRetry}>
+						重试
+					</Button>
+				) : null}
+			</div>
+		);
+	}
 	if (items.length === 0) {
 		return (
 			<p className="py-2 text-sm text-muted-foreground">

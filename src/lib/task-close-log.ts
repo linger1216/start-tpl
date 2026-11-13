@@ -28,6 +28,7 @@ export const TASK_LOG_EVENTS = [
 	"report.distribute",
 	"report.submit",
 	"report.return",
+	"report.sync",
 ] as const;
 
 export type TaskLogEvent = (typeof TASK_LOG_EVENTS)[number];
@@ -51,6 +52,7 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"report.distribute": "分发填报数据",
 	"report.submit": "提交填报",
 	"report.return": "退回填报",
+	"report.sync": "同步填报到父任务",
 };
 
 /**
@@ -235,6 +237,13 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 		case "report.return": {
 			const reason = text(detail.reason);
 			return { title: TASK_LOG_LABEL["report.return"], note: reason ? `退回原因:${reason}` : null };
+		}
+		case "report.sync": {
+			const pushed = text(detail.pushed);
+			return {
+				title: TASK_LOG_LABEL["report.sync"],
+				note: pushed ? `本次推送 ${pushed} 行,范围内保留 ${text(detail.kept) ?? "?"} 行` : null,
+			};
 		}
 		default:
 			// 将来新增事件码而界面没跟上时走这里:显示码本身,不白屏、不错位

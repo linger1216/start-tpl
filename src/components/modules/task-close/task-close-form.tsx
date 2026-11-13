@@ -270,7 +270,7 @@ export function TaskCloseForm({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
-					<DialogTitle>{editing ? "编辑任务" : "新建任务"}</DialogTitle>
+					<DialogTitle>{editing ? "编辑任务" : "新增任务"}</DialogTitle>
 					<DialogDescription>
 						{editing
 							? "可改名称 / 描述 / 截止时间 / 优先级;成员与状态走详情页。"
@@ -449,7 +449,6 @@ export function TaskCloseForm({
 													schema={selectedSchema.data}
 													canEdit
 													disabled={false}
-													iconOnly
 													onImport={(value) => {
 														setImportedRows((Array.isArray(value) ? value : [value]) as typeof importedRows);
 													}}

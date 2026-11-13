@@ -13,7 +13,7 @@ import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toastApiError } from "#/lib/api/error";
+import { toApiError, toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import type { TaskAttachment } from "#/lib/task-payload";
 import { formatLocalMinute } from "#/lib/time";
@@ -223,9 +223,12 @@ export function TaskCloseComments({
 			{/* thread —— 评论流(原型的 thread + thread__item)。
 			    外包一层 `bg-card` + 圆角 + 描边,与上半部「评论输入」Card 视觉一致;
 			    缺了它下半部会透出 PageFrame 的画布色,看起来「上半有框、下半没框」割裂。 */}
-			{items.length === 0 ? (
-				<p className="rounded-lg border border-border bg-card py-3 pl-12 text-xs text-muted-foreground">
-					{listQuery.isPending ? "加载中…" : "还没有评论。"}
+			{listQuery.isError ? (
+				<p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card py-3 pl-12 text-xs text-muted-foreground">
+					<span>{toApiError(listQuery.error).message || "评论加载失败。"}</span>
+					<Button variant="outline" size="xs" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
+						{listQuery.isFetching ? "重试中…" : "重试"}
+					</Button>
 				</p>
 			) : (
 				<ul className="grid gap-4.5 rounded-lg bg-card p-4">

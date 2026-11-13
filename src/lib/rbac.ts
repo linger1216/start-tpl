@@ -440,7 +440,6 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 那套「我 + 我的角色 + 我的部门 + 子孙」表达不了「我创建 + 我是成员」。行级口径写在 resolver 里:
 	// `taskList` 的 `mine` 是 `creator_id ∪ tc_member`,其余按 `taskId` 直读(天生自限范围)。
 	"taskClose.workflowList",
-	"taskClose.contentHistory",
 	// 填报读取在 resolver 中按任务成员关系授权;模板引用在 tc_task.report(「填报模板」页管理)
 	"taskClose.reportGet",
 	"taskClose.taskList",
@@ -480,6 +479,7 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.taskCreate",
 	"taskClose.reportBind",
 	"taskClose.reportSaveDraft",
+	"taskClose.reportSyncToParent",
 	"taskClose.reportExcelDownload",
 	"taskClose.reportExcelPreview",
 	"taskClose.taskUpdate",
@@ -547,7 +547,6 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	// (锁了会把「有任务页、没模板页」的人拦死);流程模板页自己的 `workflowGet` 走页面码。
 	"taskClose.workflowList",
 	// 说明历史在 resolver 内校验任务成员关系。
-	"taskClose.contentHistory",
 	// 填报读取在 resolver 中按任务成员关系授权;模板清单已按页面码登记(「填报模板」页),见 PERM_BY_PATH
 	"taskClose.reportGet",
 	"taskClose.taskList",

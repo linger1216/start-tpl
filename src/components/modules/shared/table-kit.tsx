@@ -110,7 +110,7 @@ export function DataTable<TRow extends TableRowData>({
 }
 
 /** 表头排序图标(升 / 降 / 未排序三态) */
-function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
+export function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
 	if (dir === "asc") return <ArrowUp className="size-3.5" />;
 	if (dir === "desc") return <ArrowDown className="size-3.5" />;
 	return <ChevronsUpDown className="size-3.5 opacity-40" />;

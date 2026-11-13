@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, CalendarClock, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -14,14 +14,12 @@ import {
 	type TaskFormPayload,
 } from "#/components/modules/task-close/task-close-form";
 import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
-import { TaskCardLink } from "#/components/modules/task-close/task-close-task-card";
+import { TaskCardLink, TaskCloseTaskCard } from "#/components/modules/task-close/task-close-task-card";
 import { TaskCloseUrge } from "#/components/modules/task-close/task-close-urge";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
-import { TaskContentHistory } from "#/components/modules/task-close/task-content-history";
 import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { TaskReport } from "#/components/modules/task-close/task-report";
-import { Button } from "#/components/ui/button";
-import { Card } from "#/components/ui/card";
+import { Button, buttonVariants } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -322,10 +320,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						<Button variant="outline" size="sm" disabled={detailQuery.isFetching} onClick={() => detailQuery.refetch()}>
 							{detailQuery.isFetching ? "重试中…" : "重试"}
 						</Button>
-						<Link to="/task-close">
-							<Button variant="ghost" size="sm">
-								返回我的任务
-							</Button>
+						<Link to="/task-close" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+							返回我的任务
 						</Link>
 					</div>
 				</div>
@@ -449,13 +445,15 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
 			<header className="border-b border-dashed border-border bg-card">
 				<div className="px-8 pt-4 pb-5">
-					{/* 顶部左上:返回按钮(用户要求「顶部左上角」) */}
+					{/* 顶部左上:返回按钮(用户要求「顶部左上角」)。真锚点 + 按钮样式 ——
+					    `<a>` 里不能放 `<button>`,那样键盘焦点会重复 */}
 					<div className="mb-1.5">
-						<Link to="/task-close">
-							<Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground">
-								<ArrowLeft className="size-3.5" />
-								返回我的任务
-							</Button>
+						<Link
+							to="/task-close"
+							className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2 text-muted-foreground" })}
+						>
+							<ArrowLeft className="size-3.5" />
+							返回我的任务
 						</Link>
 					</div>
 
@@ -660,27 +658,16 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					{/* 子任务(fan-out 出来的):点卡片进那条子任务自己的详情 */}
 					{children.length > 0 ? (
 						<section className="grid gap-3">
-							<header className="border-b border-dashed border-border pb-2">
-								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+							<header className="border-b border-border pb-2">
+								<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
 									子任务
 									<span className="text-xs font-medium tabular-nums text-muted-foreground">{children.length}</span>
 								</h2>
 							</header>
 							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 								{children.map((child) => (
-									<TaskCardLink key={child.id} task={child}>
-										<Card className="flex h-full flex-col gap-0 p-4 transition-[border-color] hover:border-primary/50">
-											<div className="mb-2 flex items-start justify-between gap-2">
-												<h3 className="line-clamp-1 text-sm font-semibold text-foreground">{child.name}</h3>
-												<Tag variant="outline">{labelOf(child.status)}</Tag>
-											</div>
-											<span className="mt-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
-												<CalendarClock className="size-3" />
-												{child.dueAt
-													? `截止 ${formatLocalMinute(child.dueAt)}`
-													: `建于 ${formatLocalMinute(child.createdAt)}`}
-											</span>
-										</Card>
+									<TaskCardLink key={child.id} task={child} className="block">
+										<TaskCloseTaskCard task={child} statusLabel={labelOf} />
 									</TaskCardLink>
 								))}
 							</div>
@@ -689,28 +676,22 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 					{/* 任务链接块 —— 内部页面 / 外部链接,按注册表渲染(未知块降级成占位,不崩) */}
 					<section className="grid gap-3">
-						<header className="flex items-center justify-between">
-							<h2 className="text-base font-semibold tracking-tight text-foreground">任务链接</h2>
-							{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
-								<TaskContentHistory taskId={task.id} onOpenAttachment={setPreviewAttachment} />
-							)}
+						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
+							<h2 className="shrink-0 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
+								任务链接
+							</h2>
 						</header>
 						<TaskLinkBlocks links={links} />
 					</section>
 
 					{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
-						<section className="grid gap-3 pt-6">
-							<header className="border-b border-dashed border-border pb-2">
-								<h2 className="text-base font-semibold tracking-tight text-foreground">结构化填报</h2>
-							</header>
-							<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
-						</section>
+						<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
 					)}
 
 					{/* 附件 block */}
 					<section className="grid gap-3 pt-6">
-						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+						<header className="flex items-center justify-between border-b border-border pb-2">
+							<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
 								附件{" "}
 								<span className="text-xs font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
 							</h2>
@@ -724,7 +705,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 										setAttachOpen(true);
 									}}
 								>
-									<FileButtonIcon />
+									<Paperclip className="size-3.5" aria-hidden />
 									新增附件
 								</Button>
 							) : null}
@@ -734,7 +715,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 					{/* 评论与回复 block —— TaskCloseComments 自带输入 + 嵌套 thread */}
 					<section className="grid gap-3 pt-6">
-						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
+						<header className="flex items-center justify-between border-b border-border pb-2">
 							<h2 id="tc-comments-title" className="text-base font-semibold tracking-tight text-foreground">
 								评论与回复
 							</h2>
@@ -755,7 +736,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
 						<section className="grid gap-2 p-3.5">
 							<header className="flex items-center justify-between">
-								<h2 className="inline-flex items-baseline gap-1.5 text-base font-semibold tracking-tight text-foreground">
+								<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
 									参与人{" "}
 									<span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
 								</h2>
@@ -808,6 +789,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								statuses={statuses}
 								roleLabel={roleText}
 								loading={logQuery.isPending}
+								error={logQuery.isError ? logQuery.error : undefined}
+								onRetry={() => logQuery.refetch()}
 							/>
 							<LoadMore
 								loading={logQuery.isFetching}
@@ -932,7 +915,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				title={actionMode === "approve" ? "发起审批" : "发起征询"}
 				description={
 					actionMode === "approve"
-						? "审批人全部通过后推进状态；任一人驳回则退回原状态。"
+						? "发出后任务锁定,处理期间不能改状态、不能再发起动作。全部通过后推进到目标状态;任一人驳回则回到原状态。"
 						: "征询不改状态、也不锁任务,只是请对方给个意见。"
 				}
 				pending={actionMutation.isPending}
@@ -979,70 +962,82 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						placeholder="从成员里选一个"
 					/>
 				</DetailRow>
-				{actionMode ? (
+				{/* 多人才需要的选项默认收起:一个人办理是常态,先只问「交给谁」 */}
+				{nextHandles.length > 0 && (
 					<DetailRow label="处理方式" align="center">
-						<Select
-							items={[
-								{ value: "serial", label: "串行" },
-								{ value: "parallel", label: "并行" },
-							]}
-							value={consultMode}
-							onValueChange={(next) => setConsultMode(next === "parallel" ? "parallel" : "serial")}
-						>
-							<SelectTrigger className="w-full" aria-label="处理方式">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="serial">串行</SelectItem>
-								<SelectItem value="parallel">并行</SelectItem>
-							</SelectContent>
-						</Select>
-					</DetailRow>
-				) : null}
-				{actionMode ? (
-					<DetailRow label="其他处理人" align="center">
-						<div className="space-y-2">
-							{nextHandles.map((id, index) => (
-								<div key={id} className="flex items-center justify-between gap-2">
-									<span>
-										{index + 2}. {peopleOptions.find((person) => person.value === id)?.label ?? id}
-									</span>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										onClick={() => setNextHandles(nextHandles.filter((item) => item !== id))}
-									>
-										移除
-									</Button>
-								</div>
-							))}
-							<div className="flex gap-2">
-								<SearchSelect
-									label="其他处理人"
-									value={nextHandle}
-									onValueChange={setNextHandle}
-									options={peopleOptions.filter(
-										(person) => person.value !== actionHandle && !nextHandles.includes(person.value),
-									)}
-									placeholder="按顺序添加"
-								/>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									disabled={!nextHandle}
-									onClick={() => {
-										setNextHandles([...nextHandles, nextHandle]);
-										setNextHandle("");
-									}}
-								>
-									添加
-								</Button>
-							</div>
+						<div className="grid gap-1">
+							<Select
+								items={[
+									{ value: "serial", label: "串行" },
+									{ value: "parallel", label: "并行" },
+								]}
+								value={consultMode}
+								onValueChange={(next) => setConsultMode(next === "parallel" ? "parallel" : "serial")}
+							>
+								<SelectTrigger className="w-full" aria-label="处理方式">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="serial">串行</SelectItem>
+									<SelectItem value="parallel">并行</SelectItem>
+								</SelectContent>
+							</Select>
+							<p className="text-xs text-muted-foreground">
+								串行:按顺序逐位处理,前一位结束才轮到下一位;并行:同时送出,一位处理完即结束。
+							</p>
 						</div>
 					</DetailRow>
-				) : null}
+				)}
+				<DetailRow label="再加一位处理人" align="center">
+					<div className="grid gap-2">
+						{nextHandles.length > 0 ? (
+							<ol className="grid gap-1">
+								{nextHandles.map((id, index) => (
+									<li key={id} className="flex items-center justify-between gap-2">
+										<span>
+											{index + 2}. {peopleOptions.find((person) => person.value === id)?.label ?? id}
+										</span>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											onClick={() => setNextHandles(nextHandles.filter((item) => item !== id))}
+										>
+											移除
+										</Button>
+									</li>
+								))}
+							</ol>
+						) : (
+							<p className="text-xs text-muted-foreground">
+								{actionMode === "approve" ? "只需一人:他通过后即推进状态。" : "只需一人:他回复后即完成征询。"}
+							</p>
+						)}
+						<div className="flex gap-2">
+							<SearchSelect
+								label="再加一位处理人"
+								value={nextHandle}
+								onValueChange={setNextHandle}
+								options={peopleOptions.filter(
+									(person) => person.value !== actionHandle && !nextHandles.includes(person.value),
+								)}
+								placeholder="再加一位处理人"
+							/>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={!nextHandle}
+								onClick={() => {
+									setNextHandles([...nextHandles, nextHandle]);
+									setNextHandle("");
+								}}
+							>
+								添加
+							</Button>
+						</div>
+					</div>
+				</DetailRow>
 			</TaskActionDialog>
 
 			<TaskActionDialog
@@ -1160,11 +1155,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	);
 }
 
-/** 「文件」icon —— 块头右上的「新增附件」按钮的点缀。lucide 没用 emoji,直接用 lucide-react */
-function FileButtonIcon() {
-	return <Paperclip className="size-3.5" aria-hidden />;
-}
-
 const ROLE_OPTIONS = [
 	{ value: "executor", label: "执行者" },
 	{ value: "participant", label: "参与者" },
@@ -1225,7 +1215,7 @@ function PeopleRow({
 				{/* 圆牌:墨底反白首字(与评论头像同款,就地内联 —— badge 合流层已拆) */}
 				<span
 					aria-hidden
-					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/85 text-[10px] font-heading font-bold leading-none text-paper"
+					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/85 text-xs font-heading font-bold leading-none text-paper"
 				>
 					{name.slice(0, 1)}
 				</span>

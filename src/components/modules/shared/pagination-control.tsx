@@ -24,7 +24,8 @@ export function PaginationControl({
 	pageSize: number;
 	total: number;
 	onPageChange: (next: number) => void;
-	onPageSizeChange: (next: number) => void;
+	/** 不传 = 每页条数不由本页决定(如服务端分页读全局参数):那就不渲染这一组,别放出点了没反应的按钮 */
+	onPageSizeChange?: (next: number) => void;
 }) {
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	const safePage = Math.min(page, totalPages);
@@ -54,33 +55,37 @@ export function PaginationControl({
 		<div className="flex flex-wrap items-center justify-between gap-2 pt-3">
 			<div className="flex items-center gap-3 text-xs text-muted-foreground">
 				<div className="flex items-center gap-2">
-					<span>每页</span>
-					<div ref={sizeGroupRef} className="relative flex items-center rounded-lg bg-secondary p-0.5">
-						{pill ? (
-							<span
-								aria-hidden="true"
-								className="pointer-events-none absolute inset-y-0.5 left-0 rounded-md bg-card shadow-card transition-[transform,width] duration-200 ease-brand"
-								style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
-							/>
-						) : null}
-						{PAGE_SIZES.map((n) => {
-							const active = n === pageSize;
-							return (
-								<button
-									key={n}
-									type="button"
-									data-active={active}
-									onClick={() => onPageSizeChange(n)}
-									className={cn(
-										"relative z-10 h-6 rounded-md px-2.5 text-xs font-medium transition-colors",
-										active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-									)}
-								>
-									{n}
-								</button>
-							);
-						})}
-					</div>
+					{onPageSizeChange ? (
+						<>
+							<span>每页</span>
+							<div ref={sizeGroupRef} className="relative flex items-center rounded-lg bg-secondary p-0.5">
+								{pill ? (
+									<span
+										aria-hidden="true"
+										className="pointer-events-none absolute inset-y-0.5 left-0 rounded-md bg-card shadow-card transition-[transform,width] duration-200 ease-brand"
+										style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
+									/>
+								) : null}
+								{PAGE_SIZES.map((n) => {
+									const active = n === pageSize;
+									return (
+										<button
+											key={n}
+											type="button"
+											data-active={active}
+											onClick={() => onPageSizeChange(n)}
+											className={cn(
+												"relative z-10 h-6 rounded-md px-2.5 text-xs font-medium transition-colors",
+												active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+											)}
+										>
+											{n}
+										</button>
+									);
+								})}
+							</div>
+						</>
+					) : null}
 				</div>
 				<span>共 {total.toLocaleString()} 条</span>
 			</div>

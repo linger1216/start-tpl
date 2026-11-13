@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, Info, TriangleAlert, Upload } from "lucide-react";
+import { Download, FileDown, FileUp, Info, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "#/components/ui/button";
@@ -22,7 +22,6 @@ type ImportOutcome = { ok: number; failed: number; messages: string[] };
  * 选完即解析 —— 通过就落值并报「成功 N 条 · 失败 M 条」,有失败行则整批不落值并列出原因。
  * 文件内容只在当前请求内解析,不落库。
  *
- * `iconOnly` = 塞进字段行时用:只出三个图标按钮,导入结果走 toast(不占版面)。
  */
 export function TaskReportExcel({
 	taskId,
@@ -31,7 +30,6 @@ export function TaskReportExcel({
 	canEdit,
 	disabled,
 	onImport,
-	iconOnly = false,
 }: {
 	taskId?: string;
 	reportId?: string;
@@ -39,8 +37,6 @@ export function TaskReportExcel({
 	canEdit: boolean;
 	disabled: boolean;
 	onImport: (value: unknown) => void;
-	/** 只渲染图标按钮(宽度极窄的字段行用) */
-	iconOnly?: boolean;
 }) {
 	const trpc = useTRPC();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -70,12 +66,7 @@ export function TaskReportExcel({
 					const field = schema.fields.find((item) => item.id === issue.field)?.label ?? issue.field;
 					return `${issue.excelRow ? `第 ${issue.excelRow} 行 · ` : ""}${field}${field ? ":" : ""}${issue.message}`;
 				});
-				if (iconOnly) {
-					if (failed > 0) toast.error(`${failed} 行未通过校验:${messages[0] ?? ""}`);
-					else toast.success(`已导入 ${rows} 行`);
-				} else {
-					setOutcome({ ok: rows - failed, failed, messages });
-				}
+				setOutcome({ ok: rows - failed, failed, messages });
 				// 有失败行就整批不落值,改好文件再选一次
 				if (failed === 0) onImport(result.value);
 			},
@@ -101,44 +92,47 @@ export function TaskReportExcel({
 	};
 
 	const columnOrder = schema.fields.map((field) => field.label).join(" / ");
-	const iconButton = (label: string, icon: React.ReactNode, onClick: () => void, isDisabled: boolean) => (
-		<Button variant="outline" size="icon-sm" aria-label={label} title={label} disabled={isDisabled} onClick={onClick}>
-			{icon}
-		</Button>
-	);
-	const textButton = (label: string, icon: React.ReactNode, onClick: () => void, isDisabled: boolean) => (
-		<Button variant="outline" size="sm" disabled={isDisabled} onClick={onClick}>
-			{icon}
-			{label}
-		</Button>
-	);
-	const button = iconOnly ? iconButton : textButton;
 
 	return (
-		<div className={iconOnly ? "flex items-center gap-1" : "space-y-1.5"}>
-			<div className="flex flex-wrap items-center gap-2">
-				{button(
-					"下载模版",
-					<Download className="size-3.5" />,
-					() => downloadTemplate.mutate({ ...source, templateOnly: true }),
-					downloadTemplate.isPending,
-				)}
-				{taskId
-					? button(
-							"导出当前填报",
-							<Upload className="size-3.5" />,
-							() => exportData.mutate({ taskId, templateOnly: false }),
-							exportData.isPending || disabled,
-						)
-					: null}
-				{canEdit
-					? button(
-							preview.isPending ? "解析中…" : "文件导入",
-							<FileSpreadsheet className="size-3.5" />,
-							() => inputRef.current?.click(),
-							disabled || preview.isPending,
-						)
-					: null}
+		<div className={"space-y-1.5"}>
+			<div className="flex flex-wrap items-center">
+				<Button
+					variant="ghost"
+					size="sm"
+					aria-label={"下载模版"}
+					title={"下载模版"}
+					disabled={downloadTemplate.isPending}
+					onClick={() => downloadTemplate.mutate({ ...source, templateOnly: true })}
+				>
+					<Download className="size-3.5" />
+					下载模版
+				</Button>
+				{taskId ? (
+					<Button
+						variant="ghost"
+						size="sm"
+						aria-label={"导出当前填报"}
+						title={"导出填报"}
+						disabled={exportData.isPending || disabled}
+						onClick={() => exportData.mutate({ taskId, templateOnly: false })}
+					>
+						<FileDown className="size-3.5" />
+						导出填报
+					</Button>
+				) : null}
+				{canEdit ? (
+					<Button
+						variant="ghost"
+						size="sm"
+						aria-label={preview.isPending ? "解析中…" : "文件导入"}
+						title={preview.isPending ? "解析中…" : "文件导入"}
+						disabled={disabled || preview.isPending}
+						onClick={() => inputRef.current?.click()}
+					>
+						<FileUp className="size-3.5" />
+						{preview.isPending ? "解析中…" : "文件导入"}
+					</Button>
+				) : null}
 				<Input
 					ref={inputRef}
 					type="file"
@@ -166,7 +160,7 @@ export function TaskReportExcel({
 					</TooltipProvider>
 				) : null}
 			</div>
-			{!iconOnly && outcome ? (
+			{outcome ? (
 				<div className="space-y-1 rounded-lg border border-border bg-secondary/40 p-2.5 text-xs">
 					<div className="font-medium text-foreground">
 						成功 <span className="text-success-fg">{outcome.ok}</span> 条 · 失败{" "}

@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { PageHeader } from "#/components/layout/page-header";
+import { SortIcon } from "#/components/modules/shared/table-kit";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
@@ -53,12 +54,6 @@ const columns = columnHelper.columns([
 		cell: (ctx) => <Tag variant={STATUS_VARIANT[ctx.getValue()]}>{ctx.getValue()}</Tag>,
 	}),
 ]);
-
-function SortIcon({ dir }: { dir: false | "asc" | "desc" }) {
-	if (dir === "asc") return <ArrowUp className="size-3.5" />;
-	if (dir === "desc") return <ArrowDown className="size-3.5" />;
-	return <ChevronsUpDown className="size-3.5 opacity-40" />;
-}
 
 function TableDemo() {
 	// 不传第二个 selector 参数 = 订阅全部已注册的 state 分片,

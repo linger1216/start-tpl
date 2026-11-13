@@ -73,6 +73,7 @@ const ACTION: Record<string, string> = {
 	reportTemplateRemove: "删除填报模板",
 	reportBind: "配置填报",
 	reportSaveDraft: "保存填报",
+	reportSyncToParent: "同步填报到父任务",
 	setEnabled: "设置启停",
 	trigger: "手动触发",
 	configure: "修改调度",

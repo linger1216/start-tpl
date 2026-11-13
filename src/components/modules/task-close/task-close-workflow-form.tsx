@@ -200,7 +200,7 @@ export function TaskCloseWorkflowForm({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 				<DialogHeader className="shrink-0">
-					<DialogTitle>{editing ? "编辑流程模板" : "新建流程模板"}</DialogTitle>
+					<DialogTitle>{editing ? "编辑流程模板" : "新增流程模板"}</DialogTitle>
 					<DialogDescription>
 						「直接改」的边不建动作,创建者直接改状态;「审批动作」的边会锁住任务,等答复结算。
 					</DialogDescription>

@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, CalendarPlus, CalendarX, ClipboardList, Plus } from "lucide-react";
+import { BellRing, CalendarClock, CalendarX, ClipboardList, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageFrame } from "#/components/layout/page-frame";
@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toastApiError } from "#/lib/api/error";
+import { toApiError, toastApiError } from "#/lib/api/error";
 import { PAGE_SIZES } from "#/lib/constants";
 import type { WorkflowStatus } from "#/lib/task-close-spec";
 import { formatLocalDate } from "#/lib/time";
@@ -51,6 +51,8 @@ export function TaskCloseCardsPage() {
 	const [startDate, setStartDate] = useState("");
 	const [endDate, setEndDate] = useState("");
 	const [mineOnly, setMineOnly] = useState(true);
+	/** 只看「有动作正轮到我处理」的 —— 与卡面「待你处理」同一判据 */
+	const [pendingOnly, setPendingOnly] = useState(false);
 	const [page, setPage] = useState(1);
 	// 读 `page.size` 参数 —— loader 已 prefetch,首帧就有;fallback 20 兜底。
 	// 不复用 `usePageSize()`:它内部 useQuery + useMemo 在 React 19 + sonner dev 拦截下
@@ -90,6 +92,7 @@ export function TaskCloseCardsPage() {
 				createdAfter,
 				createdBefore,
 				mine: mineOnly,
+				pending: pendingOnly || undefined,
 				page,
 				pageSize,
 			},
@@ -160,39 +163,42 @@ export function TaskCloseCardsPage() {
 	const items = listQuery.data?.items ?? [];
 	const total = listQuery.data?.total ?? 0;
 
+	/** 取不到数就写「—」而不是 0 —— 0 会说「无事可做」,把故障伪装成清空 */
+	const statOf = (value: number | undefined) => (listQuery.isError || value === undefined ? "—" : value);
+
 	/** 统计与列表**同一筛选口径**(不差分页);四个桶都与流程无关 —— 各模板状态互不相同,不按状态分桶 */
 	const stats: StatItem[] = [
 		{
+			key: "pending",
+			label: "待我处理",
+			value: statOf(listQuery.data?.stats.pendingMine),
+			description: "有审批 / 征询正轮到我的任务(不受下方筛选影响)",
+			Icon: BellRing,
+			tone: "bg-hue-amber-soft text-hue-amber-fg",
+			unit: "个",
+		},
+		{
 			key: "total",
 			label: "任务总数",
-			value: total,
+			value: statOf(total),
 			description: "当前筛选命中多少条(与分页的总数一致)",
 			Icon: ClipboardList,
 			tone: "bg-hue-blue-soft text-hue-blue-fg",
 			unit: "个",
 		},
 		{
-			key: "recent",
-			label: "近 7 天新建",
-			value: listQuery.data?.stats.recentCreated ?? 0,
-			description: "最近 7 天创建的任务",
-			Icon: CalendarPlus,
-			tone: "bg-hue-teal-soft text-hue-teal-fg",
-			unit: "个",
-		},
-		{
 			key: "dueSoon",
 			label: "7 天内到期",
-			value: listQuery.data?.stats.dueSoon ?? 0,
+			value: statOf(listQuery.data?.stats.dueSoon),
 			description: "设了截止时间,且在未来 7 天内到期",
 			Icon: CalendarClock,
-			tone: "bg-hue-amber-soft text-hue-amber-fg",
+			tone: "bg-hue-teal-soft text-hue-teal-fg",
 			unit: "个",
 		},
 		{
 			key: "overdue",
 			label: "已到期",
-			value: listQuery.data?.stats.overdue ?? 0,
+			value: statOf(listQuery.data?.stats.overdue),
 			description: "截止时间已过(只要设了截止,不限当前状态)",
 			Icon: CalendarX,
 			tone: "bg-hue-rose-soft text-hue-rose-fg",
@@ -204,13 +210,13 @@ export function TaskCloseCardsPage() {
 		<PageFrame>
 			<PageHeader
 				title="我的任务"
-				description="我发起、我参与的任务。点卡片进详情走闭环:改状态 / 征询 / 答复 / 评论。"
+				description="我发起、我参与的任务。有子任务的卡片先进子任务页,叶子任务直接进详情。"
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />
 						<Button onClick={() => setCreateOpen(true)}>
 							<Plus className="size-4" />
-							新建任务
+							新增任务
 						</Button>
 					</>
 				}
@@ -296,23 +302,48 @@ export function TaskCloseCardsPage() {
 						<TabsTrigger value="30d">近 30 天</TabsTrigger>
 					</TabsList>
 				</Tabs>
-				{/* `Switch` 不是原生 input(它是 button),所以这里不能用 `<label>` —— biome 会判它没有关联控件 */}
-				<span className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+				{/*
+				  用 `Switch` 自带的 `label`:文字在按钮**内部**,读屏能念出开关名,
+				  点文字也能切换。包一层 `<label>` 不行 —— `Switch` 是 `<button>` 不是 input。
+				*/}
+				<span className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
 					<Switch
+						label="只看待我处理"
+						checked={pendingOnly}
+						onCheckedChange={(next) => {
+							setPendingOnly(next);
+							setPage(1);
+						}}
+					/>
+					<Switch
+						label="只看与我相关"
 						checked={mineOnly}
 						onCheckedChange={(next) => {
 							setMineOnly(next);
 							setPage(1);
 						}}
 					/>
-					只看与我相关
 				</span>
 			</div>
 
-			{items.length === 0 ? (
+			{/* 三态分开:加载 / 出错 / 真的没有 —— 把「取不到」说成「没有」会让人以为工作被清空了 */}
+			{listQuery.isError ? (
+				<Card>
+					<div className="grid justify-items-center gap-3 py-12 text-center text-sm text-muted-foreground">
+						<p>{toApiError(listQuery.error).message || "任务列表加载失败。"}</p>
+						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
+							{listQuery.isFetching ? "重试中…" : "重试"}
+						</Button>
+					</div>
+				</Card>
+			) : items.length === 0 ? (
 				<Card>
 					<div className="py-12 text-center text-sm text-muted-foreground">
-						{listQuery.isPending ? "加载中…" : "没有任务。点右上角「新建任务」起一个。"}
+						{listQuery.isPending
+							? "加载中…"
+							: pendingOnly
+								? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
+								: "没有任务。点右上角「新增任务」起一个。"}
 					</div>
 				</Card>
 			) : (
@@ -330,8 +361,8 @@ export function TaskCloseCardsPage() {
 				pageSize={pageSize}
 				total={total}
 				onPageChange={setPage}
-				// `page.size` 是「参数管理」里的全局偏好,卡片页不直接改 —— 改完会跳参数页
-				onPageSizeChange={() => undefined}
+				// `page.size` 是「参数管理」里的全局偏好,卡片页不直接改 —— 所以不给这一组,
+				// 免得放出点了没反应的按钮(要去参数页改)
 			/>
 
 			<TaskCloseForm

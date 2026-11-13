@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarClock, ClipboardList, Network, User } from "lucide-react";
+import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
@@ -20,6 +20,8 @@ export type TaskCardItem = {
 	createdAt: string | null;
 	/** 子任务数 —— >0 时点进去是「子任务卡片页」而不是详情页 */
 	childCount: number;
+	/** 有审批 / 征询正轮到我处理 —— 列表卡右上角出「待你处理」 */
+	hasMyAction?: boolean;
 };
 
 /**
@@ -36,6 +38,7 @@ export function TaskCloseTaskCard({
 }) {
 	return (
 		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
+			{" "}
 			{/* 顶行:图标块(左) + 状态徽章(右) —— 与「流程模板」卡片同形 */}
 			<div className="mb-4 flex items-start justify-between gap-2">
 				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
@@ -43,7 +46,10 @@ export function TaskCloseTaskCard({
 				</div>
 				{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}
 				<div className="flex flex-wrap items-center justify-end gap-1.5">
-					<Tag variant="secondary">{priorityLabelOf(task.priority)}</Tag>
+					{/* 优先级章按值取色(DESIGN.md §5.6:卡片 / 台账行走 random 值哈希)—— 与详情页同色 */}
+					<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
+						{priorityLabelOf(task.priority)}
+					</Tag>
 					<Tag variant="outline">{statusLabel(task.status)}</Tag>
 				</div>
 			</div>
@@ -52,6 +58,12 @@ export function TaskCloseTaskCard({
 				{task.description?.trim() || "（无描述）"}
 			</p>
 			<div className="mt-auto flex flex-wrap items-center gap-1.5">
+				{task.hasMyAction ? (
+					<span className="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+						<BellRing className="size-3" />
+						待你处理
+					</span>
+				) : null}
 				{task.childCount > 0 ? (
 					<span className="inline-flex items-center gap-1 rounded-sm bg-brand-soft px-2 py-0.5 text-xs text-primary">
 						<Network className="size-3" />
@@ -85,7 +97,7 @@ export function TaskCardLink({
 	className?: string;
 	children: ReactNode;
 }) {
-	const cls = cn("rounded-xl outline-none focus-visible:ring-1 focus-visible:ring-ring/25", className);
+	const cls = cn("rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40", className);
 	return task.childCount > 0 ? (
 		<Link to="/task-close/$taskId/children" params={{ taskId: task.id }} className={cls}>
 			{children}
