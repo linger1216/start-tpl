@@ -1,7 +1,6 @@
 import * as XLSX from "xlsx";
 import { fromBuffer } from "yauzl";
 import { type TaskReportSchema, validateTaskReport } from "./task-report-spec";
-import type { TaskReportSource, TaskReportSummaryRow } from "./task-report-summary";
 
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_UNPACKED = 20 * 1024 * 1024;
@@ -119,43 +118,6 @@ export function createReportWorkbook(schema: TaskReportSchema, data: unknown = [
 	return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }) as Buffer;
 }
 
-export function createSummaryWorkbook(
-	schema: TaskReportSchema,
-	rows: TaskReportSummaryRow[],
-	conflicts: Array<{ field: string; first: TaskReportSource; other: TaskReportSource; message: string }>,
-): Buffer {
-	if (rows.length > MAX_ROWS || conflicts.length > MAX_ROWS) throw new Error("汇总数据超过导出上限");
-	const discovered = new Set(rows.flatMap((row) => Object.keys(row.values)));
-	const columns = [...schema.fields.map((field) => field.id).filter((id) => discovered.delete(id)), ...discovered];
-	const labels = columns.map((id) => schema.fields.find((field) => field.id === id)?.label ?? id);
-	const matrix = [
-		[...labels, "来源任务", "提交人", "提交 ID", "原始行号", "提交时间"],
-		...rows.map((row) => [
-			...columns.map((column) => cellValue(row.values[column])),
-			...(["taskId", "executorId", "submissionId", "rowIndex", "submittedAt"] as const).map((key) =>
-				cellValue(row.sources.map((source) => (key === "rowIndex" ? source.rowIndex + 1 : source[key])).join("; ")),
-			),
-		]),
-	];
-	const book = XLSX.utils.book_new();
-	XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(matrix), "汇总");
-	if (conflicts.length)
-		XLSX.utils.book_append_sheet(
-			book,
-			XLSX.utils.aoa_to_sheet([
-				["字段", "说明", "来源提交", "冲突提交"],
-				...conflicts.map((item) => [
-					cellValue(item.field),
-					cellValue(item.message),
-					cellValue(item.first.submissionId),
-					cellValue(item.other.submissionId),
-				]),
-			]),
-			"冲突",
-		);
-	return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }) as Buffer;
-}
-
 export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64: string) {
 	if (fileBase64.length > Math.ceil(MAX_FILE / 3) * 4 + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64))
 		throw new Error("文件编码或大小无效");
@@ -168,7 +130,7 @@ export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64
 			cellFormula: true,
 			cellDates: false,
 			bookVBA: true,
-			sheetRows: MAX_ROWS + 3,
+			sheetRows: MAX_ROWS + 2,
 		});
 	} catch {
 		throw new Error("无法解析 XLSX 文件");
@@ -176,37 +138,14 @@ export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64
 	if (book.SheetNames.length !== 1 || book.vbaraw) throw new Error("只接受单个无宏工作表");
 	const sheet = book.Sheets[book.SheetNames[0]];
 	const range = XLSX.utils.decode_range(sheet["!fullref"] ?? sheet["!ref"] ?? "A1:A1");
-	if (range.e.r > MAX_ROWS + 1 || range.e.c >= MAX_COLUMNS) throw new Error("工作表行列超过限制");
+	if (range.e.r > MAX_ROWS || range.e.c >= MAX_COLUMNS) throw new Error("工作表行列超过限制");
 	for (const [address, cell] of Object.entries(sheet))
 		if (!address.startsWith("!") && (cell.f || cell.F || cell.l)) throw new Error("不支持公式或链接单元格");
 	const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: true });
 	const header = matrix[0] ?? [];
-	/** 在一行里按某个键(中文名 / 英文 id)找每个字段的列 */
-	const match = (row: unknown[], key: "label" | "id") =>
-		Object.fromEntries(
-			schema.fields.map((field) => [
-				field.id,
-				row.findIndex((cell) => String(cell ?? "").trim() === (key === "label" ? field.label : field.id)),
-			]),
-		);
-	const complete = (columns: Record<string, number>) => schema.fields.every((field) => (columns[field.id] ?? -1) >= 0);
-
-	// 表头按**中文名**认(模版下载出来的就是中文);对不上再认英文 id ——
-	// 老格式是"首行英文 id + 第二行中文名",那一档数据从第 3 行起
-	let selected = match(header, "label");
-	let dataStart = 1;
-	if (!complete(selected)) {
-		const byId = match(header, "id");
-		if (complete(byId)) {
-			const labelsBelow = match(matrix[1] ?? [], "label");
-			if (complete(labelsBelow)) {
-				selected = labelsBelow;
-				dataStart = 2;
-			} else {
-				selected = byId;
-			}
-		}
-	}
+	const selected = Object.fromEntries(
+		schema.fields.map((field) => [field.id, header.findIndex((cell) => String(cell ?? "").trim() === field.label)]),
+	);
 	const positions = schema.fields.map((field) => selected[field.id]);
 	if (
 		positions.some((position) => !Number.isInteger(position) || position < 0 || position >= header.length) ||
@@ -214,8 +153,8 @@ export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64
 	)
 		throw new Error("文件表头对不上模板字段 —— 请用「下载模版」填写后再导入");
 	const rows = matrix
-		.slice(dataStart)
-		.map((row, index) => ({ row, excelRow: index + dataStart + 1 }))
+		.slice(1)
+		.map((row, index) => ({ row, excelRow: index + 2 }))
 		.filter(({ row }) => row.some((value) => value !== null && value !== ""));
 	if (schema.kind === "OBJECT" && rows.length > 1) throw new Error("表单只允许一行数据");
 	const parsed = rows.map(({ row }) =>

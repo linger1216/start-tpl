@@ -6,8 +6,8 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { TaskCloseForm, type TaskFormPayload } from "#/components/modules/task-close/task-close-form";
-import { TaskCardLink, TaskCloseTaskCard } from "#/components/modules/task-close/task-close-task-card";
+import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
+import { TaskForm, type TaskFormPayload } from "#/components/modules/task-close/task-form";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -41,7 +41,7 @@ function shiftDays(days: number): Date {
  * 所以分页/筛选的状态全在 query 入参上,不经过 `useLedgerTable` 那套客户端分页。
  * 筛选是 关键字 / 流程模板 / 创建时间区间 —— 状态不做全局筛选:各模板的状态互不相同。
  */
-export function TaskCloseCardsPage() {
+export function TaskListPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
@@ -153,7 +153,6 @@ export function TaskCloseCardsPage() {
 				? payload.executors.map(({ userId, filter }) => ({
 						userId,
 						role: "executor" as const,
-						isPrimary: true,
 						...(filter.length ? { filter } : {}),
 					}))
 				: undefined,
@@ -350,7 +349,7 @@ export function TaskCloseCardsPage() {
 				<div className="flex flex-wrap gap-3">
 					{items.map((item) => (
 						<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
-							<TaskCloseTaskCard task={item} statusLabel={labelOf} />
+							<TaskCard task={item} statusLabel={labelOf} />
 						</TaskCardLink>
 					))}
 				</div>
@@ -365,7 +364,7 @@ export function TaskCloseCardsPage() {
 				// 免得放出点了没反应的按钮(要去参数页改)
 			/>
 
-			<TaskCloseForm
+			<TaskForm
 				open={createOpen}
 				onOpenChange={setCreateOpen}
 				pending={createMutation.isPending}

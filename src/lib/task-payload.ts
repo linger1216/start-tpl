@@ -8,7 +8,7 @@ import { z } from "zod";
  * 绝对 URL 的 host(含端口)与当前页面一致也算站内。
  *
  * 判别联合的 `linkBlockSchema` 就是权威形状(后端入参校验 + 前端类型都从它来)。
- * 但**渲染必须容错**:遇到不认识的形状(老数据里的文字 / 表格 / 内部页面块)要降级成占位块,不能抛错(见 `parseBlock`)。
+ * 渲染时对无法识别的数据降级成占位块,不能抛错(见 `parseBlock`)。
  */
 export const linkBlockSchema = z.object({
 	kind: z.literal("link"),
@@ -61,20 +61,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * **容错解析**一块 —— 认不出来就返回 `null`(调用方渲染占位块)。
- *
- * 老数据里的 `ref` 块(内部页面)在这里折成链接:路径 + 查询串拼回 URL,内容不丢。
  */
 export function parseBlock(raw: unknown): TaskLinkBlock | null {
 	if (!isRecord(raw)) return null;
-	if (raw.kind === "ref") {
-		const path = typeof raw.path === "string" ? raw.path : "";
-		const query = isRecord(raw.query)
-			? Object.entries(raw.query).filter((entry): entry is [string, string] => typeof entry[1] === "string")
-			: [];
-		if (!path.startsWith("/")) return null;
-		const search = query.length > 0 ? `?${new URLSearchParams(query).toString()}` : "";
-		return { kind: "link", url: `${path}${search}` };
-	}
 	if (raw.kind !== "link") return null;
 	const url = typeof raw.url === "string" ? raw.url.trim() : "";
 	return isUsableUrl(url) ? { kind: "link", url } : null;
@@ -86,14 +75,11 @@ export function parseBlocks(raw: unknown): TaskLinkBlock[] {
 	return raw.map(parseBlock).filter((block): block is TaskLinkBlock => block !== null);
 }
 
-/** 一块的摘要(卡片 / 通知用)—— 就一个 URL */
-export function blockSummary(block: TaskLinkBlock): string {
-	return block.url;
-}
-
 /** 链接区的一句话摘要 */
 export function linkSummary(raw: unknown, max = 80): string {
-	const text = parseBlocks(raw).map(blockSummary).filter(Boolean).join(" · ");
+	const text = parseBlocks(raw)
+		.map((block) => block.url)
+		.join(" · ");
 	return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
@@ -105,7 +91,6 @@ export function normalizePayload(input: TaskPayload | null | undefined): TaskPay
 	if (!input) return null;
 	const links: TaskLinkBlock[] = [];
 	for (const block of input.links ?? []) {
-		// 老数据里的非 link 块(文字 / 表格 / 内部页面)不再写回库
 		if (!isRecord(block) || block.kind !== "link") continue;
 		const url = typeof block.url === "string" ? block.url.trim() : "";
 		// 同 URL 只留一条;空 / 形状不对的丢掉

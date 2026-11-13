@@ -415,8 +415,7 @@ UI 原语与跨域展示件保留真实调用或工作台示例，供派生项�
 | 任务详情 | `/task-close/$taskId` | `tc_task` + `tc_action` + `tc_log` + `tc_comment` | 核心闭环页:流程状态脊骨架 + 轮到你了待办条 + 评论讨论 + 活动日志时间轴 + 动态动作矩阵 |
 | 流程模板 | `/task-close/workflows` | `tc_workflow` | 流程状态机可视化编辑器:状态节点 + 转移边(直接改/审批动作)+ who 角色权限协议 |
 
-> 结构化填报、批次与汇总见 [`doc/task-forms.md`](doc/task-forms.md)；通知、调度与 Worker 见 [`doc/通知中心.md`](doc/通知中心.md)。
-> `doc/任务插件化设计.md` 是**已废止的历史草案**（就地作答写 payload），不要照此实现。
+> 结构化填报见 [`doc/task-forms.md`](doc/task-forms.md)；通知、调度与 Worker 见 [`doc/通知中心.md`](doc/通知中心.md)。
 
 ---
 
@@ -526,7 +525,7 @@ pnpm check
 ## 后续设计
 
 任务闭环插件化已废止（作答写进 `tc_task.payload` 与独立结构化填报冲突）；现行口径见
-[任务填报设计](doc/task-forms.md)。旧草案保留在 [任务插件化设计](doc/任务插件化设计.md) 供追溯。
+[任务填报设计](doc/task-forms.md)。
 
 ---
 
@@ -545,9 +544,7 @@ pnpm check
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
 - `doc/task-close.md` —— 任务闭环业务示例:三页、`tc_*` 表与 `who` 协议、状态机与活动日志
-- `doc/task-forms.md` —— 结构化填报:模板版本、草稿 / 提交 / 退回、批次与汇总、受限 Excel
-- `doc/任务闭环设计详解.md` —— 按 13 张 `tc_*` 表展开的设计架构与实现细节(给要改这个模块的人)
-- `doc/任务插件化设计.md` —— **已废止的历史草案**(就地作答写 `tc_task.payload`),仅供追溯,不要照此实现
+- `doc/task-forms.md` —— 结构化填报:模板、草稿同步与受限 Excel
 - `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)

@@ -5,11 +5,11 @@ import { int, mysqlTable, text, timestamp } from "drizzle-orm/mysql-core";
  *
  * 这里只剩模板的示例表 `todos`。**其它表都不在本文件**,分两组口径,不要混:
  *
- *  1. **系统表(25 张 `sys_*` + 13 张 `tc_*` + `demo_grid`)**:`src/db/data-base-schema.ts` —— 五张系统设置
+ *  1. **系统表(`sys_*` + `tc_*` + `demo_grid`)**:`src/db/data-base-schema.ts` —— 五张系统设置
  *     (`sys_menu` / `sys_dict` / `sys_para` / `sys_tag` / `sys_tag_relation`)+ **认证四张**
  *     (`sys_user` / `sys_session` / `sys_account` / `sys_verification`,Better Auth 内核)+
  *     **权限四张**(`sys_dept` / `sys_role` / `sys_user_dept` / `sys_casbin_rule`)+
- *     `sys_file` / `sys_log` / `sys_notification*` + 示例表 `demo_grid` + 任务闭环十三张 `tc_*`。
+ *     `sys_file` / `sys_log` / `sys_notification*` + 示例表 `demo_grid` + 任务闭环 `tc_*`。
  *     它们只声明「读写的形状」、**不进迁移**
  *     (库里已存在,进了 1050 报错);DDL 由 `scripts/create-system-tables.ts`(MySQL)与
  *     `scripts/create-better-auth-tables-dm.ts`(达梦)维护。

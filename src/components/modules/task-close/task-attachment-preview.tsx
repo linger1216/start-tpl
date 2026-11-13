@@ -51,8 +51,7 @@ export function TaskAttachmentPreview({
 	open,
 	onOpenChange,
 }: {
-	/** 已保存的附件必给;建任务时还没落库的草稿附件**不给**(走 `draftAttachmentUrl`) */
-	taskId?: string;
+	taskId: string;
 	attachment: TaskAttachment | null;
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
@@ -62,9 +61,7 @@ export function TaskAttachmentPreview({
 	const [downloading, setDownloading] = useState(false);
 	const fileId = attachment?.id ?? "";
 	const urlOptions = (next: { fileId: string; download?: boolean }) =>
-		taskId
-			? trpc.taskClose.attachmentUrl.queryOptions({ taskId, ...next })
-			: trpc.taskClose.draftAttachmentUrl.queryOptions(next);
+		trpc.taskClose.attachmentUrl.queryOptions({ taskId, ...next });
 
 	const urlQuery = useQuery({
 		...urlOptions({ fileId }),

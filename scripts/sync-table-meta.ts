@@ -62,9 +62,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
 	// 任务闭环(tc_close):见 doc/task-close.md
 	tc_report_template: "填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)",
-	tc_task_report: "任务填报(父子共享一份数据:只在根任务那行有 draft / revision)",
-	tc_report_submission: "不可变填报提交(历史遗留,当前流程不再写入)",
-	tc_content_revision: "任务说明不可变修订",
+	tc_task_report: "任务填报(每个任务独立保存草稿和版本)",
 	tc_workflow:
 		"状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义;建任务时会快照一份到 tc_task.workflow 列)",
 	tc_task: "任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)",
@@ -81,13 +79,6 @@ const TABLE_COMMENTS: Record<string, string> = {
  * 是 better-auth 写死的,别改(注释随便改)。
  */
 const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }> = [
-	{ table: "tc_content_revision", column: "id", comment: "主键" },
-	{ table: "tc_content_revision", column: "task_id", comment: "所属任务" },
-	{ table: "tc_content_revision", column: "revision", comment: "说明修订版本号" },
-	{ table: "tc_content_revision", column: "description", comment: "任务说明" },
-	{ table: "tc_content_revision", column: "payload", comment: "内容块与附件快照" },
-	{ table: "tc_content_revision", column: "actor_id", comment: "修订人" },
-	{ table: "tc_content_revision", column: "created_at", comment: "修订时间" },
 	{ table: "tc_report_template", column: "id", comment: "主键" },
 	{ table: "tc_report_template", column: "name", comment: "模板名称" },
 	{ table: "tc_report_template", column: "creator_id", comment: "创建人" },
@@ -102,19 +93,10 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "tc_report_template", column: "updated_at", comment: "更新时间" },
 	{ table: "tc_task_report", column: "id", comment: "主键" },
 	{ table: "tc_task_report", column: "task_id", comment: "任务 ID" },
-	{ table: "tc_task_report", column: "status", comment: "填报状态(每行各带)" },
-	{ table: "tc_task_report", column: "draft", comment: "填报数据(仅根任务行有;子任务为 null)" },
-	{ table: "tc_task_report", column: "revision", comment: "乐观锁版本(仅根任务行递增;子任务恒 0)" },
-	{ table: "tc_task_report", column: "current_submission_id", comment: "当前有效提交 ID(历史遗留,已不写)" },
+	{ table: "tc_task_report", column: "draft", comment: "本任务的填报草稿" },
+	{ table: "tc_task_report", column: "revision", comment: "本任务草稿的乐观锁版本" },
 	{ table: "tc_task_report", column: "created_at", comment: "创建时间" },
 	{ table: "tc_task_report", column: "updated_at", comment: "更新时间" },
-	{ table: "tc_report_submission", column: "id", comment: "主键" },
-	{ table: "tc_report_submission", column: "report_id", comment: "任务填报 ID" },
-	{ table: "tc_report_submission", column: "task_id", comment: "任务 ID" },
-	{ table: "tc_report_submission", column: "submitter_id", comment: "提交人" },
-	{ table: "tc_report_submission", column: "revision", comment: "提交时草稿版本" },
-	{ table: "tc_report_submission", column: "payload", comment: "不可变提交数据" },
-	{ table: "tc_report_submission", column: "created_at", comment: "提交时间" },
 	{ table: "sys_notification", column: "id", comment: "主键" },
 	{ table: "sys_notification", column: "type", comment: "通知类型" },
 	{ table: "sys_notification", column: "source_type", comment: "来源类型" },
@@ -499,8 +481,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "tc_action", column: "task_id", comment: "所属任务" },
 	{
 		table: "tc_action",
-		column: "serial_no",
-		comment: "流水号;同一条链共用,等于链首 action 的 id",
+		column: "root_action_id",
+		comment: "根动作 ID;同一处理链中的动作共用",
 	},
 	{
 		table: "tc_action",
@@ -522,9 +504,9 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		column: "to_status",
 		comment: "结算后推进到的状态;子 action 必须 NULL",
 	},
-	{ table: "tc_action", column: "sequence", comment: "同 serial_no 内顺序 1,2,3... 用于逐级审批" },
-	{ table: "tc_action", column: "created_id", comment: "发起人" },
-	{ table: "tc_action", column: "handle_id", comment: "响应人;每个 action 一个,多人响应用多行" },
+	{ table: "tc_action", column: "sequence", comment: "同 root_action_id 内顺序 1,2,3... 用于逐级审批" },
+	{ table: "tc_action", column: "creator_id", comment: "发起人" },
+	{ table: "tc_action", column: "assignee_id", comment: "处理人;多人处理时每人一条动作" },
 	{
 		table: "tc_action",
 		column: "status",
@@ -544,11 +526,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		column: "role",
 		comment: "角色:participant(参与者)/ executor(执行者);creator 是 tc_task.creator_id 固有属性不入此表",
 	},
-	{
-		table: "tc_member",
-		column: "is_primary",
-		comment: "是否主执行人(0/1);业务仅对 role='executor' 有意义,每个 task 至多 1 行;participant 强制 0",
-	},
+
 	{ table: "tc_member", column: "created_at", comment: "创建时间" },
 	{ table: "tc_member", column: "updated_at", comment: "更新时间" },
 	// tc_comment(任务评论,见 doc/task-close.md)
@@ -609,6 +587,8 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
  * 只改名字,不动列;目标名已存在就跳过。(只有 MySQL 走这里;达梦的索引名在建表时就写对了。)
  */
 const INDEX_RENAMES: Array<{ table: string; from: string; to: string }> = [
+	{ table: "tc_action", from: "idx_action_handle_status", to: "idx_action_assignee_status" },
+	{ table: "tc_action", from: "idx_action_task_serial", to: "idx_action_task_root" },
 	{ table: "sys_para", from: "idx_cfg_group", to: "idx_para_group" },
 	// 表名补 `sys_` 前缀时(`create-system-tables.ts` 的 `TABLE_RENAMES`),索引名不会跟着走 ——
 	// `rename table` 只动表名,得在这里补一笔。

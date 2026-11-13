@@ -37,13 +37,7 @@ export type TaskCardItem = {
  * fan-out 的父任务是「分派容器」,没有唯一收件人 → 右上角退回类型图标块。
  * 点击去向由调用方(`TaskCardLink`)决定,本组件只管长相。
  */
-export function TaskCloseTaskCard({
-	task,
-	statusLabel,
-}: {
-	task: TaskCardItem;
-	statusLabel: (value: string) => string;
-}) {
+export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabel: (value: string) => string }) {
 	return (
 		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
 			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}

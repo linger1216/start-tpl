@@ -1,6 +1,6 @@
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { db } from "#/db";
-import { sysNotification, taskCloseAction, taskCloseTask } from "#/db/data-base-schema";
+import { sysNotification, taskActionTable, taskTable } from "#/db/data-base-schema";
 import { createNotification } from "#/lib/notification";
 import { taskPathOf } from "#/lib/task-close-spec";
 
@@ -18,23 +18,23 @@ export const TASK_REMINDER_MINUTES = [60, 180] as const;
 export async function checkActionReminder(actionId: string, now = new Date()): Promise<number> {
 	return db.transaction(async (tx) => {
 		const [locked] = await tx
-			.select({ id: taskCloseAction.id })
-			.from(taskCloseAction)
+			.select({ id: taskActionTable.id })
+			.from(taskActionTable)
 			.where(
 				and(
-					eq(taskCloseAction.id, actionId),
-					eq(taskCloseAction.status, "active"),
-					isNull(taskCloseAction.viewed_at),
-					lte(taskCloseAction.activated_at, now),
+					eq(taskActionTable.id, actionId),
+					eq(taskActionTable.status, "active"),
+					isNull(taskActionTable.viewed_at),
+					lte(taskActionTable.activated_at, now),
 				),
 			)
 			.for("update");
 		if (!locked) return 0;
 		const [row] = await tx
-			.select({ action: taskCloseAction, task: taskCloseTask })
-			.from(taskCloseAction)
-			.innerJoin(taskCloseTask, eq(taskCloseTask.id, taskCloseAction.task_id))
-			.where(and(eq(taskCloseAction.id, actionId), isNull(taskCloseTask.deleted_at)))
+			.select({ action: taskActionTable, task: taskTable })
+			.from(taskActionTable)
+			.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
+			.where(and(eq(taskActionTable.id, actionId), isNull(taskTable.deleted_at)))
 			.limit(1);
 		if (!row?.action.activated_at) return 0;
 		let created = 0;
@@ -54,7 +54,7 @@ export async function checkActionReminder(actionId: string, now = new Date()): P
 				content: "您有一项未查看的审批或征询。",
 				payload: { path: taskPathOf(row.task.id), actionId, level: "warn" },
 				dedupeKey: key,
-				recipients: [{ userId: row.action.handle_id, channel: "in_app" }],
+				recipients: [{ userId: row.action.assignee_id, channel: "in_app" }],
 			});
 			created += 1;
 		}
@@ -65,13 +65,13 @@ export async function checkActionReminder(actionId: string, now = new Date()): P
 export async function checkUnviewedActions(): Promise<number> {
 	const threshold = new Date(Date.now() - TASK_REMINDER_MINUTES[0] * 60_000);
 	const rows = await db
-		.select({ id: taskCloseAction.id })
-		.from(taskCloseAction)
+		.select({ id: taskActionTable.id })
+		.from(taskActionTable)
 		.where(
 			and(
-				eq(taskCloseAction.status, "active"),
-				isNull(taskCloseAction.viewed_at),
-				lte(taskCloseAction.activated_at, threshold),
+				eq(taskActionTable.status, "active"),
+				isNull(taskActionTable.viewed_at),
+				lte(taskActionTable.activated_at, threshold),
 			),
 		);
 	let count = 0;

@@ -87,7 +87,7 @@ type RawTemplate = {
  * 编辑已有模板 = 直接覆盖其 `payload`(单版本);字段区是**一行式**编辑:
  * 名称 / 标识 / 类型 / 必填 / 删除,选项行只在单选 / 多选时出现;校验错误贴到具体字段行。
  */
-export function TaskCloseReportTemplateForm({
+export function TaskReportTemplateForm({
 	open,
 	onOpenChange,
 	templates,

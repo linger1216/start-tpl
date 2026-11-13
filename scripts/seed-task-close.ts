@@ -12,7 +12,7 @@ import "dotenv/config";
 
 import { eq } from "drizzle-orm";
 
-import { taskCloseWorkflow } from "../src/db/data-base-schema.ts";
+import { taskWorkflowTable } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
 
@@ -67,16 +67,16 @@ const rows = [
 let inserted = 0;
 for (const row of rows) {
 	const [existing] = await db
-		.select({ id: taskCloseWorkflow.id })
-		.from(taskCloseWorkflow)
-		.where(eq(taskCloseWorkflow.id, row.id))
+		.select({ id: taskWorkflowTable.id })
+		.from(taskWorkflowTable)
+		.where(eq(taskWorkflowTable.id, row.id))
 		.limit(1);
 	if (existing) continue;
 	const now = new Date();
-	await db.insert(taskCloseWorkflow).values({ ...row, created_at: now, updated_at: now });
+	await db.insert(taskWorkflowTable).values({ ...row, created_at: now, updated_at: now });
 	inserted += 1;
 }
 
-const all = await db.select({ id: taskCloseWorkflow.id }).from(taskCloseWorkflow);
+const all = await db.select({ id: taskWorkflowTable.id }).from(taskWorkflowTable);
 console.log(`✓ 任务闭环模板种子完成:本次新增 ${inserted} 条,表内共 ${all.length} 条`);
 process.exit(0);

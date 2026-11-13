@@ -26,7 +26,6 @@
         "src/lib/task-close-log.ts",
         "src/lib/task-close-spec.ts",
         "src/lib/task-report-spec.ts",
-        "src/lib/task-report-summary.ts",
         "src/lib/task-report-excel.ts",
         "src/lib/task-report-download.ts",
         "tests/task-report-spec.test.ts",
@@ -55,6 +54,8 @@
         { "file": "scripts/job-runner.ts", "kind": "lines", "matches": ["\"task-close.unviewed\": checkUnviewedActions,"] },
         { "file": "scripts/worker.ts", "kind": "lines", "matches": ["await scheduler.registerJob({ name: \"task-close.unviewed\", handler: \"task-close.unviewed\", intervalSeconds: 60 });"] },
         { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t`create table if not exists .*\\.\"tc_", "end": "^    \\)`,$" },
+        { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t// 动作列名须在建索引前统一", "end": "^\\t// 任务动作列名迁移结束$" },
+        { "file": "scripts/create-system-tables.ts", "kind": "block", "begin": "^\\t\\ttable: \"tc_action\",$", "back": "^\\t\\{$", "end": "^\\t\\},$" },
         { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "lines", "prefixes": ["`create index if not exists \"idx_report_", "`create unique index if not exists \"uk_content_", "`create unique index if not exists \"uk_report_", "`create unique index if not exists \"uk_task_report_", "`create index if not exists \"idx_task_", "`create index if not exists \"idx_action_", "`create index if not exists \"idx_member_", "`create unique index if not exists \"uk_member_", "`create index if not exists \"idx_comment_", "`create index if not exists \"idx_log_", "{ table: \"tc_action\", column:"], "min": 10 },
         { "file": "src/integrations/trpc/router.ts", "kind": "imports", "from": ["./routers/task-close"] },
         { "file": "src/lib/use-notice-sse.ts", "kind": "lines", "matches": ["void queryClient.invalidateQueries(trpc.taskClose.pathFilter());"], "prefixes": ["// 「我的任务」红点也吃通知"] },
@@ -84,7 +85,7 @@
         {
           "file": "src/db/data-base-schema.ts",
           "kind": "block",
-          "begin": "^export const task(?:Close|Report)",
+          "begin": "^export const task(?:Workflow|Action|Member|Comment|Log|Report|Table)",
           "back": "^/\\*\\*",
           "end": "^\\}\\);$|^\\);$"
         },
@@ -107,17 +108,17 @@
           "file": "scripts/sync-table-meta.ts",
           "kind": "lines",
           "prefixes": [
-            "tc_content_revision:", "tc_report_template:", "tc_task_report:", "tc_report_submission:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
+            "tc_report_template:", "tc_task_report:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
             "{ table: \"tc_", "// tc_", "// ── 任务闭环"
           ],
           "min": 40
         },
         { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:task-close"] }
       ],
-      "tables": ["tc_content_revision", "tc_report_template", "tc_task_report", "tc_report_submission", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
+      "tables": ["tc_report_template", "tc_task_report", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
       "seeds": [],
       "hints": [
-        "`tc_*` 十三张表不再建;`pnpm db:create` 只建剩下的表",
+        "`tc_*` 表不再建;`pnpm db:create` 只建剩下的表",
         "`scripts/worker.ts` 的 `registerJob(...)` 调用已删,`scheduler` 命名空间导入保留给 `runDueJobs`(调度是 Worker 共享底座,随底座保留)"
       ]
     },

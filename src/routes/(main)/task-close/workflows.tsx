@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { TaskCloseWorkflowsPage } from "#/components/modules/task-close/task-close-workflows-page";
+import { TaskWorkflowsPage } from "#/components/modules/task-close/task-workflows-page";
 
 /**
  * 「流程模板」卡片页 —— 任务闭环的状态图模板管理。
@@ -9,5 +9,5 @@ import { TaskCloseWorkflowsPage } from "#/components/modules/task-close/task-clo
  */
 export const Route = createFileRoute("/(main)/task-close/workflows")({
 	loader: ({ context }) => context.queryClient.ensureQueryData(context.trpc.taskClose.workflowList.queryOptions()),
-	component: TaskCloseWorkflowsPage,
+	component: TaskWorkflowsPage,
 });

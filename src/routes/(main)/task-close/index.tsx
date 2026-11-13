@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { TaskCloseCardsPage } from "#/components/modules/task-close/task-close-cards-page";
+import { TaskListPage } from "#/components/modules/task-close/task-list-page";
 
 /**
  * 「我的任务」卡片页。
@@ -10,5 +10,5 @@ import { TaskCloseCardsPage } from "#/components/modules/task-close/task-close-c
  * 预取错了反而多打一次接口。所以交给组件自己拉。
  */
 export const Route = createFileRoute("/(main)/task-close/")({
-	component: TaskCloseCardsPage,
+	component: TaskListPage,
 });

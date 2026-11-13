@@ -21,7 +21,7 @@ import { newId } from "#/lib/ids";
 import { TASK_URGE_COOLDOWN_MINUTES } from "#/lib/task-close-spec";
 import { formatLocalMinute } from "#/lib/time";
 
-type Action = { id: string; handleName: string | null; lastUrgedAt: string | null };
+type Action = { id: string; assigneeName: string | null; lastUrgedAt: string | null };
 type Channel = "sms" | "email";
 const STATUS: Record<string, string> = {
 	pending: "等待投递",
@@ -32,7 +32,7 @@ const STATUS: Record<string, string> = {
 };
 
 /** 催办选择和投递记录共用同一动作入口。 */
-export function TaskCloseUrge({ actions }: { actions: readonly Action[] }) {
+export function TaskUrge({ actions }: { actions: readonly Action[] }) {
 	const trpc = useTRPC();
 	const client = useQueryClient();
 	const [selected, setSelected] = useState<Action | null>(null);
@@ -82,7 +82,7 @@ export function TaskCloseUrge({ actions }: { actions: readonly Action[] }) {
 				<ul className="grid gap-2">
 					{actions.map((action) => (
 						<li key={action.id} className="flex items-center justify-between gap-2 text-sm">
-							<span className="truncate">{action.handleName ?? "处理人"}</span>
+							<span className="truncate">{action.assigneeName ?? "处理人"}</span>
 							<div className="flex items-center gap-3">
 								<ActionButton
 									onClick={() => {
@@ -110,7 +110,7 @@ export function TaskCloseUrge({ actions }: { actions: readonly Action[] }) {
 			>
 				<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
 					<DialogHeader>
-						<DialogTitle>催办 {selected?.handleName ?? "处理人"}</DialogTitle>
+						<DialogTitle>催办 {selected?.assigneeName ?? "处理人"}</DialogTitle>
 						<DialogDescription>
 							选择投递渠道；同一动作每 {TASK_URGE_COOLDOWN_MINUTES} 分钟最多催办一次。
 						</DialogDescription>

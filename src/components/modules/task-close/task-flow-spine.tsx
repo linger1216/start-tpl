@@ -1,7 +1,7 @@
 import { ArrowRight, Lock, Paperclip, ReplyIcon, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
+import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { useFileUpload } from "#/hooks/use-file-upload";
@@ -15,7 +15,7 @@ import { cn } from "#/lib/utils";
  * 当前节点在锁定期画成带锁的 `warn` 节点。
  *
  * ⚠️ **这里不放动作**。状态类按钮(发起审批 / 改状态)按用户要求留在**记录头右上角**的动作组里
- * (见 `task-close-detail-page.tsx` 与 `doc/task-close.md` 的「按钮去向」)—— 脊只回答「走到哪了」。
+ * (见 `task-detail-page.tsx` 与 `doc/task-close.md` 的「按钮去向」)—— 脊只回答「走到哪了」。
  * 同一个入口别在两处各握一半,否则人会来回找。
  */
 export function TaskFlowSpine({

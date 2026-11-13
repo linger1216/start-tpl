@@ -1,5 +1,5 @@
 /**
- * **系统表**的 drizzle 定义 —— 三十九张:
+ * **系统表**的 drizzle 定义:
  *  - 系统设置五张:`sys_menu` / `sys_dict` / **`sys_para`**(参数,旧名 `sys_config`)/ `sys_tag`(标签树)/
  *    `sys_tag_relation`(标签 ↔ 业务对象 的关系);
  *  - 认证四张(Better Auth 内核):`sys_user` / `sys_session` / `sys_account` / `sys_verification`;
@@ -11,7 +11,7 @@
  *  - 外链访客一张:**`sys_share_token`**(外链免登令牌 —— 用户管理 ▸ 访客管理,见 `lib/share-access.ts`);
  *  - 运行记录:`sys_notification*`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据)/
  *    `sys_scheduled_job` / `sys_job_execution`(调度,见 `lib/scheduler.ts`);
- *  - 任务闭环十三张 `tc_*`(见 `doc/task-close.md`);
+ *  - 任务闭环 `tc_*`(见 `doc/task-close.md`);
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
  * 为什么单独一个文件、而不是并进 `src/db/schema.ts`:
@@ -915,7 +915,7 @@ export const sysDataPlugin = mysqlTable(
 // 详细设计:`doc/task-close.md`。
 
 /** 状态图模板(payload 装整套 statuses / initial / edges 定义)。 */
-export const taskCloseWorkflow = mysqlTable("tc_workflow", {
+export const taskWorkflowTable = mysqlTable("tc_workflow", {
 	id: varchar("id", { length: 191 }).primaryKey(),
 	payload: json("payload").notNull(),
 	created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -932,7 +932,7 @@ export const taskCloseWorkflow = mysqlTable("tc_workflow", {
  * `priority` —— `tinyint(1)` 存数字档位:`0` = P0(最高)、`1` = P1(高)、`2` = P2(普通);
  * 映射见 `lib/task-close-spec.ts` 的词表。允许 null:老数据没有,新建时可空。
  */
-export const taskCloseTask = mysqlTable(
+export const taskTable = mysqlTable(
 	"tc_task",
 	{
 		id: varchar("id", { length: 191 }).primaryKey(),
@@ -954,9 +954,8 @@ export const taskCloseTask = mysqlTable(
 		/** → `tc_task.id`(父任务)。null = 本身不是子任务;多执行人 + 填报模板建任务时 fan-out 产生 */
 		parent_id: varchar("parent_id", { length: 191 }),
 		/**
-		 * 填报规则:`{ reportId: → tc_report_template.id, filter?: [{ field, value }] }`。
-		 * 父任务只存 `{ reportId }`(母版);子任务带 `filter` —— 看到的填报数据 = 父任务表格草稿按条件过滤。
-		 * null = 该任务未绑定填报。
+		 * 填报配置:模板 id、创建时的结构快照及可选筛选条件。
+		 * 子任务另存同步基线;每个任务的草稿保存在自己的 `tc_task_report` 行。null 表示未绑定。
 		 */
 		report: json("report"),
 		deleted_at: datetime("deleted_at", { mode: "date" }),
@@ -973,23 +972,23 @@ export const taskCloseTask = mysqlTable(
 
 /**
  * 外挂动作(审批 / 征询 / 监督同一种模式)。
- * - `serial_no`:同链共用,等于链首 action 的 id;
+ * - `root_action_id`:同链共用,等于链首 action 的 id;
  * - `parent_action_id`:根级为 NULL,只有根级能推进 tc_task.status(子 action 的 from/to 必须 NULL);
  * - `is_locking`:挂载期间是否锁住任务状态。
  */
-export const taskCloseAction = mysqlTable(
+export const taskActionTable = mysqlTable(
 	"tc_action",
 	{
 		id: varchar("id", { length: 191 }).primaryKey(),
 		task_id: varchar("task_id", { length: 191 }).notNull(),
-		serial_no: varchar("serial_no", { length: 191 }).notNull(),
+		root_action_id: varchar("root_action_id", { length: 191 }).notNull(),
 		parent_action_id: varchar("parent_action_id", { length: 191 }),
 		is_locking: boolean("is_locking").notNull(),
 		from_status: varchar("from_status", { length: 32 }),
 		to_status: varchar("to_status", { length: 32 }),
 		sequence: int("sequence").notNull(),
-		created_id: varchar("created_id", { length: 191 }).notNull(),
-		handle_id: varchar("handle_id", { length: 191 }).notNull(),
+		creator_id: varchar("creator_id", { length: 191 }).notNull(),
+		assignee_id: varchar("assignee_id", { length: 191 }).notNull(),
 		status: varchar("status", { length: 16 }).notNull(),
 		viewed_at: datetime("viewed_at", { mode: "date" }),
 		activated_at: datetime("activated_at", { mode: "date" }),
@@ -998,8 +997,8 @@ export const taskCloseAction = mysqlTable(
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		index("idx_action_task_serial").on(table.task_id, table.serial_no, table.sequence),
-		index("idx_action_handle_status").on(table.handle_id, table.status),
+		index("idx_action_task_root").on(table.task_id, table.root_action_id, table.sequence),
+		index("idx_action_assignee_status").on(table.assignee_id, table.status),
 		index("idx_action_parent").on(table.parent_action_id),
 		// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作,三列都进条件
 		index("idx_action_unviewed").on(table.status, table.viewed_at, table.activated_at),
@@ -1011,12 +1010,12 @@ export const taskCloseAction = mysqlTable(
  *
  * `creator` 是任务固有属性(`tc_task.creator_id`),不入此表。
  * 角色 `participant` / `executor` 由此表维护。
- * 同一用户可同时拥有多个角色 —— UK 是 `(task_id, user_id, role)`,不是 `(task_id, user_id)`。
+ * 同一用户只能有一个任务角色,事务中检查。
  * 不加 `deleted_at`(与 `sys_user_dept` 同档;纯关联表真删,审计走 `sys_log`)。
  * 不建外键(惯例:审计保留已删用户 / 已删任务)。
- * 「每个 task 至多 1 个主执行人」靠应用层事务保证;真出过脏数据再加 generated column + 单独 UK。
+ * 「每个 task 至多 1 个执行人」靠应用层事务保证;真出过脏数据再加 generated column + 单独 UK。
  */
-export const taskCloseMember = mysqlTable(
+export const taskMemberTable = mysqlTable(
 	"tc_member",
 	{
 		id: varchar("id", { length: 191 }).primaryKey(),
@@ -1025,7 +1024,6 @@ export const taskCloseMember = mysqlTable(
 		user_id: varchar("user_id", { length: 36 }).notNull(),
 		// varchar(16) + TS 联合类型:与 who 协议同形态,编译期挡拼写错
 		role: varchar("role", { length: 16 }).notNull(),
-		is_primary: tinyint("is_primary").notNull().default(0),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
@@ -1036,8 +1034,6 @@ export const taskCloseMember = mysqlTable(
 		index("idx_member_user_role").on(table.user_id, table.role),
 		/** 「这个 task 上的 X 角色有哪些人」(任务详情) */
 		index("idx_member_task_role").on(table.task_id, table.role),
-		/** 「这个 task 的主执行人」(dashboard 快查) */
-		index("idx_member_task_primary").on(table.task_id, table.is_primary),
 	],
 );
 
@@ -1051,7 +1047,7 @@ export const taskCloseMember = mysqlTable(
  * - 软删:`deleted_at` 非 NULL 行,svc 层 list 过滤,author 或 task.creator 可标记删除
  * - 支持编辑:`updated_at` 自动更新
  */
-export const taskCloseComment = mysqlTable(
+export const taskCommentTable = mysqlTable(
 	"tc_comment",
 	{
 		id: varchar("id", { length: 191 }).primaryKey(),
@@ -1087,7 +1083,7 @@ export const taskCloseComment = mysqlTable(
  *
  * 不加 `deleted_at`(流水表,见 `lib/soft-delete.ts`);不加 `updated_at`(不可变)。
  */
-export const taskCloseLog = mysqlTable(
+export const taskLogTable = mysqlTable(
 	"tc_log",
 	{
 		/** 主键(nanoid 21 字符;与 `sys_log.id` 同口径 —— 不参与任何外键,不用 191) */
@@ -1125,10 +1121,10 @@ export const taskCloseLog = mysqlTable(
 
 /**
  * 可复用的填报模板 —— **单版本**:编辑即覆盖 `payload`(原「版本表」已并入本表,不再保留历史)。
- * `shared = 1` 全员可见,`0` 仅创建人与管理员;绑定它的任务按 `tc_task_report.version_id`(历史列名,存模板 id)回查。
- * 软删:删除模板后已绑定任务仍能读 payload(历史填报),但不能再用于新任务/绑定。
+ * `shared = 1` 全员可见,`0` 仅创建人与管理员;任务绑定时保存结构快照。
+ * 软删后不能再用于新任务或绑定,已绑定任务继续使用自己的快照。
  */
-export const taskReportTemplate = mysqlTable("tc_report_template", {
+export const taskReportTemplateTable = mysqlTable("tc_report_template", {
 	id: varchar("id", { length: 32 }).primaryKey(),
 	name: varchar("name", { length: 255 }).notNull(),
 	creator_id: varchar("creator_id", { length: 36 }).notNull(),
@@ -1142,56 +1138,16 @@ export const taskReportTemplate = mysqlTable("tc_report_template", {
 	deleted_at: datetime("deleted_at", { mode: "date" }),
 });
 
-/**
- * 一任务一行填报。**父子共享一份数据**:fan-out 时只有根任务那行有 `draft` 与 `revision`,
- * 子任务那行的 `draft` 恒为 null、`revision` 恒为 0,只承载自己的 `status`。
- * 读写一律经 `reportOwnerTaskId` 落到根任务那行(见 `routers/task-close.ts`)。
- * 模板引用走 `tc_task.report.reportId`。
- */
-export const taskReport = mysqlTable(
+/** 一任务一行独立填报，模板引用走 `tc_task.report.reportId`。 */
+export const taskReportTable = mysqlTable(
 	"tc_task_report",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		task_id: varchar("task_id", { length: 191 }).notNull(),
-		status: varchar("status", { length: 16 }).notNull(),
 		draft: json("draft"),
 		revision: int("revision").notNull().default(0),
-		current_submission_id: varchar("current_submission_id", { length: 32 }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [uniqueIndex("uk_task_report_task").on(table.task_id)],
-);
-
-/** 正式提交快照不可变，不以草稿或评论代替。模板以提交当时 `tc_task.report` 为准。 */
-export const taskReportSubmission = mysqlTable(
-	"tc_report_submission",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		report_id: varchar("report_id", { length: 32 }).notNull(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		submitter_id: varchar("submitter_id", { length: 36 }).notNull(),
-		revision: int("revision").notNull(),
-		payload: json("payload").notNull(),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_report_submission_revision").on(table.report_id, table.revision),
-		index("idx_report_submission_task").on(table.task_id, table.created_at),
-	],
-);
-
-/** 任务说明的不可变修订快照，不与填报草稿混用。 */
-export const taskCloseContentRevision = mysqlTable(
-	"tc_content_revision",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		revision: int("revision").notNull(),
-		description: text("description"),
-		payload: json("payload"),
-		actor_id: varchar("actor_id", { length: 36 }).notNull(),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [uniqueIndex("uk_content_revision_task").on(table.task_id, table.revision)],
 );

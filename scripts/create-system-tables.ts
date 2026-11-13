@@ -1,7 +1,7 @@
 /**
  * **系统表的建表脚本**(设置五张 + 认证六张 + 权限四张 + 数据权限两张 + `sys_file` / `sys_log` /
  * `sys_notification*` / `sys_scheduled_job` / `sys_job_execution` / `demo_grid` / `sys_share_token`
- * = 26 张,外加任务闭环 `tc_*` 13 张,共 39 张)—— 幂等,可重复执行。
+ * 及任务闭环 `tc_*`)—— 幂等,可重复执行。
  *
  * 为什么需要它:`src/db/data-base-schema.ts` 里写着「DDL 由建表脚本维护」,但仓库里
  * 一直没有这个脚本(旧注释指向的 `doc/表结构设计.sql` 已经归档),于是 `sys_tag` 从来没在库里建起来 ——
@@ -477,43 +477,12 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		ddl: `create table if not exists \`tc_task_report\` (
     \`id\` varchar(32) not null,
     \`task_id\` varchar(191) not null,
-    \`status\` varchar(16) not null,
     \`draft\` json default null,
     \`revision\` int not null default 0,
-    \`current_submission_id\` varchar(32) default null,
     \`created_at\` datetime default current_timestamp,
     \`updated_at\` datetime default current_timestamp,
     primary key (\`id\`),
     unique key \`uk_task_report_task\` (\`task_id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
-	},
-	{
-		name: "tc_report_submission",
-		ddl: `create table if not exists \`tc_report_submission\` (
-    \`id\` varchar(32) not null,
-    \`report_id\` varchar(32) not null,
-    \`task_id\` varchar(191) not null,
-    \`submitter_id\` varchar(36) not null,
-    \`revision\` int not null,
-    \`payload\` json not null,
-    \`created_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_report_submission_revision\` (\`report_id\`, \`revision\`),
-    key \`idx_report_submission_task\` (\`task_id\`, \`created_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
-	},
-	{
-		name: "tc_content_revision",
-		ddl: `create table if not exists \`tc_content_revision\` (
-    \`id\` varchar(32) not null,
-    \`task_id\` varchar(191) not null,
-    \`revision\` int not null,
-    \`description\` text default null,
-    \`payload\` json default null,
-    \`actor_id\` varchar(36) not null,
-    \`created_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_content_revision_task\` (\`task_id\`, \`revision\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
@@ -555,14 +524,14 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		ddl: `create table if not exists \`tc_action\` (
     \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`serial_no\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`root_action_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`parent_action_id\` varchar(191) collate utf8mb4_unicode_ci default null,
     \`is_locking\` tinyint(1) not null,
     \`from_status\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`to_status\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`sequence\` int not null,
-    \`created_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`handle_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`assignee_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`status\` varchar(16) collate utf8mb4_unicode_ci not null,
     \`viewed_at\` datetime default null,
     \`activated_at\` datetime default null,
@@ -570,8 +539,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
-    key \`idx_action_task_serial\` (\`task_id\`, \`serial_no\`, \`sequence\`),
-    key \`idx_action_handle_status\` (\`handle_id\`, \`status\`),
+    key \`idx_action_task_root\` (\`task_id\`, \`root_action_id\`, \`sequence\`),
+    key \`idx_action_assignee_status\` (\`assignee_id\`, \`status\`),
     key \`idx_action_parent\` (\`parent_action_id\`),
     key \`idx_action_unviewed\` (\`status\`, \`viewed_at\`, \`activated_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外挂动作(tc_close 模块:审批/征询/监督同一种模式;用法见 doc/task-close.md)'`,
@@ -584,14 +553,12 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`user_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`role\` varchar(16) collate utf8mb4_unicode_ci not null,
-    \`is_primary\` tinyint(1) not null default 0,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
     unique key \`uk_member_unique\` (\`task_id\`, \`user_id\`, \`role\`),
     key \`idx_member_user_role\` (\`user_id\`, \`role\`),
-    key \`idx_member_task_role\` (\`task_id\`, \`role\`),
-    key \`idx_member_task_primary\` (\`task_id\`, \`is_primary\`)
+    key \`idx_member_task_role\` (\`task_id\`, \`role\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务-成员关系(tc_close 模块:participant/executor 与 tc_task 的多对多;creator 是 tc_task.creator_id 固有属性不入此表;用法见 doc/task-close.md)'`,
 	},
 	// ── tc_close:任务评论(文字 + 附件;附件复用 sys_file)
@@ -892,6 +859,24 @@ const COLUMN_RENAMES: Array<{
 	to: string;
 	newType: string;
 }> = [
+	{
+		table: "tc_action",
+		from: "created_id",
+		to: "creator_id",
+		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+	},
+	{
+		table: "tc_action",
+		from: "handle_id",
+		to: "assignee_id",
+		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+	},
+	{
+		table: "tc_action",
+		from: "serial_no",
+		to: "root_action_id",
+		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+	},
 	// 数据权限 v1.3 (m18228):`code` → `fn`(user:字段名是函数体,叫 fn 更贴切)
 	{
 		table: "sys_data_plugin",
@@ -937,7 +922,8 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
 	// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
 	{ table: "tc_task_report", column: "version_id" },
-	{ table: "tc_report_submission", column: "version_id" },
+	{ table: "tc_task_report", column: "status" },
+	{ table: "tc_member", column: "is_primary" },
 	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 	{ table: "sys_data_plugin", column: "produces" },
 	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃
@@ -1008,6 +994,7 @@ for (const upgrade of INDEX_UPGRADES) {
  * 幂等:索引不存在就跳过。
  */
 const INDEX_DROPS: Array<{ table: string; index: string }> = [
+	{ table: "tc_member", index: "idx_member_task_primary" },
 	// demo_grid 去 group_id 时连带的(`sys_data_policy` 已经拿不到这列当判据)
 	{ table: "demo_grid", index: "idx_demo_grid_group" },
 ];

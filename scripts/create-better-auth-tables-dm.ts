@@ -402,38 +402,13 @@ const STATEMENTS: string[] = [
 	`create table if not exists ${S}."tc_task_report" (
       "id" varchar(32) not null,
       "task_id" varchar(191) not null,
-      "status" varchar(16) not null,
       "draft" text default null,
       "revision" int not null default 0,
-      "current_submission_id" varchar(32) default null,
       "created_at" datetime default current_timestamp,
       "updated_at" datetime default current_timestamp,
       primary key ("id")
     )`,
 	`create unique index if not exists "uk_task_report_task" on ${S}."tc_task_report" ("task_id")`,
-	`create table if not exists ${S}."tc_report_submission" (
-      "id" varchar(32) not null,
-      "report_id" varchar(32) not null,
-      "task_id" varchar(191) not null,
-      "submitter_id" varchar(36) not null,
-      "revision" int not null,
-      "payload" text not null,
-      "created_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_report_submission_revision" on ${S}."tc_report_submission" ("report_id", "revision")`,
-	`create index if not exists "idx_report_submission_task" on ${S}."tc_report_submission" ("task_id", "created_at")`,
-	`create table if not exists ${S}."tc_content_revision" (
-      "id" varchar(32) not null,
-      "task_id" varchar(191) not null,
-      "revision" int not null,
-      "description" text default null,
-      "payload" text default null,
-      "actor_id" varchar(36) not null,
-      "created_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_content_revision_task" on ${S}."tc_content_revision" ("task_id", "revision")`,
 	`create table if not exists ${S}."tc_workflow" (
       "id" varchar(191) not null,
       "payload" text not null,
@@ -466,14 +441,14 @@ const STATEMENTS: string[] = [
 	`create table if not exists ${S}."tc_action" (
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
-      "serial_no" varchar(191) not null,
+      "root_action_id" varchar(191) not null,
       "parent_action_id" varchar(191) default null,
       "is_locking" tinyint not null,
       "from_status" varchar(32) default null,
       "to_status" varchar(32) default null,
       "sequence" int not null,
-      "created_id" varchar(191) not null,
-      "handle_id" varchar(191) not null,
+      "creator_id" varchar(191) not null,
+      "assignee_id" varchar(191) not null,
       "status" varchar(16) not null,
       "viewed_at" datetime default null,
       "activated_at" datetime default null,
@@ -482,8 +457,8 @@ const STATEMENTS: string[] = [
       "updated_at" datetime not null default current_timestamp,
       primary key ("id")
     )`,
-	`create index if not exists "idx_action_task_serial" on ${S}."tc_action" ("task_id", "serial_no", "sequence")`,
-	`create index if not exists "idx_action_handle_status" on ${S}."tc_action" ("handle_id", "status")`,
+	`create index if not exists "idx_action_task_root" on ${S}."tc_action" ("task_id", "root_action_id", "sequence")`,
+	`create index if not exists "idx_action_assignee_status" on ${S}."tc_action" ("assignee_id", "status")`,
 	`create index if not exists "idx_action_parent" on ${S}."tc_action" ("parent_action_id")`,
 	`create index if not exists "idx_action_unviewed" on ${S}."tc_action" ("status", "viewed_at", "activated_at")`,
 	`create table if not exists ${S}."tc_member" (
@@ -491,7 +466,6 @@ const STATEMENTS: string[] = [
       "task_id" varchar(191) not null,
       "user_id" varchar(36) not null,
       "role" varchar(16) not null,
-      "is_primary" tinyint not null default 0,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
       primary key ("id")
@@ -499,7 +473,6 @@ const STATEMENTS: string[] = [
 	`create unique index if not exists "uk_member_unique" on ${S}."tc_member" ("task_id", "user_id", "role")`,
 	`create index if not exists "idx_member_user_role" on ${S}."tc_member" ("user_id", "role")`,
 	`create index if not exists "idx_member_task_role" on ${S}."tc_member" ("task_id", "role")`,
-	`create index if not exists "idx_member_task_primary" on ${S}."tc_member" ("task_id", "is_primary")`,
 	`create table if not exists ${S}."tc_comment" (
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
@@ -595,6 +568,40 @@ async function main() {
 			console.log(`✗ ${rename.from} 表改名失败:${(e as Error).message?.slice(0, 90).replace(/\n/g, " ")}`);
 		}
 	}
+	// 动作列名须在建索引前统一，否则旧库会先尝试引用不存在的新列。
+	if (existingTables.has("tc_action")) {
+		const cols = new Set(
+			(
+				await q(`select COLUMN_NAME as c from SYS.ALL_TAB_COLUMNS where OWNER='${SCHEMA}' and TABLE_NAME='tc_action'`)
+			).map((row) => String(row.C ?? row.c).toLowerCase()),
+		);
+		const renames = [
+			{ from: "created_id", to: "creator_id" },
+			{ from: "handle_id", to: "assignee_id" },
+			{ from: "serial_no", to: "root_action_id" },
+		];
+		for (const { from, to } of renames) {
+			if (cols.has(from) && cols.has(to)) throw new Error(`tc_action 同时存在 ${from} 和 ${to}，请先处理`);
+		}
+		if (cols.has("handle_id")) {
+			const oldIndex = await q(
+				`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_action' and INDEX_NAME='idx_action_handle_status'`,
+			);
+			if (oldIndex.length) await run(`drop index "idx_action_handle_status" on ${S}."tc_action"`);
+		}
+		if (cols.has("serial_no")) {
+			const oldIndex = await q(
+				`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_action' and INDEX_NAME='idx_action_task_serial'`,
+			);
+			if (oldIndex.length) await run(`drop index "idx_action_task_serial" on ${S}."tc_action"`);
+		}
+		for (const { from, to } of renames) {
+			if (!cols.has(from)) continue;
+			await run(`alter table ${S}."tc_action" rename column "${from}" to "${to}"`);
+			renamed += 1;
+		}
+	}
+	// 任务动作列名迁移结束
 	// 改过表名就必须清计划缓存:达梦的**全局计划缓存**里还留着按旧表名编译的计划,
 	// 否则后续参数化语句会报 `[-7009] Object is modified`(实测踩过 —— 报错看着像表不存在,其实是计划失效)。
 	if (renamed > 0) {
@@ -694,11 +701,16 @@ async function main() {
 	// 达梦老库列名变更(`code` → `fn`)不走本脚本 —— 达梦 `ALTER TABLE RENAME COLUMN` 在 8.1+
 	// 才有,且**必须在所有列 drop 前**跑,迁移时人工执行:
 	//   alter table "sys_data_plugin" rename column "code" to "fn";
+	const memberPrimaryIndex = await q(
+		`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_member' and INDEX_NAME='idx_member_task_primary'`,
+	);
+	if (memberPrimaryIndex.length) await run(`drop index "idx_member_task_primary" on ${S}."tc_member"`);
 	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
 		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
 		// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
 		{ table: "tc_task_report", column: "version_id" },
-		{ table: "tc_report_submission", column: "version_id" },
+		{ table: "tc_task_report", column: "status" },
+		{ table: "tc_member", column: "is_primary" },
 		// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 		{ table: "sys_data_plugin", column: "produces" },
 		// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃

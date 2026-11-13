@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describeLog, logCategoryOf, logMovedStatus, type TaskLogItem } from "../src/lib/task-close-log.ts";
+import { describeLog, logCategoryOf, type TaskLogItem } from "../src/lib/task-close-log.ts";
 import { statusLabelOf } from "../src/lib/task-close-spec.ts";
 
 const statuses = [
@@ -53,7 +53,7 @@ describe("活动日志文本", () => {
 			item({
 				event: "action.create",
 				targetName: "李四",
-				detail: { intendedFrom: "open", intendedTo: "done", handleId: "u2", isLocking: true },
+				detail: { intendedFrom: "open", intendedTo: "done", assigneeId: "u2", isLocking: true },
 			}),
 			ctx,
 		);
@@ -64,7 +64,7 @@ describe("活动日志文本", () => {
 			item({
 				event: "action.create",
 				targetName: "李四",
-				detail: { intendedTo: null, handleId: "u2", isLocking: false },
+				detail: { intendedTo: null, assigneeId: "u2", isLocking: false },
 			}),
 			ctx,
 		);
@@ -101,12 +101,9 @@ describe("活动日志文本", () => {
 	});
 
 	it("成员 / 评论:对象与摘要要落到文字上", () => {
-		const added = describeLog(
-			item({ event: "member.add", targetName: "王五", detail: { role: "executor", isPrimary: true } }),
-			ctx,
-		);
+		const added = describeLog(item({ event: "member.add", targetName: "王五", detail: { role: "executor" } }), ctx);
 		assert.equal(added.title, "加入成员:王五");
-		assert.equal(added.note, "角色:执行者(主)");
+		assert.equal(added.note, "角色:执行者");
 
 		const removed = describeLog(
 			item({ event: "member.remove", targetName: "王五", detail: { role: "participant" } }),
@@ -140,19 +137,14 @@ describe("活动日志文本", () => {
 		assert.equal(unknown.note, "未知事件类型");
 	});
 
-	it("填报事件有专属文案,退回带原因", () => {
-		for (const event of ["report.bind", "report.distribute", "report.submit", "report.return"] as const)
+	it("填报事件有专属文案", () => {
+		for (const event of ["report.bind", "report.sync", "report.reset"] as const)
 			assert.notEqual(describeLog(item({ event }), ctx).note, "未知事件类型", `${event} 要有专属分支`);
-		const returned = describeLog(item({ event: "report.return", detail: { reason: "数字不对" } }), ctx);
-		assert.equal(returned.title, "退回填报");
-		assert.equal(returned.note, "退回原因:数字不对");
 	});
 
 	it("类别取事件码前缀;流程条只认动过状态的行", () => {
 		assert.equal(logCategoryOf("member.add"), "member");
 		assert.equal(logCategoryOf("task.transit"), "task");
 		assert.equal(logCategoryOf("brand.new"), null);
-		assert.equal(logMovedStatus({ toStatus: null }), false);
-		assert.equal(logMovedStatus({ toStatus: "done" }), true);
 	});
 });

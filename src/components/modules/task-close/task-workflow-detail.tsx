@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import type { WorkflowEdgeInput } from "#/components/modules/task-close/task-close-workflow-form";
-import { TaskCloseWorkflowGraph } from "#/components/modules/task-close/task-close-workflow-graph";
+import type { WorkflowEdgeInput } from "#/components/modules/task-close/task-workflow-form";
+import { TaskWorkflowGraph } from "#/components/modules/task-close/task-workflow-graph";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
@@ -32,7 +32,7 @@ const VIA_TEXT: Record<string, string> = { direct: "直接改", action: "审批�
  *
  * 数据来自 `workflowGet`(点「详情」时才拉),`meta` 走 `DetailDialog` 底部的创建 / 更新时间。
  */
-export function TaskCloseWorkflowDetail({
+export function TaskWorkflowDetail({
 	open,
 	onOpenChange,
 	detail,
@@ -61,7 +61,7 @@ export function TaskCloseWorkflowDetail({
 				<>
 					<div className="space-y-2">
 						<h3 className="text-sm font-medium">状态图</h3>
-						<TaskCloseWorkflowGraph statuses={detail.statuses} initial={detail.initial} edges={detail.edges} />
+						<TaskWorkflowGraph statuses={detail.statuses} initial={detail.initial} edges={detail.edges} />
 					</div>
 					<DetailRow label="状态">
 						<TagList

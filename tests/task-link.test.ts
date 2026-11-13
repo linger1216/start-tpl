@@ -32,19 +32,6 @@ describe("normalizePayload", () => {
 		assert.equal(normalizePayload({ links: [{ kind: "link", url: " " }] }), null);
 		assert.equal(normalizePayload(null), null);
 	});
-
-	it("老块类型(文字 / 表格 / 内部页面)不再写回库", () => {
-		const out = normalizePayload({
-			links: [
-				{ kind: "link", url: "/ok" },
-				// biome-ignore lint/suspicious/noExplicitAny: 模拟老数据
-				{ kind: "text", text: "旧文字" } as any,
-				// biome-ignore lint/suspicious/noExplicitAny: 模拟老数据
-				{ kind: "ref", path: "/settings/users", title: "旧内部页面" } as any,
-			],
-		});
-		assert.deepEqual(out?.links, [{ kind: "link", url: "/ok" }]);
-	});
 });
 
 describe("parseBlock(容错渲染)", () => {
@@ -56,14 +43,10 @@ describe("parseBlock(容错渲染)", () => {
 		assert.equal(parseBlock({ kind: "link", url: "ftp://x" }), null, "非 http(s) 不算链接");
 	});
 
-	it("合法链接原样解析;老 ref 块折成链接(不丢内容)", () => {
+	it("合法链接原样解析", () => {
 		assert.deepEqual(parseBlock({ kind: "link", url: "https://x.example" }), {
 			kind: "link",
 			url: "https://x.example",
-		});
-		assert.deepEqual(parseBlock({ kind: "ref", path: "/settings/users", query: { q: "张三" } }), {
-			kind: "link",
-			url: "/settings/users?q=%E5%BC%A0%E4%B8%89",
 		});
 	});
 

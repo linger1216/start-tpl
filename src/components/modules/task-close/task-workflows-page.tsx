@@ -6,15 +6,12 @@ import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
+import { TaskWorkflowDetail, type WorkflowDetail } from "#/components/modules/task-close/task-workflow-detail";
 import {
-	TaskCloseWorkflowDetail,
-	type WorkflowDetail,
-} from "#/components/modules/task-close/task-close-workflow-detail";
-import {
-	TaskCloseWorkflowForm,
+	TaskWorkflowForm,
 	type WorkflowEditing,
 	type WorkflowFormPayload,
-} from "#/components/modules/task-close/task-close-workflow-form";
+} from "#/components/modules/task-close/task-workflow-form";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -60,7 +57,7 @@ function toEditing(item: ListItem): WorkflowEditing {
  * 模板是**全局配置**:改模板不影响已建任务(它们在创建时复制了状态图快照)。
  * 授权走按钮权限点(`sys:tcWorkflow:add/edit/remove`),按钮只是可见性投影,真正拦截在服务端。
  */
-export function TaskCloseWorkflowsPage() {
+export function TaskWorkflowsPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
@@ -214,7 +211,7 @@ export function TaskCloseWorkflowsPage() {
 				</div>
 			)}
 
-			<TaskCloseWorkflowForm
+			<TaskWorkflowForm
 				open={formOpen}
 				onOpenChange={(next) => {
 					setFormOpen(next);
@@ -225,7 +222,7 @@ export function TaskCloseWorkflowsPage() {
 				onSubmit={submit}
 			/>
 
-			<TaskCloseWorkflowDetail
+			<TaskWorkflowDetail
 				open={detailId !== null}
 				onOpenChange={(next) => {
 					if (!next) setDetailId(null);

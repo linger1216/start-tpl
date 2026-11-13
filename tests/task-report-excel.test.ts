@@ -81,25 +81,22 @@ describe("填报 Excel", () => {
 		const preview = await previewReportWorkbook(schema, encoded);
 		assert.deepEqual(preview.value, [{ name: "甲", quantity: 2 }]);
 		assert.deepEqual(preview.issues, []);
-		const invalid = workbook([["name", "quantity"], ["名称", "数量"], [], ["乙", "abc"]]);
+		const invalid = workbook([["名称", "数量"], [], ["乙", "abc"]]);
 		const result = await previewReportWorkbook(schema, invalid.toString("base64"));
-		assert.equal(result.issues[0].excelRow, 4);
+		assert.equal(result.issues[0].excelRow, 3);
 		assert.equal(result.issues[0].field, "quantity");
 	});
-	it("表头按中文名认(老格式的英文 id 表头也认),对不上就报错", async () => {
-		// 新模版:只有中文表头,数据从第 2 行起
+	it("表头按字段名称匹配,对不上就报错", async () => {
 		const chinese = workbook([
 			["名称", "数量"],
 			["甲", "3"],
 		]).toString("base64");
 		assert.deepEqual((await previewReportWorkbook(schema, chinese)).value, [{ name: "甲", quantity: 3 }]);
-		// 老格式:首行英文 id + 第二行中文名,数据从第 3 行起
-		const legacy = workbook([
+		const wrongHeader = workbook([
 			["name", "quantity"],
 			["名称", "数量"],
-			["乙", "4"],
 		]).toString("base64");
-		assert.deepEqual((await previewReportWorkbook(schema, legacy)).value, [{ name: "乙", quantity: 4 }]);
+		await assert.rejects(() => previewReportWorkbook(schema, wrongHeader), /表头/);
 		// 表头对不上模板字段:直接报错,不猜
 		const unknown = workbook([
 			["列一", "列二"],
@@ -110,26 +107,15 @@ describe("填报 Excel", () => {
 	it("拒绝损坏文件、多工作表、公式、超大解压数据", async () => {
 		await assert.rejects(() => previewReportWorkbook(schema, Buffer.from("invalid").toString("base64")));
 		await assert.rejects(
-			() =>
-				previewReportWorkbook(
-					schema,
-					workbook(
-						[
-							["name", "quantity"],
-							["名称", "数量"],
-						],
-						2,
-					).toString("base64"),
-				),
+			() => previewReportWorkbook(schema, workbook([["名称", "数量"]], 2).toString("base64")),
 			/单个/,
 		);
 		const book = XLSX.utils.book_new();
 		const sheet = XLSX.utils.aoa_to_sheet([
-			["name", "quantity"],
 			["名称", "数量"],
 			["甲", 1],
 		]);
-		sheet.B3 = { t: "n", f: "1+1", v: 2 };
+		sheet.B2 = { t: "n", f: "1+1", v: 2 };
 		XLSX.utils.book_append_sheet(book, sheet, "sheet");
 		await assert.rejects(
 			() =>
@@ -139,11 +125,7 @@ describe("填报 Excel", () => {
 				),
 			/公式/,
 		);
-		const bomb = workbook([
-			["name", "quantity"],
-			["名称", "数量"],
-			...Array.from({ length: 700 }, () => ["x".repeat(32700), 1]),
-		]);
+		const bomb = workbook([["名称", "数量"], ...Array.from({ length: 700 }, () => ["x".repeat(32700), 1])]);
 		await assert.rejects(() => previewReportWorkbook(schema, bomb.toString("base64")), /超过|限制/);
 	});
 	it("危险文本导出为安全字符串", () => {

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { TaskCloseDetailPage } from "#/components/modules/task-close/task-close-detail-page";
+import { TaskDetailPage } from "#/components/modules/task-close/task-detail-page";
 
 /**
  * 任务详情 —— 不进菜单(`sys_menu` 里没有这条路径),按 `canViewPath` 的口径只要求登录;
@@ -12,5 +12,5 @@ export const Route = createFileRoute("/(main)/task-close/$taskId/")({
 
 function TaskCloseDetailRoute() {
 	const { taskId } = Route.useParams();
-	return <TaskCloseDetailPage taskId={taskId} />;
+	return <TaskDetailPage taskId={taskId} />;
 }

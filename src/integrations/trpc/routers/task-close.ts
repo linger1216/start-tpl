@@ -1,6 +1,22 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, lte, or, type SQL } from "drizzle-orm";
+import {
+	and,
+	asc,
+	count,
+	desc,
+	eq,
+	gte,
+	inArray,
+	isNotNull,
+	isNull,
+	like,
+	lt,
+	lte,
+	min,
+	or,
+	type SQL,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -9,15 +25,14 @@ import {
 	sysNotification,
 	sysNotificationDelivery,
 	sysUser,
-	taskCloseAction,
-	taskCloseComment,
-	taskCloseContentRevision,
-	taskCloseLog,
-	taskCloseMember,
-	taskCloseTask,
-	taskCloseWorkflow,
-	taskReport,
-	taskReportTemplate,
+	taskActionTable,
+	taskCommentTable,
+	taskLogTable,
+	taskMemberTable,
+	taskReportTable,
+	taskReportTemplateTable,
+	taskTable,
+	taskWorkflowTable,
 } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
@@ -34,7 +49,7 @@ import {
 } from "#/lib/task-close-spec";
 import { normalizePayload, parseBlocks, taskPayloadSchema } from "#/lib/task-payload";
 import { createReportWorkbook, previewReportWorkbook } from "#/lib/task-report-excel";
-import { reportRowSchema, taskReportSchema } from "#/lib/task-report-spec";
+import { reportRowSchema, taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
 
 /**
@@ -47,18 +62,17 @@ import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../ini
  * 流程模板的 4 个接口(`workflowGet/Create/Update/Remove`)走页面合成码
  * `pagePermOf("/task-close/workflows")`(`PERM_BY_PATH`),按钮级另配 `sys:tcWorkflow:*` 权限点。
  *
- * **可见性 v1 口径**:任何登录用户都能读任何任务(无菜单 = RBAC 允许访客)。
- * `tc_member` 决定的是**谁能推进**,不是**谁能看见** —— 见文档「权限矩阵」。
+ * 任务与其评论、动作、日志和附件由同一任务可见性判据保护。
  *
  * **管理员旁路**:「系统管理员」角色(`isAdminUser`)在本模块**什么都可以** —— 读路径由
  * `permissionsOf` 下发 `isAdmin`,写路径的 `assertCanManage` / `whoAllows` / `commentRemove` 一并放行,
  * 三处判据同源。仍受状态机完整性约束(边必须存在),只是不受 `who` 限制。
  */
 
-type TaskRow = typeof taskCloseTask.$inferSelect;
-type ActionRow = typeof taskCloseAction.$inferSelect;
-type MemberRow = typeof taskCloseMember.$inferSelect;
-type WorkflowRow = typeof taskCloseWorkflow.$inferSelect;
+type TaskRow = typeof taskTable.$inferSelect;
+type ActionRow = typeof taskActionTable.$inferSelect;
+type MemberRow = typeof taskMemberTable.$inferSelect;
+type WorkflowRow = typeof taskWorkflowTable.$inferSelect;
 
 /** `db.transaction` 的回调参数类型 —— 事务里要用 `for update` 锁行 */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -181,7 +195,7 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null) => ({
 	parentId: row.parent_id ?? null,
 	description: row.description,
 	payload: row.payload,
-	workflow: normalizeStoredWorkflow(row.workflow as WorkflowPayload),
+	workflow: row.workflow as WorkflowPayload,
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
@@ -189,22 +203,21 @@ const toMember = (row: MemberRow, nameOf: Map<string, string>) => ({
 	userId: row.user_id,
 	name: nameOf.get(row.user_id) ?? null,
 	role: row.role,
-	isPrimary: row.is_primary === 1,
 });
 
 const toAction = (row: ActionRow, nameOf: Map<string, string>) => ({
 	id: row.id,
 	taskId: row.task_id,
-	serialNo: row.serial_no,
+	rootActionId: row.root_action_id,
 	parentActionId: row.parent_action_id,
 	isLocking: row.is_locking,
 	fromStatus: row.from_status,
 	toStatus: row.to_status,
 	sequence: row.sequence,
-	createdId: row.created_id,
-	createdName: nameOf.get(row.created_id) ?? null,
-	handleId: row.handle_id,
-	handleName: nameOf.get(row.handle_id) ?? null,
+	creatorId: row.creator_id,
+	creatorName: nameOf.get(row.creator_id) ?? null,
+	assigneeId: row.assignee_id,
+	assigneeName: nameOf.get(row.assignee_id) ?? null,
 	status: row.status,
 	viewedAt: row.viewed_at?.toISOString() ?? null,
 	activatedAt: row.activated_at?.toISOString() ?? null,
@@ -215,26 +228,14 @@ const toAction = (row: ActionRow, nameOf: Map<string, string>) => ({
 
 // ────────────────────────────── 取行 / 判定 ──────────────────────────────
 
-/** 旧快照中的 any 改为三个任务角色，旧业务守卫不再参与流程。 */
-function normalizeStoredWorkflow(raw: WorkflowPayload): WorkflowPayload {
-	return {
-		...raw,
-		edges: (raw.edges ?? []).map((edge) => ({
-			from: edge.from,
-			to: edge.to,
-			via: edge.via,
-			who: [...new Set(edge.who.flatMap((who) => (who === "any" ? ["creator", "participant", "executor"] : [who])))],
-		})),
-	};
-}
-const workflowOf = (task: TaskRow): WorkflowPayload => normalizeStoredWorkflow(task.workflow as WorkflowPayload);
+const workflowOf = (task: TaskRow): WorkflowPayload => task.workflow as WorkflowPayload;
 
 /** 取一条活着的任务;取不到(含已软删)抛 `NOT_FOUND` —— 读路径都要过 `alive()` */
 async function getTaskRow(id: string): Promise<TaskRow> {
 	const [row] = await db
 		.select()
-		.from(taskCloseTask)
-		.where(and(eq(taskCloseTask.id, id), alive(taskCloseTask)))
+		.from(taskTable)
+		.where(and(eq(taskTable.id, id), alive(taskTable)))
 		.limit(1);
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
 	return row;
@@ -263,8 +264,8 @@ async function assertAttachments(tx: Tx, attachIds: readonly string[]): Promise<
 async function lockTask(tx: Tx, id: string): Promise<TaskRow> {
 	const [row] = await tx
 		.select()
-		.from(taskCloseTask)
-		.where(and(eq(taskCloseTask.id, id), alive(taskCloseTask)))
+		.from(taskTable)
+		.where(and(eq(taskTable.id, id), alive(taskTable)))
 		.limit(1)
 		.for("update");
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
@@ -285,18 +286,16 @@ async function assertCanManage(task: TaskRow, meId: string) {
 }
 
 /** 任务相关方:创建者 / 管理员 / 已在 `tc_member` 里的人。本模块「能看、能参与」的统一判据。 */
-async function isTaskParticipant(task: TaskRow, meId: string): Promise<boolean> {
+async function isTaskParticipant(task: TaskRow, meId: string, reader: Reader = db): Promise<boolean> {
 	if (task.creator_id === meId) return true;
 	if (await isAdminUser(meId)) return true;
-	return (await memberRolesOf(task.id, meId)).length > 0;
+	return (await memberRolesOf(task.id, meId, reader)).length > 0;
 }
 
 /**
  * 「任务相关方」守卫 —— 用于**不是** `assertCanManage` 那档、但也不该对陌生人开放的操作
- * (加成员、看填报、导出、看说明修订)。各调用点自带消息,便于前端区分。
+ * (加成员、看填报、导出)。各调用点自带消息,便于前端区分。
  *
- * 注意别拿 `commentCreate` 当参照:那个按既定设计对**所有登录用户**开放
- * (任务本身对全员可见,评论 = 公开讨论)。这里的口径比它窄一档。
  */
 async function assertTaskParticipant(task: TaskRow, meId: string, message: string): Promise<void> {
 	if (!(await isTaskParticipant(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message });
@@ -309,16 +308,20 @@ async function assertTaskParticipant(task: TaskRow, meId: string, message: strin
 async function isTaskReadable(task: TaskRow, meId: string): Promise<boolean> {
 	if (await isTaskParticipant(task, meId)) return true;
 	if (!task.parent_id) return false;
-	const [parent] = await db.select().from(taskCloseTask).where(eq(taskCloseTask.id, task.parent_id)).limit(1);
+	const [parent] = await db.select().from(taskTable).where(eq(taskTable.id, task.parent_id)).limit(1);
 	return parent ? isTaskParticipant(parent, meId) : false;
+}
+
+async function assertTaskReadable(task: TaskRow, meId: string): Promise<void> {
+	if (!(await isTaskReadable(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看这条任务" });
 }
 
 /** 这个人在这条任务上通过 `tc_member` 拿到的角色(不含 creator —— 那个是 `tc_task` 固有列) */
 async function memberRolesOf(taskId: string, userId: string, reader: Reader = db): Promise<string[]> {
 	const rows = await reader
-		.select({ role: taskCloseMember.role })
-		.from(taskCloseMember)
-		.where(and(eq(taskCloseMember.task_id, taskId), eq(taskCloseMember.user_id, userId)));
+		.select({ role: taskMemberTable.role })
+		.from(taskMemberTable)
+		.where(and(eq(taskMemberTable.task_id, taskId), eq(taskMemberTable.user_id, userId)));
 	return rows.map((row) => row.role);
 }
 
@@ -350,13 +353,13 @@ async function whoAllows(
 /** 任务被锁 = 存在 `is_locking=1` 且状态还活着的 action(文档「锁语义」) */
 async function isLocked(taskId: string, reader: Reader = db): Promise<boolean> {
 	const [row] = await reader
-		.select({ id: taskCloseAction.id })
-		.from(taskCloseAction)
+		.select({ id: taskActionTable.id })
+		.from(taskActionTable)
 		.where(
 			and(
-				eq(taskCloseAction.task_id, taskId),
-				eq(taskCloseAction.is_locking, true),
-				inArray(taskCloseAction.status, [...LIVE_ACTION_STATUS]),
+				eq(taskActionTable.task_id, taskId),
+				eq(taskActionTable.is_locking, true),
+				inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
 			),
 		)
 		.limit(1);
@@ -365,16 +368,16 @@ async function isLocked(taskId: string, reader: Reader = db): Promise<boolean> {
 
 async function cancelLiveTaskActions(tx: Tx, taskId: string, now: Date) {
 	const actions = await tx
-		.select({ id: taskCloseAction.id })
-		.from(taskCloseAction)
-		.where(and(eq(taskCloseAction.task_id, taskId), inArray(taskCloseAction.status, [...LIVE_ACTION_STATUS])))
+		.select({ id: taskActionTable.id })
+		.from(taskActionTable)
+		.where(and(eq(taskActionTable.task_id, taskId), inArray(taskActionTable.status, [...LIVE_ACTION_STATUS])))
 		.for("update");
 	if (!actions.length) return;
 	const ids = actions.map((action) => action.id);
 	await tx
-		.update(taskCloseAction)
+		.update(taskActionTable)
 		.set({ status: "cancelled", updated_at: now })
-		.where(inArray(taskCloseAction.id, ids));
+		.where(inArray(taskActionTable.id, ids));
 	await cancelPendingNotifications(tx, "task_action", ids);
 }
 
@@ -384,59 +387,49 @@ async function cancelLiveTaskActions(tx: Tx, taskId: string, now: Date) {
  */
 async function lockAction(tx: Tx, actionId: string): Promise<{ task: TaskRow; action: ActionRow }> {
 	const [probe] = await tx
-		.select({ taskId: taskCloseAction.task_id })
-		.from(taskCloseAction)
-		.where(eq(taskCloseAction.id, actionId))
+		.select({ taskId: taskActionTable.task_id })
+		.from(taskActionTable)
+		.where(eq(taskActionTable.id, actionId))
 		.limit(1);
 	if (!probe) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
 	const task = await lockTask(tx, probe.taskId);
 	const [action] = await tx
 		.select()
-		.from(taskCloseAction)
-		.where(eq(taskCloseAction.id, actionId))
+		.from(taskActionTable)
+		.where(eq(taskActionTable.id, actionId))
 		.limit(1)
 		.for("update");
 	if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
 	return { task, action };
 }
 
-/**
- * 取一个填报模板并解析 payload(版本表已并入模板:`version_id` 类引用存的就是模板 id)。
- * 找不到就是数据坏了。
- */
-async function getReportTemplate(reader: Reader | Tx, templateId: string) {
-	const [template] = await reader
-		.select()
-		.from(taskReportTemplate)
-		.where(eq(taskReportTemplate.id, templateId))
-		.limit(1);
-	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "模板版本不存在" });
-	return { ...template, schema: taskReportSchema.parse(template.payload) };
-}
-
-/**
- * 新绑定须锁定仍存在的模板,和删除串行(旧口径文案保留:绑定的引用值即模板 id)。
- */
-async function getAvailableReportTemplate(tx: Tx, templateId: string) {
-	// 新绑定只认活着的模板(软删的不能再用于新任务);历史填报走 getReportTemplate(不过滤)
+/** 新绑定与模板删除串行，并校验模板可见性。 */
+async function getAvailableReportTemplate(tx: Tx, templateId: string, me: { id: string; isSuper?: boolean }) {
 	const [template] = await tx
 		.select()
-		.from(taskReportTemplate)
-		.where(and(eq(taskReportTemplate.id, templateId), alive(taskReportTemplate)))
+		.from(taskReportTemplateTable)
+		.where(and(eq(taskReportTemplateTable.id, templateId), alive(taskReportTemplateTable)))
 		.limit(1)
 		.for("update");
 	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板已删除，无法用于新任务" });
+	if (!template.shared && template.creator_id !== me.id && !me.isSuper && !(await isAdminUser(me.id)))
+		throw new TRPCError({ code: "FORBIDDEN", message: "无权使用该填报模板" });
 	return { ...template, schema: taskReportSchema.parse(template.payload) };
 }
 
-/**
- * 从任务行解析填报模板(`tc_task.report.reportId`;单版本:模板 payload 即当前结构)。
- * 任务没绑定填报时抛 NOT_FOUND。
- */
+/** 任务始终使用绑定时的结构快照。 */
 async function getTaskReportTemplate(reader: Reader | Tx, task: { report: unknown }) {
-	const reportId = ((task.report ?? null) as { reportId?: string } | null)?.reportId ?? null;
+	const report = task.report as { reportId?: string; schema?: unknown } | null;
+	const reportId = report?.reportId;
 	if (!reportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
-	return getReportTemplate(reader, reportId);
+	const [template] = await reader
+		.select({ id: taskReportTemplateTable.id })
+		.from(taskReportTemplateTable)
+		.where(eq(taskReportTemplateTable.id, reportId))
+		.limit(1);
+	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板不存在" });
+	const schema = taskReportSchema.parse(report?.schema);
+	return { id: template.id, schema };
 }
 
 /** 填报的「数据范围」:子任务按 `tc_task.report.filter` 过滤;父任务(无 filter)= 全部行。 */
@@ -456,20 +449,42 @@ function rowInScope(row: unknown, filter: ScopeFilter): boolean {
 	return filter.every((condition) => (record[condition.field] ?? null) === condition.value);
 }
 
+/** 两组 AND 条件只有在同一字段要求不同值时才互斥。 */
+function scopesOverlap(a: ScopeFilter, b: ScopeFilter): boolean {
+	return !a.some((left) => b.some((right) => left.field === right.field && left.value !== right.value));
+}
+
 /**
  * 任务树(根 + 它的全部子任务)。
  *
- * 内容区(链接 / 附件)**按整棵树取并集**:子任务传的附件 / 加的链接,父任务看得到,反之亦然。
- * 填报是另一码事:父子各存一份副本,手动「保存」才同步(见 `reportSyncToParent`)。
- * 层级只有两层(见 `tc_task.parent_id` 注释),所以不用递归。
+ * 内容区只合并当前用户可读的任务，避免子任务成员看到父任务或兄弟任务的私有内容。
  */
-async function familyTasks(task: TaskRow, reader: Reader | Tx = db): Promise<TaskRow[]> {
+async function familyTasks(task: TaskRow, userId: string): Promise<TaskRow[]> {
 	const rootId = task.parent_id ?? task.id;
-	return reader
+	const rows = await db
 		.select()
-		.from(taskCloseTask)
-		.where(and(or(eq(taskCloseTask.id, rootId), eq(taskCloseTask.parent_id, rootId)), alive(taskCloseTask)))
-		.orderBy(asc(taskCloseTask.created_at));
+		.from(taskTable)
+		.where(and(or(eq(taskTable.id, rootId), eq(taskTable.parent_id, rootId)), alive(taskTable)))
+		.orderBy(asc(taskTable.created_at));
+	if (await isAdminUser(userId)) return rows;
+	const memberships = await db
+		.select({ taskId: taskMemberTable.task_id })
+		.from(taskMemberTable)
+		.where(
+			and(
+				eq(taskMemberTable.user_id, userId),
+				inArray(
+					taskMemberTable.task_id,
+					rows.map((row) => row.id),
+				),
+			),
+		);
+	const memberIds = new Set(memberships.map((row) => row.taskId));
+	const root = rows.find((row) => row.id === rootId);
+	const canReadRoot = root && (root.creator_id === userId || memberIds.has(root.id));
+	return rows.filter(
+		(row) => row.creator_id === userId || memberIds.has(row.id) || (row.parent_id === rootId && canReadRoot),
+	);
 }
 
 /** 一批 user_id → 姓名。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */
@@ -484,19 +499,18 @@ async function nameMapOf(ids: readonly string[]): Promise<Map<string, string>> {
  * 一批 task_id → 执行人姓名 —— **卡面「发给谁」的来源**。
  *
  * 执行人挂在 `tc_member`(role=executor),不在任务行上:fan-out 时一条子任务 = 一名执行人,
- * 光看 `creator_id` 全都一样(都是派活的人),分不出发给谁。主执行人优先,同任务多行取第一条。
+ * 光看 `creator_id` 全都一样(都是派活的人),分不出发给谁。每个任务至多一名执行人。
  */
 async function executorNamesOf(taskIds: readonly string[]): Promise<Map<string, string>> {
 	if (taskIds.length === 0) return new Map();
 	const rows = await db
 		.select({
-			taskId: taskCloseMember.task_id,
-			userId: taskCloseMember.user_id,
-			isPrimary: taskCloseMember.is_primary,
+			taskId: taskMemberTable.task_id,
+			userId: taskMemberTable.user_id,
 		})
-		.from(taskCloseMember)
-		.where(and(inArray(taskCloseMember.task_id, taskIds), eq(taskCloseMember.role, "executor")))
-		.orderBy(desc(taskCloseMember.is_primary), asc(taskCloseMember.created_at));
+		.from(taskMemberTable)
+		.where(and(inArray(taskMemberTable.task_id, taskIds), eq(taskMemberTable.role, "executor")))
+		.orderBy(asc(taskMemberTable.created_at));
 	const names = await nameMapOf(rows.map((row) => row.userId));
 	const map = new Map<string, string>();
 	for (const row of rows) {
@@ -518,9 +532,9 @@ async function createMentionNotifications(
 	const receivers = [...new Set(mentionIds)].filter((id) => id !== author.id);
 	if (!receivers.length) return [];
 	const members = await tx
-		.select({ userId: taskCloseMember.user_id })
-		.from(taskCloseMember)
-		.where(eq(taskCloseMember.task_id, task.id));
+		.select({ userId: taskMemberTable.user_id })
+		.from(taskMemberTable)
+		.where(eq(taskMemberTable.task_id, task.id));
 	const roster = new Set([task.creator_id, ...members.map((row) => row.userId)]);
 	if (receivers.some((id) => !roster.has(id))) {
 		throw new TRPCError({ code: "BAD_REQUEST", message: "只能提及任务成员" });
@@ -545,23 +559,23 @@ function publishMentions(receivers: readonly string[]) {
 async function activateNextAction(tx: Tx, task: TaskRow, action: ActionRow, now: Date) {
 	const [next] = await tx
 		.select()
-		.from(taskCloseAction)
+		.from(taskActionTable)
 		.where(
 			and(
-				eq(taskCloseAction.task_id, task.id),
-				eq(taskCloseAction.parent_action_id, action.id),
-				eq(taskCloseAction.is_locking, action.is_locking),
-				eq(taskCloseAction.status, "queued"),
+				eq(taskActionTable.task_id, task.id),
+				eq(taskActionTable.parent_action_id, action.id),
+				eq(taskActionTable.is_locking, action.is_locking),
+				eq(taskActionTable.status, "queued"),
 			),
 		)
-		.orderBy(asc(taskCloseAction.sequence))
+		.orderBy(asc(taskActionTable.sequence))
 		.limit(1)
 		.for("update");
 	if (!next) return null;
 	await tx
-		.update(taskCloseAction)
+		.update(taskActionTable)
 		.set({ status: "active", activated_at: now, updated_at: now })
-		.where(and(eq(taskCloseAction.id, next.id), eq(taskCloseAction.status, "queued")));
+		.where(and(eq(taskActionTable.id, next.id), eq(taskActionTable.status, "queued")));
 	await createNotification(tx, {
 		type: "action.assigned",
 		source: { type: "task_action", id: next.id },
@@ -569,7 +583,7 @@ async function activateNextAction(tx: Tx, task: TaskRow, action: ActionRow, now:
 		content: `串行${action.is_locking ? "审批" : "征询"}轮到你处理 —— 到「我的任务」查看`,
 		payload: { path: taskPathOf(task.id), level: "info", actionId: next.id },
 		dedupeKey: `action.assigned:${next.id}`,
-		recipients: [{ userId: next.handle_id, channel: "in_app" }],
+		recipients: [{ userId: next.assignee_id, channel: "in_app" }],
 	});
 	return next;
 }
@@ -585,6 +599,8 @@ function stableJson(value: unknown): string {
 		.join(",");
 	return `{${body}}`;
 }
+
+const hashReportRows = (rows: unknown) => createHash("sha256").update(stableJson(rows)).digest("hex");
 
 /** `tc_log.detail` 是 JSON 列,读出来可能是任何东西 —— 当袋子读,读不到就当空(绝不抛) */
 function detailOf(detail: unknown): Record<string, unknown> {
@@ -613,7 +629,7 @@ async function logTaskEvent(
 		at?: Date;
 	},
 ): Promise<void> {
-	await tx.insert(taskCloseLog).values({
+	await tx.insert(taskLogTable).values({
 		id: newId(),
 		task_id: entry.taskId,
 		event: entry.event,
@@ -655,9 +671,14 @@ async function insertTask(
 		workflowId: string;
 		workflow: WorkflowPayload;
 		payload?: Parameters<typeof normalizePayload>[0];
-		members: Array<{ userId: string; role: "participant" | "executor"; isPrimary?: boolean }>;
+		members: Array<{ userId: string; role: "participant" | "executor" }>;
 		/** 父子填报:父任务传 `{ reportId }`,子任务传 `{ reportId, filter }` */
-		report?: { reportId: string; filter?: Array<{ field: string; value: unknown }> } | null;
+		report?: {
+			reportId: string;
+			schema: z.infer<typeof taskReportSchema>;
+			filter?: ScopeFilter;
+			baseHash?: string;
+		} | null;
 		/** 父任务 id(fan-out 时子任务指向父) */
 		parentId?: string | null;
 		/** 母版表格行(父任务 / 单任务);为空数组或未传 = 空表 */
@@ -667,7 +688,7 @@ async function insertTask(
 ) {
 	const now = new Date();
 	const payload = await prepareTaskPayload(tx, input.payload);
-	await tx.insert(taskCloseTask).values({
+	await tx.insert(taskTable).values({
 		id: input.id,
 		name: input.name.trim(),
 		description: input.description?.trim() || null,
@@ -689,20 +710,10 @@ async function insertTask(
 		task_id: input.id,
 		user_id: member.userId,
 		role: member.role,
-		is_primary: member.role === "executor" ? 1 : 0,
 		created_at: now,
 		updated_at: now,
 	}));
-	if (members.length) await tx.insert(taskCloseMember).values(members);
-	await tx.insert(taskCloseContentRevision).values({
-		id: newId(),
-		task_id: input.id,
-		revision: 1,
-		description: input.description?.trim() || null,
-		payload,
-		actor_id: actor.id,
-		created_at: now,
-	});
+	if (members.length) await tx.insert(taskMemberTable).values(members);
 	await logTaskEvent(tx, {
 		taskId: input.id,
 		event: "task.create",
@@ -713,40 +724,10 @@ async function insertTask(
 			members: members.map((member) => ({
 				userId: member.user_id,
 				role: member.role,
-				isPrimary: member.is_primary === 1,
 			})),
 		},
 		at: now,
 	});
-}
-
-/**
- * 这个文件有没有被任何任务引用(任务 payload / 内容修订 / 评论附件)。
- *
- * 只给 `draftAttachmentUrl` 用:没有任何任务引用它 = 它还只是「刚传上来、还没归属」的草稿,
- * 谁传的都能预览。`LIKE` 扫 JSON 文本是为了省一张存放归属关系的表 —— 每次预览最多扫三张表各一行。
- */
-async function isFileReferenced(fileId: string): Promise<boolean> {
-	// id 是 nanoid(字母数字),不含 LIKE 通配符,直接拼 `%id%` 是安全的
-	const needle = `%${fileId}%`;
-	const [inTask] = await db
-		.select({ id: taskCloseTask.id })
-		.from(taskCloseTask)
-		.where(like(taskCloseTask.payload, needle))
-		.limit(1);
-	if (inTask) return true;
-	const [inRevision] = await db
-		.select({ id: taskCloseContentRevision.id })
-		.from(taskCloseContentRevision)
-		.where(like(taskCloseContentRevision.payload, needle))
-		.limit(1);
-	if (inRevision) return true;
-	const [inComment] = await db
-		.select({ id: taskCloseComment.id })
-		.from(taskCloseComment)
-		.where(like(taskCloseComment.attachments, needle))
-		.limit(1);
-	return inComment !== undefined;
 }
 
 /** 从 JSON 列里取附件 id 列表(容错:脏数据 / 老形状都退化成空数组,不抛) */
@@ -841,12 +822,12 @@ async function getVisibleReportTemplate(me: { id: string; isSuper?: boolean }, t
 	const isAdmin = me.isSuper === true || (await isAdminUser(me.id));
 	const [template] = await db
 		.select()
-		.from(taskReportTemplate)
+		.from(taskReportTemplateTable)
 		.where(
 			and(
-				eq(taskReportTemplate.id, templateId),
-				alive(taskReportTemplate),
-				...(isAdmin ? [] : [or(eq(taskReportTemplate.shared, 1), eq(taskReportTemplate.creator_id, me.id))]),
+				eq(taskReportTemplateTable.id, templateId),
+				alive(taskReportTemplateTable),
+				...(isAdmin ? [] : [or(eq(taskReportTemplateTable.shared, 1), eq(taskReportTemplateTable.creator_id, me.id))]),
 			),
 		)
 		.limit(1);
@@ -882,8 +863,8 @@ export const taskCloseRouter = createTRPCRouter({
 			}
 			const task = await getTaskRow(input.taskId ?? "");
 			await assertTaskParticipant(task, me.id, "无权导出填报");
-			const [own] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
-			if (!own || own.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+			const [own] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
+			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 			const template = await getTaskReportTemplate(db, task);
 			// 每个任务导出自己那份草稿(子任务是下发时复制出来的那份)
 			return {
@@ -912,14 +893,14 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 				const task = await getTaskRow(input.taskId ?? "");
 				const members = await db
-					.select({ userId: taskCloseMember.user_id, role: taskCloseMember.role })
-					.from(taskCloseMember)
-					.where(eq(taskCloseMember.task_id, task.id));
+					.select({ userId: taskMemberTable.user_id, role: taskMemberTable.role })
+					.from(taskMemberTable)
+					.where(eq(taskMemberTable.task_id, task.id));
 				const executor = members.some((member) => member.userId === me.id && member.role === "executor");
-				const preparing = task.creator_id === me.id;
-				if (!executor && !preparing)
+				const isCreator = task.creator_id === me.id;
+				if (!executor && !isCreator)
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以导入" });
-				const [report] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
+				const [report] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
 				if (!report) throw new TRPCError({ code: "BAD_REQUEST", message: "没有可编辑的填报" });
 				const template = await getTaskReportTemplate(db, task);
 				return await previewReportWorkbook(template.schema, input.fileBase64);
@@ -940,7 +921,7 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const id = newId();
-			await db.insert(taskReportTemplate).values({
+			await db.insert(taskReportTemplateTable).values({
 				id,
 				name: input.name,
 				creator_id: me.id,
@@ -964,22 +945,22 @@ export const taskCloseRouter = createTRPCRouter({
 			return db.transaction(async (tx) => {
 				const [template] = await tx
 					.select()
-					.from(taskReportTemplate)
-					.where(and(eq(taskReportTemplate.id, input.id), alive(taskReportTemplate)))
+					.from(taskReportTemplateTable)
+					.where(and(eq(taskReportTemplateTable.id, input.id), alive(taskReportTemplateTable)))
 					.limit(1)
 					.for("update");
 				if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "模板不存在" });
 				if (template.creator_id !== me.id && !admin)
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有模板创建人或管理员可以发布" });
 				await tx
-					.update(taskReportTemplate)
+					.update(taskReportTemplateTable)
 					.set({
 						name: input.name ?? template.name,
 						payload: input.payload,
 						shared: input.shared === undefined ? template.shared : input.shared ? 1 : 0,
 						updated_at: new Date(),
 					})
-					.where(eq(taskReportTemplate.id, input.id));
+					.where(eq(taskReportTemplateTable.id, input.id));
 				return { id: input.id };
 			});
 		}),
@@ -989,15 +970,15 @@ export const taskCloseRouter = createTRPCRouter({
 		await db.transaction(async (tx) => {
 			const [template] = await tx
 				.select()
-				.from(taskReportTemplate)
-				.where(and(eq(taskReportTemplate.id, input.id), alive(taskReportTemplate)))
+				.from(taskReportTemplateTable)
+				.where(and(eq(taskReportTemplateTable.id, input.id), alive(taskReportTemplateTable)))
 				.limit(1)
 				.for("update");
 			if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "模板不存在" });
 			if (template.creator_id !== me.id && !admin)
 				throw new TRPCError({ code: "FORBIDDEN", message: "只有模板创建人或管理员可以删除" });
 			// 软删:已绑定任务的历史填报仍读得到 payload,只是不能再用于新任务/绑定
-			await tx.update(taskReportTemplate).set(softDeleted()).where(eq(taskReportTemplate.id, input.id));
+			await tx.update(taskReportTemplateTable).set(softDeleted()).where(eq(taskReportTemplateTable.id, input.id));
 		});
 		return { ok: true };
 	}),
@@ -1007,16 +988,16 @@ export const taskCloseRouter = createTRPCRouter({
 		// 可见性:shared = 1 全员可见,0 仅创建人;管理员始终全量;软删的不出现
 		const templates = await db
 			.select()
-			.from(taskReportTemplate)
+			.from(taskReportTemplateTable)
 			.where(
 				isAdmin
-					? alive(taskReportTemplate)
+					? alive(taskReportTemplateTable)
 					: and(
-							alive(taskReportTemplate),
-							or(eq(taskReportTemplate.shared, 1), eq(taskReportTemplate.creator_id, me.id)),
+							alive(taskReportTemplateTable),
+							or(eq(taskReportTemplateTable.shared, 1), eq(taskReportTemplateTable.creator_id, me.id)),
 						),
 			)
-			.orderBy(desc(taskReportTemplate.created_at));
+			.orderBy(desc(taskReportTemplateTable.created_at));
 		return templates.map((template) => ({
 			...template,
 			canManage: isAdmin || template.creator_id === me.id,
@@ -1035,10 +1016,17 @@ export const taskCloseRouter = createTRPCRouter({
 			const task = await lockTask(tx, input.taskId);
 			if (task.creator_id !== me.id && !admin)
 				throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或管理员可以配置填报" });
+			if (task.parent_id) throw new TRPCError({ code: "BAD_REQUEST", message: "子任务不能单独绑定填报模板" });
+			const [child] = await tx
+				.select({ id: taskTable.id })
+				.from(taskTable)
+				.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
+				.limit(1);
+			if (child) throw new TRPCError({ code: "BAD_REQUEST", message: "已分派的任务不能再绑定填报模板" });
 			const [existing] = await tx
 				.select()
-				.from(taskReport)
-				.where(eq(taskReport.task_id, task.id))
+				.from(taskReportTable)
+				.where(eq(taskReportTable.task_id, task.id))
 				.limit(1)
 				.for("update");
 			if (existing)
@@ -1046,7 +1034,7 @@ export const taskCloseRouter = createTRPCRouter({
 					code: "BAD_REQUEST",
 					message: "填报模板在创建任务时确定，不能更换或移除",
 				});
-			const template = await getAvailableReportTemplate(tx, input.reportId);
+			const template = await getAvailableReportTemplate(tx, input.reportId, me);
 			const schema = template.schema;
 			const initial =
 				schema.kind === "OBJECT"
@@ -1057,11 +1045,11 @@ export const taskCloseRouter = createTRPCRouter({
 						)
 					: [];
 			const id = newId();
-			await tx.insert(taskReport).values({ id, task_id: task.id, status: "draft", draft: initial, revision: 0 });
+			await tx.insert(taskReportTable).values({ id, task_id: task.id, draft: initial, revision: 0 });
 			await tx
-				.update(taskCloseTask)
-				.set({ report: { reportId: template.id }, updated_at: new Date() })
-				.where(eq(taskCloseTask.id, task.id));
+				.update(taskTable)
+				.set({ report: { reportId: template.id, schema: template.schema }, updated_at: new Date() })
+				.where(eq(taskTable.id, task.id));
 			await logTaskEvent(tx, {
 				taskId: task.id,
 				event: "report.bind",
@@ -1076,24 +1064,21 @@ export const taskCloseRouter = createTRPCRouter({
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.taskId);
 		await assertTaskParticipant(task, me.id, "无权查看填报");
-		const [own] = await db.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1);
+		const [own] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
 		if (!own) return null;
 		// 模板引用在任务的 report 规则里(单版本:模板 payload 即当前结构)
-		const boundReportId = (task.report as { reportId?: string } | null)?.reportId ?? null;
-		if (!boundReportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
-		const template = await getReportTemplate(db, boundReportId);
+		const template = await getTaskReportTemplate(db, task);
 		const members = await db
-			.select({ userId: taskCloseMember.user_id, role: taskCloseMember.role })
-			.from(taskCloseMember)
-			.where(eq(taskCloseMember.task_id, task.id));
+			.select({ userId: taskMemberTable.user_id, role: taskMemberTable.role })
+			.from(taskMemberTable)
+			.where(eq(taskMemberTable.task_id, task.id));
 		const executor = members.some((member) => member.userId === me.id && member.role === "executor");
-		const preparing = task.creator_id === me.id;
-		if (own.status === "removed") return null;
+		const isCreator = task.creator_id === me.id;
 		return {
 			/** 每个任务读**自己那份**草稿(子任务是下发时复制出来的),互不加锁 */
 			report: own,
 			template,
-			canEdit: executor || preparing,
+			canEdit: executor || isCreator,
 			/** 子任务才能把本任务的行同步回父任务;父任务自己就是数据源 */
 			canSyncToParent: task.parent_id !== null && template.schema.kind === "TABLE",
 		};
@@ -1107,16 +1092,21 @@ export const taskCloseRouter = createTRPCRouter({
 			return db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.taskId);
 				const members = await tx
-					.select({ userId: taskCloseMember.user_id, role: taskCloseMember.role })
-					.from(taskCloseMember)
-					.where(eq(taskCloseMember.task_id, task.id));
+					.select({ userId: taskMemberTable.user_id, role: taskMemberTable.role })
+					.from(taskMemberTable)
+					.where(eq(taskMemberTable.task_id, task.id));
 				const executor = members.some((member) => member.userId === me.id && member.role === "executor");
-				const preparing = task.creator_id === me.id;
-				if (!executor && !preparing)
+				const isCreator = task.creator_id === me.id;
+				if (!executor && !isCreator)
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以填写" });
 				// 每个任务只写**自己那一行**:子任务是下发时复制出来的独立副本,父子互不加锁
-				const [own] = await tx.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1).for("update");
-				if (!own || own.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				const [own] = await tx
+					.select()
+					.from(taskReportTable)
+					.where(eq(taskReportTable.task_id, task.id))
+					.limit(1)
+					.for("update");
+				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 				if (own.revision !== input.revision)
 					throw new TRPCError({ code: "CONFLICT", message: "填报已被修改，请刷新后重试" });
 				const template = await getTaskReportTemplate(tx, task);
@@ -1128,6 +1118,10 @@ export const taskCloseRouter = createTRPCRouter({
 					rows.some((row) => !row || typeof row !== "object" || Array.isArray(row))
 				)
 					throw new TRPCError({ code: "BAD_REQUEST", message: "填报格式无效" });
+				const issues = schema.kind === "TABLE" && rows.length === 0 ? [] : validateTaskReport(schema, input.draft);
+				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
+				if (task.parent_id && schema.kind === "TABLE" && rows.some((row) => !rowInScope(row, scopeFilterOf(task))))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据不能超出分派范围" });
 				for (const row of rows)
 					for (const field of schema.fields.filter((f) => f.readOnly)) {
 						if (
@@ -1137,9 +1131,9 @@ export const taskCloseRouter = createTRPCRouter({
 					}
 				const next: unknown = schema.kind === "TABLE" ? rows : rows[0];
 				await tx
-					.update(taskReport)
+					.update(taskReportTable)
 					.set({ draft: next, revision: own.revision + 1, updated_at: new Date() })
-					.where(eq(taskReport.id, own.id));
+					.where(eq(taskReportTable.id, own.id));
 				return { revision: own.revision + 1 };
 			});
 		}),
@@ -1147,9 +1141,7 @@ export const taskCloseRouter = createTRPCRouter({
 	/**
 	 * **把本子任务的行同步到父任务**(手动「保存」才触发)。
 	 *
-	 * 父子各存一份副本(下发时复制),平时互不加锁;这里整片替换"我这份切片":
-	 * `父行' = 父行里不属于我范围的行 ∪ 我的行`,再用 `父行' ∩ 我的范围` 回灌我自己 ——
-	 * 改过范围字段的行同步后从我的视图消失(不再匹配),别人范围命中的行会进来。
+	 * 父子各存一份副本。确认父任务对应范围没有变化后，用子任务数据替换该范围。
 	 */
 	reportSyncToParent: protectedProcedure.input(z.object({ taskId: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
@@ -1157,9 +1149,9 @@ export const taskCloseRouter = createTRPCRouter({
 			const task = await lockTask(tx, input.taskId);
 			if (!task.parent_id) throw new TRPCError({ code: "BAD_REQUEST", message: "只有子任务可以同步到父任务" });
 			const members = await tx
-				.select({ userId: taskCloseMember.user_id, role: taskCloseMember.role })
-				.from(taskCloseMember)
-				.where(eq(taskCloseMember.task_id, task.id));
+				.select({ userId: taskMemberTable.user_id, role: taskMemberTable.role })
+				.from(taskMemberTable)
+				.where(eq(taskMemberTable.task_id, task.id));
 			const executor = members.some((member) => member.userId === me.id && member.role === "executor");
 			if (task.creator_id !== me.id && !executor)
 				throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以同步" });
@@ -1168,33 +1160,41 @@ export const taskCloseRouter = createTRPCRouter({
 				throw new TRPCError({ code: "BAD_REQUEST", message: "只有表格形式填报可以同步到父任务" });
 
 			// 锁两行,先子后父(固定顺序,避免和别的写路径互相等)
-			const [own] = await tx.select().from(taskReport).where(eq(taskReport.task_id, task.id)).limit(1).for("update");
-			if (!own || own.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
-			const [parent] = await tx
+			const [own] = await tx
 				.select()
-				.from(taskReport)
-				.where(eq(taskReport.task_id, task.parent_id))
+				.from(taskReportTable)
+				.where(eq(taskReportTable.task_id, task.id))
 				.limit(1)
 				.for("update");
-			if (!parent || parent.status === "removed") throw new TRPCError({ code: "NOT_FOUND", message: "父任务没有填报" });
+			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+			const [parent] = await tx
+				.select()
+				.from(taskReportTable)
+				.where(eq(taskReportTable.task_id, task.parent_id))
+				.limit(1)
+				.for("update");
+			if (!parent) throw new TRPCError({ code: "NOT_FOUND", message: "父任务没有填报" });
 
 			const filter = scopeFilterOf(task);
 			const mine = Array.isArray(own.draft) ? own.draft : [];
 			const parentRows = Array.isArray(parent.draft) ? parent.draft : [];
 			// 父任务:先拿掉我这份切片(我原来范围里的行),再把我现在的行接上去
+			const reportConfig = task.report as { baseHash?: string } | null;
+			const parentSlice = parentRows.filter((row) => rowInScope(row, filter));
+			if (reportConfig?.baseHash !== hashReportRows(parentSlice))
+				throw new TRPCError({ code: "CONFLICT", message: "父任务的对应数据已修改，请重新载入后再填写" });
+			if (mine.some((row) => !rowInScope(row, filter)))
+				throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据不能超出分派范围" });
 			const nextParentRows = [...parentRows.filter((row) => !rowInScope(row, filter)), ...mine];
-			// 我这边:按父数据的最新状态重算(改过范围字段的行就走掉,别人推给我范围的行就进来)
-			const nextOwnRows = nextParentRows.filter((row) => rowInScope(row, filter));
-
 			const now = new Date();
 			await tx
-				.update(taskReport)
+				.update(taskReportTable)
 				.set({ draft: nextParentRows, revision: parent.revision + 1, updated_at: now })
-				.where(eq(taskReport.id, parent.id));
+				.where(eq(taskReportTable.id, parent.id));
 			await tx
-				.update(taskReport)
-				.set({ draft: nextOwnRows, revision: own.revision + 1, updated_at: now })
-				.where(eq(taskReport.id, own.id));
+				.update(taskTable)
+				.set({ report: { ...(task.report as object), baseHash: hashReportRows(mine) } })
+				.where(eq(taskTable.id, task.id));
 			await logTaskEvent(tx, {
 				taskId: task.id,
 				event: "report.sync",
@@ -1202,18 +1202,60 @@ export const taskCloseRouter = createTRPCRouter({
 				detail: {
 					parentTaskId: task.parent_id,
 					pushed: mine.length,
-					kept: nextOwnRows.length,
 					summary: `同步 ${mine.length} 行到父任务`,
 				},
 			});
-			return {
-				revision: own.revision + 1,
-				parentRevision: parent.revision + 1,
-				pushed: mine.length,
-				kept: nextOwnRows.length,
-			};
+			return { pushed: mine.length };
 		});
 	}),
+	reportResetFromParent: protectedProcedure
+		.input(z.object({ taskId: ID, revision: z.number().int().min(0) }))
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			return db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.taskId);
+				if (!task.parent_id) throw new TRPCError({ code: "BAD_REQUEST", message: "只有子任务可以重新载入" });
+				const roles = await memberRolesOf(task.id, me.id, tx);
+				if (task.creator_id !== me.id && !roles.includes("executor"))
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以重新载入" });
+				if ((await getTaskReportTemplate(tx, task)).schema.kind !== "TABLE")
+					throw new TRPCError({ code: "BAD_REQUEST", message: "只有表格填报可以重新载入" });
+				const [own] = await tx
+					.select()
+					.from(taskReportTable)
+					.where(eq(taskReportTable.task_id, task.id))
+					.limit(1)
+					.for("update");
+				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				if (own.revision !== input.revision)
+					throw new TRPCError({ code: "CONFLICT", message: "填报已被修改，请刷新后重试" });
+				const [parent] = await tx
+					.select()
+					.from(taskReportTable)
+					.where(eq(taskReportTable.task_id, task.parent_id))
+					.limit(1)
+					.for("update");
+				if (!parent || !Array.isArray(parent.draft))
+					throw new TRPCError({ code: "NOT_FOUND", message: "父任务没有表格填报" });
+				const draft = parent.draft.filter((row) => rowInScope(row, scopeFilterOf(task)));
+				const revision = own.revision + 1;
+				await tx
+					.update(taskReportTable)
+					.set({ draft, revision, updated_at: new Date() })
+					.where(eq(taskReportTable.id, own.id));
+				await tx
+					.update(taskTable)
+					.set({ report: { ...(task.report as object), baseHash: hashReportRows(draft) } })
+					.where(eq(taskTable.id, task.id));
+				await logTaskEvent(tx, {
+					taskId: task.id,
+					event: "report.reset",
+					actor: me,
+					detail: { parentTaskId: task.parent_id },
+				});
+				return { draft, revision };
+			});
+		}),
 	// ────────────────────────────── 状态图模板 ──────────────────────────────
 
 	/**
@@ -1226,13 +1268,13 @@ export const taskCloseRouter = createTRPCRouter({
 	workflowList: protectedProcedure.query(async () => {
 		const rows = await db
 			.select()
-			.from(taskCloseWorkflow)
-			.where(alive(taskCloseWorkflow))
-			.orderBy(asc(taskCloseWorkflow.created_at));
+			.from(taskWorkflowTable)
+			.where(alive(taskWorkflowTable))
+			.orderBy(asc(taskWorkflowTable.created_at));
 		return rows.map((row: WorkflowRow) => ({
 			id: row.id,
 			name: (row.payload as WorkflowPayload).name ?? row.id,
-			payload: normalizeStoredWorkflow(row.payload as WorkflowPayload),
+			payload: row.payload as WorkflowPayload,
 			builtin: row.id === DEFAULT_WORKFLOW_ID,
 			createdAt: row.created_at ? row.created_at.toISOString() : null,
 			updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
@@ -1243,11 +1285,11 @@ export const taskCloseRouter = createTRPCRouter({
 	workflowGet: protectedProcedure.input(z.object({ id: ID })).query(async ({ input }) => {
 		const [row] = await db
 			.select()
-			.from(taskCloseWorkflow)
-			.where(and(eq(taskCloseWorkflow.id, input.id), alive(taskCloseWorkflow)))
+			.from(taskWorkflowTable)
+			.where(and(eq(taskWorkflowTable.id, input.id), alive(taskWorkflowTable)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "流程模板不存在" });
-		const payload = normalizeStoredWorkflow(row.payload as WorkflowPayload);
+		const payload = row.payload as WorkflowPayload;
 		return {
 			id: row.id,
 			name: payload.name ?? row.id,
@@ -1264,7 +1306,7 @@ export const taskCloseRouter = createTRPCRouter({
 	workflowCreate: protectedProcedure.input(workflowInput).mutation(async ({ input }) => {
 		const id = newId();
 		const now = new Date();
-		await db.insert(taskCloseWorkflow).values({
+		await db.insert(taskWorkflowTable).values({
 			id,
 			payload: normalizeWorkflow(input),
 			created_at: now,
@@ -1280,15 +1322,15 @@ export const taskCloseRouter = createTRPCRouter({
 	 */
 	workflowUpdate: protectedProcedure.input(workflowInput.extend({ id: ID })).mutation(async ({ input }) => {
 		const [row] = await db
-			.select({ id: taskCloseWorkflow.id })
-			.from(taskCloseWorkflow)
-			.where(and(eq(taskCloseWorkflow.id, input.id), alive(taskCloseWorkflow)))
+			.select({ id: taskWorkflowTable.id })
+			.from(taskWorkflowTable)
+			.where(and(eq(taskWorkflowTable.id, input.id), alive(taskWorkflowTable)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "流程模板不存在" });
 		await db
-			.update(taskCloseWorkflow)
+			.update(taskWorkflowTable)
 			.set({ payload: normalizeWorkflow(input), updated_at: new Date() })
-			.where(eq(taskCloseWorkflow.id, row.id));
+			.where(eq(taskWorkflowTable.id, row.id));
 		return { ok: true };
 	}),
 
@@ -1301,15 +1343,15 @@ export const taskCloseRouter = createTRPCRouter({
 			throw new TRPCError({ code: "BAD_REQUEST", message: "内置默认模板不能删除" });
 		}
 		const [row] = await db
-			.select({ id: taskCloseWorkflow.id })
-			.from(taskCloseWorkflow)
-			.where(and(eq(taskCloseWorkflow.id, input.id), alive(taskCloseWorkflow)))
+			.select({ id: taskWorkflowTable.id })
+			.from(taskWorkflowTable)
+			.where(and(eq(taskWorkflowTable.id, input.id), alive(taskWorkflowTable)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "流程模板不存在" });
 		await db
-			.update(taskCloseWorkflow)
+			.update(taskWorkflowTable)
 			.set({ ...softDeleted(), updated_at: new Date() })
-			.where(eq(taskCloseWorkflow.id, row.id));
+			.where(eq(taskWorkflowTable.id, row.id));
 		return { ok: true };
 	}),
 
@@ -1334,7 +1376,7 @@ export const taskCloseRouter = createTRPCRouter({
 					createdBefore: z.coerce.date().optional(),
 					keyword: z.string().max(64).optional(),
 					mine: z.boolean().optional(),
-					/** 只看「有动作正轮到我处理」的(审批 / 征询的当前 handle 是我) */
+					/** 只看「有动作正轮到我处理」的(审批 / 征询的当前处理人是我) */
 					pending: z.boolean().optional(),
 					...pageInput,
 				})
@@ -1345,43 +1387,56 @@ export const taskCloseRouter = createTRPCRouter({
 			const page = input?.page ?? 1;
 			const pageSize = input?.pageSize ?? 20;
 
-			const conds: (SQL | undefined)[] = [alive(taskCloseTask)];
-			if (input?.status) conds.push(eq(taskCloseTask.status, input.status));
-			if (input?.workflowId) conds.push(eq(taskCloseTask.workflow_id, input.workflowId));
-			if (input?.createdAfter) conds.push(gte(taskCloseTask.created_at, input.createdAfter));
-			if (input?.createdBefore) conds.push(lte(taskCloseTask.created_at, input.createdBefore));
-			if (input?.keyword) conds.push(like(taskCloseTask.name, `%${input.keyword}%`));
+			const conds: (SQL | undefined)[] = [alive(taskTable)];
+			if (!(await isAdminUser(me.id))) {
+				const memberTaskIds = db
+					.select({ id: taskMemberTable.task_id })
+					.from(taskMemberTable)
+					.where(eq(taskMemberTable.user_id, me.id));
+				conds.push(
+					or(
+						eq(taskTable.creator_id, me.id),
+						inArray(taskTable.id, memberTaskIds),
+						inArray(taskTable.parent_id, memberTaskIds),
+					),
+				);
+			}
+			if (input?.status) conds.push(eq(taskTable.status, input.status));
+			if (input?.workflowId) conds.push(eq(taskTable.workflow_id, input.workflowId));
+			if (input?.createdAfter) conds.push(gte(taskTable.created_at, input.createdAfter));
+			if (input?.createdBefore) conds.push(lte(taskTable.created_at, input.createdBefore));
+			if (input?.keyword) conds.push(like(taskTable.name, `%${input.keyword}%`));
 			if (input?.mine) {
 				conds.push(
 					or(
-						eq(taskCloseTask.creator_id, me.id),
+						eq(taskTable.creator_id, me.id),
 						inArray(
-							taskCloseTask.id,
+							taskTable.id,
 							db
-								.select({ id: taskCloseMember.task_id })
-								.from(taskCloseMember)
-								.where(eq(taskCloseMember.user_id, me.id)),
+								.select({ id: taskMemberTable.task_id })
+								.from(taskMemberTable)
+								.where(eq(taskMemberTable.user_id, me.id)),
 						),
 					),
 				);
 			}
-			// 「轮到我处理」= 有 active 动作把 handle 指到我。和 `actionMine` 同一判据,
+			// 「轮到我处理」= 有 active 动作的处理人是我。
 			// 前端不再另算一套权限。
 			const myPendingTaskIds = () =>
 				db
-					.select({ id: taskCloseAction.task_id })
-					.from(taskCloseAction)
-					.where(and(eq(taskCloseAction.handle_id, me.id), eq(taskCloseAction.status, "active")));
-			if (input?.pending) conds.push(inArray(taskCloseTask.id, myPendingTaskIds()));
+					.select({ id: taskActionTable.task_id })
+					.from(taskActionTable)
+					.where(and(eq(taskActionTable.assignee_id, me.id), eq(taskActionTable.status, "active")));
+			if (input?.pending) conds.push(inArray(taskTable.id, myPendingTaskIds()));
 			// 子任务不单独占一行 —— 挂在父任务里(详情页的「子任务」区);
 			// 例外:**我在那条子任务里有角色(执行人 / 参与者)**就必须列出来,
 			// 否则"参与了却看不到"—— 参与者也要能进自己的活。
 			conds.push(
 				or(
-					isNull(taskCloseTask.parent_id),
+					isNull(taskTable.parent_id),
 					inArray(
-						taskCloseTask.id,
-						db.select({ id: taskCloseMember.task_id }).from(taskCloseMember).where(eq(taskCloseMember.user_id, me.id)),
+						taskTable.id,
+						db.select({ id: taskMemberTable.task_id }).from(taskMemberTable).where(eq(taskMemberTable.user_id, me.id)),
 					),
 				),
 			);
@@ -1394,36 +1449,29 @@ export const taskCloseRouter = createTRPCRouter({
 			const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 			// 「待我处理」:**不受当前筛选影响** —— 它是「现在有什么在等我」,
 			// 跟着关键字/日期一起缩水的话,用户永远看不到自己被压了多少活
-			const pendingWhere = and(alive(taskCloseTask), inArray(taskCloseTask.id, myPendingTaskIds()));
+			const pendingWhere = and(alive(taskTable), inArray(taskTable.id, myPendingTaskIds()));
 			const [totalRow, recentRow, dueSoonRow, overdueRow, pendingRow] = await Promise.all([
-				db.select({ n: count() }).from(taskCloseTask).where(where),
+				db.select({ n: count() }).from(taskTable).where(where),
 				db
 					.select({ n: count() })
-					.from(taskCloseTask)
-					.where(and(where, gte(taskCloseTask.created_at, weekAgo))),
+					.from(taskTable)
+					.where(and(where, gte(taskTable.created_at, weekAgo))),
 				db
 					.select({ n: count() })
-					.from(taskCloseTask)
-					.where(
-						and(
-							where,
-							isNotNull(taskCloseTask.due_at),
-							gte(taskCloseTask.due_at, now),
-							lt(taskCloseTask.due_at, weekLater),
-						),
-					),
+					.from(taskTable)
+					.where(and(where, isNotNull(taskTable.due_at), gte(taskTable.due_at, now), lt(taskTable.due_at, weekLater))),
 				db
 					.select({ n: count() })
-					.from(taskCloseTask)
-					.where(and(where, isNotNull(taskCloseTask.due_at), lt(taskCloseTask.due_at, now))),
-				db.select({ n: count() }).from(taskCloseTask).where(pendingWhere),
+					.from(taskTable)
+					.where(and(where, isNotNull(taskTable.due_at), lt(taskTable.due_at, now))),
+				db.select({ n: count() }).from(taskTable).where(pendingWhere),
 			]);
 
 			const rows = await db
 				.select()
-				.from(taskCloseTask)
+				.from(taskTable)
 				.where(where)
-				.orderBy(desc(taskCloseTask.created_at), desc(taskCloseTask.id))
+				.orderBy(desc(taskTable.created_at), desc(taskTable.id))
 				.limit(pageSize)
 				.offset((page - 1) * pageSize);
 			const nameOf = await nameMapOf(rows.map((row) => row.creator_id));
@@ -1432,31 +1480,31 @@ export const taskCloseRouter = createTRPCRouter({
 			// 父任务卡片要显示「N 个子任务」:一次 group by 拿到本页所有父任务的子任务数
 			const childCounts = rows.length
 				? await db
-						.select({ parentId: taskCloseTask.parent_id, n: count() })
-						.from(taskCloseTask)
+						.select({ parentId: taskTable.parent_id, n: count() })
+						.from(taskTable)
 						.where(
 							and(
 								inArray(
-									taskCloseTask.parent_id,
+									taskTable.parent_id,
 									rows.map((row) => row.id),
 								),
-								alive(taskCloseTask),
+								alive(taskTable),
 							),
 						)
-						.groupBy(taskCloseTask.parent_id)
+						.groupBy(taskTable.parent_id)
 				: [];
 			const childCountOf = new Map(childCounts.map((row) => [row.parentId ?? "", Number(row.n ?? 0)]));
 			// 卡面「待你处理」标记:本页里有动作轮到我的那几条
 			const pendingRows = rows.length
 				? await db
-						.select({ id: taskCloseAction.task_id })
-						.from(taskCloseAction)
+						.select({ id: taskActionTable.task_id })
+						.from(taskActionTable)
 						.where(
 							and(
-								eq(taskCloseAction.handle_id, me.id),
-								eq(taskCloseAction.status, "active"),
+								eq(taskActionTable.assignee_id, me.id),
+								eq(taskActionTable.status, "active"),
 								inArray(
-									taskCloseAction.task_id,
+									taskActionTable.task_id,
 									rows.map((row) => row.id),
 								),
 							),
@@ -1489,28 +1537,28 @@ export const taskCloseRouter = createTRPCRouter({
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
 		// 不是相关方(也不是父任务的参与者)连详情都不给 —— 直接访问 URL 也一样
-		if (!(await isTaskReadable(task, me.id))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看这条任务" });
+		await assertTaskReadable(task, me.id);
 
 		const memberRows = await db
 			.select()
-			.from(taskCloseMember)
-			.where(eq(taskCloseMember.task_id, task.id))
-			.orderBy(desc(taskCloseMember.is_primary), asc(taskCloseMember.created_at));
+			.from(taskMemberTable)
+			.where(eq(taskMemberTable.task_id, task.id))
+			.orderBy(asc(taskMemberTable.created_at));
 		const actionRows = await db
 			.select()
-			.from(taskCloseAction)
-			.where(eq(taskCloseAction.task_id, task.id))
-			.orderBy(asc(taskCloseAction.created_at));
+			.from(taskActionTable)
+			.where(eq(taskActionTable.task_id, task.id))
+			.orderBy(asc(taskActionTable.created_at));
 
 		const nameOf = await nameMapOf([
 			task.creator_id,
 			...memberRows.map((row) => row.user_id),
-			...actionRows.flatMap((row) => [row.created_id, row.handle_id]),
+			...actionRows.flatMap((row) => [row.creator_id, row.assignee_id]),
 		]);
 
 		// 内容区(块)+ 附件区**按整棵树取并集**:子任务传的附件 / 加的链接,父任务看得到,反之亦然。
 		// `own` 那两个只给编辑弹窗用 —— 弹窗存回去的是「这条任务自己的」,不把别人的内容克隆一份。
-		const family = await familyTasks(task);
+		const family = await familyTasks(task, me.id);
 		const ownLinks = parseBlocks((task.payload as { links?: unknown } | null)?.links);
 		const ownAttachments = await resolveAttachments(attachmentIdsOf(task.payload));
 		const links = [
@@ -1525,9 +1573,9 @@ export const taskCloseRouter = createTRPCRouter({
 		// 子任务(fan-out 出来的):详情页用卡片列出来,点进去就是那条子任务自己的详情
 		const childRows = await db
 			.select()
-			.from(taskCloseTask)
-			.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)))
-			.orderBy(asc(taskCloseTask.created_at));
+			.from(taskTable)
+			.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
+			.orderBy(asc(taskTable.created_at));
 		const childNameOf = await nameMapOf(childRows.map((row) => row.creator_id));
 		// 子任务「发给谁」:每条 fan-out 子任务各有一名执行人 —— 卡面要能一眼认出是谁的活
 		const childExecutorNameOf = await executorNamesOf(childRows.map((row) => row.id));
@@ -1535,20 +1583,25 @@ export const taskCloseRouter = createTRPCRouter({
 		// 前端据此分流「点进去是卡片页(还有子任务)还是详情页(叶子)」
 		const grandCounts = childRows.length
 			? await db
-					.select({ parentId: taskCloseTask.parent_id, n: count() })
-					.from(taskCloseTask)
+					.select({ parentId: taskTable.parent_id, n: count() })
+					.from(taskTable)
 					.where(
 						and(
 							inArray(
-								taskCloseTask.parent_id,
+								taskTable.parent_id,
 								childRows.map((row) => row.id),
 							),
-							alive(taskCloseTask),
+							alive(taskTable),
 						),
 					)
-					.groupBy(taskCloseTask.parent_id)
+					.groupBy(taskTable.parent_id)
 			: [];
 		const grandCountOf = new Map(grandCounts.map((row) => [row.parentId ?? "", Number(row.n ?? 0)]));
+		const reached = await db
+			.select({ status: taskLogTable.to_status, at: min(taskLogTable.created_at).mapWith(taskLogTable.created_at) })
+			.from(taskLogTable)
+			.where(and(eq(taskLogTable.task_id, task.id), isNotNull(taskLogTable.to_status)))
+			.groupBy(taskLogTable.to_status);
 
 		return {
 			task: toTaskDetail(task, nameOf.get(task.creator_id) ?? null),
@@ -1565,6 +1618,7 @@ export const taskCloseRouter = createTRPCRouter({
 			})),
 			members: memberRows.map((row) => toMember(row, nameOf)),
 			actions: actionRows.map((row) => toAction(row, nameOf)),
+			reached: reached.map((row) => ({ status: row.status, at: row.at?.toISOString() ?? null })),
 			permissions: await permissionsOf(task, me.id),
 			/** 当前用户 id —— 前端要靠它判断「这条动作 / 评论是不是我的」,前端不再单独问一次会话 */
 			meId: me.id,
@@ -1584,23 +1638,15 @@ export const taskCloseRouter = createTRPCRouter({
 		.input(z.object({ taskId: ID, fileId: z.string().min(1).max(32), download: z.boolean().optional() }))
 		.query(async ({ ctx, input }) => {
 			const task = await getTaskRow(input.taskId);
-			const family = await familyTasks(task);
+			const me = requireCurrentUser(ctx);
+			await assertTaskReadable(task, me.id);
+			const family = await familyTasks(task, me.id);
 			let owned = family.some((row) => attachmentIdsOf(row.payload).includes(input.fileId));
 			if (!owned) {
-				const me = requireCurrentUser(ctx);
-				if (await isTaskParticipant(task, me.id)) {
-					const revisions = await db
-						.select({ payload: taskCloseContentRevision.payload })
-						.from(taskCloseContentRevision)
-						.where(eq(taskCloseContentRevision.task_id, task.id));
-					owned = revisions.some((revision) => attachmentIdsOf(revision.payload).includes(input.fileId));
-				}
-			}
-			if (!owned) {
 				const comments = await db
-					.select({ attachments: taskCloseComment.attachments })
-					.from(taskCloseComment)
-					.where(and(eq(taskCloseComment.task_id, task.id), alive(taskCloseComment)));
+					.select({ attachments: taskCommentTable.attachments })
+					.from(taskCommentTable)
+					.where(and(eq(taskCommentTable.task_id, task.id), alive(taskCommentTable)));
 				owned = comments.some(
 					(row) => Array.isArray(row.attachments) && (row.attachments as unknown[]).includes(input.fileId),
 				);
@@ -1614,31 +1660,6 @@ export const taskCloseRouter = createTRPCRouter({
 				throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在或还没上传完成" });
 			}
 
-			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
-			return {
-				url,
-				originName: row.origin_name,
-				contentType: row.content_type,
-				size: row.size,
-				ext: row.ext,
-			};
-		}),
-
-	/**
-	 * 新建任务时**还没挂上任务**的附件取地址(选完即传,点预览要能看)。
-	 *
-	 * 与 `attachmentUrl` 的分工:那个要求文件已挂在本任务上;这里只放行**谁都还没引用过的**
-	 * 正常状态文件 —— 一旦某个任务引用它,就必须走 `attachmentUrl`,那边才有任务归属守卫。
-	 * 没有这道口子的话,「添加附件」之后点预览会一直 404。
-	 */
-	draftAttachmentUrl: protectedProcedure
-		.input(z.object({ fileId: z.string().min(1).max(32), download: z.boolean().optional() }))
-		.query(async ({ input }) => {
-			const [row] = await db.select().from(sysFile).where(eq(sysFile.id, input.fileId)).limit(1);
-			if (!row || Number(row.status) !== 1) throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在" });
-			if (await isFileReferenced(input.fileId)) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "附件已归属其它任务" });
-			}
 			const url = await getObjectUrl(row.bucket, row.object_key, input.download ? row.origin_name : undefined);
 			return {
 				url,
@@ -1694,7 +1715,6 @@ export const taskCloseRouter = createTRPCRouter({
 						z.object({
 							userId: z.string().min(1).max(36),
 							role: ROLE_ENUM,
-							isPrimary: z.boolean().optional(),
 							/** 该成员子任务的填报过滤规则(仅表格模板;多执行人 fan-out 时生效) */
 							filter: z
 								.array(
@@ -1716,11 +1736,11 @@ export const taskCloseRouter = createTRPCRouter({
 			const me = requireCurrentUser(ctx);
 			const [workflow] = await db
 				.select()
-				.from(taskCloseWorkflow)
-				.where(and(eq(taskCloseWorkflow.id, input.workflowId), alive(taskCloseWorkflow)))
+				.from(taskWorkflowTable)
+				.where(and(eq(taskWorkflowTable.id, input.workflowId), alive(taskWorkflowTable)))
 				.limit(1);
 			if (!workflow) throw new TRPCError({ code: "NOT_FOUND", message: "状态图模板不存在" });
-			const snapshot = normalizeStoredWorkflow(workflow.payload as WorkflowPayload);
+			const snapshot = workflow.payload as WorkflowPayload;
 			// zod 的 min(1) 只拦 undefined / 空串,"   " 这类纯空白要 trim 后再拦(编辑侧也过 name.trim())
 			if (!input.name.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "任务名称不能为空" });
 			const requestedMembers = (input.members ?? []).filter((member) => member.userId !== me.id);
@@ -1730,18 +1750,48 @@ export const taskCloseRouter = createTRPCRouter({
 
 			const id = newId();
 			await db.transaction(async (tx) => {
-				const template = input.report ? await getAvailableReportTemplate(tx, input.report.reportId) : null;
+				if (requestedMembers.length) {
+					const users = await tx
+						.select({ id: sysUser.id })
+						.from(sysUser)
+						.where(
+							and(
+								inArray(
+									sysUser.id,
+									requestedMembers.map((member) => member.userId),
+								),
+								alive(sysUser),
+							),
+						)
+						.for("update");
+					if (users.length !== requestedMembers.length)
+						throw new TRPCError({ code: "NOT_FOUND", message: "任务成员不存在" });
+				}
+				const template = input.report ? await getAvailableReportTemplate(tx, input.report.reportId, me) : null;
 				const executors = requestedMembers.filter((member) => member.role === "executor");
+				const filters = [input.report?.filter, ...requestedMembers.map((member) => member.filter)].filter(
+					(filter): filter is NonNullable<typeof filter> => filter !== undefined,
+				);
+				if (filters.length && (!template || template.schema.kind !== "TABLE"))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围只支持表格填报" });
+				for (const filter of filters) {
+					const fields = new Set<string>();
+					for (const condition of filter) {
+						const field = template?.schema.fields.find((item) => item.id === condition.field);
+						if (!field || field.type === "multiselect" || fields.has(condition.field))
+							throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围字段无效或重复" });
+						fields.add(condition.field);
+					}
+				}
 				// 多执行人 = fan-out:**1 父 + N 子**(父不设执行人,每个执行人各拿一条子任务)
 				const fanout = executors.length >= 2;
-				// 两个人的数据范围完全相同 = 同一批行被两个人认领,先后保存互相覆盖且不报错。
-				// ponytail:只挡「完全相同」这条(含都不配 = 都是全部),规则嵌套包含的情况留给配的人看一眼。
+				// 只允许互斥范围,否则子任务同步时会覆盖另一个执行人的数据。
 				if (fanout && template?.schema.kind === "TABLE") {
-					const rules = executors.map((member) => stableJson(member.filter ?? input.report?.filter ?? []));
-					if (new Set(rules).size !== rules.length)
+					const rules = executors.map((member) => member.filter ?? input.report?.filter ?? []);
+					if (rules.some((rule, index) => rules.slice(index + 1).some((other) => scopesOverlap(rule, other))))
 						throw new TRPCError({
 							code: "BAD_REQUEST",
-							message: "多个执行人的数据范围不能相同，否则同一批数据会被互相覆盖",
+							message: "多个执行人的数据范围不能重叠，否则同一批数据会被互相覆盖",
 						});
 				}
 
@@ -1750,6 +1800,9 @@ export const taskCloseRouter = createTRPCRouter({
 					if (!template || !input.report?.rows?.length) return [];
 					if (template.schema.kind !== "TABLE")
 						throw new TRPCError({ code: "BAD_REQUEST", message: "数据规则只支持表格形式模板" });
+					const issues = validateTaskReport(template.schema, input.report.rows);
+					if (issues.length)
+						throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
 					return input.report.rows;
 				})();
 
@@ -1781,16 +1834,14 @@ export const taskCloseRouter = createTRPCRouter({
 							workflowId: input.workflowId,
 							workflow: snapshot,
 							payload: input.payload,
-							...(template ? { report: { reportId: template.id } } : {}),
+							...(template ? { report: { reportId: template.id, schema: template.schema } } : {}),
 							masterRows,
 							members: requestedMembers.filter((member) => member.role !== "executor"),
 						},
 						me,
 					);
 					if (template) {
-						await tx
-							.insert(taskReport)
-							.values({ id: newId(), task_id: id, status: "draft", draft: draftOf([]), revision: 0 });
+						await tx.insert(taskReportTable).values({ id: newId(), task_id: id, draft: draftOf([]), revision: 0 });
 					}
 					for (const member of executors) {
 						const childId = newId();
@@ -1809,17 +1860,27 @@ export const taskCloseRouter = createTRPCRouter({
 								workflowId: input.workflowId,
 								workflow: snapshot,
 								payload: input.payload,
-								...(template ? { report: { reportId: template.id, filter } } : {}),
-								members: [{ userId: member.userId, role: "executor", isPrimary: true }],
+								...(template
+									? {
+											report: {
+												reportId: template.id,
+												schema: template.schema,
+												filter,
+												baseHash: createHash("sha256")
+													.update(stableJson(draftOf(filter)))
+													.digest("hex"),
+											},
+										}
+									: {}),
+								members: [{ userId: member.userId, role: "executor" }],
 							},
 							me,
 						);
 						if (template) {
 							// 下发即复制:子任务拿一份独立的行副本,之后各改各的,手动「保存」才回写父任务
-							await tx.insert(taskReport).values({
+							await tx.insert(taskReportTable).values({
 								id: newId(),
 								task_id: childId,
-								status: "draft",
 								draft: draftOf(filter),
 								revision: 0,
 							});
@@ -1846,17 +1907,22 @@ export const taskCloseRouter = createTRPCRouter({
 						workflow: snapshot,
 						payload: input.payload,
 						...(template
-							? { report: { reportId: template.id, filter: executors[0]?.filter ?? input.report?.filter } }
+							? {
+									report: {
+										reportId: template.id,
+										schema: template.schema,
+										filter: executors[0]?.filter ?? input.report?.filter,
+									},
+								}
 							: {}),
 						members: requestedMembers,
 					},
 					me,
 				);
 				if (template) {
-					await tx.insert(taskReport).values({
+					await tx.insert(taskReportTable).values({
 						id: newId(),
 						task_id: id,
-						status: "draft",
 						draft: draftOf(executors[0]?.filter ?? input.report?.filter ?? []),
 						revision: 0,
 					});
@@ -1882,7 +1948,7 @@ export const taskCloseRouter = createTRPCRouter({
 					}),
 				/** `undefined` = 不传(保旧值);`null` = 显式清空;`0|1|2` = 改值 */
 				priority: z.number().int().min(0).max(2).nullish(),
-				/** `undefined` = 不传(整块 payload 保旧值,不写修订);`null` = 显式清空;对象 = 整块替换 */
+				/** `undefined` = 不传(整块 payload 保旧值);`null` = 显式清空;对象 = 整块替换 */
 				payload: taskPayloadSchema.nullish(),
 			}),
 		)
@@ -1922,25 +1988,7 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 				const payloadChanged = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
 
-				if (payloadChanged || nextDescription !== task.description) {
-					const [latest] = await tx
-						.select({ revision: taskCloseContentRevision.revision })
-						.from(taskCloseContentRevision)
-						.where(eq(taskCloseContentRevision.task_id, task.id))
-						.orderBy(desc(taskCloseContentRevision.revision))
-						.limit(1)
-						.for("update");
-					await tx.insert(taskCloseContentRevision).values({
-						id: newId(),
-						task_id: task.id,
-						revision: (latest?.revision ?? 0) + 1,
-						description: nextDescription,
-						payload: nextPayload,
-						actor_id: me.id,
-						created_at: now,
-					});
-				}
-				const setValue: Partial<typeof taskCloseTask.$inferInsert> = {
+				const setValue: Partial<typeof taskTable.$inferInsert> = {
 					name: nextName,
 					description: nextDescription,
 					due_at: nextDueAt,
@@ -1948,13 +1996,13 @@ export const taskCloseRouter = createTRPCRouter({
 					updated_at: now,
 				};
 				if (nextPriority !== undefined) setValue.priority = nextPriority;
-				await tx.update(taskCloseTask).set(setValue).where(eq(taskCloseTask.id, task.id));
+				await tx.update(taskTable).set(setValue).where(eq(taskTable.id, task.id));
 				// 说明是「整件事」的描述:父任务改了,子任务跟着改(子任务是执行副本,不各写一份)
 				if (!task.parent_id && nextDescription !== task.description) {
 					await tx
-						.update(taskCloseTask)
+						.update(taskTable)
 						.set({ description: nextDescription, updated_at: now })
-						.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)));
+						.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
 				}
 				await logTaskEvent(tx, {
 					taskId: task.id,
@@ -1991,29 +2039,10 @@ export const taskCloseRouter = createTRPCRouter({
 					attachments: input.attachments,
 				});
 				const changed = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
-				if (changed) {
-					// 与 `taskUpdate` 同口径:内容变了就落一条修订,「说明修订」弹窗里能看到是谁加的
-					const [latest] = await tx
-						.select({ revision: taskCloseContentRevision.revision })
-						.from(taskCloseContentRevision)
-						.where(eq(taskCloseContentRevision.task_id, task.id))
-						.orderBy(desc(taskCloseContentRevision.revision))
-						.limit(1)
-						.for("update");
-					await tx.insert(taskCloseContentRevision).values({
-						id: newId(),
-						task_id: task.id,
-						revision: (latest?.revision ?? 0) + 1,
-						description: task.description,
-						payload: nextPayload,
-						actor_id: me.id,
-						created_at: new Date(),
-					});
-				}
 				await tx
-					.update(taskCloseTask)
+					.update(taskTable)
 					.set({ payload: nextPayload, updated_at: new Date() })
-					.where(eq(taskCloseTask.id, task.id));
+					.where(eq(taskTable.id, task.id));
 				if (changed)
 					await logTaskEvent(tx, {
 						taskId: task.id,
@@ -2028,8 +2057,7 @@ export const taskCloseRouter = createTRPCRouter({
 	/**
 	 * 软删任务，并在同一事务终止未完成动作和待发送通知。
 	 *
-	 * 删父任务连带删它的子任务:否则子任务还在执行人的「我的任务」里,
-	 * 但它共享的填报数据挂在已经软删的根任务上(`reportOwnerTaskId` 上溯不看 `alive`)。
+	 * 删父任务连带删子任务,避免保留脱离分派上下文的子任务。
 	 */
 	taskRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
@@ -2039,21 +2067,21 @@ export const taskCloseRouter = createTRPCRouter({
 		await db.transaction(async (tx) => {
 			await lockTask(tx, task.id);
 			const children = await tx
-				.select({ id: taskCloseTask.id })
-				.from(taskCloseTask)
-				.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)))
+				.select({ id: taskTable.id })
+				.from(taskTable)
+				.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
 				.for("update");
 			for (const row of children) await cancelLiveTaskActions(tx, row.id, now);
 			await cancelLiveTaskActions(tx, task.id, now);
 			await tx
-				.update(taskCloseTask)
+				.update(taskTable)
 				.set({ ...softDeleted(), updated_at: now })
-				.where(eq(taskCloseTask.id, task.id));
+				.where(eq(taskTable.id, task.id));
 			if (children.length) {
 				await tx
-					.update(taskCloseTask)
+					.update(taskTable)
 					.set({ ...softDeleted(), updated_at: now })
-					.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)));
+					.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
 				for (const row of children)
 					await logTaskEvent(tx, { taskId: row.id, event: "task.remove", actor: me, at: now });
 			}
@@ -2102,7 +2130,7 @@ export const taskCloseRouter = createTRPCRouter({
 				const now = new Date();
 				if (workflow.statuses.some((status) => status.value === input.to && status.terminal))
 					await cancelLiveTaskActions(tx, task.id, now);
-				await tx.update(taskCloseTask).set({ status: input.to, updated_at: now }).where(eq(taskCloseTask.id, task.id));
+				await tx.update(taskTable).set({ status: input.to, updated_at: now }).where(eq(taskTable.id, task.id));
 				// 「直接改状态」以前**不留痕**(只有 action 才有记录),这里是它第一次被记进历史
 				await logTaskEvent(tx, {
 					taskId: task.id,
@@ -2126,8 +2154,6 @@ export const taskCloseRouter = createTRPCRouter({
 	 * 任何人都能把自己加成 executor 拿到提交权,或把别人拉进任务、伪造参与记录。
 	 * 「全员可评论」是只写日志的旁路,与「往成员表里插行」不是一回事。
 	 *
-	 * 注意 `isPrimary` 入参**不采信**:执行人一律按 `role === "executor"` 置 1,
-	 * 不会出现「participant 但 is_primary=1」的脏行。
 	 */
 	memberAdd: protectedProcedure
 		.input(
@@ -2135,48 +2161,44 @@ export const taskCloseRouter = createTRPCRouter({
 				taskId: ID,
 				userId: z.string().min(1).max(36),
 				role: ROLE_ENUM,
-				isPrimary: z.boolean().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			const task = await getTaskRow(input.taskId);
-			await assertTaskParticipant(task, me.id, "只有任务创建者、管理员或任务成员可以做这个操作");
-			if (input.userId === task.creator_id) {
-				throw new TRPCError({ code: "BAD_REQUEST", message: "创建者不必进成员表(他是 tc_task.creator_id)" });
-			}
-			const [user] = await db
-				.select({ id: sysUser.id })
-				.from(sysUser)
-				.where(and(eq(sysUser.id, input.userId), alive(sysUser)))
-				.limit(1);
-			if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
-
 			const primary = input.role === "executor";
 			const now = new Date();
 			await db.transaction(async (tx) => {
-				await lockTask(tx, task.id);
+				const task = await lockTask(tx, input.taskId);
+				if (!(await isTaskParticipant(task, me.id, tx)))
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者、管理员或任务成员可以做这个操作" });
+				if (input.userId === task.creator_id)
+					throw new TRPCError({ code: "BAD_REQUEST", message: "创建者不必进成员表(他是 tc_task.creator_id)" });
+				const [user] = await tx
+					.select({ id: sysUser.id })
+					.from(sysUser)
+					.where(and(eq(sysUser.id, input.userId), alive(sysUser)))
+					.limit(1);
+				if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "用户不存在" });
 				if (primary) {
 					const [executor] = await tx
-						.select({ id: taskCloseMember.id })
-						.from(taskCloseMember)
-						.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.role, "executor")))
+						.select({ id: taskMemberTable.id })
+						.from(taskMemberTable)
+						.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.role, "executor")))
 						.limit(1);
 					if (executor) throw new TRPCError({ code: "BAD_REQUEST", message: "任务已有执行人，请使用转交" });
 				}
 				// 去重键只到「人」为止 —— 带上 role 会允许同一人同时留 participant + executor 两行
 				const [dup] = await tx
-					.select({ id: taskCloseMember.id })
-					.from(taskCloseMember)
-					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)))
+					.select({ id: taskMemberTable.id })
+					.from(taskMemberTable)
+					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, input.userId)))
 					.limit(1);
 				if (dup) throw new TRPCError({ code: "BAD_REQUEST", message: "这个人已经是任务成员了" });
-				await tx.insert(taskCloseMember).values({
+				await tx.insert(taskMemberTable).values({
 					id: newId(),
 					task_id: task.id,
 					user_id: input.userId,
 					role: input.role,
-					is_primary: primary ? 1 : 0,
 					created_at: now,
 					updated_at: now,
 				});
@@ -2185,7 +2207,7 @@ export const taskCloseRouter = createTRPCRouter({
 					event: "member.add",
 					actor: me,
 					targetId: input.userId,
-					detail: { role: input.role, isPrimary: primary },
+					detail: { role: input.role },
 					at: now,
 				});
 			});
@@ -2202,13 +2224,25 @@ export const taskCloseRouter = createTRPCRouter({
 			const now = new Date();
 			await db.transaction(async (tx) => {
 				await lockTask(tx, task.id);
-				await tx
-					.delete(taskCloseMember)
+				const [pending] = await tx
+					.select({ id: taskActionTable.id })
+					.from(taskActionTable)
 					.where(
 						and(
-							eq(taskCloseMember.task_id, task.id),
-							eq(taskCloseMember.user_id, input.userId),
-							eq(taskCloseMember.role, input.role),
+							eq(taskActionTable.task_id, task.id),
+							eq(taskActionTable.assignee_id, input.userId),
+							inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
+						),
+					)
+					.limit(1);
+				if (pending) throw new TRPCError({ code: "BAD_REQUEST", message: "该成员还有未完成的动作，不能移除" });
+				await tx
+					.delete(taskMemberTable)
+					.where(
+						and(
+							eq(taskMemberTable.task_id, task.id),
+							eq(taskMemberTable.user_id, input.userId),
+							eq(taskMemberTable.role, input.role),
 						),
 					);
 				await logTaskEvent(tx, {
@@ -2254,50 +2288,29 @@ export const taskCloseRouter = createTRPCRouter({
 					throw new TRPCError({ code: "BAD_REQUEST", message: "不能转交给自己" });
 				}
 				const target = await tx
-					.select({ id: taskCloseMember.id })
-					.from(taskCloseMember)
-					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)));
+					.select({ id: taskMemberTable.id })
+					.from(taskMemberTable)
+					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, input.userId)));
 				if (target.length === 0) {
 					throw new TRPCError({ code: "BAD_REQUEST", message: "只能转交给这条任务的成员" });
 				}
 
-				// 转交前的主执行人(没有主执行人就退回「操作者本人,若他是执行者」)
-				const executors = await tx
-					.select({ userId: taskCloseMember.user_id, isPrimary: taskCloseMember.is_primary })
-					.from(taskCloseMember)
-					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.role, "executor")));
-				const fromUserId =
-					executors.find((row) => row.isPrimary === 1)?.userId ?? (myRoles.includes("executor") ? me.id : null);
-				const demote = executors.map((row) => row.userId).filter((userId) => userId !== input.userId);
-
-				// 目标 → 执行者 + 主执行人(先清掉它原有的行,免得留下 participant + executor 两行)
-				await tx
-					.delete(taskCloseMember)
-					.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, input.userId)));
-				await tx.insert(taskCloseMember).values({
-					id: newId(),
-					task_id: task.id,
-					user_id: input.userId,
-					role: "executor",
-					is_primary: 1,
-					created_at: now,
-					updated_at: now,
-				});
-				// 其余执行者 → 参与者(与目标同一人已排除)
-				for (const userId of demote) {
+				// 转交前的执行人
+				const [executor] = await tx
+					.select({ userId: taskMemberTable.user_id })
+					.from(taskMemberTable)
+					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.role, "executor")))
+					.limit(1);
+				const fromUserId = executor?.userId ?? null;
+				if (fromUserId && fromUserId !== input.userId)
 					await tx
-						.delete(taskCloseMember)
-						.where(and(eq(taskCloseMember.task_id, task.id), eq(taskCloseMember.user_id, userId)));
-					await tx.insert(taskCloseMember).values({
-						id: newId(),
-						task_id: task.id,
-						user_id: userId,
-						role: "participant",
-						is_primary: 0,
-						created_at: now,
-						updated_at: now,
-					});
-				}
+						.update(taskMemberTable)
+						.set({ role: "participant", updated_at: now })
+						.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, fromUserId)));
+				await tx
+					.update(taskMemberTable)
+					.set({ role: "executor", updated_at: now })
+					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, input.userId)));
 				await logTaskEvent(tx, {
 					taskId: task.id,
 					event: "member.transfer",
@@ -2311,59 +2324,6 @@ export const taskCloseRouter = createTRPCRouter({
 		}),
 
 	// ────────────────────────────── 动作 ──────────────────────────────
-
-	/** 一条任务的动作流(时间正序,详情页时间线) */
-	actionList: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ input }) => {
-		const rows = await db
-			.select()
-			.from(taskCloseAction)
-			.where(eq(taskCloseAction.task_id, input.taskId))
-			.orderBy(asc(taskCloseAction.created_at));
-		const nameOf = await nameMapOf(rows.flatMap((row) => [row.created_id, row.handle_id]));
-		return rows.map((row) => toAction(row, nameOf));
-	}),
-
-	/** 待我处理 —— 跨任务。`handle_id` 可能不是任务成员,没有这个列表闭环就接不上 */
-	actionMine: protectedProcedure.input(z.object({ ...pageInput }).optional()).query(async ({ ctx, input }) => {
-		const me = requireCurrentUser(ctx);
-		const page = input?.page ?? 1;
-		const pageSize = input?.pageSize ?? 20;
-		const where = and(eq(taskCloseAction.handle_id, me.id), eq(taskCloseAction.status, "active"));
-
-		const [counted] = await db.select({ n: count() }).from(taskCloseAction).where(where);
-		const rows = await db
-			.select()
-			.from(taskCloseAction)
-			.where(where)
-			.orderBy(desc(taskCloseAction.created_at), desc(taskCloseAction.id))
-			.limit(pageSize)
-			.offset((page - 1) * pageSize);
-
-		const taskIds = [...new Set(rows.map((row) => row.task_id))];
-		const tasks =
-			taskIds.length === 0
-				? []
-				: await db
-						.select({ id: taskCloseTask.id, name: taskCloseTask.name, status: taskCloseTask.status })
-						.from(taskCloseTask)
-						// 软删任务不进「待我处理」—— 否则已删任务的名字/状态从这里泄露给 handle 人
-						// (taskGet/logList/commentList 都是 alive 口径,这里补齐)
-						.where(and(inArray(taskCloseTask.id, taskIds), alive(taskCloseTask)));
-		const taskOf = new Map(tasks.map((task) => [task.id, task]));
-		const nameOf = await nameMapOf(rows.map((row) => row.created_id));
-
-		return {
-			// 软删任务留下的 live 行不进清单(taskOf 查不到 = 拿不到名字/状态,一并过滤掉)
-			items: rows
-				.filter((row) => taskOf.has(row.task_id))
-				.map((row) => ({
-					...toAction(row, nameOf),
-					taskName: taskOf.get(row.task_id)?.name ?? null,
-					taskStatus: taskOf.get(row.task_id)?.status ?? null,
-				})),
-			total: Number(counted?.n ?? 0),
-		};
-	}),
 
 	/**
 	 * 侧边栏「我的任务」的**红点计数** —— 只数**未读的站内任务通知**
@@ -2395,9 +2355,9 @@ export const taskCloseRouter = createTRPCRouter({
 	 * 发起动作 —— 审批(`toStatus` 有值)和征询(`toStatus` 为空)是同一张表的同一种模式。
 	 *
 	 * 派生规则(文档「状态机推进」):
-	 *  · 根级(`parentActionId` 不传):`from_status = 当前任务状态`,`serial_no = 自己 id`,`sequence = 0`;
+	 *  · 根级(`parentActionId` 不传):`from_status = 当前任务状态`,`root_action_id = 自己 id`,`sequence = 0`;
 	 *    `toStatus` 有值 → `is_locking = 1` 并锁定状态转移;`toStatus` 为空 → `is_locking = 0`(不锁、不动状态);
-	 *  · 子级:`from_status` / `to_status` 必须为 NULL,继承父的 `serial_no`,`sequence = 父 + 1`(**不推进任务状态**)。
+	 *  · 子级:`from_status` / `to_status` 必须为 NULL,继承父的 `root_action_id`,`sequence = 父 + 1`(**不推进任务状态**)。
 	 *
 	 * 权限:`toStatus` 有值 → 走快照里 `via='action'` 的边 + `who` 判定;为空 → 创建者 / 参与者 / 执行者任一。
 	 */
@@ -2406,35 +2366,21 @@ export const taskCloseRouter = createTRPCRouter({
 			z.object({
 				taskId: ID,
 				toStatus: z.string().min(1).max(32).nullish(),
-				handleId: z.string().min(1).max(191),
+				assigneeId: z.string().min(1).max(191),
 				parentActionId: ID.nullish(),
-				nextHandleIds: z.array(z.string().min(1).max(36)).max(49).optional(),
+				nextAssigneeIds: z.array(z.string().min(1).max(36)).max(49).optional(),
 				flowMode: z.enum(["serial", "parallel"]).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			const nextHandleIds = input.nextHandleIds ?? [];
-			if (nextHandleIds.length && input.parentActionId) {
+			const nextAssigneeIds = input.nextAssigneeIds ?? [];
+			if (nextAssigneeIds.length && input.parentActionId) {
 				throw new TRPCError({ code: "BAD_REQUEST", message: "多人流程只能从任务发起" });
 			}
-			const handles = [input.handleId, ...nextHandleIds];
-			if (new Set(handles).size !== handles.length)
+			const assigneeIds = [input.assigneeId, ...nextAssigneeIds];
+			if (new Set(assigneeIds).size !== assigneeIds.length)
 				throw new TRPCError({ code: "BAD_REQUEST", message: "处理人不能重复" });
-			if (nextHandleIds.length) {
-				const users = await db
-					.select({ id: sysUser.id })
-					.from(sysUser)
-					.where(and(inArray(sysUser.id, nextHandleIds), alive(sysUser)));
-				if (users.length !== nextHandleIds.length) throw new TRPCError({ code: "NOT_FOUND", message: "处理人不存在" });
-			}
-			const [handle] = await db
-				.select({ id: sysUser.id, name: sysUser.name })
-				.from(sysUser)
-				.where(and(eq(sysUser.id, input.handleId), alive(sysUser)))
-				.limit(1);
-			if (!handle) throw new TRPCError({ code: "NOT_FOUND", message: "指派人不存在" });
-
 			const id = newId();
 			const now = new Date();
 			const isAdmin = await isAdminUser(me.id);
@@ -2445,13 +2391,13 @@ export const taskCloseRouter = createTRPCRouter({
 				if (input.parentActionId) {
 					const [row] = await tx
 						.select()
-						.from(taskCloseAction)
-						.where(eq(taskCloseAction.id, input.parentActionId))
+						.from(taskActionTable)
+						.where(eq(taskActionTable.id, input.parentActionId))
 						.limit(1);
 					if (!row || row.task_id !== task.id) {
 						throw new TRPCError({ code: "NOT_FOUND", message: "父动作不存在" });
 					}
-					if (!isAdmin && row.handle_id !== me.id)
+					if (!isAdmin && row.assignee_id !== me.id)
 						throw new TRPCError({ code: "FORBIDDEN", message: "只有当前处理人可以追问" });
 					if (row.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "只能追问正在处理的动作" });
 					parent = row;
@@ -2483,39 +2429,52 @@ export const taskCloseRouter = createTRPCRouter({
 						throw new TRPCError({ code: "FORBIDDEN", message: "只有创建者 / 参与者 / 执行者能发起征询" });
 					}
 				}
+				const taskMembers = await tx
+					.select({ userId: taskMemberTable.user_id })
+					.from(taskMemberTable)
+					.where(eq(taskMemberTable.task_id, task.id));
+				const allowedAssignees = new Set([task.creator_id, ...taskMembers.map((member) => member.userId)]);
+				if (assigneeIds.some((assigneeId) => !allowedAssignees.has(assigneeId)))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "处理人必须是任务创建人或成员" });
+				const users = await tx
+					.select({ id: sysUser.id })
+					.from(sysUser)
+					.where(and(inArray(sysUser.id, assigneeIds), alive(sysUser)))
+					.for("update");
+				if (users.length !== assigneeIds.length) throw new TRPCError({ code: "NOT_FOUND", message: "处理人不存在" });
 
 				const isLocking = !parent && toStatus !== null;
-				await tx.insert(taskCloseAction).values({
+				await tx.insert(taskActionTable).values({
 					id,
 					task_id: task.id,
-					serial_no: parent ? parent.serial_no : id,
+					root_action_id: parent ? parent.root_action_id : id,
 					parent_action_id: parent ? parent.id : null,
 					is_locking: isLocking,
 					from_status: parent ? null : task.status,
 					to_status: toStatus,
 					sequence: parent ? parent.sequence + 1 : 0,
-					created_id: me.id,
-					handle_id: input.handleId,
+					creator_id: me.id,
+					assignee_id: input.assigneeId,
 					status: "active",
 					activated_at: now,
 					created_at: now,
 					updated_at: now,
 				});
 				let predecessor = id;
-				for (const [index, handleId] of nextHandleIds.entries()) {
+				for (const [index, assigneeId] of nextAssigneeIds.entries()) {
 					const nextId = newId();
 					const parallel = input.flowMode === "parallel";
-					await tx.insert(taskCloseAction).values({
+					await tx.insert(taskActionTable).values({
 						id: nextId,
 						task_id: task.id,
-						serial_no: id,
+						root_action_id: id,
 						parent_action_id: parallel ? id : predecessor,
 						is_locking: isLocking,
 						from_status: null,
 						to_status: null,
 						sequence: index + 1,
-						created_id: me.id,
-						handle_id: handleId,
+						creator_id: me.id,
+						assignee_id: assigneeId,
 						status: parallel ? "active" : "queued",
 						activated_at: parallel ? now : null,
 						created_at: now,
@@ -2529,7 +2488,7 @@ export const taskCloseRouter = createTRPCRouter({
 							content: `${me.name || "有人"} ${isLocking ? "发起审批" : "征询了你"} —— 到「我的任务」查看`,
 							payload: { path: taskPathOf(task.id), level: "info", actionId: nextId },
 							dedupeKey: `action.assigned:${nextId}`,
-							recipients: [{ userId: handleId, channel: "in_app" }],
+							recipients: [{ userId: assigneeId, channel: "in_app" }],
 						});
 					predecessor = nextId;
 				}
@@ -2540,7 +2499,7 @@ export const taskCloseRouter = createTRPCRouter({
 					content: `${me.name || "有人"} ${isLocking ? "发起审批" : "征询了你"} —— 到「我的任务」查看`,
 					payload: { path: taskPathOf(task.id), level: "info", actionId: id },
 					dedupeKey: `action.assigned:${id}`,
-					recipients: [{ userId: input.handleId, channel: "in_app" }],
+					recipients: [{ userId: input.assigneeId, channel: "in_app" }],
 				});
 				await logTaskEvent(tx, {
 					taskId: task.id,
@@ -2554,7 +2513,7 @@ export const taskCloseRouter = createTRPCRouter({
 						// 「这次想去哪」:审批是目标状态,征询是 null —— 不要拿 to_status 兼职
 						intendedTo: toStatus,
 						intendedFrom: isLocking ? task.status : null,
-						handleId: input.handleId,
+						assigneeId: input.assigneeId,
 						isLocking,
 						parentActionId: parent ? parent.id : null,
 						sequence: parent ? parent.sequence + 1 : 0,
@@ -2562,8 +2521,8 @@ export const taskCloseRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			publish({ channel: `notice:${input.handleId}`, name: "notice.new", data: { actionId: id } });
-			if (input.flowMode === "parallel") publishMentions(nextHandleIds);
+			publish({ channel: `notice:${input.assigneeId}`, name: "notice.new", data: { actionId: id } });
+			if (input.flowMode === "parallel") publishMentions(nextAssigneeIds);
 			return { id };
 		}),
 
@@ -2582,15 +2541,15 @@ export const taskCloseRouter = createTRPCRouter({
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const [row] = await db
-				.select({ action: taskCloseAction, task: taskCloseTask, user: sysUser })
-				.from(taskCloseAction)
-				.innerJoin(taskCloseTask, eq(taskCloseTask.id, taskCloseAction.task_id))
-				.innerJoin(sysUser, eq(sysUser.id, taskCloseAction.handle_id))
-				.where(and(eq(taskCloseAction.id, input.id), alive(taskCloseTask), alive(sysUser)))
+				.select({ action: taskActionTable, task: taskTable, user: sysUser })
+				.from(taskActionTable)
+				.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
+				.innerJoin(sysUser, eq(sysUser.id, taskActionTable.assignee_id))
+				.where(and(eq(taskActionTable.id, input.id), alive(taskTable), alive(sysUser)))
 				.limit(1);
 			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "动作或处理人不存在" });
 			if (
-				me.id !== row.action.created_id &&
+				me.id !== row.action.creator_id &&
 				me.id !== row.task.creator_id &&
 				!(await isAdminUser(me.id, me.isSuper === true))
 			) {
@@ -2623,14 +2582,14 @@ export const taskCloseRouter = createTRPCRouter({
 			const cutoff = new Date(now.getTime() - TASK_URGE_COOLDOWN_MINUTES * 60_000);
 			const id = await db.transaction(async (tx) => {
 				const updated = await tx
-					.update(taskCloseAction)
+					.update(taskActionTable)
 					.set({ last_urged_at: now })
 					.where(
 						and(
-							eq(taskCloseAction.id, input.id),
-							eq(taskCloseAction.status, "active"),
-							eq(taskCloseAction.handle_id, row.user.id),
-							or(isNull(taskCloseAction.last_urged_at), lte(taskCloseAction.last_urged_at, cutoff)),
+							eq(taskActionTable.id, input.id),
+							eq(taskActionTable.status, "active"),
+							eq(taskActionTable.assignee_id, row.user.id),
+							or(isNull(taskActionTable.last_urged_at), lte(taskActionTable.last_urged_at, cutoff)),
 						),
 					);
 				if (updated[0].affectedRows !== 1) return null;
@@ -2660,14 +2619,14 @@ export const taskCloseRouter = createTRPCRouter({
 	actionUrgeHistory: protectedProcedure.input(z.object({ id: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const [row] = await db
-			.select({ action: taskCloseAction, task: taskCloseTask })
-			.from(taskCloseAction)
-			.innerJoin(taskCloseTask, eq(taskCloseTask.id, taskCloseAction.task_id))
-			.where(and(eq(taskCloseAction.id, input.id), alive(taskCloseTask)))
+			.select({ action: taskActionTable, task: taskTable })
+			.from(taskActionTable)
+			.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
+			.where(and(eq(taskActionTable.id, input.id), alive(taskTable)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
 		if (
-			me.id !== row.action.created_id &&
+			me.id !== row.action.creator_id &&
 			me.id !== row.task.creator_id &&
 			!(await isAdminUser(me.id, me.isSuper === true))
 		) {
@@ -2709,14 +2668,14 @@ export const taskCloseRouter = createTRPCRouter({
 		const admin = await isAdminUser(me.id, me.isSuper === true);
 		await db.transaction(async (tx) => {
 			const { task, action } = await lockAction(tx, input.id);
-			if (!admin && action.created_id !== me.id && task.creator_id !== me.id)
+			if (!admin && action.creator_id !== me.id && task.creator_id !== me.id)
 				throw new TRPCError({ code: "FORBIDDEN", message: "只有动作发起人、任务创建人或管理员可以撤回" });
 			if (!(LIVE_ACTION_STATUS as readonly string[]).includes(action.status))
 				throw new TRPCError({ code: "BAD_REQUEST", message: "该动作已结束" });
 			const chain = await tx
 				.select()
-				.from(taskCloseAction)
-				.where(and(eq(taskCloseAction.task_id, task.id), eq(taskCloseAction.serial_no, action.serial_no)))
+				.from(taskActionTable)
+				.where(and(eq(taskActionTable.task_id, task.id), eq(taskActionTable.root_action_id, action.root_action_id)))
 				.for("update");
 			const cancelled = new Set(action.is_locking ? chain.map((item) => item.id) : [action.id]);
 			let changed = true;
@@ -2731,9 +2690,9 @@ export const taskCloseRouter = createTRPCRouter({
 			const ids = [...cancelled];
 			const now = new Date();
 			await tx
-				.update(taskCloseAction)
+				.update(taskActionTable)
 				.set({ status: "cancelled", updated_at: now })
-				.where(and(inArray(taskCloseAction.id, ids), inArray(taskCloseAction.status, [...LIVE_ACTION_STATUS])));
+				.where(and(inArray(taskActionTable.id, ids), inArray(taskActionTable.status, [...LIVE_ACTION_STATUS])));
 			await cancelPendingNotifications(tx, "task_action", ids);
 			await logTaskEvent(tx, {
 				taskId: task.id,
@@ -2752,27 +2711,27 @@ export const taskCloseRouter = createTRPCRouter({
 	/** 查看指定动作仅记录处理人首次打开的时间，与站内通知已读无关。 */
 	actionView: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
-		const [action] = await db.select().from(taskCloseAction).where(eq(taskCloseAction.id, input.id)).limit(1);
+		const [action] = await db.select().from(taskActionTable).where(eq(taskActionTable.id, input.id)).limit(1);
 		if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
-		if (action.handle_id !== me.id) throw new TRPCError({ code: "FORBIDDEN", message: "只有处理人可以查看该动作" });
+		if (action.assignee_id !== me.id) throw new TRPCError({ code: "FORBIDDEN", message: "只有处理人可以查看该动作" });
 		if (action.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "该动作已不在待处理状态" });
 		await getTaskRow(action.task_id);
 		await db
-			.update(taskCloseAction)
+			.update(taskActionTable)
 			.set({ viewed_at: new Date() })
 			.where(
 				and(
-					eq(taskCloseAction.id, input.id),
-					eq(taskCloseAction.handle_id, me.id),
-					eq(taskCloseAction.status, "active"),
-					isNull(taskCloseAction.viewed_at),
+					eq(taskActionTable.id, input.id),
+					eq(taskActionTable.assignee_id, me.id),
+					eq(taskActionTable.status, "active"),
+					isNull(taskActionTable.viewed_at),
 				),
 			);
 		return { ok: true };
 	}),
 
 	/**
-	 * 答复动作 —— 只有 `handle_id` 本人能答。
+	 * 答复动作 —— 只有 `assignee_id` 本人能答。
 	 *
 	 * 结算:审批全部通过后任务转根节点的 `to_status`;驳回后保持原状态(文档「状态机推进」)。
 	 * 锁顺序与 `taskTransit` 一致(先 `tc_task` 再 `tc_action`),避免互相等锁。
@@ -2781,11 +2740,14 @@ export const taskCloseRouter = createTRPCRouter({
 		.input(z.object({ id: ID, approved: z.boolean(), reason: z.string().max(2000).nullish() }))
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			let nextReceiver: string | null = null;
+			let nextAssigneeId: string | null = null;
 			await db.transaction(async (tx) => {
 				const { task, action } = await lockAction(tx, input.id);
-				if (action.handle_id !== me.id) {
+				if (action.assignee_id !== me.id) {
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有指派人能答复这个动作" });
+				}
+				if (!action.is_locking) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: "征询必须填写意见回复" });
 				}
 				if (action.status !== "active") {
 					throw new TRPCError({ code: "BAD_REQUEST", message: "这个动作已经答复过了" });
@@ -2798,8 +2760,8 @@ export const taskCloseRouter = createTRPCRouter({
 				if (input.approved && action.is_locking) {
 					const [root] = await tx
 						.select()
-						.from(taskCloseAction)
-						.where(eq(taskCloseAction.id, action.serial_no))
+						.from(taskActionTable)
+						.where(eq(taskActionTable.id, action.root_action_id))
 						.limit(1)
 						.for("update");
 					const edge = workflowOf(task).edges.find(
@@ -2810,14 +2772,14 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 
 				await tx
-					.update(taskCloseAction)
+					.update(taskActionTable)
 					.set({ status: input.approved ? "done" : "rejected", updated_at: new Date() })
-					.where(eq(taskCloseAction.id, action.id));
+					.where(eq(taskActionTable.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
 
 				// 通过 / 驳回的意见都落成评论(有就写一条;通过的意见是可选的)
 				if (reason) {
-					await tx.insert(taskCloseComment).values({
+					await tx.insert(taskCommentTable).values({
 						id: newId(),
 						task_id: task.id,
 						author_id: me.id,
@@ -2828,50 +2790,49 @@ export const taskCloseRouter = createTRPCRouter({
 				}
 
 				const now = new Date();
-				const nextAction =
-					input.approved || !action.is_locking ? await activateNextAction(tx, task, action, now) : null;
-				nextReceiver = nextAction?.handle_id ?? null;
+				const nextAction = input.approved ? await activateNextAction(tx, task, action, now) : null;
+				nextAssigneeId = nextAction?.assignee_id ?? null;
 				// 审批默认全员通过；任一拒绝立即回退并取消剩余节点。
 				let movedTo: string | null = null;
 				if (action.is_locking) {
 					const [root] = await tx
 						.select()
-						.from(taskCloseAction)
-						.where(and(eq(taskCloseAction.id, action.serial_no), eq(taskCloseAction.task_id, task.id)))
+						.from(taskActionTable)
+						.where(and(eq(taskActionTable.id, action.root_action_id), eq(taskActionTable.task_id, task.id)))
 						.limit(1)
 						.for("update");
 					if (!root || !root.is_locking)
 						throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "审批流程缺少根节点" });
 					if (!input.approved) {
 						const pending = await tx
-							.select({ id: taskCloseAction.id })
-							.from(taskCloseAction)
+							.select({ id: taskActionTable.id })
+							.from(taskActionTable)
 							.where(
 								and(
-									eq(taskCloseAction.task_id, task.id),
-									eq(taskCloseAction.serial_no, action.serial_no),
-									inArray(taskCloseAction.status, [...LIVE_ACTION_STATUS]),
+									eq(taskActionTable.task_id, task.id),
+									eq(taskActionTable.root_action_id, action.root_action_id),
+									inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
 								),
 							)
 							.for("update");
 						if (pending.length) {
 							const ids = pending.map((item) => item.id);
 							await tx
-								.update(taskCloseAction)
+								.update(taskActionTable)
 								.set({ status: "cancelled", updated_at: now })
-								.where(inArray(taskCloseAction.id, ids));
+								.where(inArray(taskActionTable.id, ids));
 							await cancelPendingNotifications(tx, "task_action", ids);
 						}
 					}
 					const [remaining] = await tx
-						.select({ id: taskCloseAction.id })
-						.from(taskCloseAction)
+						.select({ id: taskActionTable.id })
+						.from(taskActionTable)
 						.where(
 							and(
-								eq(taskCloseAction.task_id, task.id),
-								eq(taskCloseAction.serial_no, action.serial_no),
-								eq(taskCloseAction.is_locking, true),
-								inArray(taskCloseAction.status, [...LIVE_ACTION_STATUS]),
+								eq(taskActionTable.task_id, task.id),
+								eq(taskActionTable.root_action_id, action.root_action_id),
+								eq(taskActionTable.is_locking, true),
+								inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
 							),
 						)
 						.limit(1)
@@ -2880,7 +2841,7 @@ export const taskCloseRouter = createTRPCRouter({
 					if (next && next !== task.status) {
 						if (workflowOf(task).statuses.some((status) => status.value === next && status.terminal))
 							await cancelLiveTaskActions(tx, task.id, now);
-						await tx.update(taskCloseTask).set({ status: next, updated_at: now }).where(eq(taskCloseTask.id, task.id));
+						await tx.update(taskTable).set({ status: next, updated_at: now }).where(eq(taskTable.id, task.id));
 						movedTo = next;
 					}
 				}
@@ -2902,7 +2863,7 @@ export const taskCloseRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			if (nextReceiver) publishMentions([nextReceiver]);
+			if (nextAssigneeId) publishMentions([nextAssigneeId]);
 			return { ok: true };
 		}),
 
@@ -2928,7 +2889,7 @@ export const taskCloseRouter = createTRPCRouter({
 			let receivers: string[] = [];
 			await db.transaction(async (tx) => {
 				const { task, action } = await lockAction(tx, input.id);
-				if (action.handle_id !== me.id) {
+				if (action.assignee_id !== me.id) {
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有被征询的人能回复" });
 				}
 				if (action.is_locking) {
@@ -2943,11 +2904,11 @@ export const taskCloseRouter = createTRPCRouter({
 				const now = new Date();
 				const commentId = newId();
 				await tx
-					.update(taskCloseAction)
+					.update(taskActionTable)
 					.set({ status: "done", updated_at: now })
-					.where(eq(taskCloseAction.id, action.id));
+					.where(eq(taskActionTable.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
-				await tx.insert(taskCloseComment).values({
+				await tx.insert(taskCommentTable).values({
 					id: commentId,
 					task_id: action.task_id,
 					author_id: me.id,
@@ -2958,7 +2919,7 @@ export const taskCloseRouter = createTRPCRouter({
 				});
 				receivers = await createMentionNotifications(tx, task, content, me, input.mentionIds ?? [], commentId);
 				const nextAction = await activateNextAction(tx, task, action, now);
-				if (nextAction) receivers.push(nextAction.handle_id);
+				if (nextAction) receivers.push(nextAction.assignee_id);
 				await logTaskEvent(tx, {
 					taskId: action.task_id,
 					event: "action.reply",
@@ -2966,7 +2927,7 @@ export const taskCloseRouter = createTRPCRouter({
 					// target = **意见那条评论** —— 读取侧按它取摘要(excerpt),动态流直接渲染
 					targetId: commentId,
 					detail: {
-						consultOf: action.created_id, // 征询是谁发起的(展示:"对 甲 回复征询")
+						consultOf: action.creator_id, // 征询是谁发起的(展示:"对 甲 回复征询")
 						commentId,
 						nextActionId: nextAction?.id ?? null,
 						attachments: input.attachments?.length ?? 0,
@@ -2981,12 +2942,13 @@ export const taskCloseRouter = createTRPCRouter({
 	// ────────────────────────────── 评论 ──────────────────────────────
 
 	/** 评论流 —— 附件只存了 `sys_file.id`,这里回填文件名 / 大小;已删文件直接丢掉(不留空行) */
-	commentList: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ input }) => {
+	commentList: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ ctx, input }) => {
+		await assertTaskReadable(await getTaskRow(input.taskId), requireCurrentUser(ctx).id);
 		const rows = await db
 			.select()
-			.from(taskCloseComment)
-			.where(and(eq(taskCloseComment.task_id, input.taskId), alive(taskCloseComment)))
-			.orderBy(asc(taskCloseComment.created_at));
+			.from(taskCommentTable)
+			.where(and(eq(taskCommentTable.task_id, input.taskId), alive(taskCommentTable)))
+			.orderBy(asc(taskCommentTable.created_at));
 
 		const nameOf = await nameMapOf(rows.map((row) => row.author_id));
 		const fileIds = [...new Set(rows.flatMap((row) => (row.attachments as string[] | null) ?? []))];
@@ -3018,7 +2980,7 @@ export const taskCloseRouter = createTRPCRouter({
 	}),
 
 	/**
-	 * 发评论 —— **任何登录用户**,不限 `tc_member`(文档「权限矩阵」)。
+	 * 任务可见者可以评论,写入与任务删除按任务行锁串行。
 	 *
 	 * 附件 id 在事务里先验存在(`assertAttachments`):attachmentUrl 的"挂在任务上才给 URL"
 	 * 归属守卫靠这里收口 —— 不校验的话 `commentCreate([任意fileId])` 能把守卫骗开。
@@ -3034,16 +2996,17 @@ export const taskCloseRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			const task = await getTaskRow(input.taskId);
 			// zod 的 min(1) 拦不住 "   ":trim 后为空的评论等于没写,直接拒(与驳回原因同一口径)
 			if (!input.content.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "评论内容不能为空" });
 			const id = newId();
 			const now = new Date();
 			let receivers: string[] = [];
 			await db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.taskId);
+				await assertTaskReadable(task, me.id);
 				// 附件 id 先验存在(见 assertAttachments):attachmentUrl 的归属守卫依赖这里收口
 				await assertAttachments(tx, input.attachments ?? []);
-				await tx.insert(taskCloseComment).values({
+				await tx.insert(taskCommentTable).values({
 					id,
 					task_id: input.taskId,
 					author_id: me.id,
@@ -3071,8 +3034,8 @@ export const taskCloseRouter = createTRPCRouter({
 		const me = requireCurrentUser(ctx);
 		const [row] = await db
 			.select()
-			.from(taskCloseComment)
-			.where(and(eq(taskCloseComment.id, input.id), alive(taskCloseComment)))
+			.from(taskCommentTable)
+			.where(and(eq(taskCommentTable.id, input.id), alive(taskCommentTable)))
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "评论不存在" });
 		const task = await getTaskRow(row.task_id);
@@ -3081,9 +3044,9 @@ export const taskCloseRouter = createTRPCRouter({
 		}
 		await db.transaction(async (tx) => {
 			await tx
-				.update(taskCloseComment)
+				.update(taskCommentTable)
 				.set({ ...softDeleted(), updated_at: new Date() })
-				.where(eq(taskCloseComment.id, row.id));
+				.where(eq(taskCommentTable.id, row.id));
 			await logTaskEvent(tx, {
 				taskId: task.id,
 				event: "comment.remove",
@@ -3097,30 +3060,27 @@ export const taskCloseRouter = createTRPCRouter({
 	/**
 	 * 任务活动流 —— 「谁、什么时候、把什么从 A 改成 B」,按时间**倒序**分页。
 	 *
-	 * 与 `actionList` / `commentList` 同权限口径(登录 + 任务可见):任务不存在 / 已软删 ⇒ `NOT_FOUND`
-	 * —— 详情页据此自动回「我的任务」(见 `task-close-detail-page.tsx`)。
+	 * 与 `commentList` 同权限口径(登录 + 任务可见):任务不存在 / 已软删 ⇒ `NOT_FOUND`
+	 * —— 详情页据此自动回「我的任务」(见 `task-detail-page.tsx`)。
 	 *
 	 * `targetName` 由**读取侧**按 `event` 决定去哪张表查(动作 → 指派人,成员 → 那个人,评论 → 不查);
 	 * 是"尽力而为":查不到回退 id。`comment.*` 另给 `excerpt`(正文摘要)供活动流直接渲染。
 	 */
 	logList: protectedProcedure.input(z.object({ taskId: ID, ...pageInput })).query(async ({ ctx, input }) => {
 		const task = await getTaskRow(input.taskId);
+		await assertTaskReadable(task, requireCurrentUser(ctx).id);
 		const page = input.page ?? 1;
 		const pageSize = input.pageSize ?? 20;
 
-		const [counted] = await db.select({ n: count() }).from(taskCloseLog).where(eq(taskCloseLog.task_id, input.taskId));
+		const [counted] = await db.select({ n: count() }).from(taskLogTable).where(eq(taskLogTable.task_id, input.taskId));
 		const rows = await db
 			.select()
-			.from(taskCloseLog)
-			.where(eq(taskCloseLog.task_id, input.taskId))
+			.from(taskLogTable)
+			.where(eq(taskLogTable.task_id, input.taskId))
 			// 同一毫秒撞点时用 id 兜底 —— 只为**稳定**,不表示语义(见 doc/task-close.md「活动日志」)
-			.orderBy(desc(taskCloseLog.created_at), desc(taskCloseLog.id))
+			.orderBy(desc(taskLogTable.created_at), desc(taskLogTable.id))
 			.limit(pageSize)
 			.offset((page - 1) * pageSize);
-
-		const canReadDistribution = rows.some((row) => row.event === "report.distribute")
-			? await isTaskParticipant(task, requireCurrentUser(ctx).id)
-			: false;
 
 		// 要查名字的人:操作人(快照缺失时兜底)+ 各事件的主对象
 		const personIds = rows.flatMap((row) => {
@@ -3130,7 +3090,7 @@ export const taskCloseRouter = createTRPCRouter({
 				ids.push(row.target_id ?? "");
 			}
 			if (row.event === "action.create" || row.event === "action.respond") {
-				ids.push(typeof detail.handleId === "string" ? detail.handleId : "");
+				ids.push(typeof detail.assigneeId === "string" ? detail.assigneeId : "");
 			}
 			// 回复征询:展示名是**被回复的征询发起人**(「对 甲 回复征询」)
 			if (row.event === "action.reply") {
@@ -3149,19 +3109,19 @@ export const taskCloseRouter = createTRPCRouter({
 			commentIds.length === 0
 				? []
 				: await db
-						.select({ id: taskCloseComment.id, content: taskCloseComment.content })
-						.from(taskCloseComment)
-						.where(inArray(taskCloseComment.id, commentIds));
+						.select({ id: taskCommentTable.id, content: taskCommentTable.content })
+						.from(taskCommentTable)
+						.where(inArray(taskCommentTable.id, commentIds));
 		const contentOf = new Map(comments.map((row) => [row.id, row.content]));
 
 		return {
 			items: rows.map((row) => {
 				const detail = detailOf(row.detail);
-				const handleId = typeof detail.handleId === "string" ? detail.handleId : null;
+				const assigneeId = typeof detail.assigneeId === "string" ? detail.assigneeId : null;
 				const replyOf = typeof detail.consultOf === "string" ? detail.consultOf : null;
 				const personId =
 					row.event === "action.create" || row.event === "action.respond"
-						? handleId
+						? assigneeId
 						: row.event === "action.reply"
 							? replyOf
 							: row.target_id;
@@ -3175,7 +3135,7 @@ export const taskCloseRouter = createTRPCRouter({
 					targetName: personId ? (nameOf.get(personId) ?? personId) : null,
 					actorId: row.actor_id,
 					actorName: row.actor_name ?? nameOf.get(row.actor_id) ?? null,
-					detail: row.event === "report.distribute" && !canReadDistribution ? null : row.detail,
+					detail: row.detail,
 					excerpt: content ? content.slice(0, 80) : null,
 					createdAt: row.created_at ? row.created_at.toISOString() : null,
 				};

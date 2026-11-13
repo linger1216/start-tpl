@@ -146,7 +146,7 @@ function FoldSection({
  * 版式:基本信息是主线(常显),填报 / 链接 / 附件是可选区,收成摘要条;
  * 页头摘要条 + 页脚缺项提示都从表单状态派生,不另存一份。
  */
-export function TaskCloseForm({
+export function TaskForm({
 	open,
 	onOpenChange,
 	pending,
@@ -185,7 +185,7 @@ export function TaskCloseForm({
 	const [executorIds, setExecutorIds] = useState<string[]>([]);
 	const [links, setLinks] = useState<TaskLinkBlock[]>([]);
 	const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
-	/** 预览中的附件(新建态还没落库 → 走 draftAttachmentUrl) */
+	/** 预览已保存任务的附件 */
 	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
 
 	// 打开时回填;模板缺省取第一个,避免"没选模板点保存"这种可避免的报错
@@ -611,7 +611,7 @@ export function TaskCloseForm({
 													})}
 												</div>
 												<p className="text-xs text-muted-foreground">
-													未划范围的人默认拿到全部 {importedRows.length} 行。
+													未划范围的人默认拿到全部 {importedRows.length} 行；多个执行人的范围必须互斥。
 												</p>
 											</div>
 										) : null}
@@ -676,7 +676,7 @@ export function TaskCloseForm({
 						{/* 附件:选完即传,提交只带 id 列表(与评论附件同一链路);点条目就地预览 */}
 						<AttachmentChips
 							attachments={attachments}
-							onOpen={setPreviewAttachment}
+							onOpen={editing ? setPreviewAttachment : undefined}
 							onRemove={(id) => setAttachments((prev) => prev.filter((item) => item.id !== id))}
 							disabled={pending}
 						/>
@@ -721,14 +721,16 @@ export function TaskCloseForm({
 					</Button>
 				</DialogFooter>
 			</DialogContent>
-			<TaskAttachmentPreview
-				taskId={editing?.id}
-				attachment={previewAttachment}
-				open={previewAttachment !== null}
-				onOpenChange={(next) => {
-					if (!next) setPreviewAttachment(null);
-				}}
-			/>
+			{editing && (
+				<TaskAttachmentPreview
+					taskId={editing.id}
+					attachment={previewAttachment}
+					open={previewAttachment !== null}
+					onOpenChange={(next) => {
+						if (!next) setPreviewAttachment(null);
+					}}
+				/>
+			)}
 		</Dialog>
 	);
 }

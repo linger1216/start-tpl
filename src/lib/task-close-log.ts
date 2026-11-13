@@ -6,7 +6,7 @@
  *  - 该 router 会连带拉起 tRPC 运行时,而这个文件要被前端 / 纯函数测试直接 import。
  *
  * 图标与色调**不在这里**(lucide 是客户端概念,别让它进 router 的 import 图)——
- * 见 `components/modules/task-close/task-close-log.tsx` 的注册表。
+ * 见 `components/modules/task-close/task-log.tsx` 的注册表。
  */
 
 /** 17 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
@@ -25,10 +25,8 @@ export const TASK_LOG_EVENTS = [
 	"member.remove",
 	"member.transfer",
 	"report.bind",
-	"report.distribute",
-	"report.submit",
-	"report.return",
 	"report.sync",
+	"report.reset",
 ] as const;
 
 export type TaskLogEvent = (typeof TASK_LOG_EVENTS)[number];
@@ -49,10 +47,8 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"member.remove": "移出成员",
 	"member.transfer": "转交",
 	"report.bind": "配置填报",
-	"report.distribute": "分发填报数据",
-	"report.submit": "提交填报",
-	"report.return": "退回填报",
 	"report.sync": "同步填报到父任务",
+	"report.reset": "从父任务重新载入填报",
 };
 
 /**
@@ -87,11 +83,6 @@ export type TaskLogItem = {
 	/** ISO 时刻;理论上不为 null(列 not null),与 `commentList` 同口径仍按可空处理 */
 	createdAt: string | null;
 };
-
-/** 这次事件有没有动任务状态 —— 流程脊(`TaskFlowSpine`)就取这些行 */
-export function logMovedStatus(item: Pick<TaskLogItem, "toStatus">): boolean {
-	return item.toStatus !== null;
-}
 
 /** `task.update` 记下来的字段键 → 中文(新增可编辑字段时记得补) */
 export const TASK_LOG_FIELD_LABEL: Record<string, string> = {
@@ -157,7 +148,7 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 		case "action.create": {
 			const intended = text(detail.intendedTo);
 			const intendedFrom = text(detail.intendedFrom);
-			const target = item.targetName ?? text(detail.handleId);
+			const target = item.targetName ?? text(detail.assigneeId);
 			if (intended) {
 				return {
 					title: `${TASK_LOG_LABEL["action.create"]}:${arrow(intendedFrom ? ctx.statusLabel(intendedFrom) : from, ctx.statusLabel(intended))}`,
@@ -202,7 +193,7 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 			const who = item.targetName ?? item.targetId;
 			return {
 				title: who ? `${TASK_LOG_LABEL["member.add"]}:${who}` : TASK_LOG_LABEL["member.add"],
-				note: role ? `角色:${ctx.roleLabel(role)}${bool(detail.isPrimary) ? "(主)" : ""}` : null,
+				note: role ? `角色:${ctx.roleLabel(role)}` : null,
 			};
 		}
 		case "member.remove": {
@@ -221,28 +212,14 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 			};
 		}
 		case "report.bind":
-			return {
-				title:
-					detail.versionId === null
-						? "移除填报"
-						: detail.previousVersionId
-							? "更换填报模板"
-							: TASK_LOG_LABEL["report.bind"],
-				note: null,
-			};
-		case "report.distribute":
-			return { title: TASK_LOG_LABEL["report.distribute"], note: null };
-		case "report.submit":
-			return { title: TASK_LOG_LABEL["report.submit"], note: null };
-		case "report.return": {
-			const reason = text(detail.reason);
-			return { title: TASK_LOG_LABEL["report.return"], note: reason ? `退回原因:${reason}` : null };
-		}
+			return { title: TASK_LOG_LABEL["report.bind"], note: null };
+		case "report.reset":
+			return { title: TASK_LOG_LABEL["report.reset"], note: null };
 		case "report.sync": {
 			const pushed = text(detail.pushed);
 			return {
 				title: TASK_LOG_LABEL["report.sync"],
-				note: pushed ? `本次推送 ${pushed} 行,范围内保留 ${text(detail.kept) ?? "?"} 行` : null,
+				note: pushed ? `本次推送 ${pushed} 行` : null,
 			};
 		}
 		default:

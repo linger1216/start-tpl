@@ -5,8 +5,8 @@ import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { TaskCloseReportTemplateForm } from "#/components/modules/task-close/task-close-report-template-form";
-import { TaskCloseReportTemplatesDetail } from "#/components/modules/task-close/task-close-report-templates-detail";
+import { TaskReportTemplateDetail } from "#/components/modules/task-close/task-report-template-detail";
+import { TaskReportTemplateForm } from "#/components/modules/task-close/task-report-template-form";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -53,7 +53,7 @@ export function parsedReportTemplate(row: ReportTemplateRow) {
  * 模板是**单版本**:编辑即覆盖 `payload`,已绑定任务用新结构填报。
  * 授权走按钮权限点(`sys:tc_report_template:add/edit/remove`),按钮只是可见性投影,真正拦截在服务端。
  */
-export function TaskCloseReportTemplatesPage() {
+export function TaskReportTemplatesPage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
@@ -182,14 +182,14 @@ export function TaskCloseReportTemplatesPage() {
 				</div>
 			)}
 
-			<TaskCloseReportTemplateForm
+			<TaskReportTemplateForm
 				open={formOpen}
 				onOpenChange={setFormOpen}
 				templates={listQuery.data ?? []}
 				initialTemplateId={formTemplateId}
 			/>
 
-			<TaskCloseReportTemplatesDetail
+			<TaskReportTemplateDetail
 				row={detailRow}
 				open={detailRow !== null}
 				onOpenChange={(next) => {

@@ -1,9 +1,9 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
+import { TaskReportPreview } from "#/components/modules/task-close/task-report-preview";
 import {
 	parsedReportTemplate,
 	type ReportTemplateRow,
-} from "#/components/modules/task-close/task-close-report-templates-page";
-import { TaskReportPreview } from "#/components/modules/task-close/task-report-preview";
+} from "#/components/modules/task-close/task-report-templates-page";
 import { Tag } from "#/components/ui/tag";
 import { taskReportSchema } from "#/lib/task-report-spec";
 
@@ -11,7 +11,7 @@ import { taskReportSchema } from "#/lib/task-report-spec";
  * 填报模板详情 —— **就是预览**:按 payload 渲染出「填报人会看到的表单」(只读),
  * 不单独列字段清单(字段数 / 可见性在卡片上,标识与选项在预览的控件与占位里)。
  */
-export function TaskCloseReportTemplatesDetail({
+export function TaskReportTemplateDetail({
 	row,
 	open,
 	onOpenChange,

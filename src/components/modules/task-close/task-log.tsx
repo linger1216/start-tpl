@@ -42,10 +42,8 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"member.remove": UserMinus,
 	"member.transfer": ArrowRightLeft,
 	"report.bind": FilePlus2,
-	"report.distribute": FilePlus2,
-	"report.submit": Send,
-	"report.return": MessageSquareReply,
 	"report.sync": Upload,
+	"report.reset": ArrowRightLeft,
 };
 
 /**
@@ -77,15 +75,14 @@ function toneOf(item: TaskLogItem): string {
  * 任务**动态** —— 详情页右栏「流程动态」下半段(状态流之上)的事件时间轴。
  *
  * 拆成两块对外:
- *  - `TaskCloseLogList` —— 纯列表(无 Card 标题,便于内嵌到任意 block);样式是「贯穿竖线 + 节点」时间轴
- *  - `LoadMore` —— 「加载更多」按钮(详情页与未来入口共用)
+ *  - `TaskLogList` —— 纯列表(无 Card 标题,便于内嵌到任意 block);样式是「贯穿竖线 + 节点」时间轴
  *
  * 数据由详情页统一取(`logList`),同一批 `items` 还给右栏上方的「状态流」用 —— 一处查询供两处。
  * 认不出的 `event` 有占位(见 `describeLog` 的 default 分支),不崩、不错位。
  */
 
 /** 纯列表,无 Card 标题。详情页右栏内嵌使用。 */
-export function TaskCloseLogList({
+export function TaskLogList({
 	items,
 	statuses,
 	roleLabel,
@@ -158,27 +155,5 @@ export function TaskCloseLogList({
 				);
 			})}
 		</ul>
-	);
-}
-
-/** 「加载更多」按钮 —— `loaded >= total` 时不渲染(空态由父级自己处理) */
-export function LoadMore({
-	loading,
-	total,
-	loaded,
-	onLoadMore,
-}: {
-	loading: boolean;
-	total: number;
-	loaded: number;
-	onLoadMore: () => void;
-}) {
-	if (loaded >= total) return null;
-	return (
-		<div className="pt-1.5 ps-7">
-			<Button variant="ghost" size="sm" disabled={loading} onClick={onLoadMore}>
-				{loading ? "加载中…" : "加载更多"}
-			</Button>
-		</div>
 	);
 }

@@ -85,7 +85,7 @@ const VIA_OPTIONS: { value: "direct" | "action"; label: string }[] = [
  * **改状态会连带收拾边**:改标识会把边 / 初始态里的旧值一起改名,删状态则剔除引用它的边 ——
  * 服务端 `normalizeWorkflow` 还会再校验一遍(前端只是提前挡,服务端为准)。
  */
-export function TaskCloseWorkflowForm({
+export function TaskWorkflowForm({
 	open,
 	onOpenChange,
 	pending,

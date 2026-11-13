@@ -6,20 +6,17 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
+import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
-import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
-import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
-import {
-	TaskCloseForm,
-	type TaskFormEditing,
-	type TaskFormPayload,
-} from "#/components/modules/task-close/task-close-form";
-import { LoadMore, TaskCloseLogList } from "#/components/modules/task-close/task-close-log";
-import { TaskCardLink, TaskCloseTaskCard } from "#/components/modules/task-close/task-close-task-card";
-import { TaskCloseUrge } from "#/components/modules/task-close/task-close-urge";
+import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
+import { TaskComments } from "#/components/modules/task-close/task-comments";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
+import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-flow-spine";
+import { TaskForm, type TaskFormEditing, type TaskFormPayload } from "#/components/modules/task-close/task-form";
 import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
+import { TaskLogList } from "#/components/modules/task-close/task-log";
 import { TaskReport } from "#/components/modules/task-close/task-report";
+import { TaskUrge } from "#/components/modules/task-close/task-urge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -74,7 +71,7 @@ import { TaskActionDialog } from "./task-action-dialog";
  * 虚线(`border-dashed`)只画在「标签与其内容之间」与记录头底部;脊的连线用实线 + 箭头。
  * 列表行用 hover 底色代替行分隔线;输入框描边、内容表格的框、附件 chip 的框保留(控件 / 容器边界)。
  */
-export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
+export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
@@ -101,7 +98,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 「发起审批 / 发起征询」共用弹窗:`mode` 非空即打开(目标状态由流程自动判定,不让人选) */
 	const [actionMode, setActionMode] = useState<"approve" | "consult" | null>(null);
 	/** 交给谁 —— 多选,**选择顺序就是处理顺序**(第一个人先办,后面依次) */
-	const [actionHandlers, setActionHandlers] = useState<string[]>([]);
+	const [actionAssignees, setActionAssignees] = useState<string[]>([]);
 	const [consultMode, setConsultMode] = useState<"serial" | "parallel">("serial");
 	/** 转交弹窗:转给谁 */
 	const [transferOpen, setTransferOpen] = useState(false);
@@ -118,14 +115,12 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 正在预览的附件(开弹窗看 / 下载) */
 	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
 	/** 动态度:一次取多少条(「加载更多」每次 +20) */
-	const [logPageSize, setLogPageSize] = useState(20);
+	const [logPage, setLogPage] = useState(1);
 
 	const detailQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
-	// 我的待办:一次拿全,用来判断 todo 横幅有几条、流程事件是否高亮
-	const mineQuery = useQuery(trpc.taskClose.actionMine.queryOptions({ pageSize: 100 }));
 	const usersQuery = useQuery(trpc.user.list.queryOptions());
 	// 活动日志(`tc_log`):同一批 items 既画右栏「流程动态」里的「事件」段落,流程状态也由它派生
-	const logQuery = useQuery(trpc.taskClose.logList.queryOptions({ taskId, pageSize: logPageSize }));
+	const logQuery = useQuery(trpc.taskClose.logList.queryOptions({ taskId, page: logPage, pageSize: 20 }));
 
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
 
@@ -135,7 +130,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			onSuccess: async (_data, variables) => {
 				await invalidate();
 				setActionMode(null);
-				setActionHandlers([]);
+				setActionAssignees([]);
 				toast.success(variables.toStatus ? "已发起审批" : "已发起征询");
 			},
 			onError: toastApiError,
@@ -222,8 +217,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		if (ids.length === 0 || addingMembers) return;
 		setAddingMembers(true);
 		try {
-			for (const userId of ids)
-				await memberAddMutation.mutateAsync({ taskId: task.id, userId, role: "participant", isPrimary: false });
+			for (const userId of ids) await memberAddMutation.mutateAsync({ taskId: task.id, userId, role: "participant" });
 			setMemberOpen(false);
 			setNewMemberIds([]);
 			toast.success(`已加入 ${ids.length} 位成员`);
@@ -243,8 +237,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
-	const myActionIds = useMemo(() => new Set((mineQuery.data?.items ?? []).map((item) => item.id)), [mineQuery.data]);
-
 	const userOptions = useMemo(
 		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
 		[usersQuery.data],
@@ -256,8 +248,11 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	 * 会挡住下面的渲染,所以返回值仅在 data 已就绪路径里有意义。
 	 */
 	const myPendingActions = useMemo(
-		() => (detailQuery.data?.actions ?? []).filter((row) => myActionIds.has(row.id)),
-		[detailQuery.data, myActionIds],
+		() =>
+			(detailQuery.data?.actions ?? []).filter(
+				(row) => row.status === "active" && row.assigneeId === detailQuery.data?.meId,
+			),
+		[detailQuery.data],
 	);
 
 	/**
@@ -399,20 +394,19 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	 * 日志是倒序,翻正序后每个状态取**首次**那条;当前态也会命中,所以它自带"什么时候到的"。
 	 */
 	const reachedAt = new Map<string, string>();
-	for (const item of [...(logQuery.data?.items ?? [])].reverse()) {
-		if (!item.toStatus || !item.createdAt || reachedAt.has(item.toStatus)) continue;
-		reachedAt.set(item.toStatus, item.createdAt);
+	for (const item of detailQuery.data.reached) {
+		if (item.status && item.at) reachedAt.set(item.status, item.at);
 	}
 
 	/** 「轮到你了」的待办 —— 指给我的、还没结的动作;`toStatus` 为空 = 征询(不摊通过 / 驳回) */
 	const todoItems: TodoItem[] = myPendingActions.map((row) => {
-		const root = detailQuery.data.actions.find((item) => item.id === row.serialNo);
+		const root = detailQuery.data.actions.find((item) => item.id === row.rootActionId);
 		return {
 			id: row.id,
 			title:
 				row.isLocking && root?.toStatus
-					? `${row.createdName ?? PLACEHOLDER_EMPTY} 发起 ${statusLabelOf(statuses, root.fromStatus ?? "")} → ${statusLabelOf(statuses, root.toStatus)}`
-					: `${row.createdName ?? PLACEHOLDER_EMPTY} 发起征询`,
+					? `${row.creatorName ?? PLACEHOLDER_EMPTY} 发起 ${statusLabelOf(statuses, root.fromStatus ?? "")} → ${statusLabelOf(statuses, root.toStatus)}`
+					: `${row.creatorName ?? PLACEHOLDER_EMPTY} 发起征询`,
 			stateLabel: row.status === "active" ? "待答复" : "已发起",
 			actionable: row.status === "active",
 			consult: !row.isLocking,
@@ -468,14 +462,14 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	 * 文案走人话:谁先谁后、最后落在哪。
 	 */
 	const orderHint =
-		actionHandlers.length === 0 ? (
+		actionAssignees.length === 0 ? (
 			<p className="text-xs text-muted-foreground">
 				{actionMode === "approve" ? "选好审批人后,这里会显示他们审批的先后顺序。" : "选好后,这里会显示征询的先后顺序。"}
 			</p>
 		) : (
 			<div className="grid gap-1">
 				<ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-					{actionHandlers.map((id, index) => (
+					{actionAssignees.map((id, index) => (
 						<li key={id} className="inline-flex items-center gap-1">
 							<span className="inline-flex size-4 items-center justify-center rounded-full bg-muted font-medium text-foreground tabular-nums">
 								{index + 1}
@@ -483,16 +477,16 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<span className="text-foreground">
 								{peopleOptions.find((person) => person.value === id)?.label ?? id}
 							</span>
-							{index < actionHandlers.length - 1 ? <span aria-hidden>→</span> : null}
+							{index < actionAssignees.length - 1 ? <span aria-hidden>→</span> : null}
 						</li>
 					))}
 				</ol>
 				<p className="text-xs text-muted-foreground">
 					{actionMode === "approve"
-						? actionHandlers.length > 1
-							? `这 ${actionHandlers.length} 位会依次审批,全部通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;任一人驳回就退回当前状态。`
+						? actionAssignees.length > 1
+							? `这 ${actionAssignees.length} 位会依次审批,全部通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;任一人驳回就退回当前状态。`
 							: `通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;驳回则退回当前状态。`
-						: `${actionHandlers.length} 位会依次收到征询,先选的人先收到。`}
+						: `${actionAssignees.length} 位会依次收到征询,先选的人先收到。`}
 				</p>
 			</div>
 		);
@@ -570,7 +564,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									size="sm"
 									title="发起审批;任务会锁定,等对方答复"
 									onClick={() => {
-										setActionHandlers([]);
+										setActionAssignees([]);
 										setActionMode("approve");
 									}}
 								>
@@ -594,7 +588,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									size="sm"
 									title="请某位成员给意见(不改状态、不锁任务)"
 									onClick={() => {
-										setActionHandlers([]);
+										setActionAssignees([]);
 										setActionMode("consult");
 									}}
 								>
@@ -719,7 +713,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 								{children.map((child) => (
 									<TaskCardLink key={child.id} task={child} className="block h-48">
-										<TaskCloseTaskCard task={child} statusLabel={labelOf} />
+										<TaskCard task={child} statusLabel={labelOf} />
 									</TaskCardLink>
 								))}
 							</div>
@@ -737,7 +731,10 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					</section>
 
 					{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
-						<TaskReport taskId={task.id} canManage={task.creatorId === meId || permissions.isAdmin} />
+						<TaskReport
+							taskId={task.id}
+							canManage={(task.creatorId === meId || permissions.isAdmin) && !task.parentId && children.length === 0}
+						/>
 					)}
 
 					{/* 附件 block */}
@@ -765,7 +762,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						<TaskAttachmentList attachments={attachments} onOpen={setPreviewAttachment} />
 					</section>
 
-					{/* 评论与回复 block —— TaskCloseComments 自带输入 + 嵌套 thread */}
+					{/* 评论与回复 block —— TaskComments 自带输入 + 嵌套 thread */}
 					<section className="grid gap-3 pt-6">
 						<header className="flex items-center justify-between border-b border-border pb-2">
 							<h2 id="tc-comments-title" className="text-base font-semibold tracking-tight text-foreground">
@@ -773,7 +770,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</h2>
 						</header>
 						{/* 删评论:只有作者本人;`canRemoveAny` 只给管理员(创建者也不能删别人的) */}
-						<TaskCloseComments
+						<TaskComments
 							taskId={task.id}
 							meId={meId}
 							canRemoveAny={myRole === "admin"}
@@ -803,9 +800,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								{members.map((m) => (
 									<PeopleRow
 										key={`${m.userId}-${m.role}`}
-										roleLabel={m.isPrimary ? "主执行" : roleText(m.role)}
+										roleLabel={roleText(m.role)}
 										name={m.name ?? m.userId}
-										main={m.isPrimary}
+										main={m.role === "executor"}
 										onRemove={
 											can.manageMembers
 												? () =>
@@ -825,18 +822,18 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</ul>
 						</section>
 
-						<TaskCloseUrge
+						<TaskUrge
 							actions={detailQuery.data.actions.filter(
 								(action) =>
 									action.status === "active" &&
-									(meId === task.creatorId || meId === action.createdId || permissions.isAdmin),
+									(meId === task.creatorId || meId === action.creatorId || permissions.isAdmin),
 							)}
 						/>
 
 						{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
 						<section className="grid gap-2 border-t border-border p-3.5">
 							<h2 className="text-base font-semibold tracking-tight text-foreground">动态</h2>
-							<TaskCloseLogList
+							<TaskLogList
 								items={logQuery.data?.items ?? []}
 								statuses={statuses}
 								roleLabel={roleText}
@@ -844,18 +841,18 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								error={logQuery.isError ? logQuery.error : undefined}
 								onRetry={() => logQuery.refetch()}
 							/>
-							<LoadMore
-								loading={logQuery.isFetching}
+							<PaginationControl
+								page={logPage}
+								pageSize={20}
 								total={logQuery.data?.total ?? 0}
-								loaded={logQuery.data?.items?.length ?? 0}
-								onLoadMore={() => setLogPageSize((size) => size + 20)}
+								onPageChange={setLogPage}
 							/>
 						</section>
 					</div>
 				</aside>
 			</main>
 
-			<TaskCloseForm
+			<TaskForm
 				open={editOpen}
 				onOpenChange={setEditOpen}
 				pending={updateMutation.isPending}
@@ -971,7 +968,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						: "征询不改状态、也不锁任务,只是请对方给个意见。"
 				}
 				pending={actionMutation.isPending}
-				confirmDisabled={actionHandlers.length === 0}
+				confirmDisabled={actionAssignees.length === 0}
 				confirmText="发起"
 				pendingText="发起中…"
 				onConfirm={() =>
@@ -979,8 +976,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						taskId: task.id,
 						// 审批的目标状态由流程自动判定(当前状态出发的审批边,取模板顺序第一条),不让人选
 						toStatus: actionMode === "approve" ? (actionTargetOptions[0]?.value ?? null) : null,
-						handleId: actionHandlers[0] ?? "",
-						nextHandleIds: actionHandlers.slice(1),
+						assigneeId: actionAssignees[0] ?? "",
+						nextAssigneeIds: actionAssignees.slice(1),
 						flowMode: actionMode === "consult" ? consultMode : "serial",
 					})
 				}
@@ -1002,8 +999,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 					<div className="grid gap-1.5">
 						<MultiSelect
 							options={peopleOptions}
-							value={actionHandlers}
-							onChange={setActionHandlers}
+							value={actionAssignees}
+							onChange={setActionAssignees}
 							placeholder="搜索成员…"
 							emptyText="没有可选的人 —— 先到「参与人」里加成员"
 							minHeight={132}
@@ -1017,7 +1014,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 						{actionMode === "consult" ? orderHint : null}
 					</div>
 				</DetailRow>
-				{actionMode === "consult" && actionHandlers.length > 1 ? (
+				{actionMode === "consult" && actionAssignees.length > 1 ? (
 					<DetailRow label="处理方式" align="center">
 						<div className="grid gap-1">
 							<Select
@@ -1231,7 +1228,7 @@ const ROLE_WHY: Record<string, string> = {
 /**
  * 参与人块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
  *
- * 头像与「评论与回复」`TaskCloseComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
+ * 头像与「评论与回复」`TaskComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
  * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
  * 「主执行」这个身份靠**角色标签**(页面上传的是 `主执行`)+ 名字加粗来区分,不靠颜色。
  *

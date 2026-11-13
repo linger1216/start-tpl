@@ -7,7 +7,7 @@ import { blankBlock, isInternalUrl, type TaskLinkBlock } from "#/lib/task-payloa
 
 /**
  * 链接区编辑器 —— 清单式交互(像待办):
- * 「+」由调用方放在折叠区标题行(见 `task-close-form.tsx`),它只是往数组末尾推一条空块;
+ * 「+」由调用方放在折叠区标题行(见 `task-form.tsx`),它只是往数组末尾推一条空块;
  * 中间是**可编辑的地址输入框**(全宽),下面是**预览**
  * (站内 / 站外由 host 判定,见 `isInternalUrl`,只在预览上标出来,不给人选)。
  * 回车 = 提交这一条并**自动续一行**;空条目失焦即丢弃 —— 与待办里「没写就删掉」一致。

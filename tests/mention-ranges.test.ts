@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { updateMentionRanges } from "../src/components/modules/task-close/task-close-mention.tsx";
+import { updateMentionRanges } from "../src/components/modules/task-close/task-mention.tsx";
 
 test("提及范围随前文编辑移动，修改提及本身会移除目标", () => {
 	const ranges = [

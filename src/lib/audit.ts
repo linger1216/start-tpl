@@ -74,6 +74,7 @@ const ACTION: Record<string, string> = {
 	reportBind: "配置填报",
 	reportSaveDraft: "保存填报",
 	reportSyncToParent: "同步填报到父任务",
+	reportResetFromParent: "从父任务重新载入填报",
 	setEnabled: "设置启停",
 	trigger: "手动触发",
 	configure: "修改调度",

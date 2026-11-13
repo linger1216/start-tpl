@@ -4,8 +4,8 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
-import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-close-mention";
 import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
+import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
@@ -33,7 +33,7 @@ type Pending = { id: string; name: string };
  *
  * `meName` 是给输入区 avatar 用的首字母(原型是「我」);fallback 到 "我"。
  */
-export function TaskCloseComments({
+export function TaskComments({
 	taskId,
 	meId,
 	meName,
