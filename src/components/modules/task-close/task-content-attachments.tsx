@@ -69,14 +69,19 @@ export function TaskAttachmentAddButton({
 		if (!files || files.length === 0) return;
 		setUploading(true);
 		try {
+			// 多选要**攒齐再写一次**:逐个 onChange 会拿同一个旧 value,最后只剩最后传上的那个
+			const picked: TaskAttachment[] = [];
 			for (const file of Array.from(files).slice(0, MAX_FILES - value.length)) {
 				const result = await upload(file, "private");
 				if (!result.ok) {
 					toast.error(result.message);
 					continue;
 				}
-				onChange([...value, { id: result.row.id, name: result.row.originName, size: result.row.size }]);
+				if (value.some((item) => item.id === result.row.id) || picked.some((item) => item.id === result.row.id))
+					continue; // 秒传可能把同一个文件判成同一行,别重
+				picked.push({ id: result.row.id, name: result.row.originName, size: result.row.size });
 			}
+			if (picked.length > 0) onChange([...value, ...picked]);
 		} finally {
 			setUploading(false);
 			if (fileRef.current) fileRef.current.value = "";

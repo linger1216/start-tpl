@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
+import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
 import { TaskCloseComments } from "#/components/modules/task-close/task-close-comments";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-close-flow-spine";
@@ -84,8 +85,10 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 附件弹窗:创建人给任务加 / 删附件(随 `task.payload.attachments` 走) */
 	const [attachOpen, setAttachOpen] = useState(false);
 	const [draftAttachments, setDraftAttachments] = useState<TaskAttachment[]>([]);
-	const [newMemberId, setNewMemberId] = useState("");
-	const [newMemberRole, setNewMemberRole] = useState("participant");
+	/** 加入成员:多选,统一按参与者加入(角色不让选) */
+	const [newMemberIds, setNewMemberIds] = useState<string[]>([]);
+	/** 批量加入进行中(逐条调接口,不能靠单次 isPending) */
+	const [addingMembers, setAddingMembers] = useState(false);
 	/**
 	 * 待确认移出的成员 —— 移出是破坏性操作,先弹 `ConfirmDialog`(非空即打开)。
 	 * 存下 userId / role / 姓名:关掉弹窗后这些数据就没有别的来源了。
@@ -95,13 +98,10 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		role: "participant" | "executor";
 		name: string;
 	} | null>(null);
-	/** 「发起审批 / 发起征询」共用弹窗:`mode` 非空即打开(审批多一步选目标状态) */
+	/** 「发起审批 / 发起征询」共用弹窗:`mode` 非空即打开(目标状态由流程自动判定,不让人选) */
 	const [actionMode, setActionMode] = useState<"approve" | "consult" | null>(null);
-	/** 弹窗里选的:目标状态(审批用)+ 交给谁 */
-	const [actionTo, setActionTo] = useState("");
-	const [actionHandle, setActionHandle] = useState("");
-	const [nextHandles, setNextHandles] = useState<string[]>([]);
-	const [nextHandle, setNextHandle] = useState("");
+	/** 交给谁 —— 多选,**选择顺序就是处理顺序**(第一个人先办,后面依次) */
+	const [actionHandlers, setActionHandlers] = useState<string[]>([]);
 	const [consultMode, setConsultMode] = useState<"serial" | "parallel">("serial");
 	/** 转交弹窗:转给谁 */
 	const [transferOpen, setTransferOpen] = useState(false);
@@ -132,8 +132,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 			onSuccess: async (_data, variables) => {
 				await invalidate();
 				setActionMode(null);
-				setNextHandles([]);
-				setNextHandle("");
+				setActionHandlers([]);
 				toast.success(variables.toStatus ? "已发起审批" : "已发起征询");
 			},
 			onError: toastApiError,
@@ -207,17 +206,30 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 	const memberAddMutation = useMutation(
 		trpc.taskClose.memberAdd.mutationOptions({
-			onSuccess: writeSuccess(invalidate, {
-				close: () => {
-					setMemberOpen(false);
-					setNewMemberId("");
-					setNewMemberRole("participant");
-				},
-				message: () => "已加入成员",
-			}),
+			onSuccess: writeSuccess(invalidate),
 			onError: toastApiError,
 		}),
 	);
+
+	/** 批量加入:服务端是单人接口,这里逐个串行加,全加完再关窗 */
+	const addMembers = async () => {
+		const ids = [...newMemberIds];
+		if (ids.length === 0 || addingMembers) return;
+		setAddingMembers(true);
+		try {
+			for (const userId of ids)
+				await memberAddMutation.mutateAsync({ taskId: task.id, userId, role: "participant", isPrimary: false });
+			setMemberOpen(false);
+			setNewMemberIds([]);
+			toast.success(`已加入 ${ids.length} 位成员`);
+		} catch (error) {
+			// 中途失败:已加进去的保留(服务端逐条提交),提示原因并清空选择
+			toastApiError(error);
+			setNewMemberIds([]);
+		} finally {
+			setAddingMembers(false);
+		}
+	};
 
 	const memberRemoveMutation = useMutation(
 		trpc.taskClose.memberRemove.mutationOptions({
@@ -440,6 +452,40 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		attachments: own.attachments,
 	};
 
+	/**
+	 * 审批 / 征询的先后顺序说明 —— 审批挂在「目标状态」下面(先看清路径),征询挂在「交给谁」下面。
+	 * 文案走人话:谁先谁后、最后落在哪。
+	 */
+	const orderHint =
+		actionHandlers.length === 0 ? (
+			<p className="text-xs text-muted-foreground">
+				{actionMode === "approve" ? "选好审批人后,这里会显示他们审批的先后顺序。" : "选好后,这里会显示征询的先后顺序。"}
+			</p>
+		) : (
+			<div className="grid gap-1">
+				<ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+					{actionHandlers.map((id, index) => (
+						<li key={id} className="inline-flex items-center gap-1">
+							<span className="inline-flex size-4 items-center justify-center rounded-full bg-muted font-medium text-foreground tabular-nums">
+								{index + 1}
+							</span>
+							<span className="text-foreground">
+								{peopleOptions.find((person) => person.value === id)?.label ?? id}
+							</span>
+							{index < actionHandlers.length - 1 ? <span aria-hidden>→</span> : null}
+						</li>
+					))}
+				</ol>
+				<p className="text-xs text-muted-foreground">
+					{actionMode === "approve"
+						? actionHandlers.length > 1
+							? `这 ${actionHandlers.length} 位会依次审批,全部通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;任一人驳回就退回当前状态。`
+							: `通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;驳回则退回当前状态。`
+						: `${actionHandlers.length} 位会依次收到征询,先选的人先收到。`}
+				</p>
+			</div>
+		);
+
 	return (
 		<div className="mx-auto flex w-full flex-col bg-card">
 			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
@@ -512,12 +558,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								<Button
 									size="sm"
 									title="发起审批;任务会锁定,等对方答复"
-									disabled={peopleOptions.length === 0}
 									onClick={() => {
-										setActionTo(actionTargetOptions[0]?.value ?? "");
-										setActionHandle("");
-										setNextHandles([]);
-										setNextHandle("");
+										setActionHandlers([]);
 										setActionMode("approve");
 									}}
 								>
@@ -540,12 +582,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									variant="outline"
 									size="sm"
 									title="请某位成员给意见(不改状态、不锁任务)"
-									disabled={peopleOptions.length === 0}
 									onClick={() => {
-										setActionTo("");
-										setActionHandle("");
-										setNextHandles([]);
-										setNextHandle("");
+										setActionHandlers([]);
 										setActionMode("consult");
 									}}
 								>
@@ -915,60 +953,62 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 				title={actionMode === "approve" ? "发起审批" : "发起征询"}
 				description={
 					actionMode === "approve"
-						? "发出后任务锁定,处理期间不能改状态、不能再发起动作。全部通过后推进到目标状态;任一人驳回则回到原状态。"
+						? "发出后任务会锁定:期间不能改状态,也不能再发起别的动作。"
 						: "征询不改状态、也不锁任务,只是请对方给个意见。"
 				}
 				pending={actionMutation.isPending}
-				confirmDisabled={!actionHandle || (actionMode === "approve" && !actionTo)}
+				confirmDisabled={actionHandlers.length === 0}
 				confirmText="发起"
 				pendingText="发起中…"
 				onConfirm={() =>
 					actionMutation.mutate({
 						taskId: task.id,
-						toStatus: actionMode === "approve" ? actionTo : null,
-						handleId: actionHandle,
-						nextHandleIds: nextHandles,
-						flowMode: consultMode,
+						// 审批的目标状态由流程自动判定(当前状态出发的审批边,取模板顺序第一条),不让人选
+						toStatus: actionMode === "approve" ? (actionTargetOptions[0]?.value ?? null) : null,
+						handleId: actionHandlers[0] ?? "",
+						nextHandleIds: actionHandlers.slice(1),
+						flowMode: actionMode === "consult" ? consultMode : "serial",
 					})
 				}
 			>
 				{actionMode === "approve" ? (
-					/* 目标状态:多个候选时让人在弹窗里选(入口在右上角,不像之前那样点节点即定) */
 					<DetailRow label="目标状态" align="center">
-						<Select
-							items={actionTargetOptions}
-							value={actionTo}
-							onValueChange={(next) => setActionTo(next ? String(next) : "")}
-						>
-							<SelectTrigger className="w-full" aria-label="目标状态">
-								<SelectValue placeholder="选一个目标状态" />
-							</SelectTrigger>
-							<SelectContent>
-								{actionTargetOptions.map((item) => (
-									<SelectItem key={item.value} value={item.value}>
-										{item.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<div className="grid gap-1.5">
+							<span className="text-sm text-foreground">
+								{actionTargetOptions[0]
+									? `全部通过后,任务会进入「${actionTargetOptions[0].label}」`
+									: "当前状态没有可发起的审批"}
+							</span>
+							{/* 审批顺序放在目标状态下面:先看清"这一趟要经过谁、最后到哪儿" */}
+							{orderHint}
+						</div>
 					</DetailRow>
 				) : null}
 				<DetailRow label="交给谁" align="center">
-					<SearchSelect
-						aria-label="交给谁"
-						value={actionHandle}
-						onValueChange={setActionHandle}
-						options={peopleOptions.filter((person) => !nextHandles.includes(person.value))}
-						placeholder="从成员里选一个"
-					/>
+					<div className="grid gap-1.5">
+						<MultiSelect
+							options={peopleOptions}
+							value={actionHandlers}
+							onChange={setActionHandlers}
+							placeholder="搜索成员…"
+							emptyText="没有可选的人 —— 先到「参与人」里加成员"
+							minHeight={132}
+							maxHeight={160}
+						/>
+						<p className="text-xs text-muted-foreground">
+							{actionMode === "approve"
+								? "点选的人会按先后排成一串;选谁、谁先谁后都由你定。"
+								: "点选的人会按先后排成一串,先选的人先收到征询。"}
+						</p>
+						{actionMode === "consult" ? orderHint : null}
+					</div>
 				</DetailRow>
-				{/* 多人才需要的选项默认收起:一个人办理是常态,先只问「交给谁」 */}
-				{nextHandles.length > 0 && (
+				{actionMode === "consult" && actionHandlers.length > 1 ? (
 					<DetailRow label="处理方式" align="center">
 						<div className="grid gap-1">
 							<Select
 								items={[
-									{ value: "serial", label: "串行" },
+									{ value: "serial", label: "逐级" },
 									{ value: "parallel", label: "并行" },
 								]}
 								value={consultMode}
@@ -978,121 +1018,50 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="serial">串行</SelectItem>
+									<SelectItem value="serial">逐级</SelectItem>
 									<SelectItem value="parallel">并行</SelectItem>
 								</SelectContent>
 							</Select>
 							<p className="text-xs text-muted-foreground">
-								串行:按顺序逐位处理,前一位结束才轮到下一位;并行:同时送出,一位处理完即结束。
+								逐级:按顺序逐位处理,前一位回复后才轮到下一位;并行:同时送出,一位回复即结束。
 							</p>
 						</div>
 					</DetailRow>
-				)}
-				<DetailRow label="再加一位处理人" align="center">
-					<div className="grid gap-2">
-						{nextHandles.length > 0 ? (
-							<ol className="grid gap-1">
-								{nextHandles.map((id, index) => (
-									<li key={id} className="flex items-center justify-between gap-2">
-										<span>
-											{index + 2}. {peopleOptions.find((person) => person.value === id)?.label ?? id}
-										</span>
-										<Button
-											type="button"
-											variant="ghost"
-											size="sm"
-											onClick={() => setNextHandles(nextHandles.filter((item) => item !== id))}
-										>
-											移除
-										</Button>
-									</li>
-								))}
-							</ol>
-						) : (
-							<p className="text-xs text-muted-foreground">
-								{actionMode === "approve" ? "只需一人:他通过后即推进状态。" : "只需一人:他回复后即完成征询。"}
-							</p>
-						)}
-						<div className="flex gap-2">
-							<SearchSelect
-								label="再加一位处理人"
-								value={nextHandle}
-								onValueChange={setNextHandle}
-								options={peopleOptions.filter(
-									(person) => person.value !== actionHandle && !nextHandles.includes(person.value),
-								)}
-								placeholder="再加一位处理人"
-							/>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={!nextHandle}
-								onClick={() => {
-									setNextHandles([...nextHandles, nextHandle]);
-									setNextHandle("");
-								}}
-							>
-								添加
-							</Button>
-						</div>
-					</div>
-				</DetailRow>
+				) : null}
 			</TaskActionDialog>
 
 			<TaskActionDialog
 				open={memberOpen}
-				onOpenChange={setMemberOpen}
+				onOpenChange={(next) => {
+					setMemberOpen(next);
+					if (!next) setNewMemberIds([]);
+				}}
 				title="加入成员"
-				pending={memberAddMutation.isPending}
-				confirmDisabled={!newMemberId}
-				confirmText="加入"
+				description="多选,按参与者加入;需要执行人时在成员行里单独转交。"
+				pending={addingMembers || memberAddMutation.isPending}
+				confirmDisabled={newMemberIds.length === 0 || addingMembers}
+				confirmText={newMemberIds.length > 1 ? `加入 ${newMemberIds.length} 人` : "加入"}
 				pendingText="加入中…"
-				onConfirm={() =>
-					memberAddMutation.mutate({
-						taskId: task.id,
-						userId: newMemberId,
-						role: newMemberRole as "participant" | "executor",
-						isPrimary: newMemberRole === "executor",
-					})
-				}
+				onConfirm={() => void addMembers()}
 			>
 				<DetailRow label="人员" align="center">
-					<SearchSelect
-						aria-label="人员"
-						value={newMemberId}
-						onValueChange={setNewMemberId}
-						options={userOptions}
-						placeholder="选一个人"
+					<MultiSelect
+						options={userOptions.filter(
+							(person) =>
+								person.value !== meId &&
+								person.value !== task.creatorId &&
+								!members.some((member) => member.userId === person.value),
+						)}
+						value={newMemberIds}
+						onChange={setNewMemberIds}
+						placeholder="搜索姓名…"
+						emptyText="没有可加入的人"
+						minHeight={160}
+						maxHeight={200}
 					/>
-				</DetailRow>
-				<DetailRow label="角色" align="center">
-					<Select
-						items={
-							members.some((member) => member.role === "executor")
-								? ROLE_OPTIONS.filter((item) => item.value !== "executor")
-								: ROLE_OPTIONS
-						}
-						value={newMemberRole}
-						onValueChange={(next) => setNewMemberRole(next ? String(next) : "participant")}
-					>
-						<SelectTrigger className="w-full" aria-label="角色">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{ROLE_OPTIONS.filter(
-								(item) => item.value !== "executor" || !members.some((member) => member.role === "executor"),
-							).map((item) => (
-								<SelectItem key={item.value} value={item.value}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
 				</DetailRow>
 			</TaskActionDialog>
 
-			{/* 新增附件 —— 任务相关方都能加:选完即传,保存只改 `payload.attachments`(复用任务编辑的附件 picker) */}
 			<TaskActionDialog
 				open={attachOpen}
 				onOpenChange={setAttachOpen}
@@ -1154,11 +1123,6 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		</div>
 	);
 }
-
-const ROLE_OPTIONS = [
-	{ value: "executor", label: "执行者" },
-	{ value: "participant", label: "参与者" },
-];
 
 function roleText(role: string): string {
 	return ({ creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>)[role] ?? role;

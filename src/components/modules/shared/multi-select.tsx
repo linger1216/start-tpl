@@ -1,4 +1,4 @@
-import { ListChecks } from "lucide-react";
+import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ActionButton } from "#/components/ui/action-button";
@@ -35,6 +35,7 @@ export function MultiSelect({
 	emptyText = "没有匹配的项",
 	maxRender = 50,
 	maxRenderSearching = 200,
+	minHeight = 120,
 	maxHeight = 224,
 	disabled = false,
 	className,
@@ -50,6 +51,8 @@ export function MultiSelect({
 	maxRender?: number;
 	/** 搜索时最多渲染多少条(默认 200) */
 	maxRenderSearching?: number;
+	/** 滚动区最小高度(px)—— 过滤后结果变少时列表不塌,弹窗高度不闪 */
+	minHeight?: number;
 	/** 滚动区最大高度(px) */
 	maxHeight?: number;
 	disabled?: boolean;
@@ -96,26 +99,36 @@ export function MultiSelect({
 
 	return (
 		<div className={cn(className, fill && "flex min-h-0 flex-1 flex-col")}>
-			<div className="flex flex-wrap items-center gap-2">
-				<ListChecks className="size-3.5 text-primary" />
+			{/* 第一行只管「找」:搜索独占整行(带放大镜),清空靠右、只在有选中时出现 */}
+			<div className="flex items-center gap-2">
+				<div className="relative min-w-0 flex-1">
+					<Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						aria-label="搜索选项"
+						value={keyword}
+						onChange={(event) => setKeyword(event.target.value)}
+						placeholder={placeholder}
+						disabled={disabled}
+						className="h-8 pl-7"
+					/>
+				</div>
+				{value.length > 0 ? (
+					<ActionButton disabled={disabled} onClick={() => onChange([])}>
+						清空
+					</ActionButton>
+				) : null}
+			</div>
+
+			{/* 第二行只管「数」:已选 / 共,弱化成一行说明,别和搜索抢注意力 */}
+			<div className="mt-1.5 flex items-center justify-between gap-2">
 				<span className="text-xs text-muted-foreground tabular-nums">
-					已选 <span className="font-medium text-foreground">{value.length}</span> 项 / 共 {options.length} 项
+					已选 <span className="font-medium text-foreground">{value.length}</span> 项 · 共 {options.length} 项
 				</span>
-				<Input
-					value={keyword}
-					onChange={(event) => setKeyword(event.target.value)}
-					placeholder={placeholder}
-					disabled={disabled}
-					className="h-7 w-52"
-				/>
-				<ActionButton disabled={disabled || value.length === 0} onClick={() => onChange([])}>
-					清空
-				</ActionButton>
-				{trailing ? <div className="ml-auto">{trailing}</div> : null}
+				{trailing ? <div className="shrink-0">{trailing}</div> : null}
 			</div>
 
 			{chips.length > 0 ? (
-				<div className="mt-2">
+				<div className="mt-1.5">
 					<TagList
 						values={chips.map((chip) => chip.label)}
 						layout="wrap"
@@ -131,7 +144,7 @@ export function MultiSelect({
 
 			<div
 				className={cn("mt-2 space-y-0.5 overflow-y-auto rounded-xl border border-border p-2", fill && "min-h-0 flex-1")}
-				style={fill ? undefined : { maxHeight }}
+				style={fill ? undefined : { minHeight, maxHeight }}
 			>
 				{rows.length === 0 ? (
 					<p className="px-1 py-2 text-xs text-muted-foreground">{emptyText}</p>

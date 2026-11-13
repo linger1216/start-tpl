@@ -3,6 +3,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { CloudUpload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -135,6 +136,9 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 	const [revision, setRevision] = useState(data.report.revision);
 	const [dirty, setDirty] = useState(false);
 	const [issues, setIssues] = useState<ReturnType<typeof validateTaskReport>>([]);
+	/** 表格在**前端分页**:数据长时别让整页滚成一条线(行索引仍按整份数据算) */
+	const [page, setPage] = useState(1);
+	const [pageSize, setPageSize] = useState(20);
 	/** 自动落草稿(防抖)—— 没有"保存"这个动作,填完即存;并发冲突就就地重放一次 */
 	const save = useMutation(
 		trpc.taskClose.reportSaveDraft.mutationOptions({
@@ -173,6 +177,10 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 	}, [dirty, save.isPending, data.canEdit, taskId, revision, draft, save.mutate, schema]);
 	const rows =
 		schema.kind === "TABLE" ? (Array.isArray(draft) ? draft : []) : [Array.isArray(draft) ? {} : (draft ?? {})];
+	const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+	const currentPage = Math.min(page, totalPages);
+	const pageStart = (currentPage - 1) * pageSize;
+	const pageRows = rows.slice(pageStart, pageStart + pageSize);
 	/** 这个格子有没有被校验点名 —— 有就把输入框标红,不用人对着下面的清单逐条找 */
 	const invalidOf = (row: number, field: string) =>
 		issues.some((issue) => issue.field === field && (schema.kind === "OBJECT" || issue.row === row));
@@ -200,7 +208,12 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 			actions={
 				<div className="flex items-center">
 					{data.canSyncToParent ? (
-						<Button variant="ghost" size="sm" disabled={sync.isPending || save.isPending} onClick={() => sync.mutate({ taskId })}>
+						<Button
+							variant="ghost"
+							size="sm"
+							disabled={sync.isPending || save.isPending}
+							onClick={() => sync.mutate({ taskId })}
+						>
 							<CloudUpload className="size-3.5" />
 							{sync.isPending ? "同步中…" : "保存填报"}
 						</Button>
@@ -216,6 +229,7 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 							setRowKeys(Array.isArray(next) ? next.map(() => crypto.randomUUID()) : []);
 							setDirty(true);
 							setIssues([]);
+							setPage(1);
 						}}
 					/>
 				</div>
@@ -239,60 +253,64 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 								</tr>
 							</thead>
 							<tbody>
-								{rows.map((row, index) => (
-									<tr key={rowKeys[index]}>
-										{schema.fields.map((field, column) => (
-											<td
-												key={field.id}
-												className="min-w-40 border border-border p-2"
-												onPaste={(event) => {
-													const text = event.clipboardData.getData("text");
-													// 单格粘贴交给输入框自己处理;带分隔符的才按区域铺开
-													if (!text.includes("\t") && !text.includes("\n")) return;
-													event.preventDefault();
-													setDraft(pasteReportGrid(schema, rows, index, column, text));
-													setDirty(true);
-													setIssues([]);
-												}}
-												onKeyDown={(event) => {
-													const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
-													if (!delta) return;
-													const target = event.currentTarget
-														.closest("table")
-														?.querySelector<HTMLInputElement>(
-															`tr:nth-child(${index + delta + 1}) td:nth-child(${column + 1}) input`,
-														);
-													if (!target || target.disabled) return;
-													event.preventDefault();
-													target.focus();
-												}}
-											>
-												<ReportField
-													field={field}
-													value={row[field.id]}
-													invalid={invalidOf(index, field.id)}
-													disabled={!data.canEdit || field.readOnly}
-													onChange={(value) => update(index, field.id, value)}
-												/>
-											</td>
-										))}
-										{data.canEdit && (
-											<td className="border border-border p-2">
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => {
-														setDraft(rows.filter((_, i) => i !== index));
-														setRowKeys((keys) => keys.filter((_, i) => i !== index));
+								{pageRows.map((row, offset) => {
+									// 表格里按「本页第几行」找 DOM(上下键),写数据用整份数据的下标
+									const index = pageStart + offset;
+									return (
+										<tr key={rowKeys[index]}>
+											{schema.fields.map((field, column) => (
+												<td
+													key={field.id}
+													className="min-w-40 border border-border p-2"
+													onPaste={(event) => {
+														const text = event.clipboardData.getData("text");
+														// 单格粘贴交给输入框自己处理;带分隔符的才按区域铺开
+														if (!text.includes("\t") && !text.includes("\n")) return;
+														event.preventDefault();
+														setDraft(pasteReportGrid(schema, rows, index, column, text));
 														setDirty(true);
+														setIssues([]);
+													}}
+													onKeyDown={(event) => {
+														const delta = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+														if (!delta) return;
+														const target = event.currentTarget
+															.closest("table")
+															?.querySelector<HTMLInputElement>(
+																`tr:nth-child(${offset + delta + 1}) td:nth-child(${column + 1}) input`,
+															);
+														if (!target || target.disabled) return;
+														event.preventDefault();
+														target.focus();
 													}}
 												>
-													删除
-												</Button>
-											</td>
-										)}
-									</tr>
-								))}
+													<ReportField
+														field={field}
+														value={row[field.id]}
+														invalid={invalidOf(index, field.id)}
+														disabled={!data.canEdit || field.readOnly}
+														onChange={(value) => update(index, field.id, value)}
+													/>
+												</td>
+											))}
+											{data.canEdit && (
+												<td className="border border-border p-2">
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => {
+															setDraft(rows.filter((_, i) => i !== index));
+															setRowKeys((keys) => keys.filter((_, i) => i !== index));
+															setDirty(true);
+														}}
+													>
+														删除
+													</Button>
+												</td>
+											)}
+										</tr>
+									);
+								})}
 							</tbody>
 						</table>
 					) : (
@@ -309,6 +327,18 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 						))
 					)}
 				</div>
+				{schema.kind === "TABLE" && rows.length > pageSize ? (
+					<PaginationControl
+						page={currentPage}
+						pageSize={pageSize}
+						total={rows.length}
+						onPageChange={setPage}
+						onPageSizeChange={(next) => {
+							setPageSize(next);
+							setPage(1);
+						}}
+					/>
+				) : null}
 				{issues.length > 0 && (
 					<ul role="alert" className="grid gap-1 text-sm text-destructive">
 						{issues.map((issue) => (
@@ -327,6 +357,7 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 								size="sm"
 								onClick={() => {
 									setRowKeys((keys) => [...keys, crypto.randomUUID()]);
+									setPage(Math.ceil((rows.length + 1) / pageSize));
 									setDraft([
 										...rows,
 										Object.fromEntries(

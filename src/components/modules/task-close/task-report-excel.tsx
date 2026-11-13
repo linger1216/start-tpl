@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
-import { Download, FileDown, FileUp, Info, TriangleAlert } from "lucide-react";
+import { Download, FileDown, FileUp, Info, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { ActionIconButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
@@ -161,7 +162,11 @@ export function TaskReportExcel({
 				) : null}
 			</div>
 			{outcome ? (
-				<div className="space-y-1 rounded-lg border border-border bg-secondary/40 p-2.5 text-xs">
+				<div className="relative space-y-1 rounded-lg border border-border bg-secondary/40 p-2.5 pr-8 text-xs">
+					{/* 导入结果是一次性反馈:给个 ×,看完就能收掉(不然常驻在版本行里很吵) */}
+					<ActionIconButton label="关闭导入结果" onClick={() => setOutcome(null)} className="absolute top-1 right-1">
+						<X className="size-3" />
+					</ActionIconButton>
 					<div className="font-medium text-foreground">
 						成功 <span className="text-success-fg">{outcome.ok}</span> 条 · 失败{" "}
 						<span className={outcome.failed > 0 ? "text-danger" : "text-muted-foreground"}>{outcome.failed}</span> 条

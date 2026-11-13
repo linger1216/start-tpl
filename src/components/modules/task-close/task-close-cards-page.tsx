@@ -210,7 +210,7 @@ export function TaskCloseCardsPage() {
 		<PageFrame>
 			<PageHeader
 				title="我的任务"
-				description="我发起、我参与的任务。有子任务的卡片先进子任务页,叶子任务直接进详情。"
+				description="我发起、我参与的任务。有子任务的卡片进去后,在详情页里能直接看到子任务。"
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />

@@ -469,6 +469,32 @@ async function nameMapOf(ids: readonly string[]): Promise<Map<string, string>> {
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 
+/**
+ * 一批 task_id → 执行人姓名 —— **卡面「发给谁」的来源**。
+ *
+ * 执行人挂在 `tc_member`(role=executor),不在任务行上:fan-out 时一条子任务 = 一名执行人,
+ * 光看 `creator_id` 全都一样(都是派活的人),分不出发给谁。主执行人优先,同任务多行取第一条。
+ */
+async function executorNamesOf(taskIds: readonly string[]): Promise<Map<string, string>> {
+	if (taskIds.length === 0) return new Map();
+	const rows = await db
+		.select({
+			taskId: taskCloseMember.task_id,
+			userId: taskCloseMember.user_id,
+			isPrimary: taskCloseMember.is_primary,
+		})
+		.from(taskCloseMember)
+		.where(and(inArray(taskCloseMember.task_id, taskIds), eq(taskCloseMember.role, "executor")))
+		.orderBy(desc(taskCloseMember.is_primary), asc(taskCloseMember.created_at));
+	const names = await nameMapOf(rows.map((row) => row.userId));
+	const map = new Map<string, string>();
+	for (const row of rows) {
+		const name = names.get(row.userId);
+		if (name && !map.has(row.taskId)) map.set(row.taskId, name);
+	}
+	return map;
+}
+
 /** 只接收任务成员的结构化 ID；评论与通知同事务提交。 */
 async function createMentionNotifications(
 	tx: Tx,
@@ -1392,6 +1418,8 @@ export const taskCloseRouter = createTRPCRouter({
 				.limit(pageSize)
 				.offset((page - 1) * pageSize);
 			const nameOf = await nameMapOf(rows.map((row) => row.creator_id));
+			// 卡面「发给谁」:执行人(挂在 tc_member 上,不在任务行上)
+			const executorNameOf = await executorNamesOf(rows.map((row) => row.id));
 			// 父任务卡片要显示「N 个子任务」:一次 group by 拿到本页所有父任务的子任务数
 			const childCounts = rows.length
 				? await db
@@ -1432,6 +1460,8 @@ export const taskCloseRouter = createTRPCRouter({
 					...toTaskBrief(row, nameOf.get(row.creator_id) ?? null),
 					childCount: childCountOf.get(row.id) ?? 0,
 					hasMyAction: pendingSet.has(row.id),
+					/** 这条派给谁 —— 卡面顶行显示;没有执行人(fan-out 的父任务是分派容器)时为 null */
+					executorName: executorNameOf.get(row.id) ?? null,
 				})),
 				total: Number(totalRow[0]?.n ?? 0),
 				stats: {
@@ -1488,6 +1518,8 @@ export const taskCloseRouter = createTRPCRouter({
 			.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)))
 			.orderBy(asc(taskCloseTask.created_at));
 		const childNameOf = await nameMapOf(childRows.map((row) => row.creator_id));
+		// 子任务「发给谁」:每条 fan-out 子任务各有一名执行人 —— 卡面要能一眼认出是谁的活
+		const childExecutorNameOf = await executorNamesOf(childRows.map((row) => row.id));
 		// 子任务也可能再 fan-out 出孙任务:一次 group by 拿到每个子任务自己的子任务数 ——
 		// 前端据此分流「点进去是卡片页(还有子任务)还是详情页(叶子)」
 		const grandCounts = childRows.length
@@ -1517,6 +1549,8 @@ export const taskCloseRouter = createTRPCRouter({
 			children: childRows.map((row) => ({
 				...toTaskBrief(row, childNameOf.get(row.creator_id) ?? null),
 				childCount: grandCountOf.get(row.id) ?? 0,
+				/** 发给谁 —— 一眼看得出这条是给谁干的 */
+				executorName: childExecutorNameOf.get(row.id) ?? null,
 			})),
 			members: memberRows.map((row) => toMember(row, nameOf)),
 			actions: actionRows.map((row) => toAction(row, nameOf)),
