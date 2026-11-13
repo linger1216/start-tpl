@@ -112,6 +112,9 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 	/** 驳回弹窗:动作 id + 原因(驳回必须写原因,服务端也会拒空的) */
 	const [rejectId, setRejectId] = useState<string | null>(null);
 	const [rejectReason, setRejectReason] = useState("");
+	/** 通过也走弹窗:意见可选,常用原因点一下填进输入框 */
+	const [approveId, setApproveId] = useState<string | null>(null);
+	const [approveReason, setApproveReason] = useState("");
 	/** 正在预览的附件(开弹窗看 / 下载) */
 	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
 	/** 动态度:一次取多少条(「加载更多」每次 +20) */
@@ -161,6 +164,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 		trpc.taskClose.actionRespond.mutationOptions({
 			onSuccess: async (_data, variables) => {
 				await invalidate();
+				setApproveId(null);
+				setApproveReason("");
 				setRejectId(null);
 				setRejectReason("");
 				toast.success(variables.approved ? "已通过" : "已驳回");
@@ -677,7 +682,10 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							await viewMutation.mutateAsync({ id });
 							await invalidate();
 						}}
-						onApprove={(id) => respondMutation.mutate({ id, approved: true })}
+						onApprove={(id) => {
+							setApproveReason("");
+							setApproveId(id);
+						}}
 						onReject={(id) => {
 							setRejectReason("");
 							setRejectId(id);
@@ -704,7 +712,7 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 							</header>
 							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 								{children.map((child) => (
-									<TaskCardLink key={child.id} task={child} className="block">
+									<TaskCardLink key={child.id} task={child} className="block h-48">
 										<TaskCloseTaskCard task={child} statusLabel={labelOf} />
 									</TaskCardLink>
 								))}
@@ -1088,6 +1096,44 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 
 			{/* 驳回 —— 必须写原因;原因会以一条评论留档(服务端同一口径) */}
 			<TaskActionDialog
+				open={approveId !== null}
+				onOpenChange={(next) => {
+					if (!next) setApproveId(null);
+				}}
+				title="通过"
+				description="通过后按流程推进;意见可写可不写,写了会作为一条评论留档。"
+				pending={respondMutation.isPending}
+				confirmDisabled={false}
+				confirmText="通过"
+				pendingText="通过中…"
+				onConfirm={() =>
+					approveId &&
+					respondMutation.mutate(
+						{ id: approveId, approved: true, reason: approveReason.trim() || null },
+						{ onSuccess: () => setApproveId(null) },
+					)
+				}
+			>
+				<DetailRow label="常见原因" align="center">
+					<div className="flex flex-wrap gap-1.5">
+						{APPROVE_PRESETS.map((reason) => (
+							<Button key={reason} type="button" variant="outline" size="sm" onClick={() => setApproveReason(reason)}>
+								{reason}
+							</Button>
+						))}
+					</div>
+				</DetailRow>
+				<DetailRow label="意见" align="center">
+					<Textarea
+						rows={3}
+						value={approveReason}
+						placeholder="可写一句通过意见,留空也行…"
+						onChange={(event) => setApproveReason(event.target.value)}
+					/>
+				</DetailRow>
+			</TaskActionDialog>
+
+			<TaskActionDialog
 				open={rejectId !== null}
 				onOpenChange={(next) => {
 					if (!next) setRejectId(null);
@@ -1110,10 +1156,8 @@ export function TaskCloseDetailPage({ taskId }: { taskId: string }) {
 								type="button"
 								variant="outline"
 								size="sm"
-								onClick={() =>
-									// 点一下就进输入框:空的直接填,已经写了就接着补,别覆盖人家打的字
-									setRejectReason((prev) => (prev.trim() ? `${prev.trim()};${reason}` : reason))
-								}
+								// 点一下就**替换**输入框内容(单选式的快捷填写),不拼接
+								onClick={() => setRejectReason(reason)}
 							>
 								{reason}
 							</Button>
@@ -1147,7 +1191,19 @@ function roleText(role: string): string {
 }
 
 /** 驳回的常用原因 —— 点一下填进输入框,省得每次从零打字 */
-const REJECT_PRESETS = ["材料不完整", "数据有误", "不符合要求", "需补充说明"];
+const REJECT_PRESETS = [
+	"材料不完整",
+	"数据有误",
+	"信息不一致",
+	"不符合要求",
+	"依据不足",
+	"需补充说明",
+	"流程不符",
+	"重复提交",
+	"超出范围",
+];
+/** 通过的常用意见 */
+const APPROVE_PRESETS = ["情况属实", "符合要求", "材料齐全", "已核对无误", "同意办理"];
 
 /** 头部 ⓘ 用的身份名 —— 比 `roleText` 多「管理员 / 旁观」两种(那两个不是 `tc_member` 里的角色) */
 const ROLE_LABEL: Record<string, string> = {

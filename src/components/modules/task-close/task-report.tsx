@@ -10,6 +10,7 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { TableResizeHandle } from "#/components/ui/table-resize-handle";
 import { useTRPC } from "#/integrations/trpc/react";
 import type { TRPCRouter } from "#/integrations/trpc/router";
 import { toastApiError } from "#/lib/api/error";
@@ -138,7 +139,9 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 	const [issues, setIssues] = useState<ReturnType<typeof validateTaskReport>>([]);
 	/** 表格在**前端分页**:数据长时别让整页滚成一条线(行索引仍按整份数据算) */
 	const [page, setPage] = useState(1);
-	const [pageSize, setPageSize] = useState(20);
+	const [pageSize, setPageSize] = useState(10);
+	/** 用户拖出来的列宽(键 = 字段标识);没拖过的列仍均分 */
+	const [columnSizing, setColumnSizing] = useState<Record<string, number>>({});
 	/** 自动落草稿(防抖)—— 没有"保存"这个动作,填完即存;并发冲突就就地重放一次 */
 	const save = useMutation(
 		trpc.taskClose.reportSaveDraft.mutationOptions({
@@ -239,14 +242,27 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 				<p className="text-sm text-muted-foreground">共 {rows.length} 条数据</p>
 				{schema.kind === "TABLE" && rows.length === 0 && <p className="text-sm text-muted-foreground">暂无数据行。</p>}
 				<div className={schema.kind === "TABLE" ? "overflow-x-auto" : "grid gap-3"}>
+					{/* 字段宽度未知就**均分**:table-fixed + 每列一只 col(操作列固定宽、不参与均分) */}
 					{schema.kind === "TABLE" ? (
-						<table className="w-full min-w-max border-collapse text-sm">
+						<table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">
+							<colgroup>
+								{schema.fields.map((field) => (
+									<col key={field.id} />
+								))}
+								{data.canEdit ? <col className="w-16" /> : null}
+							</colgroup>
 							<thead>
 								<tr>
 									{schema.fields.map((field) => (
-										<th key={field.id} className="border border-border px-2 py-2 text-left">
+										<th
+											key={field.id}
+											className="relative border border-border px-2 py-2 text-left"
+											style={columnSizing[field.id] ? { width: columnSizing[field.id] } : undefined}
+										>
 											{field.label}
 											{field.required ? " *" : ""}
+											{/* 拖右边缘调列宽,双击重置回均分 */}
+											<TableResizeHandle columnId={field.id} onChange={setColumnSizing} />
 										</th>
 									))}
 									{data.canEdit && <th className="border border-border px-2">操作</th>}
@@ -261,7 +277,7 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 											{schema.fields.map((field, column) => (
 												<td
 													key={field.id}
-													className="min-w-40 border border-border p-2"
+													className="border border-border p-2"
 													onPaste={(event) => {
 														const text = event.clipboardData.getData("text");
 														// 单格粘贴交给输入框自己处理;带分隔符的才按区域铺开
@@ -327,7 +343,7 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 						))
 					)}
 				</div>
-				{schema.kind === "TABLE" && rows.length > pageSize ? (
+				{schema.kind === "TABLE" ? (
 					<PaginationControl
 						page={currentPage}
 						pageSize={pageSize}
@@ -426,7 +442,7 @@ function ReportField({
 				disabled={disabled}
 				onValueChange={(next) => onChange(next ?? null)}
 			>
-				<SelectTrigger aria-label={field.label} aria-invalid={invalid || undefined}>
+				<SelectTrigger aria-label={field.label} aria-invalid={invalid || undefined} className="w-full">
 					<SelectValue placeholder="请选择" />
 				</SelectTrigger>
 				<SelectContent>

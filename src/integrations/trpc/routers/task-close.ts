@@ -1363,16 +1363,14 @@ export const taskCloseRouter = createTRPCRouter({
 					.where(and(eq(taskCloseAction.handle_id, me.id), eq(taskCloseAction.status, "active")));
 			if (input?.pending) conds.push(inArray(taskCloseTask.id, myPendingTaskIds()));
 			// 子任务不单独占一行 —— 挂在父任务里(详情页的「子任务」区);
-			// 例外:把子任务交给我的(我是它的执行人),必须能在列表里直接进,否则没入口干活
+			// 例外:**我在那条子任务里有角色(执行人 / 参与者)**就必须列出来,
+			// 否则"参与了却看不到"—— 参与者也要能进自己的活。
 			conds.push(
 				or(
 					isNull(taskCloseTask.parent_id),
 					inArray(
 						taskCloseTask.id,
-						db
-							.select({ id: taskCloseMember.task_id })
-							.from(taskCloseMember)
-							.where(and(eq(taskCloseMember.user_id, me.id), eq(taskCloseMember.role, "executor"))),
+						db.select({ id: taskCloseMember.task_id }).from(taskCloseMember).where(eq(taskCloseMember.user_id, me.id)),
 					),
 				),
 			);
@@ -1938,6 +1936,13 @@ export const taskCloseRouter = createTRPCRouter({
 				};
 				if (nextPriority !== undefined) setValue.priority = nextPriority;
 				await tx.update(taskCloseTask).set(setValue).where(eq(taskCloseTask.id, task.id));
+				// 说明是「整件事」的描述:父任务改了,子任务跟着改(子任务是执行副本,不各写一份)
+				if (!task.parent_id && nextDescription !== task.description) {
+					await tx
+						.update(taskCloseTask)
+						.set({ description: nextDescription, updated_at: now })
+						.where(and(eq(taskCloseTask.parent_id, task.id), alive(taskCloseTask)));
+				}
 				await logTaskEvent(tx, {
 					taskId: task.id,
 					event: "task.update",
@@ -2797,12 +2802,13 @@ export const taskCloseRouter = createTRPCRouter({
 					.where(eq(taskCloseAction.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
 
-				if (!input.approved && reason) {
+				// 通过 / 驳回的意见都落成评论(有就写一条;通过的意见是可选的)
+				if (reason) {
 					await tx.insert(taskCloseComment).values({
 						id: newId(),
 						task_id: task.id,
 						author_id: me.id,
-						content: `驳回原因:${reason}`,
+						content: `${input.approved ? "通过意见" : "驳回原因"}:${reason}`,
 						created_at: new Date(),
 						updated_at: new Date(),
 					});

@@ -506,6 +506,11 @@ describe("任务闭环", () => {
 			assert.equal(child.description, "父任务说明");
 			assert.deepEqual((child.payload as { links?: unknown }).links, links);
 		}
+		// 父任务**改了**说明,子任务跟着改(说明描述的是整件事)
+		await asA().taskClose.taskUpdate({ id: parentId, name: parent.name ?? "父任务", description: "父任务说明(改)" });
+		for (const child of await db.select().from(taskCloseTask).where(eq(taskCloseTask.parent_id, parentId))) {
+			assert.equal(child.description, "父任务说明(改)", "父任务改说明要同步到子任务");
+		}
 		const reportB = await asB().taskClose.reportGet({ taskId: childB.id });
 		assert.equal(reportB?.template.id, template.id);
 		assert.deepEqual(reportB?.report.draft, [{ town: "甲镇", value: 1 }], "子任务拿的是下发时复制的那一份");
@@ -705,6 +710,14 @@ describe("任务闭环", () => {
 			"执行人能在「我的任务」里看到自己那条子任务",
 		);
 		assert.ok(!asBList.items.some((item) => item.id === parentId), "执行人看不到父任务");
+
+		// 子任务的**参与者**(不是执行人)也要在列表里看到自己参与的那条 —— 参与≠没活干
+		await asA().taskClose.memberAdd({ taskId: bChild.id, userId: C.id, role: "participant" });
+		const asCList = await asC().taskClose.taskList({ mine: true, pageSize: 100 });
+		assert.ok(
+			asCList.items.some((item) => item.id === bChild.id),
+			"参与者能在「我的任务」里看到自己参与的子任务",
+		);
 	});
 	it("并发保存只有一个成功;转交后旧执行人写不进去", async () => {
 		const taskId = await newTask("填报生命周期");

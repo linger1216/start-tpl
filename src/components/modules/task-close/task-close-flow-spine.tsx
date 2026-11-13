@@ -153,29 +153,6 @@ export function TaskTodoStrip({
 	// 选单状态挂在**回复行是否打开**上:切换待办/关闭时把 @词 的踪迹一并清掉
 	const mention = useMentionPicker(participants, setText, textRef);
 
-	/** 「通过」的**原位两段式确认**:第一击只进入待确认态(2 秒不确认自动还原),第二击才生效。
-	 *  通过 = 锁定推进的不可逆写操作,零摩擦单击是本页最大的防呆欠账 —— 但也不给熟手加弹窗。 */
-	const [confirmFor, setConfirmFor] = useState<string | null>(null);
-	const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	function askApprove(id: string) {
-		markViewed(id);
-		if (confirmFor === id) {
-			setConfirmFor(null);
-			if (confirmTimer.current) clearTimeout(confirmTimer.current);
-			onApprove(id);
-			return;
-		}
-		setConfirmFor(id);
-		if (confirmTimer.current) clearTimeout(confirmTimer.current);
-		confirmTimer.current = setTimeout(() => setConfirmFor(null), 2000);
-	}
-
-	function resetConfirm() {
-		setConfirmFor(null);
-		if (confirmTimer.current) clearTimeout(confirmTimer.current);
-	}
-
 	/** 动手之前顺手把"已查看"打上(未查看提醒按它去重),失败不拦动作 */
 	function markViewed(id: string) {
 		void onView(id).catch(() => undefined);
@@ -245,27 +222,22 @@ export function TaskTodoStrip({
 							</span>
 							{item.actionable && !item.consult ? (
 								<span className="inline-flex items-center gap-2">
-									{/* 两段式:第一击进待确认态(按钮变「确认通过」),第二击才生效;2s 自动还原 */}
-									{confirmFor === item.id ? (
-										<Button size="sm" disabled={busy} onClick={() => askApprove(item.id)}>
-											确认通过?
-										</Button>
-									) : (
-										<Button
-											variant="outline"
-											size="sm"
-											disabled={busy}
-											onClick={() => askApprove(item.id)}
-											onBlur={resetConfirm}
-										>
-											通过
-										</Button>
-									)}
+									{/* 通过 / 驳回都走弹窗:理由与常用原因在弹窗里填,不在这儿直接落到不可逆动作 */}
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={busy}
+										onClick={() => {
+											markViewed(item.id);
+											onApprove(item.id);
+										}}
+									>
+										通过
+									</Button>
 									<ActionButton
 										tone="danger"
 										disabled={busy}
 										onClick={() => {
-											resetConfirm();
 											markViewed(item.id);
 											onReject(item.id);
 										}}

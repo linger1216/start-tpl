@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BellRing, CalendarClock, ClipboardList, Network } from "lucide-react";
+import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
@@ -27,12 +27,14 @@ export type TaskCardItem = {
 };
 
 /**
- * 任务卡片 —— 「我的任务」列表与「子任务卡片页」**同一张卡**(同类页面必须同形)。
+ * 任务卡片 —— 「我的任务」列表与详情页「子任务」区**同一张卡**(同类页面必须同形)。
  *
- * 点击目标由调用方决定(有子任务 → 卡片页,叶子 → 详情页),本组件只管长相。
+ * 内部布局按"扫读顺序"排:
+ *   ① 标题(为主)+ 右上角执行人(发给谁)  ② 状态 / 优先级 / 待你处理(到什么程度)
+ *   ③ 描述(两行封顶)  ④ 底部一条细脚注:子任务数 / 创建人 / 截止或建于
  *
- * 卡顶左格是**发件抬头**:这张卡是发给谁的 —— 执行人(圆牌 + 姓名,公文的收件抬头)。
- * fan-out 的父任务是一个「分派容器」,没有唯一收件人 → 退回原来的类型图标块。
+ * fan-out 的父任务是「分派容器」,没有唯一收件人 → 右上角退回类型图标块。
+ * 点击去向由调用方(`TaskCardLink`)决定,本组件只管长相。
  */
 export function TaskCloseTaskCard({
 	task,
@@ -42,58 +44,61 @@ export function TaskCloseTaskCard({
 	statusLabel: (value: string) => string;
 }) {
 	return (
-		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
-			{/* 顶行:抬头(左)+ 状态徽章(右) —— 与「流程模板」卡片同形 */}
-			<div className="mb-4 flex items-start justify-between gap-2">
+		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
+			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}
+			<div className="flex items-start justify-between gap-3">
+				<h3 className="min-w-0 flex-1 line-clamp-2 text-lg leading-snug font-semibold text-foreground">{task.name}</h3>
 				{task.executorName ? (
-					<span className="flex min-w-0 items-center gap-2">
-						{/* 「人」的视觉身份 = 墨底正圆 + 反白首字 + 宋体(见 DESIGN.md §4.4) */}
+					<span className="flex shrink-0 items-center gap-1.5" title={`执行人:${task.executorName}`}>
+						{/* 「人」的视觉身份 = 墨底正圆 + 反白首字 + 宋体(见 DESIGN.md §4.4);比标题小一号,不抢主 */}
 						<span
 							aria-hidden
-							className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/85 text-[13px] font-heading font-bold leading-none text-paper"
+							className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/85 font-heading text-[11px] font-bold leading-none text-paper"
 						>
 							{task.executorName.slice(0, 1)}
 						</span>
-						<span className="shrink-0 text-xs text-muted-foreground">执行人</span>
-						<span className="min-w-0 truncate text-sm font-medium text-foreground">{task.executorName}</span>
+						<span className="max-w-20 truncate text-xs text-muted-foreground">{task.executorName}</span>
 					</span>
 				) : (
-					/* 没有执行人 = 一条待分派 / 分派容器的活 —— 只出类型图标块 */
-					<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
-						{task.childCount > 0 ? <Network className="size-4.5" /> : <ClipboardList className="size-4.5" />}
-					</div>
+					/* 没有执行人 = 待分派 / 分派容器:只出类型图标,不占文字位 */
+					<span className="grid size-6 shrink-0 place-items-center rounded-md bg-brand-soft text-primary">
+						{task.childCount > 0 ? <Network className="size-3.5" /> : <ClipboardList className="size-3.5" />}
+					</span>
 				)}
-				{/* 徽章顺序:优先级(分流)的最高频扫读 → 状态。优先级缺省时让出空间,不留空徽章 */}
-				<div className="flex flex-wrap items-center justify-end gap-1.5">
-					{/* 优先级章按值取色(DESIGN.md §5.6:卡片 / 台账行走 random 值哈希)—— 与详情页同色 */}
-					<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
-						{priorityLabelOf(task.priority)}
-					</Tag>
-					<Tag variant="outline">{statusLabel(task.status)}</Tag>
-				</div>
 			</div>
-			<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{task.name}</h3>
-			<p className="mb-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-				{task.description?.trim() || "（无描述）"}
-			</p>
-			<div className="mt-auto flex flex-wrap items-center gap-1.5">
+
+			{/* 第二行:状态成组 —— 状态(主扫读)+ 优先级(分流)+「待你处理」告警 */}
+			<div className="mt-3 flex flex-wrap items-center gap-2">
+				<Tag variant="outline">{statusLabel(task.status)}</Tag>
+				<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
+					{priorityLabelOf(task.priority)}
+				</Tag>
 				{task.hasMyAction ? (
-					<span className="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+					<span className="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
 						<BellRing className="size-3" />
 						待你处理
 					</span>
 				) : null}
+			</div>
+
+			{/* 第三行:描述(两行封顶,弱化成辅助信息) */}
+			<p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+				{task.description?.trim() || "（无描述）"}
+			</p>
+
+			{/* 底行:元信息压成一条细脚注 —— 子任务数 / 创建人 / 截止(或建于) */}
+			<div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
 				{task.childCount > 0 ? (
-					<span className="inline-flex items-center gap-1 rounded-sm bg-brand-soft px-2 py-0.5 text-xs text-primary">
+					<span className="inline-flex items-center gap-1 text-primary">
 						<Network className="size-3" />
 						{task.childCount} 个子任务
 					</span>
 				) : null}
-				{/* 创建人 —— 顶行已有「执行人」,这里必须带字,否则两个名字看不出谁是谁 */}
-				<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-					创建 {task.creatorName ?? PLACEHOLDER_EMPTY}
+				<span className="inline-flex min-w-0 items-center gap-1">
+					<User className="size-3 shrink-0" />
+					<span className="truncate">{task.creatorName ?? PLACEHOLDER_EMPTY}</span>
 				</span>
-				<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+				<span className="inline-flex items-center gap-1">
 					<CalendarClock className="size-3" />
 					{task.dueAt ? `截止 ${formatLocalMinute(task.dueAt)}` : `建于 ${formatLocalMinute(task.createdAt)}`}
 				</span>

@@ -349,7 +349,7 @@ export function TaskCloseCardsPage() {
 			) : (
 				<div className="flex flex-wrap gap-3">
 					{items.map((item) => (
-						<TaskCardLink key={item.id} task={item} className="block w-full max-w-sm">
+						<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
 							<TaskCloseTaskCard task={item} statusLabel={labelOf} />
 						</TaskCardLink>
 					))}
