@@ -444,6 +444,9 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionUrgeHistory",
+	// 任务提醒候选人和记录由 resolver 限制为任务相关人员。
+	"taskClose.reminderCandidates",
+	"taskClose.reminderHistory",
 	"taskClose.commentList",
 	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
 	"taskClose.logList",
@@ -488,6 +491,7 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.actionCreate",
 	"taskClose.actionView",
 	"taskClose.actionUrge",
+	"taskClose.reminderSend",
 	"taskClose.actionWithdraw",
 	"taskClose.actionRespond",
 	// 回复征询:`who` 判据 = 被征询的人(assignee_id),与 actionRespond 同理
@@ -548,6 +552,9 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionUrgeHistory",
+	// 任务提醒候选人和记录由 resolver 限制为任务相关人员。
+	"taskClose.reminderCandidates",
+	"taskClose.reminderHistory",
 	"taskClose.commentList",
 	// 活动日志(只读):同「任务可见即可读」,不做页面码 —— 它与详情页一体,锁了会把详情页打死
 	"taskClose.logList",

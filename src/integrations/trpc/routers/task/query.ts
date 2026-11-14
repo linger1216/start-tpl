@@ -32,11 +32,13 @@ import { isAdminUser } from "#/lib/casbin";
 import { alive } from "#/lib/soft-delete";
 import { getObjectUrl } from "#/lib/storage";
 import { parseBlocks } from "#/lib/task/payload";
-import { reportAttachmentIds, taskReportSchema } from "#/lib/task/report-spec";
+import { taskReminderConfigSchema } from "#/lib/task/reminder-spec";
+import { reportAttachmentIds } from "#/lib/task/report-spec";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	type ActionRow,
 	assertTaskReadable,
+	getTaskReportTemplate,
 	getTaskRow,
 	ID,
 	isLocked,
@@ -76,6 +78,7 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null) => ({
 	description: row.description,
 	payload: row.payload,
 	workflow: row.workflow as WorkflowPayload,
+	reminderConfig: taskReminderConfigSchema.parse(row.reminder_config ?? undefined),
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
@@ -487,7 +490,7 @@ export const taskQueryRouter = createTRPCRouter({
 			links,
 			attachments,
 			/** 这条任务**自己**的内容(编辑 / 附件弹窗回存用,别把兄弟任务的内容克隆过来) */
-			own: { links: ownLinks, attachments: ownAttachments },
+			own: { links: ownLinks, attachments: ownAttachments, attachmentIds: attachmentIdsOf(task.payload) },
 			children: childRows.map((row) => ({
 				...toTaskBrief(row, childNameOf.get(row.creator_id) ?? null),
 				childCount: grandCountOf.get(row.id) ?? 0,
@@ -521,15 +524,24 @@ export const taskQueryRouter = createTRPCRouter({
 			const family = await familyTasks(task, me.id);
 			let owned = family.some((row) => attachmentIdsOf(row.payload).includes(input.fileId));
 			if (!owned) {
+				const comments = await db
+					.select({ attachments: taskCommentTable.attachments })
+					.from(taskCommentTable)
+					.where(and(eq(taskCommentTable.task_id, task.id), alive(taskCommentTable)));
+				owned = comments.some(
+					(row) => Array.isArray(row.attachments) && (row.attachments as unknown[]).includes(input.fileId),
+				);
+			}
+			if (!owned) {
 				const snapshot = task.report as { schema?: unknown } | null;
-				const schema = taskReportSchema.safeParse(snapshot?.schema);
-				if (schema.success) {
+				if (snapshot && typeof snapshot === "object" && "reportId" in snapshot) {
+					const { schema } = await getTaskReportTemplate(task);
 					const [report] = await db
 						.select({ draft: taskReportTable.draft })
 						.from(taskReportTable)
 						.where(eq(taskReportTable.task_id, task.id))
 						.limit(1);
-					owned = reportAttachmentIds(schema.data, report?.draft).includes(input.fileId);
+					owned = reportAttachmentIds(schema, report?.draft).includes(input.fileId);
 					// 父任务还要能预览**子任务已保存**的填报附件(与 reportGet 的可见集合同口径:
 					// 只看 current_submission_id 指向的那份快照,没保存的一律不放行)
 					if (!owned) {
@@ -542,18 +554,9 @@ export const taskQueryRouter = createTRPCRouter({
 							)
 							.innerJoin(taskTable, eq(taskTable.id, taskReportTable.task_id))
 							.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
-						owned = submissions.some((row) => reportAttachmentIds(schema.data, row.payload).includes(input.fileId));
+						owned = submissions.some((row) => reportAttachmentIds(schema, row.payload).includes(input.fileId));
 					}
 				}
-			}
-			if (!owned) {
-				const comments = await db
-					.select({ attachments: taskCommentTable.attachments })
-					.from(taskCommentTable)
-					.where(and(eq(taskCommentTable.task_id, task.id), alive(taskCommentTable)));
-				owned = comments.some(
-					(row) => Array.isArray(row.attachments) && (row.attachments as unknown[]).includes(input.fileId),
-				);
 			}
 			if (!owned) throw new TRPCError({ code: "NOT_FOUND", message: "附件不存在" });
 

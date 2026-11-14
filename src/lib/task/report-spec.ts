@@ -104,9 +104,8 @@ export const taskReportSchema = z
 							message: "选项不能重复",
 						});
 				}
-				const itemIdsSet = new Set((field.itemFields ?? []).map((item) => item.id));
 				for (const item of field.itemFields ?? [])
-					if (item.requiredWhen && (!itemIdsSet.has(item.requiredWhen.field) || item.requiredWhen.field === item.id))
+					if (item.requiredWhen && (!itemIds.has(item.requiredWhen.field) || item.requiredWhen.field === item.id))
 						ctx.addIssue({
 							code: "custom",
 							path: ["fields", index, "itemFields"],
@@ -285,9 +284,11 @@ function invalidReason(field: ValueField, value: unknown): string | null {
 				: "日期时间格式不正确";
 		case "array": {
 			if (!Array.isArray(value) || value.length > 200) return "数组格式无效";
+			const allowed = new Set((field.itemFields ?? []).map((item) => item.id));
 			for (const [itemIndex, item] of value.entries()) {
 				if (!item || typeof item !== "object" || Array.isArray(item)) return `第 ${itemIndex + 1} 项格式无效`;
 				const itemRow = item as Record<string, unknown>;
+				if (Object.keys(itemRow).some((key) => !allowed.has(key))) return `第 ${itemIndex + 1} 项包含未知字段`;
 				for (const sub of field.itemFields ?? []) {
 					const subValue = itemRow[sub.id];
 					const subEmpty = subValue == null || subValue === "" || (Array.isArray(subValue) && subValue.length === 0);

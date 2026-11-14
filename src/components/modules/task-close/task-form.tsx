@@ -6,6 +6,7 @@ import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
 import { TaskLinkEditor } from "#/components/modules/task-close/task-link-editor";
+import { TaskReminderConfigEditor } from "#/components/modules/task-close/task-reminder-config";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { ActionButton, ActionIconButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
@@ -30,6 +31,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task/close-spec";
 import { blankBlock, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
+import { type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalDate } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -60,6 +62,7 @@ export type TaskFormEditing = {
 	priority: number | null;
 	links: TaskLinkBlock[];
 	attachments: TaskAttachment[];
+	reminderConfig: TaskReminderConfig;
 };
 
 export type TaskFormPayload = {
@@ -81,6 +84,7 @@ export type TaskFormPayload = {
 	links: TaskLinkBlock[];
 	/** 附件 id 列表(`sys_file.id`) */
 	attachments: string[];
+	reminderConfig: TaskReminderConfig;
 };
 
 type Option = SearchSelectOption<string>;
@@ -168,7 +172,7 @@ export function TaskForm({
 	const templates = useQuery({ ...trpc.taskClose.reportTemplateList.queryOptions(), enabled: open && !editing });
 	const [reportTemplateId, setReportTemplateId] = useState("");
 	/** 三个可选区的展开态(收起时不卸载,填到一半的东西不丢) */
-	const [fold, setFold] = useState({ report: false, links: false, attach: false });
+	const [fold, setFold] = useState({ report: false, links: false, attach: false, reminder: false });
 	/** 数据范围卡片的展开态:key = 执行人 id(null = 都收起) */
 	const [scopeOpen, setScopeOpen] = useState<string | null>(null);
 	const [importedRows, setImportedRows] = useState<Array<Record<string, string | number | boolean | string[] | null>>>(
@@ -180,6 +184,9 @@ export function TaskForm({
 	const [description, setDescription] = useState("");
 	const [due, setDue] = useState("");
 	/** `null` = 未设置;`0|1|2` = P0/P1/P2。DB 列是 tinyint,运行时是 number */
+	const [reminderConfig, setReminderConfig] = useState<TaskReminderConfig>(() =>
+		taskReminderConfigSchema.parse(undefined),
+	);
 	const [priority, setPriority] = useState<number | null>(null);
 	const [workflowId, setWorkflowId] = useState("");
 	const [executorIds, setExecutorIds] = useState<string[]>([]);
@@ -196,10 +203,11 @@ export function TaskForm({
 		setDescription(editing?.description ?? "");
 		setDue(toDateInput(editing?.dueAt));
 		setPriority(editing?.priority ?? null);
+		setReminderConfig(editing?.reminderConfig ?? taskReminderConfigSchema.parse(undefined));
 		setWorkflowId(editing ? "" : (workflowOptions[0]?.value ?? ""));
 		setExecutorIds([]);
 		setReportTemplateId("");
-		setFold({ report: false, links: false, attach: false });
+		setFold({ report: false, links: false, attach: false, reminder: false });
 		resetReportRule();
 		setLinks(editing?.links ?? []);
 		setAttachments(editing?.attachments ?? []);
@@ -210,7 +218,8 @@ export function TaskForm({
 		if (open && !editing && !workflowId && workflowOptions[0]) setWorkflowId(workflowOptions[0].value);
 	}, [open, editing, workflowId, workflowOptions]);
 
-	const canSubmit = name.trim().length > 0 && (editing !== null || workflowId.length > 0);
+	const reminderValid = taskReminderConfigSchema.safeParse(reminderConfig).success;
+	const canSubmit = name.trim().length > 0 && (editing !== null || workflowId.length > 0) && reminderValid;
 	/** 页脚缺项提示:只列真必填(截止 / 描述 / 执行人都可空) */
 	const missingRequired = [name.trim() ? null : "任务名称", editing || workflowId ? null : "流程模板"].filter(
 		(item): item is string => item !== null,
@@ -682,12 +691,28 @@ export function TaskForm({
 							disabled={pending}
 						/>
 					</FoldSection>
+					<FoldSection
+						title="通知"
+						meta={`执行人 ${reminderConfig.executor.offsets.length} 个时间点，节点 ${reminderConfig.node.offsets.length} 个时间点`}
+						open={fold.reminder}
+						onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}
+					>
+						<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} />
+					</FoldSection>
 				</DialogBody>
 				<DialogFooter>
 					{missingRequired.length ? (
 						<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
 							还缺 {missingRequired.length} 项必填:{missingRequired.join("、")}
 						</span>
+					) : !reminderValid ? (
+						<button
+							type="button"
+							className="text-xs text-destructive sm:mr-auto"
+							onClick={() => setFold((prev) => ({ ...prev, reminder: true }))}
+						>
+							请完善通知提醒方式
+						</button>
 					) : executorIds.length > 1 ? (
 						<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
 							将下发 {executorIds.length} 条任务
@@ -704,6 +729,7 @@ export function TaskForm({
 								description: description.trim() || null,
 								dueAt: fromDateInput(due),
 								priority,
+								reminderConfig,
 								workflowId,
 								report: reportTemplateId
 									? {

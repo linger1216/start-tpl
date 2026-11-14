@@ -18,6 +18,7 @@ import { cancelPendingNotifications, createNotification } from "#/lib/notificati
 import { alive } from "#/lib/soft-delete";
 import { publish } from "#/lib/sse-bus";
 import { TASK_URGE_COOLDOWN_MINUTES, taskPathOf } from "#/lib/task/close-spec";
+import { cancelActionReminders, rescheduleTaskReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	activateNextAction,
@@ -162,6 +163,7 @@ export const taskActionRouter = createTRPCRouter({
 					created_at: now,
 					updated_at: now,
 				});
+				await scheduleNodeReminders(tx, task, { id, assignee_id: input.assigneeId, activated_at: now }, now);
 				let predecessor = id;
 				for (const [index, assigneeId] of nextAssigneeIds.entries()) {
 					const nextId = newId();
@@ -182,7 +184,10 @@ export const taskActionRouter = createTRPCRouter({
 						created_at: now,
 						updated_at: now,
 					});
-					if (parallel) await notifyAssignee(nextId, assigneeId);
+					if (parallel) {
+						await scheduleNodeReminders(tx, task, { id: nextId, assignee_id: assigneeId, activated_at: now }, now);
+						await notifyAssignee(nextId, assigneeId);
+					}
 					predecessor = nextId;
 				}
 				await notifyAssignee(id, input.assigneeId);
@@ -334,12 +339,13 @@ export const taskActionRouter = createTRPCRouter({
 			.from(sysNotificationDelivery)
 			.where(inArray(sysNotificationDelivery.notification_id, ids))
 			.orderBy(desc(sysNotificationDelivery.created_at));
+		const admin = await isAdminUser(me.id, me.isSuper === true);
 		return deliveries.map((delivery) => ({
 			id: delivery.id,
 			channel: delivery.channel,
 			status: delivery.status,
 			attempts: delivery.attempts,
-			error: delivery.last_error,
+			error: admin ? delivery.last_error : delivery.last_error ? "投递失败，请联系管理员" : null,
 			createdAt: delivery.created_at.toISOString(),
 			sentAt: delivery.sent_at?.toISOString() ?? null,
 		}));
@@ -377,6 +383,7 @@ export const taskActionRouter = createTRPCRouter({
 				.set({ status: "cancelled", updated_at: now })
 				.where(and(inArray(taskActionTable.id, ids), inArray(taskActionTable.status, [...LIVE_ACTION_STATUS])));
 			await cancelPendingNotifications(tx, "task_action", ids);
+			await cancelActionReminders(tx, ids, now);
 			await writeTaskEvent(tx, {
 				taskId: task.id,
 				event: "action.withdraw",
@@ -399,17 +406,22 @@ export const taskActionRouter = createTRPCRouter({
 		if (action.assignee_id !== me.id) throw new TRPCError({ code: "FORBIDDEN", message: "只有处理人可以查看该动作" });
 		if (action.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "该动作已不在待处理状态" });
 		await getTaskRow(action.task_id);
-		await db
-			.update(taskActionTable)
-			.set({ viewed_at: new Date() })
-			.where(
-				and(
-					eq(taskActionTable.id, input.id),
-					eq(taskActionTable.assignee_id, me.id),
-					eq(taskActionTable.status, "active"),
-					isNull(taskActionTable.viewed_at),
-				),
-			);
+		await db.transaction(async (tx) => {
+			await lockTask(tx, action.task_id);
+			const now = new Date();
+			await tx
+				.update(taskActionTable)
+				.set({ viewed_at: now })
+				.where(
+					and(
+						eq(taskActionTable.id, input.id),
+						eq(taskActionTable.assignee_id, me.id),
+						eq(taskActionTable.status, "active"),
+						isNull(taskActionTable.viewed_at),
+					),
+				);
+			await cancelActionReminders(tx, [action.id], new Date());
+		});
 		return { ok: true };
 	}),
 
@@ -459,6 +471,7 @@ export const taskActionRouter = createTRPCRouter({
 					.set({ status: input.approved ? "done" : "rejected", updated_at: new Date() })
 					.where(eq(taskActionTable.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
+				await cancelActionReminders(tx, [action.id], new Date());
 
 				// 通过 / 驳回的意见都落成评论(有就写一条;通过的意见是可选的)
 				if (reason) {
@@ -505,6 +518,7 @@ export const taskActionRouter = createTRPCRouter({
 								.set({ status: "cancelled", updated_at: now })
 								.where(inArray(taskActionTable.id, ids));
 							await cancelPendingNotifications(tx, "task_action", ids);
+							await cancelActionReminders(tx, ids, now);
 						}
 					}
 					const [remaining] = await tx
@@ -525,6 +539,12 @@ export const taskActionRouter = createTRPCRouter({
 						if (workflowOf(task).statuses.some((status) => status.value === next && status.terminal))
 							await cancelLiveTaskActions(tx, task.id, now);
 						await tx.update(taskTable).set({ status: next, updated_at: now }).where(eq(taskTable.id, task.id));
+						if (
+							workflowOf(task).statuses.some(
+								(status) => (status.value === task.status || status.value === next) && status.terminal,
+							)
+						)
+							await rescheduleTaskReminders(tx, { ...task, status: next }, now);
 						movedTo = next;
 					}
 				}
@@ -591,6 +611,7 @@ export const taskActionRouter = createTRPCRouter({
 					.set({ status: "done", updated_at: now })
 					.where(eq(taskActionTable.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
+				await cancelActionReminders(tx, [action.id], new Date());
 				await tx.insert(taskCommentTable).values({
 					id: commentId,
 					task_id: action.task_id,

@@ -947,6 +947,8 @@ export const taskTable = mysqlTable(
 		 * 子任务另存同步基线;每个任务的草稿保存在自己的 `tc_task_report` 行。null 表示未绑定。
 		 */
 		report: json("report"),
+		/** 提醒配置；旧任务为空时使用默认节点提醒。 */
+		reminder_config: json("reminder_config"),
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -959,6 +961,30 @@ export const taskTable = mysqlTable(
 		/** 按流程模板筛(「我的任务」按模板切换) */
 		index("idx_task_workflow").on(table.workflow_id),
 		index("idx_task_parent").on(table.parent_id),
+	],
+);
+
+/** 持久化的任务提醒；事件键用于跨 Worker 幂等调度。 */
+export const taskReminderTable = mysqlTable(
+	"tc_task_reminder",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		action_id: varchar("action_id", { length: 191 }),
+		recipient_id: varchar("recipient_id", { length: 191 }).notNull(),
+		kind: varchar("kind", { length: 20 }).notNull(),
+		offset_minutes: int("offset_minutes").notNull(),
+		channels: json("channels").notNull(),
+		scheduled_at: datetime("scheduled_at", { mode: "date" }).notNull(),
+		status: varchar("status", { length: 20 }).notNull(),
+		event_key: varchar("event_key", { length: 191 }).notNull(),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_task_reminder_event").on(table.event_key),
+		index("idx_task_reminder_due").on(table.status, table.scheduled_at),
+		index("idx_task_reminder_task").on(table.task_id, table.status),
 	],
 );
 

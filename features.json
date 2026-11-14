@@ -25,6 +25,10 @@
         "src/integrations/trpc/routers/task",
         "src/lib/task",
         "tests/task-report-spec.test.ts",
+        "tests/task-reminder-spec.test.ts",
+        "tests/task-members-reminder.test.ts",
+		"tests/task-deadline.test.ts",
+        "tests/task-report-keyed.test.ts",
         "tests/task-report-excel.test.ts",
         "scripts/seed-task-close.ts",
         "tests/task-close.test.ts",
@@ -88,7 +92,7 @@
         {
           "file": "src/db/data-base-schema.ts",
           "kind": "block",
-          "begin": "^export const task(?:Workflow|Action|Member|Comment|Log|Report|Table)",
+          "begin": "^export const task(?:Workflow|Action|Member|Comment|Log|Report|Reminder|Table)",
           "back": "^/\\*\\*",
           "end": "^\\}\\);$|^\\);$"
         },
@@ -111,14 +115,14 @@
           "file": "scripts/sync-table-meta.ts",
           "kind": "lines",
           "prefixes": [
-            "tc_report_template:", "tc_task_report:", "tc_workflow: \"", "tc_task:", "tc_action:", "tc_member:", "tc_comment:",
+            "tc_report_template:", "tc_task_report:", "tc_workflow: \"", "tc_task:", "tc_task_reminder:", "tc_action:", "tc_member:", "tc_comment:",
             "{ table: \"tc_", "// tc_", "// ── 任务闭环"
           ],
           "min": 40
         },
         { "file": "package.json", "kind": "json", "matches": ["scripts.db:seed:task-close"] }
       ],
-      "tables": ["tc_report_template", "tc_task_report", "tc_workflow", "tc_task", "tc_action", "tc_member", "tc_comment", "tc_log"],
+      "tables": ["tc_report_template", "tc_task_report", "tc_workflow", "tc_task", "tc_task_reminder", "tc_action", "tc_member", "tc_comment", "tc_log"],
       "seeds": [],
       "hints": [
         "`tc_*` 表不再建;`pnpm db:create` 只建剩下的表",

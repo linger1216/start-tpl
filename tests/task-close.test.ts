@@ -24,6 +24,7 @@ import {
 	taskCommentTable,
 	taskLogTable,
 	taskMemberTable,
+	taskReminderTable,
 	taskReportTable,
 	taskReportTemplateTable,
 	taskTable,
@@ -34,6 +35,7 @@ import { addUserRole, clearCasbinCache, removeAllRolesOfUser } from "../src/lib/
 import { bucketFor } from "../src/lib/storage.ts";
 import { checkActionReminder } from "../src/lib/task/close-reminders.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task/close-spec.ts";
+import { rescheduleTaskReminders, runScheduledTaskReminders } from "../src/lib/task/scheduled-reminders.ts";
 import {
 	assertRejects,
 	caller,
@@ -115,12 +117,24 @@ after(async () => {
 			.select({ id: taskActionTable.id })
 			.from(taskActionTable)
 			.where(inArray(taskActionTable.task_id, ids));
+		const reminders = await db
+			.select({ id: taskReminderTable.id })
+			.from(taskReminderTable)
+			.where(inArray(taskReminderTable.task_id, ids));
 		const notifications = await db
 			.select({ id: sysNotification.id })
 			.from(sysNotification)
 			.where(
 				or(
 					and(eq(sysNotification.source_type, "task"), inArray(sysNotification.source_id, ids)),
+					and(eq(sysNotification.source_type, "task_reminder"), inArray(sysNotification.source_id, ids)),
+					and(
+						eq(sysNotification.source_type, "task_scheduled_reminder"),
+						inArray(
+							sysNotification.source_id,
+							reminders.map((r) => r.id),
+						),
+					),
 					and(
 						eq(sysNotification.source_type, "task_action"),
 						inArray(
@@ -146,6 +160,7 @@ after(async () => {
 			await db.delete(sysNotificationDelivery).where(inArray(sysNotificationDelivery.notification_id, notificationIds));
 			await db.delete(sysNotification).where(inArray(sysNotification.id, notificationIds));
 		}
+		await db.delete(taskReminderTable).where(inArray(taskReminderTable.task_id, ids));
 		await db.delete(taskActionTable).where(inArray(taskActionTable.task_id, ids));
 		await db.delete(taskMemberTable).where(inArray(taskMemberTable.task_id, ids));
 		await db.delete(taskCommentTable).where(inArray(taskCommentTable.task_id, ids));
@@ -407,6 +422,18 @@ describe("任务闭环", () => {
 			() => asA().taskClose.attachmentUrl({ taskId: task.id, fileId: FOREIGN_FILE_ID }),
 			"附件不存在",
 		);
+		await db
+			.update(taskTable)
+			.set({ report: { reportId: template.id } })
+			.where(eq(taskTable.id, task.id));
+		assert.ok((await asA().taskClose.attachmentUrl({ taskId: task.id, fileId: ATTACH_FILE_ID })).url);
+		await db
+			.update(taskTable)
+			.set({ report: { reportId: template.id, schema: { invalid: true } } })
+			.where(eq(taskTable.id, task.id));
+		await assert.rejects(() => asA().taskClose.reportGet({ taskId: task.id }));
+		await asA().taskClose.commentCreate({ taskId: task.id, content: "评论附件", attachments: [FOREIGN_FILE_ID] });
+		assert.ok((await asA().taskClose.attachmentUrl({ taskId: task.id, fileId: FOREIGN_FILE_ID })).url);
 	});
 	it("填报模板在创建任务时固定,不能更换或移除;保存靠 revision 挡住覆盖", async () => {
 		const old = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
@@ -903,7 +930,34 @@ describe("任务闭环", () => {
 			payload: { links: [{ kind: "link", url: "https://example.com/sibling" }], attachments: [COMMENT_FILE_ID] },
 		});
 		// 执行人(不是创建人)自己给子任务加附件 —— 以前只有创建人能做
-		await asB().taskClose.taskAttach({ id: childId, attachments: [ATTACH_FILE_ID] });
+		await asB().taskClose.taskAttach({ id: childId, attachments: [ATTACH_FILE_ID], expectedAttachments: [] });
+		await assertRejects(
+			() => asB().taskClose.taskAttach({ id: childId, attachments: [COMMENT_FILE_ID], expectedAttachments: [] }),
+			"附件已被修改",
+		);
+		await assertRejects(
+			() =>
+				asA().taskClose.taskUpdate({ id: childId, name: taskName("共享内容"), payload: null, expectedPayload: null }),
+			"内容已被修改",
+		);
+		assert.deepEqual(
+			(await asB().taskClose.taskGet({ id: childId })).own.attachments.map((file) => file.id),
+			[ATTACH_FILE_ID],
+		);
+		const competing = await Promise.allSettled([
+			asB().taskClose.taskAttach({
+				id: childId,
+				attachments: [ATTACH_FILE_ID, COMMENT_FILE_ID],
+				expectedAttachments: [ATTACH_FILE_ID],
+			}),
+			asB().taskClose.taskAttach({
+				id: childId,
+				attachments: [ATTACH_FILE_ID, FOREIGN_FILE_ID],
+				expectedAttachments: [ATTACH_FILE_ID],
+			}),
+		]);
+		assert.equal(competing.filter((result) => result.status === "fulfilled").length, 1);
+		assert.equal(competing.filter((result) => result.status === "rejected").length, 1);
 		// 创建人给子任务补链接(整块 payload 仍属创建人 / 管理员)
 		await asA().taskClose.taskUpdate({
 			id: childId,
@@ -949,7 +1003,12 @@ describe("任务闭环", () => {
 		await db.insert(sysUser).values({ id: `viewer-${suffix}`, name: "旁观", email: `viewer-${suffix}@test.local` });
 		extraTestUserIds.push(`viewer-${suffix}`);
 		await assertRejects(
-			() => callerAs({ id: `viewer-${suffix}`, name: "旁观" }).taskClose.taskAttach({ id: parentId, attachments: [] }),
+			() =>
+				callerAs({ id: `viewer-${suffix}`, name: "旁观" }).taskClose.taskAttach({
+					id: parentId,
+					attachments: [],
+					expectedAttachments: [],
+				}),
 			"无权给这条任务加附件",
 		);
 	});
@@ -1821,8 +1880,101 @@ describe("任务闭环", () => {
 		assert.equal(await badgeOf(), before, "读了通知,红点取消");
 	});
 
+	it("定时提醒持久化、延迟执行且并发只发送一次", async () => {
+		const dueAt = new Date(Date.now() + 4 * 60 * 60_000);
+		const { id } = await asA().taskClose.taskCreate({
+			name: taskName("定时提醒"),
+			workflowId,
+			dueAt: dueAt.toISOString(),
+			members: [{ userId: B.id, role: "executor" }],
+			reminderConfig: {
+				executor: { offsets: [60, 120], channels: ["in_app"] },
+				node: { offsets: [60, 180], channels: ["in_app"] },
+			},
+		});
+		const entries = await db
+			.select()
+			.from(taskReminderTable)
+			.where(and(eq(taskReminderTable.task_id, id), eq(taskReminderTable.kind, "executor")));
+		assert.equal(entries.length, 2);
+		const future = new Date(dueAt.getTime() + 60_000);
+		await Promise.all([runScheduledTaskReminders(future), runScheduledTaskReminders(future)]);
+		const sent = await db
+			.select()
+			.from(taskReminderTable)
+			.where(and(eq(taskReminderTable.task_id, id), eq(taskReminderTable.status, "sent")));
+		assert.equal(sent.length, 2);
+		const notices = await db
+			.select()
+			.from(sysNotification)
+			.where(
+				and(
+					eq(sysNotification.source_type, "task_scheduled_reminder"),
+					inArray(
+						sysNotification.source_id,
+						entries.map((entry) => entry.id),
+					),
+				),
+			);
+		assert.equal(notices.length, 2);
+	});
+
+	it("修改规则保留仍适用的延迟提醒，取消移除的时间点", async () => {
+		const dueAt = new Date(Date.now() + 4 * 60 * 60_000);
+		const oldConfig = {
+			executor: { offsets: [60, 120], channels: ["in_app" as const] },
+			node: { offsets: [], channels: [] },
+		};
+		const { id } = await asA().taskClose.taskCreate({
+			name: taskName("延迟后改规则"),
+			workflowId,
+			dueAt: dueAt.toISOString(),
+			members: [{ userId: B.id, role: "executor" }],
+			reminderConfig: oldConfig,
+		});
+		const before = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
+		const nextConfig = { ...oldConfig, executor: { ...oldConfig.executor, offsets: [120, 180] } };
+		await db.transaction(async (tx) => {
+			const [task] = await tx.select().from(taskTable).where(eq(taskTable.id, id)).for("update");
+			await tx.update(taskTable).set({ reminder_config: nextConfig }).where(eq(taskTable.id, id));
+			await rescheduleTaskReminders(
+				tx,
+				{ ...task, reminder_config: nextConfig },
+				new Date(dueAt.getTime() - 90 * 60_000),
+				"executor",
+			);
+		});
+		const after = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
+		assert.equal(
+			after.find((row) => row.id === before.find((row) => row.offset_minutes === 120)?.id)?.status,
+			"pending",
+		);
+		assert.equal(
+			after.find((row) => row.id === before.find((row) => row.offset_minutes === 60)?.id)?.status,
+			"cancelled",
+		);
+		assert.equal(
+			after.some((row) => row.offset_minutes === 180 && row.status === "pending"),
+			false,
+		);
+	});
+
+	it("查看节点取消待发的定时提醒", async () => {
+		const taskId = await newTask("节点提醒取消");
+		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, assigneeId: B.id });
+		const entries = await db.select().from(taskReminderTable).where(eq(taskReminderTable.action_id, actionId));
+		assert.equal(entries.length, 2);
+		await asB().taskClose.actionView({ id: actionId });
+		const cancelled = await db
+			.select()
+			.from(taskReminderTable)
+			.where(and(eq(taskReminderTable.action_id, actionId), eq(taskReminderTable.status, "cancelled")));
+		assert.equal(cancelled.length, 2);
+	});
+
 	it("未查看提醒按轮次去重，已查看或已完成的动作不再提醒", async () => {
 		const taskId = await newTask("未查看提醒");
+		await db.update(taskTable).set({ reminder_config: null }).where(eq(taskTable.id, taskId));
 		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, assigneeId: B.id });
 		const now = new Date();
 		await db
@@ -1847,6 +1999,7 @@ describe("任务闭环", () => {
 
 	it("未查看提醒按 60 / 180 分钟两档独立触发", async () => {
 		const taskId = await newTask("提醒边界");
+		await db.update(taskTable).set({ reminder_config: null }).where(eq(taskTable.id, taskId));
 		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, assigneeId: B.id });
 		const now = new Date();
 		const setAged = (minutes: number) =>
@@ -1924,6 +2077,49 @@ describe("任务闭环", () => {
 		} finally {
 			await db.update(sysUser).set({ name: B.name }).where(eq(sysUser.id, B.id));
 		}
+	});
+
+	it("统一提醒按成员授权、逐人冷却并对重复请求幂等", async () => {
+		const taskId = await newTask("统一提醒");
+		await assertRejects(() => asC().taskClose.reminderCandidates({ taskId }), "无权发送");
+		await assertRejects(
+			() => asA().taskClose.reminderSend({ taskId, recipientIds: [C.id], channels: ["in_app"], requestId: "outsider" }),
+			"任务相关人员",
+		);
+		const candidates = await asB().taskClose.reminderCandidates({ taskId });
+		assert.deepEqual(candidates.map((u) => u.id).sort(), [A.id, B.id].sort());
+		const first = await asA().taskClose.reminderSend({
+			taskId,
+			recipientIds: [B.id],
+			channels: ["in_app", "sms"],
+			requestId: "first",
+		});
+		assert.equal(first.results[0]?.status, "sent");
+		const second = await asB().taskClose.reminderSend({
+			taskId,
+			recipientIds: [B.id, A.id],
+			channels: ["in_app"],
+			requestId: "second",
+		});
+		assert.deepEqual(
+			second.results.map((x) => x.status),
+			["cooldown", "sent"],
+		);
+		const repeat = await asB().taskClose.reminderSend({
+			taskId,
+			recipientIds: [B.id, A.id],
+			channels: ["in_app"],
+			requestId: "second",
+		});
+		assert.deepEqual(
+			repeat.results.map((x) => x.status),
+			["cooldown", "reused"],
+		);
+		const history = await asB().taskClose.reminderHistory({ taskId });
+		const missingPhone = history.find((item) => item.recipientId === B.id && item.channel === "sms");
+		assert.equal(missingPhone?.status, "failed");
+		assert.equal(missingPhone?.error, "未配置有效的联系电话");
+		await assertRejects(() => asC().taskClose.reminderHistory({ taskId }), "无权查看");
 	});
 
 	it("催办校验权限、联系方式与冷却，重复请求不重复投递", async () => {

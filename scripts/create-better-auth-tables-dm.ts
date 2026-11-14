@@ -442,6 +442,7 @@ const STATEMENTS: string[] = [
       "workflow_id" varchar(191),
       "parent_id" varchar(191),
       "report" text,
+      "reminder_config" text,
       "deleted_at" datetime default null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
@@ -451,6 +452,24 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_task_workflow" on ${S}."tc_task" ("workflow_id")`,
 	`create index if not exists "idx_task_creator_status" on ${S}."tc_task" ("creator_id", "status")`,
 	`create index if not exists "idx_task_parent" on ${S}."tc_task" ("parent_id")`,
+	`create table if not exists ${S}."tc_task_reminder" (
+      "id" varchar(36) not null,
+      "task_id" varchar(191) not null,
+      "action_id" varchar(191) default null,
+      "recipient_id" varchar(191) not null,
+      "kind" varchar(20) not null,
+      "offset_minutes" int not null,
+      "channels" text not null,
+      "scheduled_at" datetime not null,
+      "status" varchar(20) not null,
+      "event_key" varchar(191) not null,
+      "created_at" datetime not null default current_timestamp,
+      "updated_at" datetime not null default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_task_reminder_event" on ${S}."tc_task_reminder" ("event_key")`,
+	`create index if not exists "idx_task_reminder_due" on ${S}."tc_task_reminder" ("status", "scheduled_at")`,
+	`create index if not exists "idx_task_reminder_task" on ${S}."tc_task_reminder" ("task_id", "status")`,
 	`create table if not exists ${S}."tc_action" (
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
@@ -687,6 +706,7 @@ async function main() {
 		// 父子任务 + 填报规则(批次退役)
 		{ table: "tc_task", column: "parent_id", ddl: "varchar(191)" },
 		{ table: "tc_task", column: "report", ddl: "text" },
+		{ table: "tc_task", column: "reminder_config", ddl: "text" },
 		{ table: "sys_data_policy", column: "deleted_at", ddl: "datetime" },
 		{ table: "sys_data_plugin", column: "deleted_at", ddl: "datetime" },
 	];

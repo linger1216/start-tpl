@@ -6,6 +6,7 @@ import { sysUser, taskActionTable, taskMemberTable } from "#/db/data-base-schema
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive } from "#/lib/soft-delete";
+import { rescheduleTaskReminders } from "#/lib/task/scheduled-reminders";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertCanManage,
@@ -82,6 +83,7 @@ export const taskMemberRouter = createTRPCRouter({
 						updated_at: now,
 					})),
 				);
+				if (primary) await rescheduleTaskReminders(tx, task, now, "executor");
 				for (const userId of input.userIds)
 					await writeTaskEvent(tx, {
 						taskId: task.id,
@@ -126,6 +128,7 @@ export const taskMemberRouter = createTRPCRouter({
 							eq(taskMemberTable.role, input.role),
 						),
 					);
+				if (input.role === "executor") await rescheduleTaskReminders(tx, task, now, "executor");
 				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "member.remove",
@@ -192,6 +195,7 @@ export const taskMemberRouter = createTRPCRouter({
 					.update(taskMemberTable)
 					.set({ role: "executor", updated_at: now })
 					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, input.userId)));
+				await rescheduleTaskReminders(tx, task, now, "executor");
 				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "member.transfer",

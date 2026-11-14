@@ -525,6 +525,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`workflow_id\` varchar(191) collate utf8mb4_unicode_ci default null,
     \`parent_id\` varchar(191) collate utf8mb4_unicode_ci default null,
     \`report\` json default null,
+    \`reminder_config\` json default null,
     \`deleted_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
@@ -534,6 +535,27 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_task_creator_status\` (\`creator_id\`, \`status\`),
     key \`idx_task_parent\` (\`parent_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;parent_id/report 承载父子填报;软删走 deleted_at)'`,
+	},
+	{
+		name: "tc_task_reminder",
+		ddl: `create table if not exists \`tc_task_reminder\` (
+    \`id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`action_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`recipient_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`kind\` varchar(20) collate utf8mb4_unicode_ci not null,
+    \`offset_minutes\` int not null,
+    \`channels\` json not null,
+    \`scheduled_at\` datetime not null,
+    \`status\` varchar(20) collate utf8mb4_unicode_ci not null,
+    \`event_key\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`created_at\` datetime not null default current_timestamp,
+    \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_task_reminder_event\` (\`event_key\`),
+    key \`idx_task_reminder_due\` (\`status\`, \`scheduled_at\`),
+    key \`idx_task_reminder_task\` (\`task_id\`, \`status\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
 	},
 	{
 		name: "tc_action",
@@ -681,6 +703,7 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{ table: "tc_action", column: "viewed_at", ddl: "datetime default null" },
 	{ table: "tc_action", column: "activated_at", ddl: "datetime default null" },
 	{ table: "tc_task", column: "priority", ddl: "tinyint default null" },
+	{ table: "tc_task", column: "reminder_config", ddl: "json default null" },
 	{
 		table: "sys_menu",
 		column: "type",

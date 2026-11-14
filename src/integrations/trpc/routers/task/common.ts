@@ -20,6 +20,7 @@ import { publish } from "#/lib/sse-bus";
 import type { TaskLogEvent } from "#/lib/task/close-log";
 import { taskPathOf, type WorkflowStatus } from "#/lib/task/close-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
+import { cancelActionReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 
 /** 任务路由共用的授权、事务锁、通知及活动日志逻辑。 */
 
@@ -86,6 +87,24 @@ export async function assertAttachments(tx: Tx, attachIds: readonly string[]): P
 	if (missing.length > 0) {
 		throw new TRPCError({ code: "BAD_REQUEST", message: `${missing.length} 个附件不存在或还没上传完成` });
 	}
+}
+
+/**
+ * 任务的结构快照(`tc_task.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
+ * (模板是单版本,payload 即当前结构),否则老任务一打开就"无法加载填报"。
+ */
+export async function getTaskReportTemplate(task: { report: unknown }, reader: Pick<typeof db, "select"> = db) {
+	const report = task.report as { reportId?: string; schema?: unknown } | null;
+	const reportId = report?.reportId;
+	if (!reportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
+	if (report?.schema != null) return { id: reportId, schema: taskReportSchema.parse(report.schema) };
+	const [template] = await reader
+		.select({ payload: taskReportTemplateTable.payload })
+		.from(taskReportTemplateTable)
+		.where(eq(taskReportTemplateTable.id, reportId))
+		.limit(1);
+	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板不存在" });
+	return { id: reportId, schema: taskReportSchema.parse(template.payload) };
 }
 
 /** 取任务并**锁行**(`for update`)—— 事务内改状态前必须走它,否则并发下会丢转移 */
@@ -217,6 +236,7 @@ export async function cancelLiveTaskActions(tx: Tx, taskId: string, now: Date) {
 		.set({ status: "cancelled", updated_at: now })
 		.where(inArray(taskActionTable.id, ids));
 	await cancelPendingNotifications(tx, "task_action", ids);
+	await cancelActionReminders(tx, ids, now);
 }
 
 /**
@@ -322,6 +342,7 @@ export async function activateNextAction(tx: Tx, task: TaskRow, action: ActionRo
 		.update(taskActionTable)
 		.set({ status: "active", activated_at: now, updated_at: now })
 		.where(and(eq(taskActionTable.id, next.id), eq(taskActionTable.status, "queued")));
+	await scheduleNodeReminders(tx, task, { ...next, activated_at: now }, now);
 	await createNotification(tx, {
 		type: "action.assigned",
 		source: { type: "task_action", id: next.id },

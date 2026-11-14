@@ -3,6 +3,7 @@ import { db } from "#/db";
 import { sysNotification, taskActionTable, taskTable } from "#/db/data-base-schema";
 import { createNotification } from "#/lib/notification";
 import { taskPathOf } from "#/lib/task/close-spec";
+import { runScheduledTaskReminders } from "#/lib/task/scheduled-reminders";
 
 /** 所有时间单位为分钟；第二轮距激活 180 分钟。 */
 export const TASK_REMINDER_MINUTES = [60, 180] as const;
@@ -36,7 +37,9 @@ export async function checkActionReminder(actionId: string, now = new Date()): P
 			.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
 			.where(and(eq(taskActionTable.id, actionId), isNull(taskTable.deleted_at)))
 			.limit(1);
-		if (!row?.action.activated_at) return 0;
+		if (!row?.action.activated_at || row.task.reminder_config) return 0;
+		const workflow = row.task.workflow as { statuses?: Array<{ value: string; terminal?: boolean }> } | null;
+		if (workflow?.statuses?.some((status) => status.value === row.task.status && status.terminal)) return 0;
 		let created = 0;
 		for (const [index, minutes] of TASK_REMINDER_MINUTES.entries()) {
 			if (now.getTime() - row.action.activated_at.getTime() < minutes * 60_000) continue;
@@ -76,5 +79,5 @@ export async function checkUnviewedActions(): Promise<number> {
 		);
 	let count = 0;
 	for (const row of rows) count += await checkActionReminder(row.id);
-	return count;
+	return count + (await runScheduledTaskReminders());
 }

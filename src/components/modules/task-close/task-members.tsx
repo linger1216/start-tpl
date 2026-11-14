@@ -1,9 +1,11 @@
 import { Trash2, UserPlus } from "lucide-react";
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { cn } from "#/lib/utils";
 
 export function TaskMembers({
+	creatorId,
 	creatorName,
 	members,
 	canAddMember,
@@ -11,8 +13,10 @@ export function TaskMembers({
 	removing,
 	onAdd,
 	onRemove,
+	onRemind,
 	roleText,
 }: {
+	creatorId: string;
 	creatorName: string | null;
 	members: Array<{ userId: string; role: string; name: string | null }>;
 	canAddMember: boolean;
@@ -20,6 +24,7 @@ export function TaskMembers({
 	removing: boolean;
 	onAdd: () => void;
 	onRemove: (member: { userId: string; role: "participant" | "executor"; name: string }) => void;
+	onRemind?: (person: { id: string; name: string }) => void;
 	roleText: (role: string) => string;
 }) {
 	return (
@@ -35,13 +40,19 @@ export function TaskMembers({
 				) : null}
 			</header>
 			<ul className="grid gap-0.5">
-				<PeopleRow roleLabel="创建人" name={creatorName ?? PLACEHOLDER_EMPTY} main={false} />
+				<PeopleRow
+					roleLabel="创建人"
+					name={creatorName ?? PLACEHOLDER_EMPTY}
+					main={false}
+					onRemind={onRemind ? () => onRemind({ id: creatorId, name: creatorName ?? PLACEHOLDER_EMPTY }) : undefined}
+				/>
 				{members.map((m) => (
 					<PeopleRow
 						key={`${m.userId}-${m.role}`}
 						roleLabel={roleText(m.role)}
 						name={m.name ?? m.userId}
 						main={m.role === "executor"}
+						onRemind={onRemind ? () => onRemind({ id: m.userId, name: m.name ?? m.userId }) : undefined}
 						onRemove={
 							canManage
 								? () =>
@@ -81,12 +92,14 @@ function PeopleRow({
 	roleLabel,
 	name,
 	main,
+	onRemind,
 	onRemove,
 	removing,
 }: {
 	roleLabel: string;
 	name: string;
 	main: boolean;
+	onRemind?: () => void;
 	onRemove?: () => void;
 	removing?: boolean;
 }) {
@@ -103,6 +116,11 @@ function PeopleRow({
 				</span>
 				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
+			{onRemind && (
+				<ActionButton aria-label={`提醒${name}`} onClick={onRemind}>
+					提醒
+				</ActionButton>
+			)}
 			{onRemove ? (
 				<Button variant="ghost" size="icon-sm" aria-label="移出成员" disabled={removing} onClick={onRemove}>
 					<Trash2 className="size-3.5" />

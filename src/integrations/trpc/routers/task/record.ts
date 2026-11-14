@@ -7,12 +7,14 @@ import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { normalizePayload, taskPayloadSchema } from "#/lib/task/payload";
+import { type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import {
 	reportAttachmentIds,
 	reportRowSchema,
 	type taskReportSchema,
 	validateTaskReport,
 } from "#/lib/task/report-spec";
+import { cancelTaskReminders, rescheduleTaskReminders } from "#/lib/task/scheduled-reminders";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertAttachments,
@@ -67,6 +69,7 @@ async function insertTask(
 		dueAt?: Date | null;
 		priority?: number | null;
 		workflowId: string;
+		reminderConfig: TaskReminderConfig;
 		workflow: WorkflowPayload;
 		payload?: Parameters<typeof normalizePayload>[0];
 		members: Array<{ userId: string; role: "participant" | "executor" }>;
@@ -100,6 +103,7 @@ async function insertTask(
 		workflow_id: input.workflowId,
 		parent_id: input.parentId ?? null,
 		report: input.report ?? null,
+		reminder_config: input.reminderConfig,
 		created_at: now,
 		updated_at: now,
 	});
@@ -112,6 +116,8 @@ async function insertTask(
 		updated_at: now,
 	}));
 	if (members.length) await tx.insert(taskMemberTable).values(members);
+	const [created] = await tx.select().from(taskTable).where(eq(taskTable.id, input.id));
+	await rescheduleTaskReminders(tx, created, now);
 	await writeTaskEvent(tx, {
 		taskId: input.id,
 		event: "task.create",
@@ -151,6 +157,7 @@ export const taskRecordRouter = createTRPCRouter({
 				/** `0` = P0 / `1` = P1 / `2` = P2;留空表示「未设置」 */
 				priority: z.number().int().min(0).max(2).nullish(),
 				workflowId: ID,
+				reminderConfig: taskReminderConfigSchema,
 				/** 绑定填报模板: `{ reportId, filter?, rows? }` —— rows 为建任务时直接带进来的初始行(文件导入) */
 				report: z
 					.object({
@@ -292,6 +299,7 @@ export const taskRecordRouter = createTRPCRouter({
 							dueAt: input.dueAt ? new Date(input.dueAt) : null,
 							priority: input.priority,
 							workflowId: input.workflowId,
+							reminderConfig: input.reminderConfig,
 							workflow: snapshot,
 							payload: input.payload,
 							...(template ? { report: { reportId: template.id, schema: template.schema } } : {}),
@@ -318,6 +326,7 @@ export const taskRecordRouter = createTRPCRouter({
 								dueAt: input.dueAt ? new Date(input.dueAt) : null,
 								priority: input.priority,
 								workflowId: input.workflowId,
+								reminderConfig: input.reminderConfig,
 								workflow: snapshot,
 								payload: input.payload,
 								...(template
@@ -362,6 +371,7 @@ export const taskRecordRouter = createTRPCRouter({
 						dueAt: input.dueAt ? new Date(input.dueAt) : null,
 						priority: input.priority,
 						workflowId: input.workflowId,
+						reminderConfig: input.reminderConfig,
 						workflow: snapshot,
 						payload: input.payload,
 						...(template
@@ -408,6 +418,9 @@ export const taskRecordRouter = createTRPCRouter({
 				priority: z.number().int().min(0).max(2).nullish(),
 				/** `undefined` = 不传(整块 payload 保旧值);`null` = 显式清空;对象 = 整块替换 */
 				payload: taskPayloadSchema.nullish(),
+				/** 旧客户端可不传；新客户端提交编辑前读取到的内容，用于检测并发修改。 */
+				expectedPayload: taskPayloadSchema.nullish(),
+				reminderConfig: taskReminderConfigSchema.optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -428,6 +441,13 @@ export const taskRecordRouter = createTRPCRouter({
 			const now = new Date();
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
+				if (
+					payloadTouched &&
+					input.expectedPayload !== undefined &&
+					stableJson(normalizePayload(input.expectedPayload) ?? null) !==
+						stableJson(normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]) ?? null)
+				)
+					throw new TRPCError({ code: "CONFLICT", message: "任务内容已被修改，请刷新后重试" });
 				const nextDescription = input.description === undefined ? task.description : input.description?.trim() || null;
 				const nextDueAt = input.dueAt === undefined ? task.due_at : input.dueAt ? new Date(input.dueAt) : null;
 				/** 优先级 `undefined` = 不动;`null` = 显式清空;字符串 = 改值 */
@@ -454,7 +474,17 @@ export const taskRecordRouter = createTRPCRouter({
 					updated_at: now,
 				};
 				if (nextPriority !== undefined) setValue.priority = nextPriority;
+				if (input.reminderConfig !== undefined) setValue.reminder_config = input.reminderConfig;
 				await tx.update(taskTable).set(setValue).where(eq(taskTable.id, task.id));
+				const previousConfig = taskReminderConfigSchema.parse(task.reminder_config ?? undefined);
+				const config = input.reminderConfig ?? previousConfig;
+				if (nextDueText !== prevDueAt || stableJson(config.executor) !== stableJson(previousConfig.executor))
+					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "executor");
+				if (
+					(input.reminderConfig !== undefined && !task.reminder_config) ||
+					stableJson(config.node) !== stableJson(previousConfig.node)
+				)
+					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "node");
 				// 说明是「整件事」的描述:父任务改了,子任务跟着改(子任务是执行副本,不各写一份)
 				if (!task.parent_id && nextDescription !== task.description) {
 					await tx
@@ -485,6 +515,7 @@ export const taskRecordRouter = createTRPCRouter({
 			z.object({
 				id: ID,
 				attachments: z.array(z.string().min(1).max(32)).max(20),
+				expectedAttachments: z.array(z.string().min(1).max(32)).max(20),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -492,8 +523,11 @@ export const taskRecordRouter = createTRPCRouter({
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
 				await assertTaskParticipant(task, me.id, "无权给这条任务加附件");
+				const current = normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]);
+				if (stableJson(current?.attachments ?? []) !== stableJson(input.expectedAttachments))
+					throw new TRPCError({ code: "CONFLICT", message: "附件已被修改，请刷新后重试" });
 				const nextPayload = await prepareTaskPayload(tx, {
-					...normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]),
+					...current,
 					attachments: input.attachments,
 				});
 				const changed = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
@@ -530,8 +564,12 @@ export const taskRecordRouter = createTRPCRouter({
 				.from(taskTable)
 				.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
 				.for("update");
-			for (const row of children) await cancelLiveTaskActions(tx, row.id, now);
+			for (const row of children) {
+				await cancelLiveTaskActions(tx, row.id, now);
+				await cancelTaskReminders(tx, row.id, now);
+			}
 			await cancelLiveTaskActions(tx, task.id, now);
+			await cancelTaskReminders(tx, task.id, now);
 			await tx
 				.update(taskTable)
 				.set({ ...softDeleted(), updated_at: now })
@@ -590,6 +628,12 @@ export const taskRecordRouter = createTRPCRouter({
 				if (workflow.statuses.some((status) => status.value === input.to && status.terminal))
 					await cancelLiveTaskActions(tx, task.id, now);
 				await tx.update(taskTable).set({ status: input.to, updated_at: now }).where(eq(taskTable.id, task.id));
+				if (
+					workflow.statuses.some(
+						(status) => (status.value === task.status || status.value === input.to) && status.terminal,
+					)
+				)
+					await rescheduleTaskReminders(tx, { ...task, status: input.to }, now);
 				// 「直接改状态」以前**不留痕**(只有 action 才有记录),这里是它第一次被记进历史
 				await writeTaskEvent(tx, {
 					taskId: task.id,

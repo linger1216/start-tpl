@@ -17,6 +17,7 @@ import { TaskForm, type TaskFormEditing, type TaskFormPayload } from "#/componen
 import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { TaskLogList } from "#/components/modules/task-close/task-log";
 import { TaskMembers } from "#/components/modules/task-close/task-members";
+import { TaskReminders } from "#/components/modules/task-close/task-reminders";
 import { TaskReport } from "#/components/modules/task-close/task-report";
 import { TaskUrge } from "#/components/modules/task-close/task-urge";
 import { Button, buttonVariants } from "#/components/ui/button";
@@ -37,7 +38,7 @@ import {
 	statusLabelOf,
 	type WorkflowStatus,
 } from "#/lib/task/close-spec";
-import type { TaskAttachment } from "#/lib/task/payload";
+import type { TaskAttachment, TaskPayload } from "#/lib/task/payload";
 import { TaskActionDialog } from "./task-action-dialog";
 
 /**
@@ -73,11 +74,14 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const navigate = useNavigate();
 
 	const [editOpen, setEditOpen] = useState(false);
+	const editPayloadBaseline = useRef<TaskPayload | null>(null);
 	const [removeOpen, setRemoveOpen] = useState(false);
 	const [memberOpen, setMemberOpen] = useState(false);
+	const [reminderRecipient, setReminderRecipient] = useState<{ id: string; name: string } | null>(null);
 	/** 附件弹窗:创建人给任务加 / 删附件(随 `task.payload.attachments` 走) */
 	const [attachOpen, setAttachOpen] = useState(false);
 	const [draftAttachments, setDraftAttachments] = useState<TaskAttachment[]>([]);
+	const attachmentBaseline = useRef<string[]>([]);
 	/** 加入成员:多选,统一按参与者加入(角色不让选) */
 	const [newMemberIds, setNewMemberIds] = useState<string[]>([]);
 	/**
@@ -394,6 +398,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		// 编辑弹窗只带**本任务自己的**内容 —— 页面上的并集是展示用的,存回去会把别人的内容克隆一份
 		links: own.links,
 		attachments: own.attachments,
+		reminderConfig: task.reminderConfig,
 	};
 
 	/**
@@ -464,7 +469,10 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					setTransferTo("");
 					setTransferOpen(true);
 				}}
-				onEdit={() => setEditOpen(true)}
+				onEdit={() => {
+					editPayloadBaseline.current = (task.payload as TaskPayload | null) ?? null;
+					setEditOpen(true);
+				}}
 				onRemove={() => setRemoveOpen(true)}
 				onRefresh={() => {
 					void detailQuery.refetch();
@@ -565,6 +573,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 									variant="ghost"
 									size="sm"
 									onClick={() => {
+										attachmentBaseline.current = own.attachmentIds;
 										setDraftAttachments(own.attachments);
 										setAttachOpen(true);
 									}}
@@ -603,6 +612,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
 						{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
 						<TaskMembers
+							creatorId={task.creatorId}
 							creatorName={task.creatorName ?? null}
 							members={members}
 							canAddMember={permissions.canAddMember}
@@ -610,13 +620,22 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 							removing={memberRemoveMutation.isPending}
 							onAdd={() => setMemberOpen(true)}
 							onRemove={setPendingRemoveMember}
+							onRemind={myRole !== null ? setReminderRecipient : undefined}
 							roleText={roleText}
 						/>
+
+						{myRole !== null && (
+							<TaskReminders
+								taskId={task.id}
+								recipient={reminderRecipient}
+								onClose={() => setReminderRecipient(null)}
+							/>
+						)}
 
 						<TaskUrge
 							actions={detailQuery.data.actions.filter(
 								(action) =>
-									action.status === "active" &&
+									(action.status === "active" || action.lastUrgedAt !== null) &&
 									(meId === task.creatorId || meId === action.creatorId || permissions.isAdmin),
 							)}
 						/>
@@ -657,7 +676,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						description: payload.description,
 						dueAt: payload.dueAt,
 						priority: payload.priority,
+						reminderConfig: payload.reminderConfig,
 						payload: { type: payloadType, links: payload.links, attachments: payload.attachments },
+						expectedPayload: editPayloadBaseline.current,
 					})
 				}
 			/>
@@ -878,6 +899,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					attachMutation.mutate({
 						id: task.id,
 						attachments: draftAttachments.map((file) => file.id),
+						expectedAttachments: attachmentBaseline.current,
 					})
 				}
 			>

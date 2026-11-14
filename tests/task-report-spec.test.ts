@@ -130,6 +130,11 @@ describe("填报字段类型:手机 / 邮箱 / 附件 / 数组", () => {
 		const secondIssue = validateTaskReport(schema, [{ contacts: [{ name: "张三" }, { name: "" }] }]);
 		assert.ok(secondIssue.some((issue) => issue.message.includes("第 2 项「姓名」必填")));
 	});
+	it("数组元素不得携带模板未声明的字段", () => {
+		const issues = validateTaskReport(schema, [{ contacts: [{ name: "张三", hidden: "不应保存" }] }]);
+		assert.equal(issues.length, 1);
+		assert.match(issues[0].message, /未知字段/);
+	});
 	it("数组必须配元素字段;非数组字段不能带元素字段", () => {
 		assert.equal(
 			taskReportSchema.safeParse({ id: "x", kind: "TABLE", fields: [{ id: "a", label: "A", type: "array" }] }).success,

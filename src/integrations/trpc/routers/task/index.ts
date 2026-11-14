@@ -4,6 +4,7 @@ import { taskCommentRouter } from "./comment";
 import { taskMemberRouter } from "./member";
 import { taskQueryRouter } from "./query";
 import { taskRecordRouter } from "./record";
+import { taskReminderRouter } from "./reminder";
 import { taskReportRouter } from "./report";
 import { taskWorkflowRouter } from "./workflow";
 
@@ -13,6 +14,7 @@ export const taskCloseRouter = mergeTRPCRouters(
 	taskWorkflowRouter,
 	taskQueryRouter,
 	taskRecordRouter,
+	taskReminderRouter,
 	taskMemberRouter,
 	taskActionRouter,
 	taskCommentRouter,

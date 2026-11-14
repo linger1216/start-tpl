@@ -140,6 +140,7 @@ export function TaskListPage() {
 			description: payload.description,
 			dueAt: payload.dueAt,
 			priority: payload.priority,
+			reminderConfig: payload.reminderConfig,
 			workflowId: payload.workflowId,
 			report: payload.report
 				? {

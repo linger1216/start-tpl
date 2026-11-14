@@ -183,3 +183,25 @@ test("标题截断按码点切,不劈开 emoji 的代理对", async () => {
 	assert.equal(lone.test(row?.title ?? ""), false, "标题里不该出现孤立的代理项");
 	assert.equal([...(row?.title ?? "")].length, NOTIFICATION_TITLE_MAX);
 });
+
+test("允许缺少联系方式时其他渠道继续投递，缺失渠道记录失败", async () => {
+	const { id } = await sendNotification({
+		type: "test",
+		title: "缺联系方式",
+		dedupeKey: `test:${newId()}`,
+		allowMissingTargets: true,
+		recipients: [
+			{ userId: "test-delivery", channel: "in_app" },
+			{ userId: "test-delivery", channel: "sms", target: null },
+			{ userId: "test-delivery", channel: "email", target: "test@example.invalid" },
+		],
+	});
+	ids.push(id);
+	const rows = await db.select().from(sysNotificationDelivery).where(eq(sysNotificationDelivery.notification_id, id));
+	const byChannel = new Map(rows.map((row) => [row.channel, row]));
+	assert.equal(byChannel.get("in_app")?.status, "sent");
+	assert.equal(byChannel.get("email")?.status, "pending");
+	assert.equal(byChannel.get("sms")?.status, "failed");
+	assert.equal(byChannel.get("sms")?.last_error, "未配置有效的联系电话");
+	assert.equal(byChannel.get("sms")?.next_attempt_at, null);
+});

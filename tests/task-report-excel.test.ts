@@ -76,6 +76,29 @@ const baseEntries = [{ name: "[Content_Types].xml", text: "<Types/>" }];
 const asBase64 = (entries: Array<{ name: string; text: string }>) => zip(entries).toString("base64");
 
 describe("填报 Excel", () => {
+	it("附件字段导出后可作为机器数据导入", async () => {
+		const form = taskReportSchema.parse({
+			id: "files",
+			kind: "OBJECT",
+			fields: [
+				{ id: "phone", label: "手机号", type: "phone" },
+				{ id: "files", label: "附件", type: "attachment" },
+			],
+		});
+		const original = { phone: "13812345678", files: ["-file-a", "file-b"] };
+		const encoded = createReportWorkbook(form, original).toString("base64");
+		const result = await previewReportWorkbook(form, encoded);
+		assert.deepEqual(result.issues, []);
+		assert.deepEqual(result.value, original);
+		const legacy = workbook([
+			["手机号", "附件"],
+			["13812345678", "file-a;file-b"],
+		]);
+		assert.deepEqual((await previewReportWorkbook(form, legacy.toString("base64"))).value, {
+			phone: "13812345678",
+			files: ["file-a", "file-b"],
+		});
+	});
 	it("模板与数据往返，错误行定位到原 Excel 行", async () => {
 		const encoded = createReportWorkbook(schema, [{ name: "甲", quantity: 2 }]).toString("base64");
 		const preview = await previewReportWorkbook(schema, encoded);

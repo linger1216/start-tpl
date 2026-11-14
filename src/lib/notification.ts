@@ -14,6 +14,8 @@ export type NotificationInput = {
 	payload?: Record<string, unknown>;
 	dedupeKey: string;
 	recipients: readonly NotificationRecipient[];
+	/** 缺少外部渠道联系方式时保留失败投递，其他渠道仍可发送。 */
+	allowMissingTargets?: boolean;
 };
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -69,7 +71,10 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 	const now = new Date();
 	const recipients = new Map<string, NotificationRecipient>();
 	for (const recipient of input.recipients) {
-		if (!recipient.userId || (recipient.channel !== "in_app" && !recipient.target?.trim())) {
+		if (
+			!recipient.userId ||
+			(recipient.channel !== "in_app" && !recipient.target?.trim() && !input.allowMissingTargets)
+		) {
 			throw new Error("通知收件人或渠道目标无效");
 		}
 		recipients.set(`${recipient.userId}:${recipient.channel}`, recipient);
@@ -95,9 +100,18 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 			recipient_id: recipient.userId,
 			channel: recipient.channel,
 			target: recipient.target ?? null,
-			status: recipient.channel === "in_app" ? "sent" : "pending",
+			status: recipient.channel === "in_app" ? "sent" : recipient.target?.trim() ? "pending" : "failed",
+			last_error:
+				recipient.channel !== "in_app" && !recipient.target?.trim()
+					? recipient.channel === "sms"
+						? "未配置有效的联系电话"
+						: "未配置有效的邮箱"
+					: null,
 			sent_at: recipient.channel === "in_app" ? now : null,
-			next_attempt_at: recipient.channel === "in_app" ? null : new Date(Math.floor(now.getTime() / 1000) * 1000),
+			next_attempt_at:
+				recipient.channel === "in_app" || !recipient.target?.trim()
+					? null
+					: new Date(Math.floor(now.getTime() / 1000) * 1000),
 			created_at: now,
 			updated_at: now,
 		})),

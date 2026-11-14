@@ -20,6 +20,7 @@ import {
 	assertAttachments,
 	assertTaskParticipant,
 	getAvailableReportTemplate,
+	getTaskReportTemplate,
 	getTaskRow,
 	hashReportRows,
 	ID,
@@ -51,25 +52,6 @@ async function getVisibleReportTemplate(me: { id: string; isSuper?: boolean }, t
 		.limit(1);
 	if (!template) throw new TRPCError({ code: "FORBIDDEN", message: "无权使用该填报模板" });
 	return { ...template, schema: taskReportSchema.parse(template.payload) };
-}
-
-/**
- * 任务的结构快照(`tc_task.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
- * (模板是单版本,payload 即当前结构),否则老任务一打开就"无法加载填报"。
- */
-async function getTaskReportTemplate(task: { report: unknown }, reader: Pick<typeof db, "select"> = db) {
-	const report = task.report as { reportId?: string; schema?: unknown } | null;
-	const reportId = report?.reportId;
-	if (!reportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
-	const snapshot = taskReportSchema.safeParse(report?.schema);
-	if (snapshot.success) return { id: reportId, schema: snapshot.data };
-	const [template] = await reader
-		.select({ payload: taskReportTemplateTable.payload })
-		.from(taskReportTemplateTable)
-		.where(eq(taskReportTemplateTable.id, reportId))
-		.limit(1);
-	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板不存在" });
-	return { id: reportId, schema: taskReportSchema.parse(template.payload) };
 }
 
 /** 创建人或当前执行人可以填写、导入及同步。 */

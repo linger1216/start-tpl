@@ -62,6 +62,7 @@ const ACTION: Record<string, string> = {
 	actionCreate: "发起动作",
 	actionView: "查看动作",
 	actionUrge: "催办动作",
+	reminderSend: "发送任务提醒",
 	actionWithdraw: "撤回动作",
 	reportExcelDownload: "下载填报表格",
 	reportExcelPreview: "预览填报表格",

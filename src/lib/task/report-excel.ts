@@ -299,11 +299,14 @@ export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64
 				else if ((field.type === "integer" || field.type === "decimal") && typeof value === "string" && value.trim()) {
 					const number = Number(value);
 					if (Number.isFinite(number)) value = number;
-				} else if (field.type === "multiselect" && typeof value === "string")
-					value = value
+				} else if ((field.type === "multiselect" || field.type === "attachment") && typeof value === "string") {
+					// 导出时为防公式注入可能加单引号；附件 ID 不含单引号，导入时恢复原 ID。
+					const text = field.type === "attachment" && /^'[=+@-]/.test(value) ? value.slice(1) : value;
+					value = text
 						.split(/[;；]/)
 						.map((item) => item.trim())
 						.filter(Boolean);
+				}
 				// 日期 / 日期时间:手填的是本地写法(或 Excel 的日期序列号),落库前折成统一口径。
 				// **认不出来就保留原文**,让校验报「日期格式不正确」—— 别悄悄当空值丢掉。
 				else if (field.type === "date") value = parseLocalDateText(value as string | number) ?? value;

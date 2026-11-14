@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf } from "#/lib/task/close-spec";
+import { priorityLabelOf, taskDeadlineState } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -38,6 +38,15 @@ export type TaskCardItem = {
  * 点击去向由调用方(`TaskCardLink`)决定,本组件只管长相。
  */
 export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabel: (value: string) => string }) {
+	// 首次渲染保持服务端和客户端一致，挂载后再按本机时钟计算并定期刷新。
+	const [now, setNow] = useState<number | null>(null);
+	useEffect(() => {
+		if (!task.dueAt) return;
+		setNow(Date.now());
+		const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+		return () => window.clearInterval(timer);
+	}, [task.dueAt]);
+	const deadline = now === null ? null : taskDeadlineState(task.dueAt, now);
 	return (
 		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
 			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}
@@ -68,6 +77,18 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 				<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
 					{priorityLabelOf(task.priority)}
 				</Tag>
+				{deadline ? (
+					<Tag
+						variant="outline"
+						className={
+							deadline === "overdue"
+								? "border-transparent bg-danger-soft text-danger-fg"
+								: "border-transparent bg-warn-soft text-warn-fg"
+						}
+					>
+						{deadline === "overdue" ? "超期" : "临期"}
+					</Tag>
+				) : null}
 				{task.hasMyAction ? (
 					<span className="inline-flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
 						<BellRing className="size-3" />

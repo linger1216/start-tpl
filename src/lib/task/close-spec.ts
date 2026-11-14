@@ -90,3 +90,10 @@ export const ROLE_WHY: Record<string, string> = {
 	participant: "参与者:发起征询按身份;状态类按钮按模板里 who 含 participant 的边。",
 	viewer: "你不在这条任务的流程里(既不是创建人、也不是成员):只能看,不能推进。",
 };
+export function taskDeadlineState(dueAt: string | null, now: number): "soon" | "overdue" | null {
+	if (!dueAt || !Number.isFinite(now)) return null;
+	const remaining = Date.parse(dueAt) - now;
+	if (!Number.isFinite(remaining)) return null;
+	if (remaining < 0) return "overdue";
+	return remaining <= 48 * 60 * 60 * 1000 ? "soon" : null;
+}
