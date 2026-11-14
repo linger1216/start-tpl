@@ -444,15 +444,18 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionUrgeHistory",
-	// 任务提醒候选人和记录由 resolver 限制为任务相关人员。
+	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
 	"taskClose.reminderCandidates",
 	"taskClose.reminderHistory",
+	"taskClose.taskReminderPreview",
 	"taskClose.commentList",
 	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
 	"taskClose.logList",
 	// 类别 2:流程模板详情 —— 模板是「全系统一份」的配置,不看部门
 	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-query.ts)
 	"taskClose.attachmentUrl",
+	// 类别 3:截止提醒预览 —— 纯算,**不读任何行**,所以没有"这行归谁看"的问题
+	"taskClose.reminderPreview",
 	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
 ];
 
@@ -552,13 +555,17 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.taskList",
 	"taskClose.taskGet",
 	"taskClose.actionUrgeHistory",
-	// 任务提醒候选人和记录由 resolver 限制为任务相关人员。
+	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
 	"taskClose.reminderCandidates",
 	"taskClose.reminderHistory",
+	"taskClose.taskReminderPreview",
 	"taskClose.commentList",
 	// 活动日志(只读):同「任务可见即可读」,不做页面码 —— 它与详情页一体,锁了会把详情页打死
 	"taskClose.logList",
 	// 类别 3:任务附件取地址(登录即可;内部再校验 fileId 挂在本任务上)
 	"taskClose.attachmentUrl",
+	// 类别 3:截止提醒预览 —— **纯算**:工作日日历是内置数据,不读库、不看任何人的数据,
+	// 只是把"我会在哪几天几点被提醒"算出来给建任务弹窗用(hover 那个图标)
+	"taskClose.reminderPreview",
 	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
 ];

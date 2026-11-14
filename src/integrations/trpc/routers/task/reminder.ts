@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import {
@@ -19,6 +19,13 @@ import { publish } from "#/lib/sse-bus";
 import { taskPathOf } from "#/lib/task/close-spec";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import { getTaskRow, ID, isTaskParticipant, lockTask, type TaskRow, type Tx } from "./common";
+
+/** 提醒记录一次最多取这么多(与页面上的说明一致) */
+const HISTORY_LIMIT = 200;
+/** 悬浮预览最多给几条(再多就用"共 N 次 + 最后一次"概括) */
+const PLAN_PREVIEW_LIMIT = 5;
+/** 记录列表里「计划」最多列几条 —— 再多就把列表刷满了,完整计划看右上角预览 */
+const HISTORY_PLAN_LIMIT = 3;
 
 const channelsSchema = z
 	.array(z.enum(["in_app", "sms", "email"]))
@@ -162,6 +169,56 @@ export const taskReminderRouter = createTRPCRouter({
 				publish({ channel: `notice:${item.recipientId}`, name: "notice.new", data: { id: item.id } });
 		return { results };
 	}),
+	/**
+	 * **即将发生的计划内提醒**(待发的排期)。
+	 *
+	 * 详情页「任务提醒」右上角那个图标悬停时看它:排期本身不在记录列表里展示(内部行为),
+	 * 但用户需要能一眼预览"接下来会在什么时候、提醒谁、哪种提醒"。
+	 */
+	taskReminderPreview: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ ctx, input }) => {
+		const me = requireCurrentUser(ctx);
+		const task = await getTaskRow(input.taskId);
+		if (!(await canRemind(task, me))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看任务提醒计划" });
+		const rows = await db
+			.select()
+			.from(taskReminderTable)
+			.where(and(eq(taskReminderTable.task_id, task.id), eq(taskReminderTable.status, "pending")))
+			.orderBy(asc(taskReminderTable.scheduled_at));
+		// 只看还没到点的:已经到点但 worker 还没扫到的那些算"迟到",不混进"即将发生"
+		const now = Date.now();
+		const upcoming = rows.filter((row) => row.scheduled_at.getTime() > now);
+		const head = upcoming.slice(0, PLAN_PREVIEW_LIMIT);
+		const ids = [...new Set(head.map((row) => row.recipient_id))];
+		const names = new Map(
+			(ids.length
+				? await db.select({ id: sysUser.id, name: sysUser.name }).from(sysUser).where(inArray(sysUser.id, ids))
+				: []
+			).map((user) => [user.id, user.name]),
+		);
+		return {
+			/** 待发总数(只算未来的) */
+			total: upcoming.length,
+			items: head.map((row) => ({
+				id: row.id,
+				reminder: row.kind as "executor" | "node",
+				scheduledAt: row.scheduled_at.toISOString(),
+				recipientName: names.get(row.recipient_id) ?? "已删除用户",
+				channels: row.channels as string[],
+			})),
+			/** 最后一次的时刻(只给前几条容易让人误判) */
+			last: upcoming.at(-1)?.scheduled_at.toISOString() ?? null,
+		};
+	}),
+
+	/**
+	 * 提醒记录 = **计划**(接下来几条待发的排期) + **已送达/投递中**的投递记录。
+	 *
+	 * 两边都带 `kind` 区分,前端给「计划 / 已送达」标识:
+	 *   · `planned` —— 还没到点的排期(只列**最近 3 条**,否则"每天一次 × 90 天"会把列表刷满;
+	 *     完整计划看右上角那个预览图标)。**不会**被标成"已发送",避免误以为已经提醒过了;
+	 *   · `delivery` —— 真正投递过的:即时提醒 / 节点催办 / 到点发出的定时提醒,状态取投递行
+	 *     (已送达 / 待投递 / 投递中 / 投递失败)。
+	 */
 	reminderHistory: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.taskId);
@@ -203,13 +260,22 @@ export const taskReminderRouter = createTRPCRouter({
 					),
 				),
 			);
+		// 计划:接下来还没到点的排期(升序,只给最近几条)
+		const upcoming = (
+			await db
+				.select()
+				.from(taskReminderTable)
+				.where(and(eq(taskReminderTable.task_id, task.id), eq(taskReminderTable.status, "pending")))
+				.orderBy(asc(taskReminderTable.scheduled_at))
+		).filter((row) => row.scheduled_at.getTime() > Date.now());
+		const plannedRows = upcoming.slice(0, HISTORY_PLAN_LIMIT);
 		const events = await db
 			.select()
 			.from(sysNotification)
 			.where(or(...filters))
 			.orderBy(desc(sysNotification.created_at))
-			.limit(200);
-		if (!events.length) return [];
+			.limit(HISTORY_LIMIT);
+		if (!events.length && plannedRows.length === 0) return { planned: [], records: [], plannedTotal: 0 };
 		const deliveries = await db
 			.select()
 			.from(sysNotificationDelivery)
@@ -229,7 +295,13 @@ export const taskReminderRouter = createTRPCRouter({
 			}
 		};
 		const ids = [
-			...new Set([...events.map((e) => senderId(e.payload)), ...deliveries.map((d) => d.recipient_id)].filter(Boolean)),
+			...new Set(
+				[
+					...events.map((e) => senderId(e.payload)),
+					...deliveries.map((d) => d.recipient_id),
+					...plannedRows.map((row) => row.recipient_id),
+				].filter(Boolean),
+			),
 		];
 		const names = new Map(
 			(ids.length
@@ -237,7 +309,17 @@ export const taskReminderRouter = createTRPCRouter({
 				: []
 			).map((user) => [user.id, user.name]),
 		);
-		return deliveries.map((delivery) => {
+		const planned = plannedRows.map((row) => ({
+			kind: "planned" as const,
+			id: row.id,
+			/** 截止提醒 / 节点未查看提醒 */
+			reminder: row.kind as "executor" | "node",
+			scheduledAt: row.scheduled_at.toISOString(),
+			recipientId: row.recipient_id,
+			recipientName: names.get(row.recipient_id) ?? "已删除用户",
+			channels: row.channels as string[],
+		}));
+		const records = deliveries.map((delivery) => {
 			const event = eventById.get(delivery.notification_id);
 			const sender = senderId(event?.payload ?? null);
 			const error = delivery.last_error
@@ -248,6 +330,7 @@ export const taskReminderRouter = createTRPCRouter({
 						: "投递失败，请联系管理员"
 				: null;
 			return {
+				kind: "delivery" as const,
 				id: delivery.id,
 				senderId: sender,
 				senderName: names.get(sender) ?? "系统",
@@ -259,5 +342,7 @@ export const taskReminderRouter = createTRPCRouter({
 				createdAt: delivery.created_at.toISOString(),
 			};
 		});
+		// 先「计划」(升序:最近的在前),再历史(投递行本来就是倒序)
+		return { planned, records, plannedTotal: upcoming.length };
 	}),
 });

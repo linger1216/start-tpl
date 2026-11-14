@@ -7,7 +7,7 @@ import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { normalizePayload, taskPayloadSchema } from "#/lib/task/payload";
-import { type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
+import { readTaskReminderConfig, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import {
 	reportAttachmentIds,
 	reportRowSchema,
@@ -304,7 +304,12 @@ export const taskRecordRouter = createTRPCRouter({
 							payload: input.payload,
 							...(template ? { report: { reportId: template.id, schema: template.schema } } : {}),
 							masterRows,
-							members: requestedMembers.filter((member) => member.role !== "executor"),
+							// 父任务的执行人 = 创建人:母版数据由他维护,父任务的截止提醒也发给他
+							// (子任务的执行人仍是各自那名;这里把"谁负责父任务那份"显式化)
+							members: [
+								...requestedMembers.filter((member) => member.role !== "executor"),
+								{ userId: me.id, role: "executor" as const },
+							],
 						},
 						me,
 					);
@@ -476,7 +481,8 @@ export const taskRecordRouter = createTRPCRouter({
 				if (nextPriority !== undefined) setValue.priority = nextPriority;
 				if (input.reminderConfig !== undefined) setValue.reminder_config = input.reminderConfig;
 				await tx.update(taskTable).set(setValue).where(eq(taskTable.id, task.id));
-				const previousConfig = taskReminderConfigSchema.parse(task.reminder_config ?? undefined);
+				// 读旧值要容错:老结构(offsets 数组)按「关」处理,别让一次编辑把接口整成 500
+				const previousConfig = readTaskReminderConfig(task.reminder_config);
 				const config = input.reminderConfig ?? previousConfig;
 				if (nextDueText !== prevDueAt || stableJson(config.executor) !== stableJson(previousConfig.executor))
 					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "executor");
@@ -491,6 +497,29 @@ export const taskRecordRouter = createTRPCRouter({
 						.update(taskTable)
 						.set({ description: nextDescription, updated_at: now })
 						.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
+				}
+				/**
+				 * 提醒规则同样是「整件事的规则」:父任务改了频率 / 时间 / 提前天数 / 方式,子任务要跟着改,
+				 * 并且**按新规则重排各自的排期**(否则子任务还按老规则发提醒 —— 这是用户反馈过的现象)。
+				 *
+				 * 只往父 → 子的方向同步(与说明同款);子任务的改动不反向影响父任务。
+				 */
+				if (
+					!task.parent_id &&
+					input.reminderConfig !== undefined &&
+					stableJson(config) !== stableJson(previousConfig)
+				) {
+					const children = await tx
+						.select()
+						.from(taskTable)
+						.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
+					for (const child of children) {
+						await tx
+							.update(taskTable)
+							.set({ reminder_config: config, updated_at: now })
+							.where(eq(taskTable.id, child.id));
+						await rescheduleTaskReminders(tx, { ...child, reminder_config: config }, now);
+					}
 				}
 				await writeTaskEvent(tx, {
 					taskId: task.id,

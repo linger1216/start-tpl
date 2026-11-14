@@ -152,6 +152,8 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 	const [conflicted, setConflicted] = useState(false);
 	const [syncConflict, setSyncConflict] = useState(false);
 	const [confirmReset, setConfirmReset] = useState(false);
+	/** 待确认删除的数据行 —— 用 rowKey 而不是下标,避免确认期间数据变化误删别的行 */
+	const [pendingDeleteRow, setPendingDeleteRow] = useState<{ key: string; index: number } | null>(null);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const markDirty = () => {
 		setDirty(true);
@@ -344,6 +346,24 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 				isPending={reset.isPending}
 				onConfirm={() => reset.mutate({ taskId, revision })}
 			/>
+			<ConfirmDialog
+				open={pendingDeleteRow !== null}
+				onOpenChange={(next) => {
+					if (!next) setPendingDeleteRow(null);
+				}}
+				title={`删除第 ${(pendingDeleteRow?.index ?? 0) + 1} 行`}
+				description="这一行会从当前填报草稿中移除；自动保存后无法撤销。"
+				onConfirm={() => {
+					if (!pendingDeleteRow) return;
+					const index = rowKeysRef.current.indexOf(pendingDeleteRow.key);
+					if (index >= 0) {
+						setDraft((prev) => (Array.isArray(prev) ? prev.filter((_, i) => i !== index) : prev));
+						replaceRowKeys(rowKeysRef.current.filter((_, i) => i !== index));
+						markDirty();
+					}
+					setPendingDeleteRow(null);
+				}}
+			/>
 			<div className="grid gap-4">
 				{schema.kind === "TABLE" ? <p className="text-sm text-muted-foreground">共 {rows.length} 条数据</p> : null}
 				{schema.kind === "OBJECT" && data.syncedChildren.length > 0 ? (
@@ -487,18 +507,14 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 											))}
 											{data.canEdit && (
 												<td className="border border-border p-2">
-													<Button
-														variant="ghost"
-														size="sm"
+													<ActionButton
+														tone="danger"
+														aria-label={`删除第 ${index + 1} 行`}
 														disabled={busy}
-														onClick={() => {
-															setDraft(rows.filter((_, i) => i !== index));
-															replaceRowKeys(rowKeysRef.current.filter((_, i) => i !== index));
-															markDirty();
-														}}
+														onClick={() => setPendingDeleteRow({ key: rowKey, index })}
 													>
 														删除
-													</Button>
+													</ActionButton>
 												</td>
 											)}
 										</tr>
@@ -581,6 +597,7 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 									markDirty();
 								}}
 							>
+								<Plus className="size-3.5" />
 								添加行
 							</Button>
 						)}
@@ -1137,14 +1154,33 @@ function ReportArrayField({
 	};
 	const itemFields = field.itemFields ?? [];
 	const itemKeys = itemKeysRef.current;
-	const removeItem = (index: number) => {
-		itemKeysRef.current = itemKeysRef.current.filter((key) => key !== itemKeys[index]);
+	/** 待确认删除的数组项 —— 用 itemKey 定位,避免确认期间数组顺序变化时误删 */
+	const [pendingRemove, setPendingRemove] = useState<{ key: string; index: number } | null>(null);
+	const removeItem = (itemKey: string) => {
+		const index = itemKeysRef.current.indexOf(itemKey);
+		if (index < 0) return;
+		itemKeysRef.current = itemKeysRef.current.filter((key) => key !== itemKey);
 		onChange(itemsRef.current.filter((_, i) => i !== index));
 	};
 	const addItem = () => {
 		itemKeysRef.current = [...itemKeysRef.current, crypto.randomUUID()];
 		onChange([...itemsRef.current, {}]);
 	};
+	const removeConfirm = (
+		<ConfirmDialog
+			open={pendingRemove !== null}
+			onOpenChange={(next) => {
+				if (!next) setPendingRemove(null);
+			}}
+			title={`删除第 ${(pendingRemove?.index ?? 0) + 1} 项`}
+			description="这一项会从当前数组草稿中移除；自动保存后无法撤销。"
+			onConfirm={() => {
+				if (!pendingRemove) return;
+				removeItem(pendingRemove.key);
+				setPendingRemove(null);
+			}}
+		/>
+	);
 	/** 数组整体渲染成表格 —— 表头一行是元素字段,每行一个元素(只读那侧同款口径) */
 	if (layout === "table")
 		return (
@@ -1195,7 +1231,11 @@ function ReportArrayField({
 										))}
 										{disabled ? null : (
 											<td className="px-2 py-1">
-												<ActionButton tone="danger" onClick={() => removeItem(index)}>
+												<ActionButton
+													tone="danger"
+													aria-label={`删除第 ${index + 1} 项`}
+													onClick={() => setPendingRemove({ key: itemKeys[index], index })}
+												>
 													删除
 												</ActionButton>
 											</td>
@@ -1207,11 +1247,18 @@ function ReportArrayField({
 					</div>
 				) : null}
 				{disabled ? null : (
-					<Button variant="outline" size="sm" disabled={items.length >= 200} onClick={addItem}>
+					<Button
+						variant="outline"
+						size="sm"
+						className="justify-self-start"
+						disabled={items.length >= 200}
+						onClick={addItem}
+					>
 						<Plus className="size-3.5" />
 						添加
 					</Button>
 				)}
+				{removeConfirm}
 			</div>
 		);
 	return (
@@ -1222,7 +1269,11 @@ function ReportArrayField({
 					<div className="flex items-center justify-between gap-2">
 						<span className="text-xs text-muted-foreground">第 {index + 1} 项</span>
 						{disabled ? null : (
-							<ActionButton tone="danger" onClick={() => removeItem(index)}>
+							<ActionButton
+								tone="danger"
+								aria-label={`删除第 ${index + 1} 项`}
+								onClick={() => setPendingRemove({ key: itemKeys[index], index })}
+							>
 								删除
 							</ActionButton>
 						)}
@@ -1246,11 +1297,18 @@ function ReportArrayField({
 				</div>
 			))}
 			{disabled ? null : (
-				<Button variant="outline" size="sm" disabled={items.length >= 200} onClick={addItem}>
+				<Button
+					variant="outline"
+					size="sm"
+					className="justify-self-start"
+					disabled={items.length >= 200}
+					onClick={addItem}
+				>
 					<Plus className="size-3.5" />
 					添加
 				</Button>
 			)}
+			{removeConfirm}
 		</div>
 	);
 }

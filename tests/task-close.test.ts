@@ -35,7 +35,9 @@ import { addUserRole, clearCasbinCache, removeAllRolesOfUser } from "../src/lib/
 import { bucketFor } from "../src/lib/storage.ts";
 import { checkActionReminder } from "../src/lib/task/close-reminders.ts";
 import { DEFAULT_WORKFLOW_ID } from "../src/lib/task/close-spec.ts";
+import { executorReminderEvents, readTaskReminderConfig } from "../src/lib/task/reminder-spec.ts";
 import { rescheduleTaskReminders, runScheduledTaskReminders } from "../src/lib/task/scheduled-reminders.ts";
+import { isWorkingDay, nextWorkingDayAt } from "../src/lib/workday.ts";
 import {
 	assertRejects,
 	caller,
@@ -1029,7 +1031,12 @@ describe("任务闭环", () => {
 		);
 		const detail = await asA().taskClose.taskGet({ id: parentId });
 		assert.equal(detail.children.length, 2, "父任务详情带出子任务");
-		assert.equal(detail.members.filter((member) => member.role === "executor").length, 0, "父任务本身不设执行人");
+		// 父任务的执行人 = 创建人(母版与父任务提醒由他负责);子任务的执行人各是各的
+		assert.deepEqual(
+			detail.members.filter((member) => member.role === "executor").map((member) => member.userId),
+			[A.id],
+			"父任务的执行人是创建人",
+		);
 
 		// 创建人:列表只有父任务(子任务挂在父里),父任务卡片带 childCount
 		const mine = await asA().taskClose.taskList({ mine: true, pageSize: 100 });
@@ -1064,6 +1071,61 @@ describe("任务闭环", () => {
 			"参与者能在「我的任务」里看到自己参与的子任务",
 		);
 	});
+	it("fan-out 父任务的执行人是创建人:父任务的截止提醒发给他,子任务各发各的", async () => {
+		const dueAt = new Date(Date.now() + 10 * 24 * 60 * 60_000);
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("父任务执行人"),
+			workflowId,
+			dueAt: dueAt.toISOString(),
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
+			reminderConfig: {
+				executor: { cadence: "daily", time: "09:00", daysBefore: 3, channels: ["in_app"] },
+				node: { afterMinutes: null, channels: [] },
+			},
+		});
+		const parentRows = await db
+			.select()
+			.from(taskReminderTable)
+			.where(and(eq(taskReminderTable.task_id, parentId), eq(taskReminderTable.kind, "executor")));
+		assert.ok(parentRows.length > 0, "父任务自己也有截止提醒(执行人是创建人)");
+		assert.ok(
+			parentRows.every((row) => row.recipient_id === A.id),
+			"父任务的截止提醒只发给创建人",
+		);
+		for (const child of await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId))) {
+			const childRows = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, child.id));
+			assert.ok(
+				childRows.every((row) => row.recipient_id !== A.id),
+				"子任务的提醒发给他自己的执行人,不发给创建人",
+			);
+		}
+		// 父任务已经有执行人了 → 再加执行人只能走「转交」
+		await assertRejects(
+			() => asA().taskClose.memberAdd({ taskId: parentId, userIds: [B.id], role: "executor" }),
+			"已有执行人",
+		);
+	});
+
+	it("加人一律按参与者:管理员可以把自己加进来(只排除任务创建人)", async () => {
+		// B 临时是管理员 → 在 C 建的任务里能加**自己**;创建人仍然不进成员表
+		await addUserRole(B.id, (await getSystemAdminRoleRow()).id);
+		try {
+			const { id } = await asC().taskClose.taskCreate({ name: taskName("加自己"), workflowId });
+			await asB().taskClose.memberAdd({ taskId: id, userIds: [B.id], role: "participant" });
+			const detail = await asB().taskClose.taskGet({ id });
+			assert.equal(detail.members.find((member) => member.userId === B.id)?.role, "participant");
+			await assertRejects(
+				() => asC().taskClose.memberAdd({ taskId: id, userIds: [C.id], role: "participant" }),
+				"创建者不必进成员表",
+			);
+		} finally {
+			await removeAllRolesOfUser(B.id);
+		}
+	});
+
 	it("父任务先自己加参与者,再从任务内的角色里选审批人(不反向依赖子任务执行人)", async () => {
 		const { id: parentId } = await asA().taskClose.taskCreate({
 			name: taskName("父任务审批人"),
@@ -1074,7 +1136,12 @@ describe("任务闭环", () => {
 			],
 		});
 		const detail = await asA().taskClose.taskGet({ id: parentId });
-		assert.equal(detail.members.filter((member) => member.role === "executor").length, 0, "父任务不设执行人");
+		const parentExecutors = detail.members.filter((member) => member.role === "executor");
+		assert.deepEqual(
+			parentExecutors.map((member) => member.userId),
+			[A.id],
+			"fan-out 父任务的执行人 = 创建人",
+		);
 		// 父任务要找人:**自己加参与者**,而不是反向依赖子任务的执行人
 		await asA().taskClose.memberAdd({ taskId: parentId, userIds: [B.id], role: "participant" });
 		const action = await asA().taskClose.actionCreate({ taskId: parentId, toStatus: "done", assigneeId: B.id });
@@ -1881,29 +1948,58 @@ describe("任务闭环", () => {
 	});
 
 	it("定时提醒持久化、延迟执行且并发只发送一次", async () => {
-		const dueAt = new Date(Date.now() + 4 * 60 * 60_000);
+		// 截止 10 天后 + 提前 7 天窗口、每天 09:00 → 物化出「窗口内每个工作日 09:00」那几行
+		const dueAt = new Date(Date.now() + 10 * 24 * 60 * 60_000);
+		const rule = { cadence: "daily" as const, time: "09:00", daysBefore: 7, channels: ["in_app" as const] };
 		const { id } = await asA().taskClose.taskCreate({
 			name: taskName("定时提醒"),
 			workflowId,
 			dueAt: dueAt.toISOString(),
 			members: [{ userId: B.id, role: "executor" }],
-			reminderConfig: {
-				executor: { offsets: [60, 120], channels: ["in_app"] },
-				node: { offsets: [60, 180], channels: ["in_app"] },
-			},
+			reminderConfig: { executor: rule, node: { afterMinutes: 60, channels: ["in_app"] } },
 		});
+		const events = executorReminderEvents(rule, dueAt, new Date(), { isWorkday: isWorkingDay });
+		assert.ok(events.length > 0, "这个窗口里得排到提醒,否则用例本身没意义");
 		const entries = await db
 			.select()
 			.from(taskReminderTable)
 			.where(and(eq(taskReminderTable.task_id, id), eq(taskReminderTable.kind, "executor")));
-		assert.equal(entries.length, 2);
-		const future = new Date(dueAt.getTime() + 60_000);
-		await Promise.all([runScheduledTaskReminders(future), runScheduledTaskReminders(future)]);
+		assert.equal(entries.length, events.length, "排期 = 展开出的工作日时刻");
+		// 还没投递:记录里只有「计划」那几条,**没有**任何投递记录
+		const beforeFire = await asA().taskClose.reminderHistory({ taskId: id });
+		assert.equal(beforeFire.records.length, 0, "没投递就没有投递记录");
+		assert.equal(beforeFire.plannedTotal, events.length);
+		assert.deepEqual(
+			beforeFire.planned.map((item) => item.scheduledAt),
+			events.slice(0, 3).map((event) => event.at.toISOString()),
+			"计划只列最近 3 条(升序)",
+		);
+		// 但详情页右上角的预览要能看到"即将发生"的排期(升序、前 5 条 + 总数)
+		const plan = await asA().taskClose.taskReminderPreview({ taskId: id });
+		assert.equal(plan.total, events.length);
+		assert.equal(plan.items.length, Math.min(5, events.length));
+		assert.deepEqual(
+			plan.items.map((item) => item.scheduledAt),
+			events.slice(0, 5).map((event) => event.at.toISOString()),
+		);
+		assert.ok(plan.items.every((item) => item.reminder === "executor" && item.recipientName === B.name));
+		assert.equal(plan.last, events.at(-1)?.at.toISOString());
+		await assertRejects(() => asC().taskClose.taskReminderPreview({ taskId: id }), "无权查看");
+		// 到点发送:把排期时间挪到过去再用**真实 now** 扫(不能拿未来时间扫全表,会误伤别的任务的排期)
+		await db
+			.update(taskReminderTable)
+			.set({ scheduled_at: new Date(Date.now() - 60_000) })
+			.where(and(eq(taskReminderTable.task_id, id), eq(taskReminderTable.status, "pending")));
+		const onWorkday = nextWorkingDayAt(new Date(), 10, 0);
+		await Promise.all([
+			runScheduledTaskReminders(onWorkday, { taskId: id }),
+			runScheduledTaskReminders(onWorkday, { taskId: id }),
+		]);
 		const sent = await db
 			.select()
 			.from(taskReminderTable)
 			.where(and(eq(taskReminderTable.task_id, id), eq(taskReminderTable.status, "sent")));
-		assert.equal(sent.length, 2);
+		assert.equal(sent.length, events.length);
 		const notices = await db
 			.select()
 			.from(sysNotification)
@@ -1916,46 +2012,174 @@ describe("任务闭环", () => {
 					),
 				),
 			);
-		assert.equal(notices.length, 2);
+		assert.equal(notices.length, events.length);
+		// 真正投递之后:每条排期都以一条**普通投递记录**出现在提醒记录里(发送人是"系统")
+		const fired = await asA().taskClose.reminderHistory({ taskId: id });
+		assert.equal(fired.records.length, events.length);
+		assert.ok(
+			fired.records.every((item) => item.channel === "in_app" && item.status === "sent" && item.senderName === "系统"),
+			"定时提醒到点后就是一条普通投递记录",
+		);
+		assert.ok(fired.records.every((item) => item.recipientId === B.id));
+		assert.equal(fired.planned.length, 0, "都发完了,计划里不再有这条任务的排期");
+		assert.equal((await asA().taskClose.taskReminderPreview({ taskId: id })).total, 0, "发完就没有待发的了");
+
+		// 迟到的排期撞上周末 / 假期:不发送,顺延到下一个工作日的**计划时刻**(09:00)
+		const weekend = new Date(2026, 10, 21, 9, 0); // 周六 09:00
+		const weekendNow = new Date(2026, 10, 21, 10, 0); // 周六 10:00 才来扫
+		const [late] = sent;
+		assert.ok(late);
+		await db
+			.update(taskReminderTable)
+			.set({ status: "pending", scheduled_at: weekend })
+			.where(eq(taskReminderTable.id, late.id));
+		const delivered = await runScheduledTaskReminders(weekendNow, { taskId: id });
+		assert.equal(delivered, 0, "周末一刻一律不发");
+		const [deferred] = await db.select().from(taskReminderTable).where(eq(taskReminderTable.id, late.id));
+		assert.equal(deferred?.status, "pending", "还是待发,不是已发送");
+		assert.equal(deferred?.scheduled_at.getDay(), 1, "顺延到周一(2026-11-23)");
+		assert.equal(deferred?.scheduled_at.getHours(), 9, "时刻沿用计划里的 09:00");
+		assert.equal(
+			(
+				await db
+					.select({ id: sysNotification.id })
+					.from(sysNotification)
+					.where(
+						and(eq(sysNotification.source_type, "task_scheduled_reminder"), eq(sysNotification.source_id, late.id)),
+					)
+			).length,
+			1,
+			"没为这次迟到多出一条通知",
+		);
 	});
 
-	it("修改规则保留仍适用的延迟提醒，取消移除的时间点", async () => {
-		const dueAt = new Date(Date.now() + 4 * 60 * 60_000);
+	it("父任务改提醒规则:子任务跟着改并按新规则重排(子任务改动不反向影响父)", async () => {
+		const dueAt = new Date(Date.now() + 10 * 24 * 60 * 60_000);
+		const before = {
+			executor: { cadence: "daily" as const, time: "09:00", daysBefore: 3, channels: ["in_app" as const] },
+			node: { afterMinutes: 60, channels: ["in_app" as const] },
+		};
+		const { id: parentId } = await asA().taskClose.taskCreate({
+			name: taskName("父改提醒"),
+			workflowId,
+			dueAt: dueAt.toISOString(),
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
+			reminderConfig: before,
+		});
+		const children = await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId));
+		assert.equal(children.length, 2, "两个执行人 fan-out 成两条子任务");
+		assert.ok(
+			children.every((row) => JSON.stringify(readTaskReminderConfig(row.reminder_config)) === JSON.stringify(before)),
+			"建任务时子任务就拿到同一份规则",
+		);
+
+		// 父任务改频率 / 时间 / 窗口 / 方式 → 子任务跟着改,并按新规则重排各自的排期
+		const next = {
+			executor: {
+				cadence: "weekly" as const,
+				time: "10:30",
+				daysBefore: 7,
+				channels: ["in_app" as const, "email" as const],
+			},
+			node: { afterMinutes: null, channels: [] },
+		};
+		await asA().taskClose.taskUpdate({ id: parentId, name: taskName("父改提醒"), reminderConfig: next });
+		for (const child of await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId))) {
+			assert.deepEqual(readTaskReminderConfig(child.reminder_config), next, "子任务要拿到新规则");
+			const rows = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, child.id));
+			const pending = rows.filter((row) => row.status === "pending");
+			assert.ok(pending.length > 0, "要有按新规则排出来的待发");
+			assert.ok(
+				pending.every((row) => row.scheduled_at.getHours() === 10 && row.scheduled_at.getMinutes() === 30),
+				"按新时间点重排",
+			);
+			assert.ok(
+				pending.every((row) => (row.channels as string[]).includes("email")),
+				"新提醒方式也带上了",
+			);
+			assert.ok(
+				rows.every((row) => row.status !== "pending" || row.scheduled_at.getMinutes() === 30),
+				"老规则的排期不再有 pending 的",
+			);
+		}
+
+		// 反向:改子任务自己的规则,不动父任务(与「不反向依赖」同口径)
+		await asA().taskClose.taskUpdate({ id: children[0]?.id ?? "", name: taskName("父改提醒"), reminderConfig: before });
+		const [parentRow] = await db.select().from(taskTable).where(eq(taskTable.id, parentId));
+		assert.deepEqual(readTaskReminderConfig(parentRow?.reminder_config), next, "子任务改动不反向影响父任务");
+	});
+
+	it("提醒预览:给出前 5 次,且都落在工作日", async () => {
+		const dueAt = new Date(Date.now() + 20 * 24 * 60 * 60_000);
+		const preview = await asA().taskClose.reminderPreview({
+			executor: { cadence: "daily", time: "09:00", daysBefore: 10, channels: ["in_app"] },
+			dueAt: dueAt.toISOString(),
+		});
+		assert.ok(preview.total > 5, "10 天窗口里的工作日肯定不止 5 次");
+		assert.equal(preview.times.length, 5, "只给前 5 次");
+		assert.equal(preview.known, true, "2026 的数据是内置的");
+		for (const time of preview.times) {
+			const at = new Date(time);
+			assert.equal(at.getHours(), 9, "时间点就是配置的那个");
+			assert.equal(isWorkingDay(at), true, "预览的每一天都得是工作日");
+		}
+		const sorted = [...preview.times].sort();
+		assert.deepEqual(preview.times, sorted, "升序");
+		assert.ok(
+			preview.last && new Date(preview.last) > new Date(preview.times[4] ?? ""),
+			"还给最后一次的时刻(只给前 5 次容易让人误判总量)",
+		);
+	});
+
+	it("改规则：不再适用的排期取消，新时刻补上；同一份配置重排是幂等的", async () => {
+		const dueAt = new Date(Date.now() + 10 * 24 * 60 * 60_000);
 		const oldConfig = {
-			executor: { offsets: [60, 120], channels: ["in_app" as const] },
-			node: { offsets: [], channels: [] },
+			executor: { cadence: "daily" as const, time: "09:00", daysBefore: 3, channels: ["in_app" as const] },
+			node: { afterMinutes: null, channels: [] },
 		};
 		const { id } = await asA().taskClose.taskCreate({
-			name: taskName("延迟后改规则"),
+			name: taskName("改规则重排"),
 			workflowId,
 			dueAt: dueAt.toISOString(),
 			members: [{ userId: B.id, role: "executor" }],
 			reminderConfig: oldConfig,
 		});
 		const before = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
-		const nextConfig = { ...oldConfig, executor: { ...oldConfig.executor, offsets: [120, 180] } };
-		await db.transaction(async (tx) => {
-			const [task] = await tx.select().from(taskTable).where(eq(taskTable.id, id)).for("update");
-			await tx.update(taskTable).set({ reminder_config: nextConfig }).where(eq(taskTable.id, id));
-			await rescheduleTaskReminders(
-				tx,
-				{ ...task, reminder_config: nextConfig },
-				new Date(dueAt.getTime() - 90 * 60_000),
-				"executor",
-			);
-		});
+		assert.ok(before.length > 0);
+		/** 只改时间点 09:00 → 10:30:旧的每个时刻都不再适用 */
+		const nextConfig = { ...oldConfig, executor: { ...oldConfig.executor, time: "10:30" } };
+		const reschedule = (config: typeof oldConfig) =>
+			db.transaction(async (tx) => {
+				const [task] = await tx.select().from(taskTable).where(eq(taskTable.id, id)).for("update");
+				await tx.update(taskTable).set({ reminder_config: config }).where(eq(taskTable.id, id));
+				await rescheduleTaskReminders(tx, { ...task, reminder_config: config }, new Date(), "executor");
+			});
+		await reschedule(nextConfig);
 		const after = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
-		assert.equal(
-			after.find((row) => row.id === before.find((row) => row.offset_minutes === 120)?.id)?.status,
-			"pending",
+		for (const row of before)
+			assert.equal(after.find((entry) => entry.id === row.id)?.status, "cancelled", "旧时刻全部取消");
+		const added = after.filter((row) => !before.some((entry) => entry.id === row.id) && row.status === "pending");
+		assert.ok(added.length > 0, "新时刻补上了");
+		assert.ok(
+			added.every((row) => row.scheduled_at.getHours() === 10 && row.scheduled_at.getMinutes() === 30),
+			"新排期落在 10:30",
 		);
-		assert.equal(
-			after.find((row) => row.id === before.find((row) => row.offset_minutes === 60)?.id)?.status,
-			"cancelled",
-		);
-		assert.equal(
-			after.some((row) => row.offset_minutes === 180 && row.status === "pending"),
-			false,
+		// 同一份配置再排一次:不该换 id、也不该多出行(幂等)
+		const pendingIds = after
+			.filter((row) => row.status === "pending")
+			.map((row) => row.id)
+			.sort();
+		await reschedule(nextConfig);
+		const again = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
+		assert.deepEqual(
+			again
+				.filter((row) => row.status === "pending")
+				.map((row) => row.id)
+				.sort(),
+			pendingIds,
 		);
 	});
 
@@ -1963,13 +2187,13 @@ describe("任务闭环", () => {
 		const taskId = await newTask("节点提醒取消");
 		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, assigneeId: B.id });
 		const entries = await db.select().from(taskReminderTable).where(eq(taskReminderTable.action_id, actionId));
-		assert.equal(entries.length, 2);
+		assert.equal(entries.length, 1, "默认只排一次(未查看 1 小时)");
 		await asB().taskClose.actionView({ id: actionId });
 		const cancelled = await db
 			.select()
 			.from(taskReminderTable)
 			.where(and(eq(taskReminderTable.action_id, actionId), eq(taskReminderTable.status, "cancelled")));
-		assert.equal(cancelled.length, 2);
+		assert.equal(cancelled.length, 1);
 	});
 
 	it("未查看提醒按轮次去重，已查看或已完成的动作不再提醒", async () => {
@@ -2116,7 +2340,7 @@ describe("任务闭环", () => {
 			["cooldown", "reused"],
 		);
 		const history = await asB().taskClose.reminderHistory({ taskId });
-		const missingPhone = history.find((item) => item.recipientId === B.id && item.channel === "sms");
+		const missingPhone = history.records.find((item) => item.recipientId === B.id && item.channel === "sms");
 		assert.equal(missingPhone?.status, "failed");
 		assert.equal(missingPhone?.error, "未配置有效的联系电话");
 		await assertRejects(() => asC().taskClose.reminderHistory({ taskId }), "无权查看");

@@ -18,6 +18,7 @@ export function TaskMembers({
 }: {
 	creatorId: string;
 	creatorName: string | null;
+	/** 原始成员表:**可能包含创建人本人**(fan-out 父任务的执行人就是他) */
 	members: Array<{ userId: string; role: string; name: string | null }>;
 	canAddMember: boolean;
 	canManage: boolean;
@@ -27,11 +28,20 @@ export function TaskMembers({
 	onRemind?: (person: { id: string; name: string }) => void;
 	roleText: (role: string) => string;
 }) {
+	/**
+	 * 创建人也可能是执行人(fan-out 父任务:父任务的执行人 = 创建人)。
+	 * 这时只在创建人那一行标「创建人 · 执行人」,成员列表里**不再重复一行**;人数按人去重。
+	 */
+	const creatorRoles = members.filter((member) => member.userId === creatorId).map((member) => member.role);
+	const others = members.filter((member) => member.userId !== creatorId);
+	const creatorLabel = creatorRoles.length
+		? `创建人 · ${creatorRoles.map((role) => roleText(role)).join(" · ")}`
+		: "创建人";
 	return (
 		<section className="grid gap-2 p-3.5">
 			<header className="flex items-center justify-between">
 				<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-					参与人 <span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
+					参与人 <span className="text-xs font-medium tabular-nums text-muted-foreground">{others.length + 1}</span>
 				</h2>
 				{canAddMember ? (
 					<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={onAdd}>
@@ -41,12 +51,12 @@ export function TaskMembers({
 			</header>
 			<ul className="grid gap-0.5">
 				<PeopleRow
-					roleLabel="创建人"
+					roleLabel={creatorLabel}
 					name={creatorName ?? PLACEHOLDER_EMPTY}
 					main={false}
 					onRemind={onRemind ? () => onRemind({ id: creatorId, name: creatorName ?? PLACEHOLDER_EMPTY }) : undefined}
 				/>
-				{members.map((m) => (
+				{others.map((m) => (
 					<PeopleRow
 						key={`${m.userId}-${m.role}`}
 						roleLabel={roleText(m.role)}

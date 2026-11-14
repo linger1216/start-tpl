@@ -32,8 +32,9 @@ import { isAdminUser } from "#/lib/casbin";
 import { alive } from "#/lib/soft-delete";
 import { getObjectUrl } from "#/lib/storage";
 import { parseBlocks } from "#/lib/task/payload";
-import { taskReminderConfigSchema } from "#/lib/task/reminder-spec";
+import { executorReminderEvents, executorReminderRuleSchema, readTaskReminderConfig } from "#/lib/task/reminder-spec";
 import { reportAttachmentIds } from "#/lib/task/report-spec";
+import { isWorkingDay, workdayKnown } from "#/lib/workday";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	type ActionRow,
@@ -78,7 +79,7 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null) => ({
 	description: row.description,
 	payload: row.payload,
 	workflow: row.workflow as WorkflowPayload,
-	reminderConfig: taskReminderConfigSchema.parse(row.reminder_config ?? undefined),
+	reminderConfig: readTaskReminderConfig(row.reminder_config),
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
@@ -414,6 +415,38 @@ export const taskQueryRouter = createTRPCRouter({
 		}),
 
 	/** 任务详情:本体 + 成员 + 动作流 + **我能做什么** */
+	/**
+	 * 截止提醒预览:给定执行人提醒规则 + 截止时间,**算出前 5 次提醒时刻**(与排期走同一份展开代码)。
+	 *
+	 * 放在服务端是为了**不让 2011–2026 的节假日数据进客户端包**;纯算,不读库、不看任何人的数据。
+	 * `known = false` 表示算到的日期已超出节假日数据集(那边只按周末判断,前端要如实提示)。
+	 */
+	reminderPreview: protectedProcedure
+		.input(
+			z.object({
+				executor: executorReminderRuleSchema,
+				/** ISO 字符串;解析不出来就拒(与 `taskCreate` 的口径一致) */
+				dueAt: z.string().min(1).max(64),
+			}),
+		)
+		.query(({ input }) => {
+			const dueAt = new Date(input.dueAt);
+			if (Number.isNaN(dueAt.getTime()))
+				throw new TRPCError({ code: "BAD_REQUEST", message: "截止时间写成了一段没法解析的日期" });
+			const events = executorReminderEvents(input.executor, dueAt, new Date(), { isWorkday: isWorkingDay });
+			const last = events.at(-1);
+			return {
+				/** 前 5 次(升序,ISO) */
+				times: events.slice(0, 5).map((event) => event.at.toISOString()),
+				/** 窗口内一共几次 */
+				total: events.length,
+				/** 最后一次的时刻(只给前 5 次容易让人误判总量) */
+				last: last ? last.at.toISOString() : null,
+				/** 算到的日期是否都在节假日数据集内 */
+				known: events.length === 0 || (workdayKnown(events[0].at) && workdayKnown(events[events.length - 1].at)),
+			};
+		}),
+
 	taskGet: protectedProcedure.input(z.object({ id: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);

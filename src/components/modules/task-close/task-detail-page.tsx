@@ -82,7 +82,10 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const [attachOpen, setAttachOpen] = useState(false);
 	const [draftAttachments, setDraftAttachments] = useState<TaskAttachment[]>([]);
 	const attachmentBaseline = useRef<string[]>([]);
-	/** 加入成员:多选,统一按参与者加入(角色不让选) */
+	/**
+	 * 加入成员:**一律按参与者加**。执行人只在「建任务」时定,之后换人只走「转交执行人」。
+	 * (fan-out 任务的父任务,执行人是创建人,见 `taskCreate`;这里不需要角色选择。)
+	 */
 	const [newMemberIds, setNewMemberIds] = useState<string[]>([]);
 	/**
 	 * 待确认移出的成员 —— 移出是破坏性操作,先弹 `ConfirmDialog`(非空即打开)。
@@ -860,7 +863,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					if (!next) setNewMemberIds([]);
 				}}
 				title="加入成员"
-				description="多选,按参与者加入;需要执行人时在成员行里单独转交。"
+				description="多选,按参与者加入;换执行人请用「转交执行人」。"
 				pending={memberAddMutation.isPending}
 				confirmDisabled={newMemberIds.length === 0}
 				confirmText={newMemberIds.length > 1 ? `加入 ${newMemberIds.length} 人` : "加入"}
@@ -870,10 +873,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				<DetailRow label="人员" align="center">
 					<MultiSelect
 						options={userOptions.filter(
-							(person) =>
-								person.value !== meId &&
-								person.value !== task.creatorId &&
-								!members.some((member) => member.userId === person.value),
+							// 只排除任务创建人(他不在成员表里);**自己可以被加进来** —— 管理员常要把自己也拉进去
+							(person) => person.value !== task.creatorId && !members.some((member) => member.userId === person.value),
 						)}
 						value={newMemberIds}
 						onChange={setNewMemberIds}

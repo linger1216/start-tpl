@@ -13,7 +13,8 @@ import {
 import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification, type NotificationChannel } from "#/lib/notification";
 import { taskPathOf } from "#/lib/task/close-spec";
-import { reminderEvents, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
+import { executorReminderEvents, nodeReminderEvents, readTaskReminderConfig } from "#/lib/task/reminder-spec";
+import { isWorkingDay, nextWorkingDayAt } from "#/lib/workday";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Task = typeof taskTable.$inferSelect;
@@ -110,8 +111,8 @@ export async function scheduleNodeReminders(
 	now: Date,
 ): Promise<void> {
 	if (!task.reminder_config || !action.activated_at || terminal(task)) return;
-	const config = taskReminderConfigSchema.parse(task.reminder_config);
-	for (const event of reminderEvents(config, "node", action.activated_at, now)) {
+	const config = readTaskReminderConfig(task.reminder_config);
+	for (const event of nodeReminderEvents(config.node, action.activated_at, now, { isWorkday: isWorkingDay })) {
 		const id = newId();
 		await insertScheduled(tx, {
 			id,
@@ -141,7 +142,7 @@ export async function rescheduleTaskReminders(
 		await cancelTaskReminders(tx, task.id, now, kind);
 		return;
 	}
-	const config = taskReminderConfigSchema.parse(task.reminder_config);
+	const config = readTaskReminderConfig(task.reminder_config);
 	const members = await tx
 		.select({ userId: taskMemberTable.user_id })
 		.from(taskMemberTable)
@@ -165,27 +166,29 @@ export async function rescheduleTaskReminders(
 		at: Date;
 		channels: NotificationChannel[];
 	}> = [];
+	// 截止提醒:窗口内**每个工作日**的时刻(周末 / 节假日跳过;调休上班日照常)
 	if (kind !== "node" && task.due_at)
 		for (const userId of recipients)
-			for (const offset of config.executor.offsets)
+			for (const event of executorReminderEvents(config.executor, task.due_at, now, { isWorkday: isWorkingDay }))
 				desired.push({
 					kind: "executor",
 					actionId: null,
 					userId,
-					offset,
-					at: new Date(task.due_at.getTime() - offset * 60000),
+					offset: event.offset,
+					at: event.at,
 					channels: config.executor.channels,
 				});
+	// 节点未查看提醒:激活后 X 时长一次(落在非工作日顺延到下一个工作日)
 	if (kind !== "executor")
 		for (const action of actions)
 			if (action.activated_at)
-				for (const offset of config.node.offsets)
+				for (const event of nodeReminderEvents(config.node, action.activated_at, now, { isWorkday: isWorkingDay }))
 					desired.push({
 						kind: "node",
 						actionId: action.id,
 						userId: action.assignee_id,
-						offset,
-						at: new Date(action.activated_at.getTime() + offset * 60000),
+						offset: event.offset,
+						at: event.at,
 						channels: config.node.channels,
 					});
 	const existing = await tx
@@ -296,6 +299,20 @@ async function runReminder(id: string, now: Date): Promise<number> {
 				.where(eq(taskReminderTable.id, id));
 			return 0;
 		}
+		/**
+		 * **送达时刻本身也得是工作日**:排期只排在工作日,但 worker 可能迟到(挂了 / 被误触发),
+		 * 于是"到点该发的那条"会在周末或假期才被扫到 —— 这时不发,把它挪到下一个工作日的**计划时刻**。
+		 */
+		if (!isWorkingDay(now)) {
+			await tx
+				.update(taskReminderTable)
+				.set({
+					scheduled_at: nextWorkingDayAt(now, entry.scheduled_at.getHours(), entry.scheduled_at.getMinutes()),
+					updated_at: now,
+				})
+				.where(eq(taskReminderTable.id, id));
+			return 0;
+		}
 		const channels = entry.channels as NotificationChannel[];
 		await createNotification(tx, {
 			type: entry.kind === "node" ? "action.unviewed" : "task.deadline",
@@ -325,11 +342,26 @@ async function runReminder(id: string, now: Date): Promise<number> {
 	});
 }
 
-export async function runScheduledTaskReminders(now = new Date()): Promise<number> {
+/**
+ * 把到点的定时提醒发出去。
+ *
+ * `taskId` 只为**测试 / 定点重放**准备:不带就扫全库(worker 的用法),
+ * 带上就只处理这一个任务 —— 免得测试里一次调用把别人任务的排期一起发了。
+ */
+export async function runScheduledTaskReminders(
+	now = new Date(),
+	{ taskId }: { taskId?: string } = {},
+): Promise<number> {
 	const rows = await db
 		.select({ id: taskReminderTable.id })
 		.from(taskReminderTable)
-		.where(and(eq(taskReminderTable.status, "pending"), lte(taskReminderTable.scheduled_at, now)))
+		.where(
+			and(
+				eq(taskReminderTable.status, "pending"),
+				lte(taskReminderTable.scheduled_at, now),
+				taskId ? eq(taskReminderTable.task_id, taskId) : undefined,
+			),
+		)
 		.limit(200);
 	let count = 0;
 	for (const row of rows) count += await runReminder(row.id, now);

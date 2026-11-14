@@ -25,6 +25,8 @@
         "src/integrations/trpc/routers/task",
         "src/lib/task",
         "tests/task-report-spec.test.ts",
+        "tests/task-report.test.ts",
+        "tests/task-fixtures.ts",
         "tests/task-reminder-spec.test.ts",
         "tests/task-members-reminder.test.ts",
 		"tests/task-deadline.test.ts",

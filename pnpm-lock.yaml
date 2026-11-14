@@ -229,6 +229,9 @@ importers:
       casbin:
         specifier: ^5.51.1
         version: 5.51.1
+      chinese-workday:
+        specifier: ^2.0.0
+        version: 2.0.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -2426,6 +2429,9 @@ packages:
 
   chevrotain@7.1.1:
     resolution: {integrity: sha512-wy3mC1x4ye+O+QkEinVJkPf5u2vsrDIYW9G7ZuwFl6v/Yu0LwUuT2POsb+NUWApebyxfkQq6+yDfRExbnI5rcw==}
+
+  chinese-workday@2.0.0:
+    resolution: {integrity: sha512-K2i+1fmZrb7xdjjbQg6AUIlKuav2NwLWVWLvdTJqbbGBfkn63UuKqq//Z6vclqrmoy8wfhaAZ50sjGEFD9CRjg==}
 
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
@@ -5972,6 +5978,8 @@ snapshots:
   chevrotain@7.1.1:
     dependencies:
       regexp-to-ast: 0.5.0
+
+  chinese-workday@2.0.0: {}
 
   chokidar@5.0.0:
     dependencies:

@@ -31,7 +31,7 @@ import { useTRPC } from "#/integrations/trpc/react";
 import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task/close-spec";
 import { blankBlock, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
-import { type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
+import { reminderSummaryOf, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalDate } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -693,11 +693,11 @@ export function TaskForm({
 					</FoldSection>
 					<FoldSection
 						title="通知"
-						meta={`执行人 ${reminderConfig.executor.offsets.length} 个时间点，节点 ${reminderConfig.node.offsets.length} 个时间点`}
+						meta={reminderSummaryOf(reminderConfig)}
 						open={fold.reminder}
 						onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}
 					>
-						<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} />
+						<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} dueAt={fromDateInput(due)} />
 					</FoldSection>
 				</DialogBody>
 				<DialogFooter>
