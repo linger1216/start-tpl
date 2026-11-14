@@ -4,7 +4,7 @@
 
 ## 代码与存储
 
-- `src/integrations/trpc/routers/task-close.ts`：任务、成员、动作和填报的 tRPC 接口与事务边界。
+- `src/integrations/trpc/routers/task-close.ts`：组合入口；`task-query.ts`、`task-record.ts`、`task-member.ts`、`task-action.ts`、`task-comment.ts`、`task-workflow.ts`、`task-report.ts` 按职责实现接口，`task-shared.ts` 保存共用的授权与事务逻辑。
 - `src/lib/task-close-spec.ts` / `task-close-log.ts`：流程状态与活动日志的客户端安全词表。
 - `src/lib/task-report-spec.ts` / `task-report-summary.ts` / `task-report-excel.ts`：填报校验、汇总和受限 Excel 处理。
 - `src/components/modules/task-close/`：任务列表、详情、流程模板、填报模板与填报界面。
@@ -71,7 +71,7 @@
 
 任务创建时复制流程模板的状态与转移定义，后续修改模板不改变已创建任务。`status` 永远表示模板定义的任务业务状态；审批的处理状态在 `tc_action.status`，不会把框架临时状态写入任务。执行状态动作时，服务端依据状态、模板边、角色、成员关系和动作锁重新校验；`taskGet.permissions` 同时提供界面所需的可用动作。接口统一走 tRPC，并在 `src/lib/rbac.ts` 显式分类。
 
-状态转移的可发起方只有三个任务角色:`creator`(创建人)/ `participant`(参与者)/ `executor`(执行者),数组 = 任一命中;任务非成员(且非创建人)不因模板边获得任何操作权。旧数据里的 `any` 取值与 `report_submitted` 守卫不再参与流程 —— 读取模板与任务快照时统一归一(`routers/task-close.ts` 的 `normalizeStoredWorkflow`,含进行中的审批结算),保存与创建只写新格式。状态可标记为结束状态,进入该状态时事务内终止未完成动作及待发送通知;重新打开必须由模板显式定义转移边。
+状态转移的可发起方只有三个任务角色:`creator`(创建人)/ `participant`(参与者)/ `executor`(执行者),数组 = 任一命中;任务非成员(且非创建人)不因模板边获得任何操作权。状态可标记为结束状态,进入该状态时事务内终止未完成动作及待发送通知;重新打开必须由模板显式定义转移边。
 
 填报模板是**单版本**结构:版本表已并入 `tc_report_template`(`schema` 列更名为 `payload`,编辑即覆盖),绑定引用(`tc_task_report.version_id` 等历史列名)存的就是模板 id。`shared = 1` 全员可见、`0` 仅创建人与管理员;删除为软删 —— 已绑定任务的历史填报仍读得到 payload,只是不能再用于新任务/绑定。管理入口在「填报模板」独立页面(带只读预览)。
 

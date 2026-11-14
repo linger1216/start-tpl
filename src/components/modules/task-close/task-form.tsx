@@ -189,7 +189,7 @@ export function TaskForm({
 	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
 
 	// 打开时回填;模板缺省取第一个,避免"没选模板点保存"这种可避免的报错
-	// biome-ignore lint/correctness/useExhaustiveDependencies: resetReportRule 读写的各 state 都以 open 为闸,只在打开瞬间生效
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 打开时取一次初始值，后台刷新不能覆盖用户输入
 	useEffect(() => {
 		if (!open) return;
 		setName(editing?.name ?? "");
@@ -203,7 +203,12 @@ export function TaskForm({
 		resetReportRule();
 		setLinks(editing?.links ?? []);
 		setAttachments(editing?.attachments ?? []);
-	}, [open, editing, workflowOptions]);
+	}, [open]);
+
+	// 流程列表可能在弹窗打开后才返回，只补尚未选择的默认值。
+	useEffect(() => {
+		if (open && !editing && !workflowId && workflowOptions[0]) setWorkflowId(workflowOptions[0].value);
+	}, [open, editing, workflowId, workflowOptions]);
 
 	const canSubmit = name.trim().length > 0 && (editing !== null || workflowId.length > 0);
 	/** 页脚缺项提示:只列真必填(截止 / 描述 / 执行人都可空) */
@@ -220,16 +225,12 @@ export function TaskForm({
 
 	// ── 带数下发(仅表格模板):Excel 模版导入的行 + 过滤条件 ──
 	const selectedTemplate = (templates.data ?? []).find((template) => template.id === reportTemplateId);
-	const selectedKind = ((selectedTemplate?.payload as { kind?: string } | null)?.kind ?? "OBJECT") as
-		| "OBJECT"
-		| "TABLE";
-	const selectedFields = ((
-		selectedTemplate?.payload as { fields?: Array<{ id: string; label: string; type: string }> } | null
-	)?.fields ?? []) as Array<{ id: string; label: string; type: string }>;
 	const selectedSchema = useMemo(
 		() => (selectedTemplate ? taskReportSchema.safeParse(selectedTemplate.payload) : null),
 		[selectedTemplate],
 	);
+	const selectedKind = selectedSchema?.success ? selectedSchema.data.kind : "OBJECT";
+	const selectedFields = selectedSchema?.success ? selectedSchema.data.fields : [];
 	/** 过滤字段(multiselect 不做过滤:值是数组,等值比较没意义) */
 	const filterFieldOptions = selectedFields.filter((field) => field.type !== "multiselect");
 	/** 一行数据里某字段出现过的值(下拉候选) */

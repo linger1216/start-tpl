@@ -335,13 +335,12 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"dataPlugin.create": "sys:plugin:add",
 	"dataPlugin.update": "sys:plugin:edit",
 	"dataPlugin.remove": "sys:plugin:remove",
-	// 任务闭环 ▸ 流程模板(页面码管详情读接口;三个写接口用按钮权限点,见 `scripts/seed-rbac.ts`)
-	"taskClose.workflowGet": pagePermOf("/task-close/workflows"),
+	// 任务闭环 ▸ 流程模板(三个写接口用按钮权限点,见 `scripts/seed-rbac.ts`)
 	"taskClose.workflowCreate": "sys:tcWorkflow:add",
 	"taskClose.workflowUpdate": "sys:tcWorkflow:edit",
 	"taskClose.workflowRemove": "sys:tcWorkflow:remove",
-	// 填报模板(「填报模板」页):列表按页面码,增 / 发布 / 删用按钮权限点(见 scripts/seed-rbac.ts)
-	"taskClose.reportTemplateList": pagePermOf("/task-close/report-templates"),
+	// 任务表单和填报模板管理页共用列表，任一页面可见即可读取。
+	"taskClose.reportTemplateList": [pagePermOf("/task-close"), pagePermOf("/task-close/report-templates")],
 	"taskClose.reportTemplateCreate": "sys:tc_report_template:add",
 	"taskClose.reportTemplatePublish": "sys:tc_report_template:edit",
 	"taskClose.reportTemplateRemove": "sys:tc_report_template:remove",
@@ -449,8 +448,7 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
 	"taskClose.logList",
 	// 类别 2:流程模板详情 —— 模板是「全系统一份」的配置,不看部门
-	"taskClose.workflowGet",
-	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-close.ts)
+	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-query.ts)
 	"taskClose.attachmentUrl",
 	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
 ];
@@ -542,10 +540,10 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	// 类别 3:任务闭环 —— 任务本体 / 动作 / 评论本模块还没有页面级权限点,可见性 v1 口径是
 	// 「任何登录用户可读任何任务」,`tc_member` 只决定**推进权**(理由见 `UNMAPPED_MUTATIONS`)。
 	// `workflowList` 供**建任务选模板**与「我的任务」页共用,跨页面,不锁到流程模板页面码
-	// (锁了会把「有任务页、没模板页」的人拦死);流程模板页自己的 `workflowGet` 走页面码。
+	// (锁了会把「有任务页、没模板页」的人拦死);模板管理写接口走按钮权限点。
 	"taskClose.workflowList",
 	// 说明历史在 resolver 内校验任务成员关系。
-	// 填报读取在 resolver 中按任务成员关系授权;模板清单已按页面码登记(「填报模板」页),见 PERM_BY_PATH
+	// 填报读取在 resolver 中按任务成员关系授权;模板清单按调用页面登记,见 PERM_BY_PATH
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",

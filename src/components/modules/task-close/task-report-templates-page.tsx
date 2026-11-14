@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardList, FileText, Pencil, Plus, Share2, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
@@ -17,6 +17,7 @@ import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { taskReportSchema } from "#/lib/task-report-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -33,24 +34,15 @@ export type ReportTemplateRow = {
 };
 
 /** 把 `payload` 解成模板定义(解析失败给空结构,卡片显示「结构无效」) */
-export function parsedReportTemplate(row: ReportTemplateRow) {
-	const payload = (row.payload ?? {}) as {
-		kind?: "OBJECT" | "TABLE";
-		fields?: Array<{
-			id: string;
-			label: string;
-			type: string;
-			required?: boolean;
-			options?: string[];
-		}>;
-	};
-	return { kind: payload.kind ?? "OBJECT", fields: payload.fields ?? [] };
+function parsedReportTemplate(row: ReportTemplateRow) {
+	const result = taskReportSchema.safeParse(row.payload);
+	return result.success ? result.data : { kind: "OBJECT" as const, fields: [] };
 }
 
 /**
  * 任务闭环 ▸ 填报模板 —— 卡片页(与「流程模板」同款版式)。
  *
- * 模板是**单版本**:编辑即覆盖 `payload`,已绑定任务用新结构填报。
+ * 模板是**单版本**:编辑即覆盖 `payload`,已绑定任务保留结构快照。
  * 授权走按钮权限点(`sys:tc_report_template:add/edit/remove`),按钮只是可见性投影,真正拦截在服务端。
  */
 export function TaskReportTemplatesPage() {
@@ -61,9 +53,8 @@ export function TaskReportTemplatesPage() {
 	const canEdit = useHasPerm("sys:tc_report_template:edit");
 	const canRemove = useHasPerm("sys:tc_report_template:remove");
 
-	const [formOpen, setFormOpen] = useState(false);
-	const [formTemplateId, setFormTemplateId] = useState<string | null>(null);
-	const [detailRow, setDetailRow] = useState<ReportTemplateRow | null>(null);
+	const [form, setForm] = useState<{ templateId: string | null } | null>(null);
+	const [detailId, setDetailId] = useState<string | null>(null);
 	const [pendingDelete, setPendingDelete] = useState<ReportTemplateRow | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.reportTemplateList.queryOptions());
@@ -80,6 +71,7 @@ export function TaskReportTemplatesPage() {
 	);
 
 	const rows = useMemo(() => (listQuery.data ?? []) as ReportTemplateRow[], [listQuery.data]);
+	const detailRow = rows.find((row) => row.id === detailId) ?? null;
 
 	const stats = useMemo<StatItem[]>(() => {
 		const sums = rows.reduce(
@@ -96,41 +88,35 @@ export function TaskReportTemplatesPage() {
 			{
 				key: "templates",
 				label: "填报模板",
-				value: rows.length,
+				value: listQuery.isError ? "—" : rows.length,
 				Icon: FileText,
 				tone: "bg-hue-blue-soft text-hue-blue-fg",
 			},
 			{
 				key: "fields",
 				label: "字段",
-				value: sums.fields,
+				value: listQuery.isError ? "—" : sums.fields,
 				Icon: ClipboardList,
 				tone: "bg-hue-violet-soft text-hue-violet-fg",
 			},
 			{
 				key: "shared",
 				label: "分享中",
-				value: sums.shared,
+				value: listQuery.isError ? "—" : sums.shared,
 				Icon: Share2,
 				tone: "bg-hue-teal-soft text-hue-teal-fg",
 			},
 		];
-	}, [rows]);
+	}, [rows, listQuery.isError]);
 
-	const openEdit = useCallback((row: ReportTemplateRow) => {
-		setFormTemplateId(row.id);
-		setFormOpen(true);
-	}, []);
-	const openCreate = useCallback(() => {
-		setFormTemplateId(null);
-		setFormOpen(true);
-	}, []);
+	const openEdit = (row: ReportTemplateRow) => setForm({ templateId: row.id });
+	const openCreate = () => setForm({ templateId: null });
 
 	return (
 		<PageFrame>
 			<PageHeader
 				title="填报模板"
-				description="任务的填报表单结构：字段集合与类型。编辑保存即覆盖当前结构,已绑定任务用新结构填报。"
+				description="任务的填报表单结构：字段集合与类型。编辑影响后续绑定，已绑定任务保留原有结构。"
 				actions={
 					<>
 						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />
@@ -151,11 +137,18 @@ export function TaskReportTemplatesPage() {
 					<Card>
 						<div className="py-12 text-center text-sm text-muted-foreground">加载中…</div>
 					</Card>
+				) : listQuery.isError ? (
+					<Card className="grid justify-items-center gap-3 py-12 text-sm text-muted-foreground">
+						<p>填报模板加载失败。</p>
+						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
+							{listQuery.isFetching ? "重试中…" : "重试"}
+						</Button>
+					</Card>
 				) : (
 					<EmptyState
 						icon={<FileText className="size-6" />}
 						title="还没有填报模板"
-						description="填报模板定义任务的表单结构(字段 / 类型 / 必填)。建任务或建批次时绑定一个模板,执行人按它填报。"
+						description="填报模板定义任务的表单结构(字段 / 类型 / 必填)。建任务时绑定模板，执行人按任务的结构快照填报。"
 						actions={
 							canAdd ? (
 								<Button onClick={openCreate}>
@@ -174,7 +167,7 @@ export function TaskReportTemplatesPage() {
 							row={row}
 							canEdit={canEdit && row.canManage}
 							canRemove={canRemove && row.canManage}
-							onView={() => setDetailRow(row)}
+							onView={() => setDetailId(row.id)}
 							onEdit={() => openEdit(row)}
 							onDelete={() => setPendingDelete(row)}
 						/>
@@ -183,22 +176,28 @@ export function TaskReportTemplatesPage() {
 			)}
 
 			<TaskReportTemplateForm
-				open={formOpen}
-				onOpenChange={setFormOpen}
+				open={form !== null}
+				onOpenChange={(next) => {
+					if (!next) setForm(null);
+				}}
 				templates={listQuery.data ?? []}
-				initialTemplateId={formTemplateId}
+				initialTemplateId={form?.templateId ?? null}
 			/>
 
 			<TaskReportTemplateDetail
 				row={detailRow}
-				open={detailRow !== null}
+				open={detailId !== null}
 				onOpenChange={(next) => {
-					if (!next) setDetailRow(null);
+					if (!next) setDetailId(null);
 				}}
-				onEdit={(row) => {
-					setDetailRow(null);
-					openEdit(row);
-				}}
+				onEdit={
+					canEdit && detailRow?.canManage
+						? (row) => {
+								setDetailId(null);
+								openEdit(row);
+							}
+						: undefined
+				}
 			/>
 
 			<ConfirmDialog

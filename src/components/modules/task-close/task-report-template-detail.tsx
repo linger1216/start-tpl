@@ -1,9 +1,6 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { TaskReportPreview } from "#/components/modules/task-close/task-report-preview";
-import {
-	parsedReportTemplate,
-	type ReportTemplateRow,
-} from "#/components/modules/task-close/task-report-templates-page";
+import type { ReportTemplateRow } from "#/components/modules/task-close/task-report-templates-page";
 import { Tag } from "#/components/ui/tag";
 import { taskReportSchema } from "#/lib/task-report-spec";
 
@@ -20,17 +17,16 @@ export function TaskReportTemplateDetail({
 	row: ReportTemplateRow | null;
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
-	onEdit: (row: ReportTemplateRow) => void;
+	onEdit?: (row: ReportTemplateRow) => void;
 }) {
-	const def = row ? parsedReportTemplate(row) : null;
 	const parsed = row ? taskReportSchema.safeParse(row.payload) : null;
 	return (
 		<DetailDialog
 			open={open}
 			onOpenChange={onOpenChange}
 			title={`填报模板 · ${row?.name ?? ""}`}
-			description="编辑保存即覆盖当前结构,已绑定任务会用新结构填报。"
-			tag={row ? <Tag variant="outline">{def?.kind === "TABLE" ? "表格" : "表单"}</Tag> : null}
+			description="编辑影响后续绑定；已绑定任务保留原有结构。"
+			tag={parsed?.success ? <Tag variant="outline">{parsed.data.kind === "TABLE" ? "表格" : "表单"}</Tag> : null}
 			meta={
 				row
 					? {
@@ -40,8 +36,7 @@ export function TaskReportTemplateDetail({
 						}
 					: null
 			}
-			onEdit={() => row && onEdit(row)}
-			editDisabled={row ? !row.canManage : false}
+			onEdit={row && onEdit ? () => onEdit(row) : undefined}
 		>
 			{row && parsed?.success ? (
 				<TaskReportPreview schema={parsed.data} />

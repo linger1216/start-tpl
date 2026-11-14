@@ -6,7 +6,7 @@ import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
-import { TaskWorkflowDetail, type WorkflowDetail } from "#/components/modules/task-close/task-workflow-detail";
+import { TaskWorkflowDetail } from "#/components/modules/task-close/task-workflow-detail";
 import {
 	TaskWorkflowForm,
 	type WorkflowEditing,
@@ -65,22 +65,17 @@ export function TaskWorkflowsPage() {
 	const canEdit = useHasPerm("sys:tcWorkflow:edit");
 	const canRemove = useHasPerm("sys:tcWorkflow:remove");
 
-	const [formOpen, setFormOpen] = useState(false);
-	const [editing, setEditing] = useState<WorkflowEditing | null>(null);
+	const [form, setForm] = useState<"create" | WorkflowEditing | null>(null);
 	const [detailId, setDetailId] = useState<string | null>(null);
 	const [pendingDelete, setPendingDelete] = useState<ListItem | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.workflowList.queryOptions());
-	const detailQuery = useQuery({
-		...trpc.taskClose.workflowGet.queryOptions({ id: detailId ?? "" }),
-		enabled: detailId !== null,
-	});
 
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
 
 	const createMutation = useMutation(
 		trpc.taskClose.workflowCreate.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setFormOpen(false), message: () => "流程模板已创建" }),
+			onSuccess: writeSuccess(invalidate, { close: () => setForm(null), message: () => "流程模板已创建" }),
 			onError: toastApiError,
 		}),
 	);
@@ -88,10 +83,7 @@ export function TaskWorkflowsPage() {
 	const updateMutation = useMutation(
 		trpc.taskClose.workflowUpdate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, {
-				close: () => {
-					setFormOpen(false);
-					setEditing(null);
-				},
+				close: () => setForm(null),
 				message: () => "流程模板已保存",
 			}),
 			onError: toastApiError,
@@ -106,6 +98,7 @@ export function TaskWorkflowsPage() {
 	);
 
 	const items = useMemo(() => (listQuery.data ?? []) as ListItem[], [listQuery.data]);
+	const detailItem = items.find((item) => item.id === detailId);
 
 	const stats = useMemo<StatItem[]>(() => {
 		const sums = items.reduce(
@@ -119,39 +112,37 @@ export function TaskWorkflowsPage() {
 			{
 				key: "templates",
 				label: "流程模板",
-				value: items.length,
+				value: listQuery.isError ? "—" : items.length,
 				Icon: Workflow,
 				tone: "bg-hue-blue-soft text-hue-blue-fg",
 			},
 			{
 				key: "statuses",
 				label: "状态",
-				value: sums.statuses,
+				value: listQuery.isError ? "—" : sums.statuses,
 				Icon: Layers,
 				tone: "bg-hue-violet-soft text-hue-violet-fg",
 			},
 			{
 				key: "edges",
 				label: "转移边",
-				value: sums.edges,
+				value: listQuery.isError ? "—" : sums.edges,
 				Icon: GitBranch,
 				tone: "bg-hue-amber-soft text-hue-amber-fg",
 			},
 		];
-	}, [items]);
+	}, [items, listQuery.isError]);
 
 	function openCreate() {
-		setEditing(null);
-		setFormOpen(true);
+		setForm("create");
 	}
 
 	function openEdit(item: ListItem) {
-		setEditing(toEditing(item));
-		setFormOpen(true);
+		setForm(toEditing(item));
 	}
 
 	function submit(payload: WorkflowFormPayload) {
-		if (editing) updateMutation.mutate({ id: editing.id, ...payload });
+		if (form && form !== "create") updateMutation.mutate({ id: form.id, ...payload });
 		else createMutation.mutate(payload);
 	}
 
@@ -179,6 +170,13 @@ export function TaskWorkflowsPage() {
 				listQuery.isPending ? (
 					<Card>
 						<div className="py-12 text-center text-sm text-muted-foreground">加载中…</div>
+					</Card>
+				) : listQuery.isError ? (
+					<Card className="grid justify-items-center gap-3 py-12 text-sm text-muted-foreground">
+						<p>流程模板加载失败。</p>
+						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
+							{listQuery.isFetching ? "重试中…" : "重试"}
+						</Button>
 					</Card>
 				) : (
 					<EmptyState
@@ -212,13 +210,12 @@ export function TaskWorkflowsPage() {
 			)}
 
 			<TaskWorkflowForm
-				open={formOpen}
+				open={form !== null}
 				onOpenChange={(next) => {
-					setFormOpen(next);
-					if (!next) setEditing(null);
+					if (!next) setForm(null);
 				}}
 				pending={createMutation.isPending || updateMutation.isPending}
-				editing={editing}
+				editing={form === "create" ? null : form}
 				onSubmit={submit}
 			/>
 
@@ -227,16 +224,8 @@ export function TaskWorkflowsPage() {
 				onOpenChange={(next) => {
 					if (!next) setDetailId(null);
 				}}
-				detail={(detailQuery.data as WorkflowDetail | undefined) ?? null}
-				isPending={detailQuery.isPending}
-				onEdit={
-					canEdit && detailQuery.data
-						? () => {
-								const row = items.find((item) => item.id === detailId);
-								if (row) openEdit(row);
-							}
-						: undefined
-				}
+				detail={detailItem ? { ...detailItem, ...parsed(detailItem) } : null}
+				onEdit={canEdit && detailItem ? () => openEdit(detailItem) : undefined}
 			/>
 
 			<ConfirmDialog

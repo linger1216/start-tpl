@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { isInternalUrl, linkSummary, normalizePayload, parseBlock } from "../src/lib/task-payload.ts";
+import { isInternalUrl, normalizePayload, parseBlock } from "../src/lib/task-payload.ts";
 
 describe("normalizePayload", () => {
 	it("trim URL / 去重 / 丢弃空与形状不对的 / 附件去重去空", () => {
@@ -48,16 +48,6 @@ describe("parseBlock(容错渲染)", () => {
 			kind: "link",
 			url: "https://x.example",
 		});
-	});
-
-	it("linkSummary 拼接各条 URL", () => {
-		assert.equal(
-			linkSummary([
-				{ kind: "link", url: "/settings/users" },
-				{ kind: "link", url: "https://x.example" },
-			]),
-			"/settings/users · https://x.example",
-		);
 	});
 });
 

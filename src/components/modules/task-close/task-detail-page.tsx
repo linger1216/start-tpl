@@ -84,8 +84,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const [draftAttachments, setDraftAttachments] = useState<TaskAttachment[]>([]);
 	/** 加入成员:多选,统一按参与者加入(角色不让选) */
 	const [newMemberIds, setNewMemberIds] = useState<string[]>([]);
-	/** 批量加入进行中(逐条调接口,不能靠单次 isPending) */
-	const [addingMembers, setAddingMembers] = useState(false);
 	/**
 	 * 待确认移出的成员 —— 移出是破坏性操作,先弹 `ConfirmDialog`(非空即打开)。
 	 * 存下 userId / role / 姓名:关掉弹窗后这些数据就没有别的来源了。
@@ -211,22 +209,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
-	/** 批量加入:服务端是单人接口,这里逐个串行加,全加完再关窗 */
 	const addMembers = async () => {
 		const ids = [...newMemberIds];
-		if (ids.length === 0 || addingMembers) return;
-		setAddingMembers(true);
+		if (ids.length === 0 || memberAddMutation.isPending) return;
 		try {
-			for (const userId of ids) await memberAddMutation.mutateAsync({ taskId: task.id, userId, role: "participant" });
+			await memberAddMutation.mutateAsync({ taskId: task.id, userIds: ids, role: "participant" });
 			setMemberOpen(false);
 			setNewMemberIds([]);
 			toast.success(`已加入 ${ids.length} 位成员`);
-		} catch (error) {
-			// 中途失败:已加进去的保留(服务端逐条提交),提示原因并清空选择
-			toastApiError(error);
-			setNewMemberIds([]);
-		} finally {
-			setAddingMembers(false);
+		} catch {
+			// onError 已提示，保留选择供修正后重试。
 		}
 	};
 
@@ -241,59 +233,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
 		[usersQuery.data],
 	);
-
-	/**
-	 * 「我的待办」中属于本任务的、当前还活着的 —— hooks **必须在 early-return 之前调用**,
-	 * 否则 React 报 hooks 顺序错。data 尚未就绪时取 `[]` 兜底,`useEffect` 后的 early-return
-	 * 会挡住下面的渲染,所以返回值仅在 data 已就绪路径里有意义。
-	 */
-	const myPendingActions = useMemo(
-		() =>
-			(detailQuery.data?.actions ?? []).filter(
-				(row) => row.status === "active" && row.assigneeId === detailQuery.data?.meId,
-			),
-		[detailQuery.data],
-	);
-
-	/**
-	 * 我在任务里的角色(admin / creator / executor / participant / null) —— **只给与状态无关的按钮**用。
-	 *
-	 * 与状态有关的两个按钮**不在这里判**:它们按「事项流程」(任务快照的模板)派生,见下面的
-	 * `canApprove` / `canSetStatus` —— 「发起审批」看当前状态有没有我能发起的 action 边,
-	 * 「改状态」看我能直改的 direct 边。这样换模板不用改前端。
-	 *
-	 * 非状态按钮的角色口径(用户给定):
-	 *   · 管理员(admin)           → 转交 / 发起征询 / 编辑 / 删除 / 刷新
-	 *   · 创建者(creator)         → 发起征询 / 编辑 / 删除 / 刷新
-	 *   · 执行者(executor)        → 转交 / 发起征询 / 刷新
-	 *   · 参与者(participant)    → 发起征询 / 刷新
-	 *   · 旁观者(null)            → 只读
-	 *
-	 * `admin` 由服务端 `permissions.isAdmin`(「系统管理员」角色)下发 —— 与写接口的旁路同一判据。
-	 */
-	const myRole = useMemo<"admin" | "creator" | "executor" | "participant" | null>(() => {
-		const data = detailQuery.data;
-		if (!data) return null;
-		if (data.permissions.isAdmin) return "admin";
-		if (data.task.creatorId === data.meId) return "creator";
-		const m = data.members.find((row) => row.userId === data.meId);
-		if (m?.role === "executor" || m?.role === "participant") return m.role;
-		return null;
-	}, [detailQuery.data]);
-
-	const can = useMemo(() => {
-		const isAdmin = myRole === "admin";
-		return {
-			transfer: isAdmin || myRole === "executor",
-			consult: detailQuery.data?.permissions.canInitiateConsult ?? false,
-			edit: isAdmin || myRole === "creator",
-			remove: isAdmin || myRole === "creator",
-			refresh: myRole !== null,
-			/** 加成员:服务端 `assertTaskParticipant` 同判据 —— 创建者 / 管理员 / 当前成员;旁观者不能 */
-			addMember: myRole !== null,
-			manageMembers: isAdmin || myRole === "creator",
-		};
-	}, [myRole, detailQuery.data?.permissions.canInitiateConsult]);
 
 	/** 这条 id 在库里已经不存在了(被删 / 别人删了 / 手输错了) */
 	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
@@ -344,6 +283,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	}
 
 	const { task, links, attachments, own, children, members, permissions, meId } = detailQuery.data;
+	const myPendingActions = detailQuery.data.actions.filter((row) => row.status === "active" && row.assigneeId === meId);
+	const memberRole = members.find((member) => member.userId === meId)?.role;
+	const myRole = permissions.isAdmin ? "admin" : task.creatorId === meId ? "creator" : (memberRole ?? null);
 	/**
 	 * `payload.type` 是业务场景标签,编辑界面不编辑它 —— 但保存时**必须原样带回**,
 	 * 否则 `taskUpdate` 整块替换 payload 会把它抹掉(设置页的类型筛选随之失效)。
@@ -387,7 +329,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
 	const canSetStatus = !permissions.locked && statusOptions.length > 0;
 	/** 更多▾ 里有没有内容(转交 / 发起审批在场时降级的改状态 / 编辑 / 删除) */
-	const hasMoreActions = can.transfer || (canSetStatus && canApprove) || can.edit || can.remove;
+	const hasMoreActions = permissions.canTransfer || (canSetStatus && canApprove) || permissions.canManage;
 
 	/**
 	 * 走过的状态 + 首次到达时刻 —— 读活动日志里 `toStatus` 非空的行(与流程条同源)。
@@ -582,7 +524,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 									更改状态
 								</Button>
 							) : null}
-							{can.consult ? (
+							{permissions.canInitiateConsult ? (
 								<Button
 									variant="outline"
 									size="sm"
@@ -607,7 +549,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 										}
 									/>
 									<DropdownMenuContent align="end">
-										{can.transfer ? (
+										{permissions.canTransfer ? (
 											<DropdownMenuItem
 												onClick={() => {
 													setTransferTo("");
@@ -627,11 +569,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 												更改状态
 											</DropdownMenuItem>
 										) : null}
-										{(can.transfer || (canSetStatus && canApprove)) && (can.edit || can.remove) ? (
+										{(permissions.canTransfer || (canSetStatus && canApprove)) && permissions.canManage ? (
 											<DropdownMenuSeparator />
 										) : null}
-										{can.edit ? <DropdownMenuItem onClick={() => setEditOpen(true)}>编辑</DropdownMenuItem> : null}
-										{can.remove ? (
+										{permissions.canManage ? (
+											<DropdownMenuItem onClick={() => setEditOpen(true)}>编辑</DropdownMenuItem>
+										) : null}
+										{permissions.canManage ? (
 											<DropdownMenuItem variant="destructive" onClick={() => setRemoveOpen(true)}>
 												删除
 											</DropdownMenuItem>
@@ -639,7 +583,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : null}
-							{can.refresh ? (
+							{myRole !== null ? (
 								<RefreshButton busy={detailQuery.isFetching} onClick={() => detailQuery.refetch()} />
 							) : null}
 						</div>
@@ -720,7 +664,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						</section>
 					) : null}
 
-					{/* 任务链接块 —— 内部页面 / 外部链接,按注册表渲染(未知块降级成占位,不崩) */}
+					{/* 任务链接 */}
 					<section className="grid gap-3">
 						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
 							<h2 className="shrink-0 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
@@ -730,11 +674,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						<TaskLinkBlocks links={links} />
 					</section>
 
-					{(task.creatorId === meId || permissions.isAdmin || members.some((member) => member.userId === meId)) && (
-						<TaskReport
-							taskId={task.id}
-							canManage={(task.creatorId === meId || permissions.isAdmin) && !task.parentId && children.length === 0}
-						/>
+					{permissions.canAddMember && (
+						<TaskReport taskId={task.id} canManage={permissions.canManage && !task.parentId && children.length === 0} />
 					)}
 
 					{/* 附件 block */}
@@ -773,6 +714,10 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						<TaskComments
 							taskId={task.id}
 							meId={meId}
+							participants={[
+								{ id: task.creatorId, name: task.creatorName ?? "" },
+								...members.map((member) => ({ id: member.userId, name: member.name ?? "" })),
+							].filter((person) => person.id !== meId && person.name)}
 							canRemoveAny={myRole === "admin"}
 							labelledBy="tc-comments-title"
 						/>
@@ -789,7 +734,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 									参与人{" "}
 									<span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
 								</h2>
-								{can.addMember ? (
+								{permissions.canAddMember ? (
 									<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={() => setMemberOpen(true)}>
 										<UserPlus className="size-3.5" />
 									</Button>
@@ -804,7 +749,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 										name={m.name ?? m.userId}
 										main={m.role === "executor"}
 										onRemove={
-											can.manageMembers
+											permissions.canManage
 												? () =>
 														setPendingRemoveMember({
 															userId: m.userId,
@@ -1049,8 +994,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				}}
 				title="加入成员"
 				description="多选,按参与者加入;需要执行人时在成员行里单独转交。"
-				pending={addingMembers || memberAddMutation.isPending}
-				confirmDisabled={newMemberIds.length === 0 || addingMembers}
+				pending={memberAddMutation.isPending}
+				confirmDisabled={newMemberIds.length === 0}
 				confirmText={newMemberIds.length > 1 ? `加入 ${newMemberIds.length} 人` : "加入"}
 				pendingText="加入中…"
 				onConfirm={() => void addMembers()}
@@ -1275,7 +1220,7 @@ function PeopleRow({
 }
 
 /**
- * 「这条任务不存在」的识别 —— 服务端 `taskGet` 查不到活着的记录时抛 tRPC `NOT_FOUND`(`task-close.ts` 的 `getTaskRow`)。
+ * 「这条任务不存在」的识别 —— 服务端 `taskGet` 查不到活着的记录时抛 tRPC `NOT_FOUND`(`task-shared.ts` 的 `getTaskRow`)。
  *
  * 客户端拿到的是 `TRPCClientError`(实测 `@trpc/client` 的构造:`data = shape.data`,两者都挂在错误上),
  * 三种判据都认一遍:`data.code` 是字符串键 `"NOT_FOUND"`、`shape.code` 是数字码 `-32004`、`data.httpStatus` 是 404。

@@ -30,20 +30,17 @@ type Pending = { id: string; name: string };
  *
  * 上传是**选完即传**(复用 `useFileUpload` 的秒传/直传链路),提交评论时只带 `sys_file.id` 列表;
  * 不打包成「提交时一起传」是刻意的:大文件先传完,点提交就是一次轻量写。
- *
- * `meName` 是给输入区 avatar 用的首字母(原型是「我」);fallback 到 "我"。
  */
 export function TaskComments({
 	taskId,
 	meId,
-	meName,
+	participants,
 	canRemoveAny,
 	labelledBy,
 }: {
 	taskId: string;
 	meId: string;
-	/** `meName` 给 ci 输入区 avatar 当首字母;load 失败时 fallback "我" */
-	meName?: string | null;
+	participants: Participant[];
 	canRemoveAny: boolean;
 	/**
 	 * 输入框的可见标签 id(调用方区块标题的 id)—— checkup P3:输入之后 placeholder 就没了,
@@ -66,17 +63,6 @@ export function TaskComments({
 	const [pendingRemove, setPendingRemove] = useState<{ id: string; authorName: string | null } | null>(null);
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
-	// 成员名单(创建者 + 成员,去掉自己)供 @选单过滤 —— 用 taskGet(详情页同键,缓存共享,不多打一次)
-	const taskQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
-	const participants: Participant[] | undefined = (() => {
-		const detail = taskQuery.data;
-		if (!detail) return undefined;
-		const roster = [
-			{ id: detail.task.creatorId, name: detail.task.creatorName ?? "" },
-			...detail.members.map((member) => ({ id: member.userId, name: member.name ?? "" })),
-		];
-		return roster.filter((person) => person.id !== meId && person.name);
-	})();
 	// 评论也会进活动日志(`tc_log`)—— 失效要连日志一起,否则「动态」卡还停在发评论之前
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
 	const mention = useMentionPicker(participants, setContent, textRef);
@@ -136,7 +122,7 @@ export function TaskComments({
 		<div className="grid gap-5">
 			{/* ci —— 评论输入(原型的样:avatar + 边框 field + 工具条 + 发送) */}
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
-				<Avatar initials={(meName ?? "我").slice(0, 1)} />
+				<Avatar initials="我" />
 				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
 				<div className="rounded-lg border border-border bg-card">
 					<textarea

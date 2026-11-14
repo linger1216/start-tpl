@@ -5,17 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import type { TaskReportSchema } from "#/lib/task-report-spec";
 
-/** 字段类型码 → 中文名(预览与字段清单共用一份,别在调用点再抄) */
-export const REPORT_FIELD_TYPE_LABELS: Record<TaskReportSchema["fields"][number]["type"], string> = {
-	text: "文本",
-	integer: "整数",
-	decimal: "小数",
-	date: "日期",
-	datetime: "日期时间",
-	select: "单选",
-	multiselect: "多选",
-};
-
 /**
  * 填报模板的**只读预览** —— 按schema渲染出「填报人将会看到的表单」。
  *

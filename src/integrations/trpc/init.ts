@@ -257,6 +257,7 @@ export function requireCurrentUser(ctx: unknown): InjectedUser {
 }
 
 export const createTRPCRouter = t.router;
+export const mergeTRPCRouters = t.mergeRouters;
 
 /** 只挂日志与审计:**任何人**都能调(本项目当前没有这种接口,留着表达"公开"的语义) */
 export const publicProcedure = t.procedure.use(loggingMiddleware).use(auditMiddleware);

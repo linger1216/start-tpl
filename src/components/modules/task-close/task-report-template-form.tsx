@@ -137,6 +137,10 @@ export function TaskReportTemplateForm({
 		const template = templates.find((item) => item.id === id && item.canManage);
 		const parsed = taskReportSchema.safeParse(template?.payload);
 		if (!template || !parsed.success) {
+			setName("");
+			setKind("OBJECT");
+			setShared(false);
+			setFields([]);
 			setError("模板结构无效，无法编辑");
 			return;
 		}
@@ -175,7 +179,14 @@ export function TaskReportTemplateForm({
 		setFields((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
 	};
 	const addField = () => setFields([...fields, newField()]);
+	const editableTemplate =
+		!templateId ||
+		templates.some(
+			(template) =>
+				template.id === templateId && template.canManage && taskReportSchema.safeParse(template.payload).success,
+		);
 	const submit = () => {
+		if (!editableTemplate) return;
 		const result = taskReportSchema.safeParse({
 			id: "report",
 			kind,
@@ -220,7 +231,7 @@ export function TaskReportTemplateForm({
 					<DialogTitle>{templateId ? `编辑填报模板 · ${name || "(未命名)"}` : "新增填报模板"}</DialogTitle>
 					<DialogDescription>
 						{templateId
-							? "保存即覆盖当前结构;已绑定的任务会使用新结构填报。"
+							? "保存会更新模板;已绑定的任务保留原有结构。"
 							: "定义任务的填报表单结构;发布后供任务绑定。字段标识随名称自动生成,可手动修改。"}
 					</DialogDescription>
 				</DialogHeader>
@@ -344,9 +355,9 @@ export function TaskReportTemplateForm({
 							</div>
 						))}
 					</div>
-					{error && (
+					{(!editableTemplate || error) && (
 						<p role="alert" className="text-sm text-destructive">
-							{error}
+							{!editableTemplate ? "模板不可用或无权编辑，请关闭后刷新。" : error}
 						</p>
 					)}
 				</DialogBody>
@@ -355,7 +366,7 @@ export function TaskReportTemplateForm({
 					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
 						取消
 					</Button>
-					<Button disabled={pending} onClick={submit}>
+					<Button disabled={pending || !editableTemplate} onClick={submit}>
 						{pending ? "发布中…" : "发布模板"}
 					</Button>
 				</DialogFooter>

@@ -7,7 +7,7 @@ import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
 import { statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
 
-/** `workflowGet` 的返回形状(详情弹窗的数据源) */
+/** 流程模板列表的详情投影。 */
 export type WorkflowDetail = {
 	id: string;
 	name: string;
@@ -30,19 +30,17 @@ const VIA_TEXT: Record<string, string> = { direct: "直接改", action: "审批�
 /**
  * 流程模板详情 —— 只读弹窗:状态集合 / 初始态 / 转移边一览。
  *
- * 数据来自 `workflowGet`(点「详情」时才拉),`meta` 走 `DetailDialog` 底部的创建 / 更新时间。
+ * 数据来自流程模板列表，`meta` 走 `DetailDialog` 底部的创建 / 更新时间。
  */
 export function TaskWorkflowDetail({
 	open,
 	onOpenChange,
 	detail,
-	isPending,
 	onEdit,
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
 	detail: WorkflowDetail | null;
-	isPending: boolean;
 	/** 给了就在底部渲染「编辑」主操作 */
 	onEdit?: () => void;
 }) {
@@ -55,8 +53,8 @@ export function TaskWorkflowDetail({
 			onEdit={onEdit}
 			meta={detail ? { id: detail.id, createdAt: detail.createdAt, updatedAt: detail.updatedAt } : null}
 		>
-			{isPending || !detail ? (
-				<p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>
+			{!detail ? (
+				<p className="py-6 text-center text-sm text-muted-foreground">流程模板不存在。</p>
 			) : (
 				<>
 					<div className="space-y-2">

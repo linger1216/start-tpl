@@ -1,10 +1,9 @@
-import { ExternalLink, FileQuestion, Link2 } from "lucide-react";
+import { ExternalLink, Link2 } from "lucide-react";
 import { useState } from "react";
 
 import { TaskLinkPreview } from "#/components/modules/task-close/task-link-preview";
 import { ActionButton } from "#/components/ui/action-button";
-import { useStableKeys } from "#/hooks/use-stable-keys";
-import { isInternalUrl, parseBlock } from "#/lib/task-payload";
+import { isInternalUrl, type TaskLinkBlock } from "#/lib/task-payload";
 import { cn } from "#/lib/utils";
 
 /**
@@ -13,26 +12,19 @@ import { cn } from "#/lib/utils";
  *
  * 每条链接尾部有「预览」:**就地展开在链接下方**(不弹窗)—— iframe 打开同一地址
  * (站内同源必能嵌;站外看对方策略)。展开的那条占满整行,免得 iframe 挤在半列里。
- *
- * **容错**:认不出的块(老数据的文字 / 表格块、脏数据)渲染成占位,不抛错、也不吞掉其余链接。
  */
-export function TaskLinkBlocks({ links }: { links: unknown }) {
-	const items = Array.isArray(links) ? links : [];
+export function TaskLinkBlocks({ links }: { links: TaskLinkBlock[] }) {
 	/** 展开预览的那条链接(同一时刻只展开一条,再点「收起」收回) */
 	const [openUrl, setOpenUrl] = useState<string | null>(null);
-	// 块没有 id;用「按位置稳定」的 key(内容变化不重建),别用下标(会被 noArrayIndexKey 拦下)
-	const keys = useStableKeys(items.length, "tc-view");
-	if (items.length === 0) {
+	if (links.length === 0) {
 		return <p className="text-sm text-muted-foreground">（没有链接）</p>;
 	}
 	return (
 		<div className="grid gap-2 sm:grid-cols-2">
-			{items.map((raw, index) => {
-				const block = parseBlock(raw);
-				if (!block) return <UnknownBlock key={keys[index]} raw={raw} />;
+			{links.map((block) => {
 				const open = openUrl === block.url;
 				return (
-					<div key={keys[index]} className={cn("grid content-start gap-2", open && "sm:col-span-2")}>
+					<div key={block.url} className={cn("grid content-start gap-2", open && "sm:col-span-2")}>
 						<LinkView url={block.url} open={open} onToggle={() => setOpenUrl(open ? null : block.url)} />
 						{open ? <TaskLinkPreview url={block.url} onClose={() => setOpenUrl(null)} /> : null}
 					</div>
@@ -68,16 +60,6 @@ function LinkView({
 			</a>
 			<span className="shrink-0 text-xs text-muted-foreground">{internal ? "站内" : "站外"}</span>
 			<ActionButton onClick={onToggle}>{open ? "收起" : "预览"}</ActionButton>
-		</div>
-	);
-}
-
-function UnknownBlock({ raw }: { raw: unknown }) {
-	const kind = raw && typeof raw === "object" && "kind" in raw ? String((raw as { kind: unknown }).kind) : "未知";
-	return (
-		<div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-			<FileQuestion className="size-3.5 shrink-0" />
-			不支持的链接块（{kind}）
 		</div>
 	);
 }

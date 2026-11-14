@@ -8,7 +8,7 @@ import { z } from "zod";
  * 绝对 URL 的 host(含端口)与当前页面一致也算站内。
  *
  * 判别联合的 `linkBlockSchema` 就是权威形状(后端入参校验 + 前端类型都从它来)。
- * 渲染时对无法识别的数据降级成占位块,不能抛错(见 `parseBlock`)。
+ * 读取时过滤无法识别的数据(见 `parseBlock`)。
  */
 export const linkBlockSchema = z.object({
 	kind: z.literal("link"),
@@ -60,7 +60,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * **容错解析**一块 —— 认不出来就返回 `null`(调用方渲染占位块)。
+ * **容错解析**一块 —— 认不出来就返回 `null`。
  */
 export function parseBlock(raw: unknown): TaskLinkBlock | null {
 	if (!isRecord(raw)) return null;
@@ -69,18 +69,10 @@ export function parseBlock(raw: unknown): TaskLinkBlock | null {
 	return isUsableUrl(url) ? { kind: "link", url } : null;
 }
 
-/** 把 `payload.links`(unknown)解析成链接块;未知 / 坏块直接丢弃(只读渲染请用 `parseBlock` 以保留占位) */
+/** 把 `payload.links`(unknown)解析成链接块;未知 / 坏块直接丢弃 */
 export function parseBlocks(raw: unknown): TaskLinkBlock[] {
 	if (!Array.isArray(raw)) return [];
 	return raw.map(parseBlock).filter((block): block is TaskLinkBlock => block !== null);
-}
-
-/** 链接区的一句话摘要 */
-export function linkSummary(raw: unknown, max = 80): string {
-	const text = parseBlocks(raw)
-		.map((block) => block.url)
-		.join(" · ");
-	return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /**
