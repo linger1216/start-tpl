@@ -1,7 +1,7 @@
 // 系统设置 ▸ 部门管理(部门树 + 成员/角色)
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsDepartmentsPage } from "#/components/modules/settings/settings-departments-page";
+import { SettingsDepartmentsPage } from "#/components/modules/settings/departments/page";
 
 export const Route = createFileRoute("/(main)/settings/departments")({
 	/**

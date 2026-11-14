@@ -1,27 +1,36 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
-import { taskReportTable, taskReportTemplateTable, taskTable } from "#/db/data-base-schema";
+import {
+	sysFile,
+	taskMemberTable,
+	taskReportSubmissionTable,
+	taskReportTable,
+	taskReportTemplateTable,
+	taskTable,
+} from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { createReportWorkbook, previewReportWorkbook } from "#/lib/task-report-excel";
-import { taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { createReportWorkbook, previewReportWorkbook } from "#/lib/task/report-excel";
+import { reportAttachmentIds, taskReportSchema, validateTaskReport } from "#/lib/task/report-spec";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
+	assertAttachments,
 	assertTaskParticipant,
 	getAvailableReportTemplate,
 	getTaskRow,
 	hashReportRows,
 	ID,
 	lockTask,
-	logTaskEvent,
 	memberRolesOf,
+	nameMapOf,
 	type ScopeFilter,
 	stableJson,
 	type Tx,
-} from "./task-shared";
+	writeTaskEvent,
+} from "./common";
 
 /**
  * 取一个**当前用户可见**的填报模板(建任务前按模板下载 / 解析 Excel 用)。
@@ -44,13 +53,23 @@ async function getVisibleReportTemplate(me: { id: string; isSuper?: boolean }, t
 	return { ...template, schema: taskReportSchema.parse(template.payload) };
 }
 
-/** 任务始终使用绑定时的结构快照。 */
-function getTaskReportTemplate(task: { report: unknown }) {
+/**
+ * 任务的结构快照(`tc_task.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
+ * (模板是单版本,payload 即当前结构),否则老任务一打开就"无法加载填报"。
+ */
+async function getTaskReportTemplate(task: { report: unknown }, reader: Pick<typeof db, "select"> = db) {
 	const report = task.report as { reportId?: string; schema?: unknown } | null;
 	const reportId = report?.reportId;
 	if (!reportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
-	const schema = taskReportSchema.parse(report?.schema);
-	return { id: reportId, schema };
+	const snapshot = taskReportSchema.safeParse(report?.schema);
+	if (snapshot.success) return { id: reportId, schema: snapshot.data };
+	const [template] = await reader
+		.select({ payload: taskReportTemplateTable.payload })
+		.from(taskReportTemplateTable)
+		.where(eq(taskReportTemplateTable.id, reportId))
+		.limit(1);
+	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板不存在" });
+	return { id: reportId, schema: taskReportSchema.parse(template.payload) };
 }
 
 /** 创建人或当前执行人可以填写、导入及同步。 */
@@ -83,7 +102,7 @@ async function lockReportPair(tx: Tx, taskId: string, userId: string, action: "�
 	if (!parentTaskId) throw new TRPCError({ code: "BAD_REQUEST", message: `只有子任务可以${action}` });
 	if (!(await canEditReport(task, userId, tx)))
 		throw new TRPCError({ code: "FORBIDDEN", message: `只有任务创建人或当前执行人可以${action}` });
-	if (getTaskReportTemplate(task).schema.kind !== "TABLE")
+	if ((await getTaskReportTemplate(task, tx)).schema.kind !== "TABLE")
 		throw new TRPCError({ code: "BAD_REQUEST", message: `只有表格填报可以${action}` });
 	const [own] = await tx
 		.select()
@@ -103,6 +122,42 @@ async function lockReportPair(tx: Tx, taskId: string, userId: string, action: "�
 	if (!parent || !Array.isArray(parent.draft))
 		throw new TRPCError({ code: "NOT_FOUND", message: "父任务没有表格填报" });
 	return { task, parentTaskId, own, parent, ownRows: own.draft, parentRows: parent.draft };
+}
+
+/**
+ * 子任务**已保存**的填报快照(`current_submission_id` 指向的那一份)。父任务的一切(界面展示、导出)
+ * 都以它为准 —— 子任务没点保存就不算,不做实时兜底。`reportGet` 与 Excel 导出共用这一份口径。
+ */
+async function syncedChildrenOf(taskId: string) {
+	const childTasks = await db
+		.select({ id: taskTable.id, name: taskTable.name })
+		.from(taskTable)
+		.where(and(eq(taskTable.parent_id, taskId), alive(taskTable)));
+	if (childTasks.length === 0) return [];
+	const childIds = childTasks.map((row) => row.id);
+	const submissions = await db
+		.select({
+			taskId: taskReportTable.task_id,
+			syncedAt: taskReportSubmissionTable.created_at,
+			payload: taskReportSubmissionTable.payload,
+		})
+		.from(taskReportTable)
+		.innerJoin(taskReportSubmissionTable, eq(taskReportSubmissionTable.id, taskReportTable.current_submission_id))
+		.where(inArray(taskReportTable.task_id, childIds));
+	const executors = await db
+		.select({ taskId: taskMemberTable.task_id, userId: taskMemberTable.user_id })
+		.from(taskMemberTable)
+		.where(and(inArray(taskMemberTable.task_id, childIds), eq(taskMemberTable.role, "executor")));
+	const names = await nameMapOf(executors.map((row) => row.userId));
+	const executorOf = new Map(executors.map((row) => [row.taskId, row.userId]));
+	const nameOf = new Map(childTasks.map((row) => [row.id, row.name]));
+	return submissions.map((row) => ({
+		taskId: row.taskId,
+		name: nameOf.get(row.taskId) ?? row.taskId,
+		executorName: names.get(executorOf.get(row.taskId) ?? "") ?? null,
+		payload: row.payload,
+		syncedAt: row.syncedAt ? row.syncedAt.toISOString() : null,
+	}));
 }
 
 export const taskReportRouter = createTRPCRouter({
@@ -130,12 +185,47 @@ export const taskReportRouter = createTRPCRouter({
 			await assertTaskParticipant(task, me.id, "无权导出填报");
 			const [own] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
 			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
-			const template = getTaskReportTemplate(task);
-			// 每个任务导出自己那份草稿(子任务是下发时复制出来的那份)
+			const template = await getTaskReportTemplate(task);
+			if (input.templateOnly) {
+				return { fileBase64: createReportWorkbook(template.schema).toString("base64") };
+			}
+			/**
+			 * 父任务导出**父子所有填报数据**:表格那份母版里本来就并进了子任务同步过来的行,
+			 * 但表单只有一个对象 —— 父任务自己那张表看不到子任务的值,所以再附一张「子任务填报」工作表。
+			 * 数据源与界面同一份口径:子任务**点过保存**的快照(没保存的不出现在导出里)。
+			 */
+			const children =
+				template.schema.kind === "OBJECT"
+					? (await syncedChildrenOf(task.id)).map((child) => ({
+							owner: child.executorName ?? child.name,
+							payload: child.payload,
+						}))
+					: [];
+			// 「填报(可读)」那张表要把附件写成**文件名**(给附件已删的也留着名字,人看得懂更重要)
+			const attachmentIds = [
+				...new Set([
+					...reportAttachmentIds(template.schema, own.draft),
+					...children.flatMap((child) => reportAttachmentIds(template.schema, child.payload)),
+				]),
+			];
+			const fileRows = attachmentIds.length
+				? await db
+						.select({ id: sysFile.id, name: sysFile.origin_name })
+						.from(sysFile)
+						.where(inArray(sysFile.id, attachmentIds))
+				: [];
+			// 表名按「这任务有没有子任务」定:有就出「父任务填报 / 子任务填报」四张表(哪怕子任务还没保存)
+			const childRows = await db
+				.select({ id: taskTable.id })
+				.from(taskTable)
+				.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
 			return {
-				fileBase64: createReportWorkbook(template.schema, input.templateOnly ? undefined : own.draft).toString(
-					"base64",
-				),
+				fileBase64: createReportWorkbook(template.schema, own.draft, {
+					readable: true,
+					parentLayout: childRows.length > 0,
+					fileNames: Object.fromEntries(fileRows.map((row) => [row.id, row.name])),
+					children,
+				}).toString("base64"),
 			};
 		}),
 
@@ -162,7 +252,7 @@ export const taskReportRouter = createTRPCRouter({
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以导入" });
 				const [report] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
 				if (!report) throw new TRPCError({ code: "BAD_REQUEST", message: "没有可编辑的填报" });
-				const template = getTaskReportTemplate(task);
+				const template = await getTaskReportTemplate(task);
 				return await previewReportWorkbook(template.schema, input.fileBase64);
 			} catch (error) {
 				if (error instanceof TRPCError) throw error;
@@ -315,7 +405,7 @@ export const taskReportRouter = createTRPCRouter({
 				.update(taskTable)
 				.set({ report: { reportId: template.id, schema: template.schema }, updated_at: new Date() })
 				.where(eq(taskTable.id, task.id));
-			await logTaskEvent(tx, {
+			await writeTaskEvent(tx, {
 				taskId: task.id,
 				event: "report.bind",
 				actor: me,
@@ -333,14 +423,31 @@ export const taskReportRouter = createTRPCRouter({
 		const [own] = await db.select().from(taskReportTable).where(eq(taskReportTable.task_id, task.id)).limit(1);
 		if (!own) return null;
 		// 模板引用在任务的 report 规则里(单版本:模板 payload 即当前结构)
-		const template = getTaskReportTemplate(task);
+		const template = await getTaskReportTemplate(task);
+		// 子任务的填报内容:只认**点过「保存」的快照**;没保存的什么都不显示,不做实时兜底
+		const syncedChildren = await syncedChildrenOf(task.id);
+		// 附件文件名:自己那份 + 子任务快照里引用的都要解出来
+		const fileIds = [
+			...new Set([
+				...reportAttachmentIds(template.schema, own.draft),
+				...syncedChildren.flatMap((child) => reportAttachmentIds(template.schema, child.payload)),
+			]),
+		];
+		const files = fileIds.length
+			? await db
+					.select({ id: sysFile.id, name: sysFile.origin_name, size: sysFile.size, contentType: sysFile.content_type })
+					.from(sysFile)
+					.where(and(inArray(sysFile.id, fileIds), eq(sysFile.status, 1)))
+			: [];
 		return {
-			/** 每个任务读**自己那份**草稿(子任务是下发时复制出来的),互不加锁 */
 			report: own,
 			template,
+			files,
 			canEdit: await canEditReport(task, me.id),
-			/** 子任务才能把本任务的行同步回父任务;父任务自己就是数据源 */
-			canSyncToParent: task.parent_id !== null && template.schema.kind === "TABLE",
+			/** 子任务(表格 / 表单都行)能把本任务的填报同步给父任务;父任务自己就是数据源 */
+			canSyncToParent: task.parent_id !== null,
+			/** 子任务**保存过**的填报快照;没保存的不会出现在这里 */
+			syncedChildren,
 		};
 	}),
 
@@ -364,7 +471,7 @@ export const taskReportRouter = createTRPCRouter({
 				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 				if (own.revision !== input.revision)
 					throw new TRPCError({ code: "CONFLICT", message: "填报已被修改，请刷新后重试" });
-				const template = getTaskReportTemplate(task);
+				const template = await getTaskReportTemplate(task);
 				const schema = template.schema;
 				const rows = schema.kind === "TABLE" ? input.draft : [input.draft];
 				if (
@@ -375,6 +482,7 @@ export const taskReportRouter = createTRPCRouter({
 					throw new TRPCError({ code: "BAD_REQUEST", message: "填报格式无效" });
 				const issues = schema.kind === "TABLE" && rows.length === 0 ? [] : validateTaskReport(schema, input.draft);
 				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
+				await assertAttachments(tx, reportAttachmentIds(schema, input.draft));
 				if (task.parent_id && schema.kind === "TABLE" && rows.some((row) => !rowInScope(row, scopeFilterOf(task))))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据不能超出分派范围" });
 				for (const row of rows)
@@ -401,9 +509,51 @@ export const taskReportRouter = createTRPCRouter({
 	reportSyncToParent: protectedProcedure.input(z.object({ taskId: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		return db.transaction(async (tx) => {
+			// 表单没有"行"可合并:锁本任务那行,保存时追加一份不可变快照给父任务看
+			const probe = await lockTask(tx, input.taskId);
+			if (!probe.parent_id) throw new TRPCError({ code: "BAD_REQUEST", message: "只有子任务可以同步" });
+			if (!(await canEditReport(probe, me.id, tx)))
+				throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以同步" });
+			const probeTemplate = await getTaskReportTemplate(probe, tx);
+			if (probeTemplate.schema.kind === "OBJECT") {
+				const [ownRow] = await tx
+					.select()
+					.from(taskReportTable)
+					.where(eq(taskReportTable.task_id, probe.id))
+					.limit(1)
+					.for("update");
+				if (!ownRow) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				const found = validateTaskReport(probeTemplate.schema, ownRow.draft);
+				if (found.length > 0)
+					throw new TRPCError({ code: "BAD_REQUEST", message: found[0]?.message ?? "填报内容不完整" });
+				const submissionId = newId();
+				const now = new Date();
+				await tx.insert(taskReportSubmissionTable).values({
+					id: submissionId,
+					report_id: ownRow.id,
+					task_id: probe.id,
+					submitter_id: me.id,
+					revision: ownRow.revision,
+					payload: ownRow.draft,
+					created_at: now,
+				});
+				const revision = ownRow.revision + 1;
+				await tx
+					.update(taskReportTable)
+					.set({ current_submission_id: submissionId, revision, updated_at: now })
+					.where(eq(taskReportTable.id, ownRow.id));
+				await writeTaskEvent(tx, {
+					taskId: probe.id,
+					event: "report.sync",
+					actor: me,
+					detail: { parentTaskId: probe.parent_id, pushed: 1, summary: "同步表单填报到父任务" },
+				});
+				return { pushed: 1, revision };
+			}
 			const {
 				task,
 				parentTaskId,
+				own,
 				ownRows: mine,
 				parent,
 				parentRows,
@@ -427,7 +577,7 @@ export const taskReportRouter = createTRPCRouter({
 				.update(taskTable)
 				.set({ report: { ...(task.report as object), baseHash: hashReportRows(mine) } })
 				.where(eq(taskTable.id, task.id));
-			await logTaskEvent(tx, {
+			await writeTaskEvent(tx, {
 				taskId: task.id,
 				event: "report.sync",
 				actor: me,
@@ -437,7 +587,8 @@ export const taskReportRouter = createTRPCRouter({
 					summary: `同步 ${mine.length} 行到父任务`,
 				},
 			});
-			return { pushed: mine.length };
+			// 表格同步不改自己那份草稿的 revision,但两条路径的返回形状保持一致
+			return { pushed: mine.length, revision: own.revision };
 		});
 	}),
 
@@ -463,7 +614,7 @@ export const taskReportRouter = createTRPCRouter({
 					.update(taskTable)
 					.set({ report: { ...(task.report as object), baseHash: hashReportRows(draft) } })
 					.where(eq(taskTable.id, task.id));
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "report.reset",
 					actor: me,

@@ -63,6 +63,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	// 任务闭环(tc_close):见 doc/task-close.md
 	tc_report_template: "填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)",
 	tc_task_report: "任务填报(每个任务独立保存草稿和版本)",
+	tc_report_submission: "子任务表单填报的保存快照(父任务只读;没保存就看不见)",
 	tc_workflow:
 		"状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义;建任务时会快照一份到 tc_task.workflow 列)",
 	tc_task: "任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)",
@@ -91,10 +92,18 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "tc_report_template", column: "created_at", comment: "创建时间" },
 	{ table: "tc_report_template", column: "updated_at", comment: "更新时间" },
+	{ table: "tc_report_submission", column: "id", comment: "主键" },
+	{ table: "tc_report_submission", column: "report_id", comment: "→ tc_task_report.id(子任务那一行)" },
+	{ table: "tc_report_submission", column: "task_id", comment: "子任务 ID" },
+	{ table: "tc_report_submission", column: "submitter_id", comment: "点「保存」的人" },
+	{ table: "tc_report_submission", column: "revision", comment: "保存时的草稿版本" },
+	{ table: "tc_report_submission", column: "payload", comment: "不可变快照(父任务只读这份)" },
+	{ table: "tc_report_submission", column: "created_at", comment: "保存时间" },
 	{ table: "tc_task_report", column: "id", comment: "主键" },
 	{ table: "tc_task_report", column: "task_id", comment: "任务 ID" },
 	{ table: "tc_task_report", column: "draft", comment: "本任务的填报草稿" },
 	{ table: "tc_task_report", column: "revision", comment: "本任务草稿的乐观锁版本" },
+	{ table: "tc_task_report", column: "current_submission_id", comment: "手动「保存」后指向的快照(表单同步用)" },
 	{ table: "tc_task_report", column: "created_at", comment: "创建时间" },
 	{ table: "tc_task_report", column: "updated_at", comment: "更新时间" },
 	{ table: "sys_notification", column: "id", comment: "主键" },
@@ -117,7 +126,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_notification_delivery", column: "next_attempt_at", comment: "下次尝试时间" },
 	{ table: "sys_notification_delivery", column: "locked_until", comment: "租约截止时间" },
 	{ table: "sys_notification_delivery", column: "lock_token", comment: "租约令牌" },
-	{ table: "sys_notification_delivery", column: "provider", comment: "服务商" },
 	{ table: "sys_notification_delivery", column: "provider_message_id", comment: "服务商消息 ID" },
 	{ table: "sys_notification_delivery", column: "sent_at", comment: "发送时间" },
 	{ table: "sys_notification_delivery", column: "last_error", comment: "最近错误" },
@@ -162,7 +170,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_menu", column: "icon", comment: "图标名(小写 kebab-case,与 NAV_ICON_MAP 的键一致)" },
 	{ table: "sys_menu", column: "sort", comment: "同级排序,越小越靠前" },
 	{ table: "sys_menu", column: "visible", comment: "1 显示 / 0 隐藏(隐藏的分组连带子树一起不显示)" },
-	{ table: "sys_menu", column: "status", comment: "1 启用 / 0 停用(当前代码没读它)" },
 	{ table: "sys_menu", column: "type", comment: "1 目录 / 2 菜单 / 3 按钮(按钮只是权限点,不进侧边栏)" },
 	{ table: "sys_menu", column: "perm", comment: "权限标识,如 sys:role:write;前端 useHasPerm() 认它" },
 	{ table: "sys_menu", column: "created_at", comment: "创建时间" },
@@ -187,12 +194,11 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		comment: "软删除时间(null = 未删除);列表 / 查重 / 鉴权都要过滤它,见 lib/soft-delete.ts",
 	},
 	// sys_para
-	{ table: "sys_para", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "sys_para", column: "para_key", comment: "参数名,如 log.enabled(表的主键)" },
 	{ table: "sys_para", column: "para_value", comment: "参数值(text,不受 4000 字符列宽限制)" },
 	{ table: "sys_para", column: "para_type", comment: "类型码:1:int 2:bool 3:string 4:json(见 lib/para-spec.ts)" },
 	{ table: "sys_para", column: "para_group", comment: "分组(参数管理页按它归堆)" },
-	{ table: "sys_para", column: "status", comment: "1 启用 / 0 停用(当前代码没读它)" },
+	{ table: "sys_para", column: "status", comment: "1 启用 / 0 停用(参数管理页可读可改)" },
 	{ table: "sys_para", column: "remark", comment: "给人看的说明(界面直接展示)" },
 	{ table: "sys_para", column: "editable", comment: "0 = 代码内置不允许改" },
 	{ table: "sys_para", column: "created_at", comment: "创建时间" },
@@ -226,7 +232,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		comment: "业务对象类型(tinyint 码,各业务自己约定;如 1 档案 / 2 数据源)",
 	},
 	{ table: "sys_tag_relation", column: "created_at", comment: "创建时间" },
-	{ table: "sys_tag_relation", column: "updated_at", comment: "更新时间" },
 	// sys_user(Better Auth 内核)
 	{ table: "sys_user", column: "id", comment: "主键(better-auth 生成的字符串)" },
 	{ table: "sys_user", column: "name", comment: "显示名(顶栏用户菜单展示的就是它)" },
@@ -331,7 +336,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_user_dept", column: "department_id", comment: "部门 id → sys_dept.id(级联删除)" },
 	{ table: "sys_user_dept", column: "user_id", comment: "用户 id → sys_user.id(级联删除)" },
 	{ table: "sys_user_dept", column: "created_at", comment: "创建时间" },
-	{ table: "sys_user_dept", column: "updated_at", comment: "更新时间" },
 
 	// sys_casbin_rule(功能权限策略;见 src/lib/casbin.ts)
 	{ table: "sys_casbin_rule", column: "id", comment: "主键(nanoid,由代码生成)" },
@@ -573,7 +577,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		column: "actor_name",
 		comment: "操作人姓名**快照**(账号被删后历史仍读得懂;与 sys_log.operator_name 同口径)",
 	},
-	{ table: "tc_log", column: "detail", comment: "事件专属补充 JSON(结构由 event 判别,见 src/lib/task-close-log.ts)" },
+	{ table: "tc_log", column: "detail", comment: "事件专属补充 JSON(结构由 event 判别,见 src/lib/task/close-log.ts)" },
 	{
 		table: "tc_log",
 		column: "created_at",
@@ -625,11 +629,6 @@ const COLUMN_REPAIRS: Array<{ table: string; column: string; ddl: string }> = [
 	},
 	{
 		table: "sys_tag",
-		column: "updated_at",
-		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
-	},
-	{
-		table: "sys_tag_relation",
 		column: "updated_at",
 		ddl: "datetime(3) not null default current_timestamp(3) on update current_timestamp(3)",
 	},

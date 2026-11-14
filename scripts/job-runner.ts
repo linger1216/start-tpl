@@ -1,5 +1,5 @@
 import { db, dmPool } from "../src/db/index.ts";
-import { checkUnviewedActions } from "../src/lib/task-close-reminders.ts";
+import { checkUnviewedActions } from "../src/lib/task/close-reminders.ts";
 
 const handlers: Record<string, () => Promise<unknown>> = {
 	"task-close.unviewed": checkUnviewedActions,

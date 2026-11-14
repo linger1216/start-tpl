@@ -8,8 +8,8 @@ import { Input } from "#/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { downloadReportWorkbook } from "#/lib/task-report-download";
-import type { TaskReportSchema } from "#/lib/task-report-spec";
+import { downloadReportWorkbook } from "#/lib/task/report-download";
+import type { TaskReportSchema } from "#/lib/task/report-spec";
 
 /** 一次导入的结果:成功 / 失败条数 + 失败原因(最多列前几条) */
 type ImportOutcome = { ok: number; failed: number; messages: string[] };

@@ -1,12 +1,11 @@
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-
-import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeAudit } from "#/lib/audit";
 import { enforceAny, isAdminUser, isPermissionConfigured } from "#/lib/casbin";
 import { getCurrentUser } from "#/lib/current-user";
 import { buildPolicyCtx, type DataScopeFn, scopeWhere } from "#/lib/data-scope";
 import type { PolicyCtx } from "#/lib/data-scope-spec";
+import { describeTarget, labelOf, readAuditConfig, shouldAudit, writeGlobalAudit } from "#/lib/global-audit";
 import { logger, newTraceId, sanitize } from "#/lib/logger";
 import { DATA_SCOPE_BY_PATH, PERM_BY_PATH } from "#/lib/rbac";
 import { SHARE_GUEST } from "#/lib/share-access";
@@ -110,7 +109,7 @@ const requireUser = t.middleware(async ({ ctx, next }) => {
  * ③ 审计:L2 结构性地把每次**写调用**记进 `sys_log`(只记 mutation)。
  *
  * 两处刻意的写法:
- *  · **fire-and-forget**(`void writeAudit(...)`)—— 业务永远不等审计;
+ *  · **fire-and-forget**(`void writeGlobalAudit(...)`)—— 业务永远不等审计;
  *  · **只写一次** —— `next()` 在失败时**不抛**而是 resolve 成 `{ ok:false }`(与日志中间件同一个坑),
  *    所以这里把成败都收敛到一处再写,否则失败会被记成两条。
  *
@@ -141,7 +140,7 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
 	try {
 		const result = await next();
 		if (result.ok) {
-			void writeAudit({ ...base, status: 1, durationMs: Date.now() - startedAt });
+			void writeGlobalAudit({ ...base, status: 1, durationMs: Date.now() - startedAt });
 			return result;
 		}
 		failure = result.error;
@@ -149,7 +148,7 @@ export const auditMiddleware = t.middleware(async ({ ctx, path, type, getRawInpu
 		failure = error;
 	}
 	const shaped = failure as { code?: string; message?: string } | undefined;
-	void writeAudit({
+	void writeGlobalAudit({
 		...base,
 		status: 0,
 		errorCode: shaped?.code ?? "INTERNAL_SERVER_ERROR",

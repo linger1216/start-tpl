@@ -133,7 +133,6 @@ export async function processNotificationDelivery(
 			.update(sysNotificationDelivery)
 			.set({
 				status: error ? (delivery.attempts >= MAX_ATTEMPTS ? "failed" : "pending") : "sent",
-				provider: provider?.name ?? null,
 				provider_message_id: providerMessageId,
 				sent_at: error ? null : finished,
 				last_error: error,

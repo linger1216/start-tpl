@@ -1,12 +1,12 @@
 /**
  * 系统参数路由 —— 「系统设置 ▸ 参数管理」。
  *
- * 表是 **`sys_para`**(旧名 `sys_config`),主键是 `para_key`,`id` 只是普通列(nanoid,由本路由填)。
+ * 表是 **`sys_para`**(旧名 `sys_config`),主键就是 `para_key`(行标识也是它,库里没有额外的 id 列)。
  * 四件事:列出参数(库里值 + 代码默认值合并)、读单个参数、改一个值、删一条覆盖值。
  * 类型是 **tinyint 码**(1 int / 2 bool / 3 string / 4 json),码 ↔ 名称 ↔ 校验都在 `lib/para-spec.ts`。
  *
  * 另有 `import`:Excel 批量导入(upsert),列契约与摊平在
- * `src/components/modules/settings/settings-parameters-excel.ts` —— 导出与导入共用同一组表头,导出的文件能直接回导。
+ * `src/components/modules/settings/parameters/excel.ts` —— 导出与导入共用同一组表头,导出的文件能直接回导。
  */
 import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
@@ -15,7 +15,6 @@ import { z } from "zod";
 import { db } from "#/db";
 import { sysPara } from "#/db/data-base-schema";
 import type { ImportResult } from "#/lib/excel";
-import { newId } from "#/lib/ids";
 import {
 	asParaType,
 	isParaType,
@@ -52,9 +51,9 @@ const PARA_TYPE_HINT = PARA_TYPES.map((type) => PARA_TYPE_META[type].label).join
 function toPara(key: string, row: typeof sysPara.$inferSelect | undefined) {
 	const fallback = PARA_DEFAULTS[key];
 	return {
-		// 与 sys_para 的十列一一对应(界面要能看全字段);`id` 是库里的无意义短串,
-		// 只在"这条参数已落库"时有值 —— 纯代码内置、还没写进库的参数是 null。
-		id: row?.id ?? null,
+		// 与 sys_para 的九列一一对应(界面要能看全字段)。
+		// `id` = `para_key`(主键就是它):台账表格需要稳定的行标识,而库里没有额外的 id 列。
+		id: key,
 		key,
 		value: row?.para_value ?? fallback?.value ?? "",
 		type: (row?.para_type ?? fallback?.type ?? 3) as ParaType,
@@ -143,8 +142,6 @@ export const paraRouter = createTRPCRouter({
 					.where(eq(sysPara.para_key, input.key));
 			} else {
 				await db.insert(sysPara).values({
-					// 主键是 para_key;id 是 not null 的普通列,没有默认值 —— 必须自己生成
-					id: newId(),
 					para_key: input.key,
 					para_value: value,
 					para_type: type,
@@ -183,7 +180,6 @@ export const paraRouter = createTRPCRouter({
 			if (existing) throw new TRPCError({ code: "CONFLICT", message: `参数 ${input.key} 已存在,改值请走「修改」` });
 			const fallback = PARA_DEFAULTS[input.key];
 			await db.insert(sysPara).values({
-				id: newId(),
 				para_key: input.key,
 				para_value: input.value.trim(),
 				para_type: input.type,
@@ -306,8 +302,6 @@ export const paraRouter = createTRPCRouter({
 						.where(eq(sysPara.para_key, row.key));
 				} else {
 					await db.insert(sysPara).values({
-						// 主键是 para_key;id 是 not null 的普通列,没有默认值 —— 必须自己生成
-						id: newId(),
 						para_key: row.key,
 						para_value: value,
 						para_type: type,
@@ -361,7 +355,7 @@ export const paraRouter = createTRPCRouter({
 			for (const row of rows) {
 				await db
 					.update(sysPara)
-					.set({ ...softDeleted(), para_key: tombstone(row.para_key, row.id, 64) })
+					.set({ ...softDeleted(), para_key: tombstone(row.para_key, row.para_key, 64) })
 					.where(eq(sysPara.para_key, row.para_key));
 			}
 			clearParaCache();

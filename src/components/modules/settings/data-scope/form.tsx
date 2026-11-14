@@ -24,7 +24,7 @@ import {
 	SUBJECT_KIND_META,
 	type SubjectKind,
 } from "#/lib/data-scope-spec";
-import type { DataScopeRow } from "./settings-data-scope-table";
+import type { DataScopeRow } from "./table";
 
 export type DataScopeFormPayload = {
 	subject: string;

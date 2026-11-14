@@ -5,9 +5,9 @@ import { db } from "#/db";
 import { taskWorkflowTable } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { DEFAULT_WORKFLOW_ID, type WorkflowStatus } from "#/lib/task-close-spec";
-import { createTRPCRouter, protectedProcedure } from "../init";
-import { ID, type WorkflowPayload } from "./task-shared";
+import { DEFAULT_WORKFLOW_ID, type WorkflowStatus } from "#/lib/task/close-spec";
+import { createTRPCRouter, protectedProcedure } from "../../init";
+import { ID, type WorkflowPayload } from "./common";
 
 type WorkflowRow = typeof taskWorkflowTable.$inferSelect;
 

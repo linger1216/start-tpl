@@ -2,7 +2,7 @@
  * 评论 / 征询回复里的 **@提及选人** —— 键入 `@`(或点工具条的 @ 按钮)都汇到这一处。
  *
  * 选单只做**过滤与插词**;真正的提及判定由服务端在写入时按任务名册再算一遍
- * (`routers/task-shared.ts` 的 `createMentionNotifications`),前端这份名单只让交互顺滑。
+ * (`routers/task/common.ts` 的 `createMentionNotifications`),前端这份名单只让交互顺滑。
  * 挂到使用侧只有三步:
  *  - `track(value, caret)` 在 textarea 的 onChange 里调用 → 检测光标前是不是在 `@词` 里;
  *  - `onKeyDown(e)` 在 textarea 的 onKeyDown 里**最先**调用 → ↑↓ 选择、Enter/Tab 插词、Esc 关闭,吃了就返回 true;

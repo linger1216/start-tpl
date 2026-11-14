@@ -3,7 +3,7 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
-import type { TaskReportSchema } from "#/lib/task-report-spec";
+import type { TaskReportSchema } from "#/lib/task/report-spec";
 
 /**
  * 填报模板的**只读预览** —— 按schema渲染出「填报人将会看到的表单」。
@@ -86,6 +86,19 @@ function PreviewControl({ field }: { field: TaskReportSchema["fields"][number] }
 						))}
 					</SelectContent>
 				</Select>
+			);
+		case "phone":
+			return <Input type="tel" placeholder="11 位手机号" disabled className="h-8 max-w-48" />;
+		case "email":
+			return <Input type="email" placeholder="name@example.com" disabled className="h-8 max-w-48" />;
+		case "attachment":
+			return <span className="text-sm text-muted-foreground">附件:填报时上传(最多 20 个)</span>;
+		case "array":
+			return (
+				<span className="text-sm text-muted-foreground">
+					数组:填报时可「添加」多条 ——
+					{(field.itemFields ?? []).map((item) => item.label).join(" / ") || "未配置元素字段"}
+				</span>
 			);
 		case "multiselect":
 			return (

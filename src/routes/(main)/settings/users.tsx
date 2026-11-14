@@ -1,7 +1,7 @@
 // 系统设置 ▸ 用户管理(只读账号台账 + 部门/角色授权)
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsUsersPage } from "#/components/modules/settings/settings-users-page";
+import { SettingsUsersPage } from "#/components/modules/settings/users/page";
 import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/users")({

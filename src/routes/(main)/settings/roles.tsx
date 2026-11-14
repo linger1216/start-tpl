@@ -1,7 +1,7 @@
 // 系统设置 ▸ 角色管理(角色台账 + 权限点勾选;权限点是菜单/按钮本身)
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsRolesPage } from "#/components/modules/settings/settings-roles-page";
+import { SettingsRolesPage } from "#/components/modules/settings/roles/page";
 import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/roles")({

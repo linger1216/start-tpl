@@ -14,7 +14,7 @@
 import type { ExcelColumn } from "#/lib/excel";
 import { PARA_TYPE_META } from "#/lib/para-spec";
 
-import type { ParameterRow } from "./settings-parameters-table";
+import type { ParameterRow } from "./table";
 
 type ParaExcelKey = "key" | "value" | "type" | "group" | "remark";
 

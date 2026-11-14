@@ -5,7 +5,7 @@
  * 只把**活着的行**当"已存在" —— 参数被软删之后,这里要能按同一个 para_key 重建。
  *
  * 表是 `sys_para`(旧名 `sys_config`):
- *  - 主键 `para_key`;`id` 是 not null 的普通列,**没有默认值,必须自己生成**(`newId()`);
+ *  - 主键就是 `para_key`(库里没有额外的 id 列);
  *  - `para_type` 是 tinyint 码(1 int / 2 bool / 3 string / 4 json),来自 `PARA_DEFAULTS` 的 `type`。
  *
  * 用法:`pnpm db:seed:paras`
@@ -14,7 +14,6 @@ import "dotenv/config";
 
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { newId } from "../src/lib/ids.ts";
 import { alive } from "../src/lib/soft-delete.ts";
 import { PARA_DEFAULTS } from "../src/lib/sys-para.ts";
 
@@ -25,8 +24,7 @@ let inserted = 0;
 for (const [key, item] of Object.entries(PARA_DEFAULTS)) {
 	if (existing.has(key)) continue;
 	await db.insert(sysPara).values({
-		// 主键是 para_key;id 没有默认值 —— 每一处 insert 都必须自己生成
-		id: newId(),
+		// 主键就是 para_key(没有额外的 id 列)
 		para_key: key,
 		para_value: item.value,
 		para_type: item.type,

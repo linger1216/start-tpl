@@ -2,7 +2,6 @@ import { Download, ListChecks, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
-import { ActiveFilterPills, FilterChipBar } from "#/components/modules/shared/filter-chips";
 import { LedgerCard, SelectionBar } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -177,41 +176,23 @@ export function UiGalleryTable() {
 		<div className="space-y-3">
 			<StatCards items={stats} />
 
-			<FilterChipBar
-				groups={[
-					{
-						key: "status",
-						label: "状态",
-						tone: "brand",
-						options: [
-							{ value: "启用", count: ROWS.filter((r) => r.status === "启用").length },
-							{ value: "待复核", count: ROWS.filter((r) => r.status === "待复核").length },
-							{ value: "停用", count: ROWS.filter((r) => r.status === "停用").length },
-						],
-					},
-				]}
-				active={{ status }}
-				onSelect={(_key, value) => setStatus(value)}
-				onClearAll={() => setStatus(undefined)}
-				note="chip 计数由调用方按真实数据算好传进来"
-			/>
-
-			<ActiveFilterPills
-				items={[
-					...(status ? [{ key: "status", groupLabel: "状态", value: status, tone: "brand" as const }] : []),
-					...(keyword.trim()
-						? [{ key: "kw", groupLabel: "关键词", value: keyword.trim(), tone: "stone" as const }]
-						: []),
-				]}
-				onRemove={(key) => {
-					if (key === "status") setStatus(undefined);
-					if (key === "kw") setKeyword("");
-				}}
-				onClearAll={() => {
-					setStatus(undefined);
-					setKeyword("");
-				}}
-			/>
+			<fieldset className="flex flex-wrap items-center gap-2">
+				<legend className="sr-only">按状态筛选</legend>
+				{["全部", "启用", "待复核", "停用"].map((value) => (
+					<Button
+						key={value}
+						size="sm"
+						variant={status === (value === "全部" ? undefined : value) ? "default" : "outline"}
+						aria-pressed={status === (value === "全部" ? undefined : value)}
+						onClick={() => {
+							setStatus(value === "全部" ? undefined : value);
+							table.setPageIndex(0);
+						}}
+					>
+						{value}
+					</Button>
+				))}
+			</fieldset>
 
 			{/* 工具条:左搜索、右操作组 —— **在卡片外面**,搜索不该被卡片边框圈起来。
 			    整行走 shared/ledger-toolbar(8 个台账页同款),别在这里手搓一份 */}

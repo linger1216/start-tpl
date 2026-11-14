@@ -18,7 +18,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useStableKeys } from "#/hooks/use-stable-keys";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import type { WorkflowStatus } from "#/lib/task/close-spec";
 import { cn } from "#/lib/utils";
 
 /** `who` 协议的取值(与 `doc/task-close.md` 的 who 协议一致;`[]` 是系统自带,编辑器不产出) */
@@ -203,6 +203,7 @@ export function TaskWorkflowForm({
 					<DialogTitle>{editing ? "编辑流程模板" : "新增流程模板"}</DialogTitle>
 					<DialogDescription>
 						「直接改」的边不建动作,创建者直接改状态;「审批动作」的边会锁住任务,等答复结算。
+						{editing ? "保存后，已创建的任务仍使用原来的流程。" : null}
 					</DialogDescription>
 				</DialogHeader>
 				<DialogBody className="space-y-4 py-1 pr-1">

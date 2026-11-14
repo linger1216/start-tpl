@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { SettingsFilePreview } from "#/components/modules/settings/settings-file-preview";
-import { type FileRow, STATUS_META } from "#/components/modules/settings/settings-files-table";
+import { SettingsFilePreview } from "#/components/modules/settings/files/preview";
+import { type FileRow, STATUS_META } from "#/components/modules/settings/files/table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";

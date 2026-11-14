@@ -4,15 +4,16 @@ import { PARA_TYPE, PARA_TYPE_META, type ParaType } from "#/lib/para-spec";
 import { createAppColumnHelper } from "#/lib/table";
 
 /**
- * 参数清单的一行 —— **与 `sys_para` 的十列一一对应**(+ 代码内置默认值的兜底):
- * `id`、`key`→`para_key`、`value`→`para_value`、`type`→`para_type`、`group`→`para_group`、
+ * 参数清单的一行 —— **与 `sys_para` 的九列一一对应**(+ 代码内置默认值的兜底):
+ * `key`→`para_key`、`value`→`para_value`、`type`→`para_type`、`group`→`para_group`、
  * `status`、`remark`、`editable`、`createdAt`→`created_at`、`updatedAt`→`updated_at`。
  *
- * `id` 在"纯代码内置、还没写进库"的参数上是空串(`sys_para.id` 是库里的无意义短串,
- * 业务永远按 `para_key` 找参数)—— 表格里显示成 `—`;行标识用 `key`(见页面里的 `getRowId`)。
+ * `id` **不是库里的一列** —— 它就是 `key`(主键 `para_key`)的别名,给台账表格当稳定的行标识用;
+ * "纯代码内置、还没写进库"的参数同样有 key —— 它来自 `PARA_DEFAULTS`。
  * 表里没有的派生字段(如"是默认值还是已改过")不要加回来 —— 界面上不该出现库里没有的列。
  */
 export type ParameterRow = {
+	/** = `key`(主键 `para_key`);台账表格的行标识 */
 	id: string;
 	key: string;
 	value: string;

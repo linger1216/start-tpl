@@ -280,7 +280,6 @@ export const userRouter = createTRPCRouter({
 						user_id: input.id,
 						department_id: departmentId,
 						created_at: new Date(),
-						updated_at: new Date(),
 					});
 				}
 			});
@@ -358,7 +357,7 @@ export const userRouter = createTRPCRouter({
 	 * | 邮箱已在库里 | 进 `duplicates` 跳过 —— **绝不改已有账号**(批量改密码 / 改角色太危险,那是「编辑」弹窗的事) |
 	 * | 角色 / 部门名字对不上(或有同名) | 逐行报错,这一行不建 |
 	 *
-	 * 列契约与表头在 `#/components/modules/settings/settings-users-excel.ts`;它的「初始密码」列
+	 * 列契约与表头在 `#/components/modules/settings/users/excel.ts`;它的「初始密码」列
 	 * 是导出时没有的(密码是散列,导不出来)—— 拿导出的文件当模板要手补这一列。
 	 * 权限点复用「新增用户」(`sys:user:add`):导入本质就是批量新增,不另造新码(见 `lib/rbac.ts` 文件头)。
 	 */

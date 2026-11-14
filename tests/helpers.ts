@@ -18,8 +18,8 @@ import { sysCasbinRule, sysLog, sysRole } from "../src/db/data-base-schema.ts";
 import { db, dmPool } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
-import { flushAuditWrites } from "../src/lib/audit.ts";
 import { ensureCaptchaSecret } from "../src/lib/captcha-secret.ts";
+import { flushAuditWrites } from "../src/lib/global-audit.ts";
 
 /** 测试数据统一前缀:方便一眼认出、也方便误留时清理 */
 export const TEST_PREFIX = "__test__";

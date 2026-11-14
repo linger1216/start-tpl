@@ -26,6 +26,7 @@
  */
 import { and, eq } from "drizzle-orm";
 
+import { DEFAULT_NEIGHBORHOOD_TERMS, DEFAULT_STREET_NAMES } from "#/config/data-scope-regions";
 import { db } from "#/db";
 import { sysDataPlugin, sysDept } from "#/db/data-base-schema";
 import { ctxDeptIds, type PolicyCtx, parseItems } from "#/lib/data-scope-spec";
@@ -141,39 +142,16 @@ async function descendantsWithNames(roots: string[]) {
 	return collectDescendantIds(nodes, roots).map((id) => ({ id, name: names.get(id) ?? "" }));
 }
 
-// ── 闵行区的 14 个街镇(工业区) ─────────────────────────────────────────────
-
-/**
- * **闵行区 14 个街镇(工业区)** —— 4 个街道 + 9 个镇 + 1 个工业区(m19644 反馈)。
- *
- * 为什么写死在代码里:这是**行政区划**,不是业务数据 —— 组织树里「镇、街道」那一层就是这 14 个,
- * 让插件按名字比对最直接(比"父节点是不是某个 id"稳:树可以被改名,也可以有多套组织树)。
- *
- * 名字取自线上组织树本身(`sys_dept` 里「镇、街道」的子节点写的是「古美路街道」而不是
- * 「古美街道」),所以和表里存的街镇值、界面上显示的写法一致。
- * 「莘庄工业区」树里暂时没有对应节点,先占位 —— 将来挂上去也不用改代码。
- */
-export const STREET_NAMES: readonly string[] = [
-	// 4 个街道
-	"江川路街道",
-	"古美路街道",
-	"新虹街道",
-	"浦锦街道",
-	// 9 个镇
-	"莘庄镇",
-	"七宝镇",
-	"颛桥镇",
-	"华漕镇",
-	"虹桥镇",
-	"梅陇镇",
-	"吴泾镇",
-	"马桥镇",
-	"浦江镇",
-	// 1 个工业区(按街镇管理)
-	"莘庄工业区",
-];
-
-const STREET_NAME_SET = new Set(STREET_NAMES);
+/** 部署配置必须是字符串数组；非法配置让插件求值失败，不能放宽权限。 */
+function regionValues(key: string, defaults: readonly string[]): string[] {
+	const raw = process.env[key];
+	if (raw === undefined) return [...defaults];
+	const parsed: unknown = JSON.parse(raw);
+	if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string" || value.trim() === "")) {
+		throw new Error(`${key} 必须是非空字符串组成的 JSON 数组`);
+	}
+	return parsed.map((value: string) => value.trim());
+}
 
 // ── 内置插件 ────────────────────────────────────────────────────────────────
 
@@ -249,14 +227,14 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		valueKeys: ["id", "name"],
 		label: "我所在的街镇",
 		impl: "builtin",
-		remark:
-			"从我所在的部门往上找,遇到第一个街镇(闵行区 14 个街镇 / 工业区之一)就返它的 id + name;整条链上没有街镇 ⇒ 空(失败关闭)",
+		remark: "从我所在的部门往上找,遇到第一个部署配置中的街镇就返它的 id + name;整条链上没有街镇 ⇒ 空(失败关闭)",
 		// m19644:`ctx.depts` 按深度由深到浅排列(由 `deptTreeOf` 在引擎里构造,见
 		// `src/lib/data-scope.ts`),所以插件只要在数组里找名字就行,不必再爬 `parentId`。
 		// 链上一个街镇都没有 ⇒ `[]`(失败关闭 —— 不能把"我挂区级机关"的人也判成可见)。
 		resolve: ({ ctx }) => {
+			const names = new Set(regionValues("DATA_SCOPE_STREET_NAMES", DEFAULT_STREET_NAMES));
 			for (const dept of ctx.depts) {
-				if (STREET_NAME_SET.has(dept.name)) {
+				if (names.has(dept.name)) {
 					return Promise.resolve([{ id: dept.id, name: dept.name }]);
 				}
 			}
@@ -275,13 +253,9 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		// 链上一个街镇都没有 ⇒ `[]`(失败关闭 —— 不能把"我挂区级机关"的人也判成可见)。
 		resolve: ({ ctx }) => {
 			const res = [];
+			const terms = regionValues("DATA_SCOPE_NEIGHBORHOOD_TERMS", DEFAULT_NEIGHBORHOOD_TERMS);
 			for (const dept of ctx.depts) {
-				if (
-					dept.name.includes("居委会") ||
-					dept.name.includes("村委会") ||
-					dept.name.includes("居民委员会") ||
-					dept.name.includes("村民委员会")
-				) {
+				if (terms.some((term) => dept.name.includes(term))) {
 					res.push({ id: dept.id, name: dept.name });
 				}
 			}
@@ -299,7 +273,8 @@ const BUILTIN_PLUGINS: ResolvedPlugin[] = [
 		// 与 `my_street` 的差别:`my_street` 只回街镇**一个**节点(常配 `town_id`),
 		// 这个回「街镇 + 其下所有部门」(常配 `dept_id` / `town_id`)。
 		resolve: async ({ ctx }) => {
-			const street = ctx.depts.find((dept) => STREET_NAME_SET.has(dept.name));
+			const names = new Set(regionValues("DATA_SCOPE_STREET_NAMES", DEFAULT_STREET_NAMES));
+			const street = ctx.depts.find((dept) => names.has(dept.name));
 			if (!street) return [];
 			return descendantsWithNames([street.id]);
 		},

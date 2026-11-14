@@ -205,7 +205,7 @@ export async function flushAuditWrites(): Promise<void> {
  * 写一行审计。**绝不抛** —— 审计写失败只打一条 stdout warn。
  * 调用方一律 fire-and-forget(不 await),业务永远不等审计。
  */
-export async function writeAudit(entry: AuditEntry): Promise<void> {
+export async function writeGlobalAudit(entry: AuditEntry): Promise<void> {
 	const task = insertAuditRow(entry);
 	inFlight.add(task);
 	try {

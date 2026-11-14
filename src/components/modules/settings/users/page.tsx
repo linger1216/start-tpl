@@ -5,17 +5,13 @@ import { toast } from "sonner";
 
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsGuestsDetail } from "#/components/modules/settings/settings-guests-detail";
-import { type GuestFormPayload, SettingsGuestsForm } from "#/components/modules/settings/settings-guests-form";
-import { type ShareTokenRow, shareTokenColumns } from "#/components/modules/settings/settings-guests-table";
-import { SettingsUsersDetail } from "#/components/modules/settings/settings-users-detail";
-import {
-	USER_EXCEL_COLUMNS,
-	USER_IMPORT_FIELDS,
-	userExcelRows,
-} from "#/components/modules/settings/settings-users-excel";
-import { SettingsUsersForm, type UserFormPayload } from "#/components/modules/settings/settings-users-form";
-import { type UserRow, userColumns } from "#/components/modules/settings/settings-users-table";
+import { SettingsGuestsDetail } from "#/components/modules/settings/guests/detail";
+import { type GuestFormPayload, SettingsGuestsForm } from "#/components/modules/settings/guests/form";
+import { type ShareTokenRow, shareTokenColumns } from "#/components/modules/settings/guests/table";
+import { SettingsUsersDetail } from "#/components/modules/settings/users/detail";
+import { USER_EXCEL_COLUMNS, USER_IMPORT_FIELDS, userExcelRows } from "#/components/modules/settings/users/excel";
+import { SettingsUsersForm, type UserFormPayload } from "#/components/modules/settings/users/form";
+import { type UserRow, userColumns } from "#/components/modules/settings/users/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";

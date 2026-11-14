@@ -62,7 +62,6 @@ async function makeMenu(label: string, parentId: string | null, type: number, pe
 		perm,
 		sort: 0,
 		visible: 1,
-		status: 1,
 	});
 	// 断言紧接着就读判定结果,而这里是**直接写表**、绕过了领域函数 ⇒ 要手动刷缓存
 	// (「通配授权:以后新增的自动包含」那条用例正是靠它 —— 新建权限点后必须重新装载才看得见)

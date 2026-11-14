@@ -1,7 +1,7 @@
 /**
  * 任务闭环(`tc_log`)活动日志的**词表与文本** —— 客户端安全:不引 DB、不引 React、不引图标。
  *
- * 为什么单独一个文件(而不是塞进 `routers/task-close.ts`):
+ * 为什么单独一个文件(而不是塞进 `routers/task/`(组合入口 `index.ts`)):
  *  - 库里只存**英文事件码**与**状态 value**;中文是"读取时算出来的",router 与界面都要用这套词表;
  *  - 该 router 会连带拉起 tRPC 运行时,而这个文件要被前端 / 纯函数测试直接 import。
  *
@@ -10,7 +10,7 @@
  */
 
 /** 17 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
-export const TASK_LOG_EVENTS = [
+const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
 	"task.remove",
@@ -85,7 +85,7 @@ export type TaskLogItem = {
 };
 
 /** `task.update` 记下来的字段键 → 中文(新增可编辑字段时记得补) */
-export const TASK_LOG_FIELD_LABEL: Record<string, string> = {
+const TASK_LOG_FIELD_LABEL: Record<string, string> = {
 	name: "标题",
 	description: "说明",
 	dueAt: "截止时间",

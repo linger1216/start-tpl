@@ -163,7 +163,7 @@ test("软删后能用同一个 code 再建(墓碑让位,不撞唯一键)", async
 /**
  * 导入 —— 字段契约是「一行 = 一个字典项」(`code / name / label / value / remark`),
  * 这里只测接口语义:按编码聚合、并入(幂等)、逐行报错。列头与摊平在
- * `src/components/modules/settings/settings-dictionary-excel.ts`(纯前端件,不为十几行映射把 React 链拖进 tests)。
+ * `src/components/modules/settings/dictionary/excel.ts`(纯前端件,不为十几行映射把 React 链拖进 tests)。
  */
 test("导入:新编码 —— 多行归成一个字典,名称取第一行有值的那个", async () => {
 	const result = await caller.dict.import({

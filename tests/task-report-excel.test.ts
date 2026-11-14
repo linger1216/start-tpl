@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as XLSX from "xlsx";
-import { createReportWorkbook, previewReportWorkbook } from "../src/lib/task-report-excel.ts";
-import { taskReportSchema } from "../src/lib/task-report-spec.ts";
+import { createReportWorkbook, previewReportWorkbook } from "../src/lib/task/report-excel.ts";
+import { taskReportSchema } from "../src/lib/task/report-spec.ts";
 
 const schema = taskReportSchema.parse({
 	id: "report",
@@ -104,11 +104,12 @@ describe("填报 Excel", () => {
 		]).toString("base64");
 		await assert.rejects(() => previewReportWorkbook(schema, unknown), /表头/);
 	});
-	it("拒绝损坏文件、多工作表、公式、超大解压数据", async () => {
+	it("拒绝损坏文件、找不到「填报」的多表文件、公式、超大解压数据", async () => {
 		await assert.rejects(() => previewReportWorkbook(schema, Buffer.from("invalid").toString("base64")));
+		// 多张表但没有名为「填报」的那张 → 报错,不去瞎猜一张
 		await assert.rejects(
 			() => previewReportWorkbook(schema, workbook([["名称", "数量"]], 2).toString("base64")),
-			/单个/,
+			/找不到「填报」/,
 		);
 		const book = XLSX.utils.book_new();
 		const sheet = XLSX.utils.aoa_to_sheet([
@@ -171,6 +172,237 @@ describe("填报 Excel", () => {
 					asBase64([...baseEntries, { name: "xl/workbook.xml", text: '<x TargetMode="External"/>' }]),
 				),
 			/不支持/,
+		);
+	});
+});
+
+describe("父任务导出:父子所有填报数据", () => {
+	const form = taskReportSchema.parse({
+		id: "report",
+		kind: "OBJECT",
+		fields: [
+			{ id: "town", label: "街镇", type: "text" },
+			{ id: "quantity", label: "数量", type: "integer" },
+		],
+	});
+
+	it("表单填报:父任务那份进「填报」,每个已保存的子任务一行进「子任务填报」", () => {
+		const book = XLSX.read(
+			createReportWorkbook(
+				form,
+				{ town: "父镇", quantity: 1 },
+				{
+					readable: true,
+					parentLayout: true,
+					children: [
+						{ owner: "张三", payload: { town: "甲镇", quantity: 2 } },
+						{ owner: "李四", payload: { town: "乙镇", quantity: 3 } },
+					],
+				},
+			),
+			{ type: "buffer" },
+		);
+		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报", "子任务填报(可读)", "子任务填报"]);
+		const grids = book.SheetNames.map((name) =>
+			XLSX.utils.sheet_to_json<string[]>(book.Sheets[name] ?? {}, { header: 1 }),
+		);
+		const own = [
+			["街镇", "数量"],
+			["父镇", 1],
+		];
+		const children = [
+			["执行人", "街镇", "数量"],
+			["张三", "甲镇", 2],
+			["李四", "乙镇", 3],
+		];
+		assert.deepEqual(grids[0], own, "父任务填报(可读)");
+		assert.deepEqual(grids[1], own, "父任务填报");
+		assert.deepEqual(grids[2], children, "子任务填报(可读)");
+		assert.deepEqual(grids[3], children, "子任务填报");
+	});
+
+	it("没有子任务(或表格填报)时不附加那张表 —— 第一张表仍可直接导回来", () => {
+		const book = XLSX.read(createReportWorkbook(form, { town: "父镇", quantity: 1 }), { type: "buffer" });
+		assert.deepEqual(book.SheetNames, ["填报"]);
+	});
+});
+
+describe("可读导出:给人看的那张表", () => {
+	const form = taskReportSchema.parse({
+		id: "report",
+		kind: "OBJECT",
+		fields: [
+			{ id: "town", label: "街镇", type: "text" },
+			{ id: "tags", label: "标签", type: "multiselect", options: ["甲", "乙"] },
+			{ id: "proof", label: "材料", type: "attachment" },
+			{
+				id: "people",
+				label: "人员",
+				type: "array",
+				itemFields: [
+					{ id: "name", label: "姓名", type: "text" },
+					{ id: "pic", label: "照片", type: "attachment" },
+				],
+			},
+		],
+	});
+
+	const gridOf = (book: XLSX.WorkBook, sheet: string) =>
+		XLSX.utils.sheet_to_json<string[]>(book.Sheets[sheet] ?? {}, { header: 1, defval: "" });
+	const cell = (book: XLSX.WorkBook, sheet: string, row = 1, column = 0) => gridOf(book, sheet)[row]?.[column] ?? "";
+
+	it("附件写文件名、数组写成条目、多选顿号分隔;机器表仍是 id 与 JSON", () => {
+		const book = XLSX.read(
+			createReportWorkbook(
+				form,
+				{
+					town: "七宝镇",
+					tags: ["甲", "乙"],
+					proof: ["f1", "f2"],
+					people: [
+						{ name: "张三", pic: ["f3"] },
+						{ name: "李四", pic: [] },
+					],
+				},
+				{ readable: true, fileNames: { f1: "报告.pdf", f2: "照片.png", f3: "证件.jpg" } },
+			),
+			{ type: "buffer" },
+		);
+		assert.equal(cell(book, "填报(可读)", 1, 0), "七宝镇");
+		assert.equal(cell(book, "填报(可读)", 1, 1), "甲、乙");
+		assert.equal(cell(book, "填报(可读)", 1, 2), "报告.pdf、照片.png");
+		assert.equal(cell(book, "填报(可读)", 1, 3), "1) 姓名:张三，照片:证件.jpg；2) 姓名:李四，照片:");
+		assert.equal(cell(book, "填报", 1, 2), "f1;f2");
+		assert.equal(JSON.parse(cell(book, "填报", 1, 3)).length, 2);
+	});
+
+	it("缺文件名的附件退回 id,不吐占位符", () => {
+		const book = XLSX.read(createReportWorkbook(form, { proof: ["f9"] }, { readable: true }), { type: "buffer" });
+		assert.equal(cell(book, "填报(可读)", 1, 2), "f9");
+	});
+
+	it("导入认「填报」那张(可读表排在最前也不影响)", async () => {
+		const file = createReportWorkbook(form, { town: "甲镇", tags: ["甲"] }, { readable: true });
+		const parsed = await previewReportWorkbook(form, file.toString("base64"));
+		assert.deepEqual(parsed.value, { town: "甲镇", tags: ["甲"], proof: null, people: null });
+	});
+
+	it("多表但里面没有「填报」→ 明确报错,不瞎认一张", async () => {
+		const book = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["街镇"], ["甲镇"]]), "可读");
+		XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["街镇"], ["乙镇"]]), "别的");
+		const file = XLSX.write(book, { type: "buffer", bookType: "xlsx" });
+		await assert.rejects(() => previewReportWorkbook(form, file.toString("base64")), /找不到「填报」/);
+	});
+});
+
+describe("父任务导出的四张表", () => {
+	const table = taskReportSchema.parse({
+		id: "report",
+		kind: "TABLE",
+		fields: [{ id: "town", label: "街镇", type: "text" }],
+	});
+
+	it("表格填报:子任务那两张按它自己那份行铺开,首列是执行人", () => {
+		const book = XLSX.read(
+			createReportWorkbook(table, [{ town: "甲镇" }, { town: "乙镇" }], {
+				readable: true,
+				parentLayout: true,
+				children: [
+					{ owner: "张三", payload: [{ town: "甲镇" }] },
+					{ owner: "李四", payload: [{ town: "乙镇" }, { town: "丙镇" }] },
+				],
+			}),
+			{ type: "buffer" },
+		);
+		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报", "子任务填报(可读)", "子任务填报"]);
+		const child = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[3] ?? ""] ?? {}, { header: 1 });
+		assert.deepEqual(child, [
+			["执行人", "街镇"],
+			["张三", "甲镇"],
+			["李四", "乙镇"],
+			["李四", "丙镇"],
+		]);
+	});
+
+	it("导入认「父任务填报」那张(父任务导出改完能导回父任务)", async () => {
+		const file = createReportWorkbook(table, [{ town: "甲镇" }], {
+			readable: true,
+			parentLayout: true,
+			children: [{ owner: "张三", payload: [{ town: "甲镇" }] }],
+		});
+		const parsed = await previewReportWorkbook(table, file.toString("base64"));
+		assert.deepEqual(parsed.value, [{ town: "甲镇" }]);
+	});
+
+	it("有子任务但一个都没保存:只有父任务那一对(没有子任务可列)", () => {
+		const book = XLSX.read(createReportWorkbook(table, [{ town: "甲镇" }], { readable: true, parentLayout: true }), {
+			type: "buffer",
+		});
+		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报"]);
+	});
+});
+
+describe("日期口径:机器表存统一格式,可读表给本地时间,导入认本地写法", () => {
+	const dated = taskReportSchema.parse({
+		id: "report",
+		kind: "OBJECT",
+		fields: [
+			{ id: "day", label: "日期", type: "date" },
+			{ id: "moment", label: "时间", type: "datetime" },
+		],
+	});
+	const iso = new Date(2026, 10, 14, 10, 23, 45).toISOString();
+
+	it("可读表把 ISO 折成「YYYY-MM-DD HH:mm:ss」,机器表仍是 ISO(导入要认它)", () => {
+		const book = XLSX.read(createReportWorkbook(dated, { day: "2026-11-14", moment: iso }, { readable: true }), {
+			type: "buffer",
+		});
+		const grid = (index: number) =>
+			XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[index] ?? ""] ?? {}, { header: 1 });
+		assert.equal(grid(0)[1]?.[1], "2026-11-14 10:23:45", "可读表:本地时间");
+		assert.equal(grid(0)[1]?.[0], "2026-11-14");
+		assert.equal(grid(1)[1]?.[1], iso, "机器表:ISO 原样(能被校验接受)");
+	});
+
+	it("导入:人填的本地写法与 Excel 日期序列号都折成统一口径", async () => {
+		const serial = Math.round((Date.UTC(2026, 10, 14) - Date.UTC(1899, 11, 30)) / 86_400_000);
+		const book = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(
+			book,
+			XLSX.utils.aoa_to_sheet([
+				["日期", "时间"],
+				[serial, "2026-11-14 10:23"],
+			]),
+			"填报",
+		);
+		const parsed = await previewReportWorkbook(
+			dated,
+			XLSX.write(book, { type: "buffer", bookType: "xlsx" }).toString("base64"),
+		);
+		assert.deepEqual(parsed.value, { day: "2026-11-14", moment: new Date(2026, 10, 14, 10, 23).toISOString() });
+		assert.deepEqual(parsed.issues, []);
+	});
+
+	it("导入:日期写成 2026/11/14 也认;写不出日期就报校验错,不悄悄丢", async () => {
+		const book = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(
+			book,
+			XLSX.utils.aoa_to_sheet([
+				["日期", "时间"],
+				["2026/11/14", "昨天"],
+			]),
+			"填报",
+		);
+		const parsed = await previewReportWorkbook(
+			dated,
+			XLSX.write(book, { type: "buffer", bookType: "xlsx" }).toString("base64"),
+		);
+		assert.equal((parsed.value as { day?: string }).day, "2026-11-14");
+		assert.equal((parsed.value as { moment?: string }).moment, "昨天", "认不出的日期保留原文,不悄悄当空值");
+		assert.deepEqual(
+			parsed.issues.map((issue) => issue.field),
+			["moment"],
 		);
 	});
 });

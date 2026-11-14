@@ -101,7 +101,6 @@ async function makeMenu(
 		perm,
 		sort: 0,
 		visible: 1,
-		status: 1,
 	});
 	// 直接写表绕过了写接口 ⇒ 手动刷缓存(否则断言读到的还是上一份装载快照)
 	clearCasbinCache();

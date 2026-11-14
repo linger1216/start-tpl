@@ -2,7 +2,7 @@
  * 参数管理(`sys_para`)—— 集成测试。
  *
  * 测的是 tRPC procedure + 真实 SQL(直调 caller,不起 HTTP 服务):
- * 新增 → 列表 → 单键读 → 改值 → 校验拦截 → 删除,外加"主键必须是 nanoid"。
+ * 新增 → 列表 → 单键读 → 改值 → 校验拦截 → 删除,外加"主键就是 para_key"。
  *
  * 表口径(最新 DDL):表名 `sys_para`,主键 `para_key`,列 `para_value` / `para_type`(tinyint 码)。
  *
@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, like } from "drizzle-orm";
 
 import { sysPara } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
@@ -19,7 +19,7 @@ import { PAGE_SIZE_KEY, parsePageSize } from "../src/hooks/use-para-prefs.ts";
 import { PAGE_SIZES } from "../src/lib/constants.ts";
 import { PARA_TYPE } from "../src/lib/para-spec.ts";
 import { getParaMap, PARA_DEFAULTS } from "../src/lib/sys-para.ts";
-import { assertNanoid, assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
+import { assertRejects, caller, closeDb, TEST_PREFIX, uniqueSuffix } from "./helpers.ts";
 
 const SUFFIX = uniqueSuffix();
 const KEY = `${TEST_PREFIX}parameters.${SUFFIX}`;
@@ -32,23 +32,11 @@ const UPSERT_FLAGS_KEY = `${TEST_PREFIX}parameters.upsertFlags.${SUFFIX}`;
 const IMPORT_KEY = `${TEST_PREFIX}parameters.import.${SUFFIX}`;
 const IMPORT_INT_KEY = `${TEST_PREFIX}parameters.importInt.${SUFFIX}`;
 const LOCKED_KEY = `${TEST_PREFIX}parameters.locked.${SUFFIX}`;
-const deletedIds: string[] = [];
 
 after(async () => {
-	const keys = [
-		KEY,
-		INT_KEY,
-		BOOL_KEY,
-		UPSERT_KEY,
-		CREATE_FLAGS_KEY,
-		UPSERT_FLAGS_KEY,
-		IMPORT_KEY,
-		IMPORT_INT_KEY,
-		LOCKED_KEY,
-	];
-	// 只删除本轮键及本轮主动软删的 ID,不能按公共前缀清理其他测试的数据。
-	await db.delete(sysPara).where(inArray(sysPara.para_key, keys));
-	if (deletedIds.length > 0) await db.delete(sysPara).where(inArray(sysPara.id, deletedIds));
+	// 只删**本轮**的行:`SUFFIX` 每轮唯一,所以按它匹配不会碰到别的测试的数据。
+	// (软删的行主键被换成墓碑值 `…#d#<尾段>`,尾段里仍带着 SUFFIX —— 一条 LIKE 全清掉。)
+	await db.delete(sysPara).where(like(sysPara.para_key, `%${SUFFIX}`));
 });
 
 test("新增和 upsert 插入时保存表单提供的状态与元数据", async () => {
@@ -116,14 +104,14 @@ test("新增 → 列表里能看到,并且回的都是表里真有的列", async
 	assert.deepEqual(
 		Object.keys(row).sort(),
 		["createdAt", "editable", "group", "id", "key", "remark", "status", "type", "updatedAt", "value"],
-		"para.list 的出参字段应与 sys_para 的十列一一对应",
+		"para.list 的出参字段应与 sys_para 的九列一一对应(id 是 para_key 的别名,不是库里的列)",
 	);
 });
 
-test("主键是 nanoid(不是语义串);para_key 才是主键", async () => {
+test("主键是 para_key 本身(库里没有额外的 id 列)", async () => {
 	const [stored] = await db.select().from(sysPara).where(eq(sysPara.para_key, KEY)).limit(1);
 	assert.ok(stored, "库里应有这一行");
-	assertNanoid(stored.id, `${KEY}.id`);
+	assert.equal(stored.para_key, KEY, "主键就是 para_key");
 	assert.equal(stored.para_type, PARA_TYPE.STRING);
 });
 
@@ -145,7 +133,7 @@ test("update 遇到不存在的键 = 插入(upsert 的另一半),类型回落到
 	await caller.para.update({ key: UPSERT_KEY, value: "42" });
 	const stored = await db.select().from(sysPara).where(eq(sysPara.para_key, UPSERT_KEY));
 	assert.equal(stored.length, 1);
-	assertNanoid(stored[0]?.id, `${UPSERT_KEY}.id`);
+	assert.equal(stored[0]?.para_key, UPSERT_KEY);
 	// 不在 PARA_DEFAULTS 里的新键没有类型可依,回落成文本(所以 "42" 也只是字符串)
 	assert.equal(stored[0]?.para_type, PARA_TYPE.STRING);
 });
@@ -165,11 +153,15 @@ test("布尔参数只接受 true / false", async () => {
 test("delete:软删(行保留、deleted_at 非空),byKey 回落代码默认值(空串)", async () => {
 	const [before] = await db.select().from(sysPara).where(eq(sysPara.para_key, KEY)).limit(1);
 	assert.ok(before, "删除前库里应有这一行");
-	deletedIds.push(before.id);
+
 	await caller.para.remove({ keys: [KEY] });
 	assert.equal((await caller.para.byKey({ key: KEY })).value, "");
-	// 软删:按 para_key 查不到了(主键已让位),但行还在 —— 只能按 id 找
-	const [kept] = await db.select().from(sysPara).where(eq(sysPara.id, before.id));
+	// 软删:按 para_key 查不到了(主键已让位),但行还在 —— 只能按墓碑值找
+	const [kept] = await db
+		.select()
+		.from(sysPara)
+		.where(and(like(sysPara.para_key, `%${SUFFIX}`), isNotNull(sysPara.deleted_at)))
+		.limit(1);
 	assert.ok(kept, "软删要留行(审计留痕),不是物理删除");
 	assert.ok(kept.deleted_at, "deleted_at 应被写上");
 	assert.notEqual(kept.para_key, KEY, "主键让位,同一个 key 才能再建");
@@ -258,7 +250,6 @@ test("导入:和库里一样算 duplicates —— 重复导入不假装改了一
 test("导入:逐行校验 —— 缺参数名 / 类型非法 / 值类型不符 / 内置参数跳过", async () => {
 	// 造一条 editable=0 的行(界面上不允许改:与 para.update 的口径一致)
 	await db.insert(sysPara).values({
-		id: `locked-${SUFFIX}`,
 		para_key: LOCKED_KEY,
 		para_value: "locked",
 		para_type: PARA_TYPE.STRING,

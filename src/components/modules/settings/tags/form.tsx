@@ -1,6 +1,6 @@
 import { Save, Undo2 } from "lucide-react";
 
-import type { TagNode } from "#/components/modules/settings/settings-tags-tree";
+import type { TagNode } from "#/components/modules/settings/tags/tree";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";

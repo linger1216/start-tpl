@@ -2,7 +2,7 @@ import { and, eq, isNull, lte } from "drizzle-orm";
 import { db } from "#/db";
 import { sysNotification, taskActionTable, taskTable } from "#/db/data-base-schema";
 import { createNotification } from "#/lib/notification";
-import { taskPathOf } from "#/lib/task-close-spec";
+import { taskPathOf } from "#/lib/task/close-spec";
 
 /** 所有时间单位为分钟；第二轮距激活 180 分钟。 */
 export const TASK_REMINDER_MINUTES = [60, 180] as const;

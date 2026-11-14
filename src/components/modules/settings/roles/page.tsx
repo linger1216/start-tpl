@@ -4,14 +4,10 @@ import { useMemo, useState } from "react";
 import type { MenuRow } from "#/components/layout/nav-menu";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsRolesDetail } from "#/components/modules/settings/settings-roles-detail";
-import { ROLE_EXCEL_COLUMNS, roleExcelRows } from "#/components/modules/settings/settings-roles-excel";
-import {
-	type RoleFormPayload,
-	type RoleFormTab,
-	SettingsRolesForm,
-} from "#/components/modules/settings/settings-roles-form";
-import { type RoleRow, roleColumns } from "#/components/modules/settings/settings-roles-table";
+import { SettingsRolesDetail } from "#/components/modules/settings/roles/detail";
+import { ROLE_EXCEL_COLUMNS, roleExcelRows } from "#/components/modules/settings/roles/excel";
+import { type RoleFormPayload, type RoleFormTab, SettingsRolesForm } from "#/components/modules/settings/roles/form";
+import { type RoleRow, roleColumns } from "#/components/modules/settings/roles/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";

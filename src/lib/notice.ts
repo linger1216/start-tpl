@@ -18,7 +18,7 @@ export async function notifyMany(userIds: readonly string[], payload: NoticePayl
 	if (!recipients.length) return 0;
 	const path = payload.path?.trim() ?? "";
 	// 指向任务详情的通知归到 `task.notice` 源,点开时能定位到具体任务。
-	// 前缀在这里内联写死(不复用 `task-close-spec`):`notice` 可以在裁掉任务闭环的项目里单独保留,
+	// 前缀在这里内联写死(不复用 `task/close-spec`):`notice` 可以在裁掉任务闭环的项目里单独保留,
 	// 引过去会在派生时留下悬空依赖(`features.json` 的裁剪规则会拦下)。
 	const taskId = path.startsWith("/task-close/") ? path.slice("/task-close/".length) : null;
 	await sendNotification({

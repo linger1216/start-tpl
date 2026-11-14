@@ -85,7 +85,6 @@ async function impersonateMenuId(): Promise<string> {
 		icon: null,
 		sort: 0,
 		visible: 1,
-		status: 1,
 		type: MENU_TYPE.BUTTON,
 		perm: IMPERSONATE_PERM,
 	});

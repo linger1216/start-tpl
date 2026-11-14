@@ -10,7 +10,7 @@ import { z } from "zod";
  * 判别联合的 `linkBlockSchema` 就是权威形状(后端入参校验 + 前端类型都从它来)。
  * 读取时过滤无法识别的数据(见 `parseBlock`)。
  */
-export const linkBlockSchema = z.object({
+const linkBlockSchema = z.object({
 	kind: z.literal("link"),
 	/** 站内路径(`/settings/users?q=x`)或外部网址(`https://…`) */
 	url: z.string().max(2000),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { FileRow } from "#/components/modules/settings/settings-files-table";
+import type { FileRow } from "#/components/modules/settings/files/table";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {

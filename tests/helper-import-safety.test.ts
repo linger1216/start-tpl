@@ -15,7 +15,6 @@ test("导入公共测试工具不会清除其他批次的数据或会话缓存",
 	const cacheKey = `foreign_session_${suffix}`;
 	try {
 		await db.insert(sysPara).values({
-			id: suffix,
 			para_key: key,
 			para_value: "保留",
 			para_type: 3,

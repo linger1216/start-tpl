@@ -3,7 +3,7 @@ import { ExternalLink, Link2, X } from "lucide-react";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Input } from "#/components/ui/input";
 import { useStableKeys } from "#/hooks/use-stable-keys";
-import { blankBlock, isInternalUrl, type TaskLinkBlock } from "#/lib/task-payload";
+import { blankBlock, isInternalUrl, type TaskLinkBlock } from "#/lib/task/payload";
 
 /**
  * 链接区编辑器 —— 清单式交互(像待办):

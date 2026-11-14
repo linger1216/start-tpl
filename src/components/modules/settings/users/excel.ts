@@ -1,7 +1,7 @@
 import type { ExcelColumn, ImportField } from "#/lib/excel";
 import { joinMultiValue } from "#/lib/multi-value";
 
-import type { UserRow } from "./settings-users-table";
+import type { UserRow } from "./table";
 
 /**
  * 用户台账的 Excel 列契约 —— 表头与列宽**只在这里写一份**。

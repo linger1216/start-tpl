@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf } from "#/lib/task-close-spec";
+import { priorityLabelOf } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 

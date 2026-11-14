@@ -3,7 +3,7 @@ import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import type { PluginRow } from "./settings-data-plugins-table";
+import type { PluginRow } from "./table";
 
 /**
  * 值域插件详情(只读)。

@@ -29,6 +29,7 @@
     "db:migrate:ids": "dotenv -e .env.local -- tsx scripts/migrate-ids-to-nanoid.ts",
     "db:migrate:casbin": "dotenv -e .env.local -- tsx scripts/migrate-to-casbin.ts",
     "db:sync:meta": "dotenv -e .env.local -- tsx scripts/sync-table-meta.ts",
+    "db:check": "node scripts/check-schema-drift.mjs",
     "db:dm:smoke": "dotenv -e .env.local -- tsx scripts/dm-drizzle-smoke.ts",
     "db:dm:defaults": "dotenv -e .env.local -- tsx scripts/dm-sync-defaults.ts",
     "db:seed:menus": "dotenv -e .env.local -- tsx scripts/seed-menus.ts",

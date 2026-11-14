@@ -8,12 +8,12 @@ import {
 	type DeptFormValues,
 	deptFormValues,
 	SettingsDepartmentsForm,
-} from "#/components/modules/settings/settings-departments-form";
+} from "#/components/modules/settings/departments/form";
 import {
 	type DeptRow,
 	type DeptTreeNode,
 	SettingsDepartmentsTree,
-} from "#/components/modules/settings/settings-departments-tree";
+} from "#/components/modules/settings/departments/tree";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";

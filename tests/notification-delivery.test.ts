@@ -72,7 +72,7 @@ test("失败记录尝试并退避，过期租约可恢复", async () => {
 		},
 	};
 	const success = {
-		name: "test",
+		name: "backup",
 		async send() {
 			return { messageId: "recovered" };
 		},
@@ -92,6 +92,13 @@ test("失败记录尝试并退避，过期租约可恢复", async () => {
 	assert.equal(row?.attempts, 2);
 	const attempts = await db.select().from(sysNotificationAttempt).where(eq(sysNotificationAttempt.delivery_id, id));
 	assert.deepEqual(attempts.map((attempt) => attempt.status).sort(), ["failed", "sent"]);
+	assert.deepEqual(
+		attempts.sort((a, b) => a.attempt_no - b.attempt_no).map(({ provider, error }) => ({ provider, error })),
+		[
+			{ provider: "test", error: "temporary failure" },
+			{ provider: "backup", error: null },
+		],
+	);
 });
 
 test("站内通知入库即为 sent,不需要 Worker", async () => {

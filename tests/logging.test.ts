@@ -91,7 +91,7 @@ after(async () => {
 
 describe("审计词表守卫", () => {
 	it("每个 mutation 的 labelOf 都翻得出中文 —— 新 router/动词被加进来必须把词表补上", async () => {
-		const { labelOf } = await import("../src/lib/audit.ts");
+		const { labelOf } = await import("../src/lib/global-audit.ts");
 		const router = trpcRouter as unknown as {
 			_def?: { procedures?: Record<string, { _def?: { type?: string } }> };
 		};

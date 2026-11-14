@@ -5,12 +5,8 @@ import { toast } from "sonner";
 import type { MenuTreeNode } from "#/components/layout/nav-menu";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import {
-	type MenuFormValues,
-	menuFormValues,
-	SettingsMenusForm,
-} from "#/components/modules/settings/settings-menus-form";
-import { SettingsMenusTree } from "#/components/modules/settings/settings-menus-tree";
+import { type MenuFormValues, menuFormValues, SettingsMenusForm } from "#/components/modules/settings/menus/form";
+import { SettingsMenusTree } from "#/components/modules/settings/menus/tree";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";

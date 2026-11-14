@@ -17,7 +17,7 @@ import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { taskReportSchema } from "#/lib/task-report-spec";
+import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 

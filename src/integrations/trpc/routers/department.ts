@@ -286,7 +286,6 @@ export const departmentRouter = createTRPCRouter({
 				department_id: input.departmentId,
 				user_id: input.userId,
 				created_at: new Date(),
-				updated_at: new Date(),
 			});
 			return { success: true };
 		}),

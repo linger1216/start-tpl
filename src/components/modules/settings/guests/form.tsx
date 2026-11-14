@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { ShareTokenRow } from "#/components/modules/settings/settings-guests-table";
+import type { ShareTokenRow } from "#/components/modules/settings/guests/table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -17,6 +17,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
 import { parseAllowedPaths, SHARE_EXPIRES_PATTERN, SHARE_PATHS_MAX } from "#/lib/share-token-spec";
+import { formatLocalDate } from "#/lib/time";
 
 export type GuestFormPayload = {
 	remark: string;
@@ -57,7 +58,7 @@ export function SettingsGuestsForm({
 		if (!open) return;
 		setRemark(token?.remark ?? "");
 		setPathsText(token?.allowedPaths.join("\n") ?? "");
-		setExpiresAt(token?.expiresAt ? token.expiresAt.slice(0, 10) : "");
+		setExpiresAt(formatLocalDate(token?.expiresAt));
 	}, [open, token]);
 
 	const parsed = parseAllowedPaths(pathsText);

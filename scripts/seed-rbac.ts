@@ -117,7 +117,6 @@ async function upsertButton(parentId: string, name: string, perm: string, sort: 
 		icon: null,
 		sort,
 		visible: 1,
-		status: 1,
 		type: MENU_TYPE.BUTTON,
 		perm,
 	});
@@ -143,7 +142,6 @@ async function upsertHiddenGroup(name: string, path: string, sort: number): Prom
 		icon: null,
 		sort,
 		visible: 0,
-		status: 1,
 		type: MENU_TYPE.DIR,
 		perm: null,
 	});

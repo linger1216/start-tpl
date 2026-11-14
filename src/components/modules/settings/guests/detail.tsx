@@ -1,9 +1,10 @@
-import type { ShareTokenRow } from "#/components/modules/settings/settings-guests-table";
-import { shareTokenStatusOf } from "#/components/modules/settings/settings-guests-table";
+import type { ShareTokenRow } from "#/components/modules/settings/guests/table";
+import { shareTokenStatusOf } from "#/components/modules/settings/guests/table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
+import { formatLocalDate } from "#/lib/time";
 
 /**
  * 访客令牌详情(只读)。字段与 `ShareTokenRow` 的列一一对应;
@@ -57,7 +58,7 @@ export function SettingsGuestsDetail({
 							emptyPlaceholder="未配置(等于看不了任何页面)"
 						/>
 					</DetailRow>
-					<DetailRow label="有效期至">{row.expiresAt ? row.expiresAt.slice(0, 10) : "长期有效"}</DetailRow>
+					<DetailRow label="有效期至">{formatLocalDate(row.expiresAt) || "长期有效"}</DetailRow>
 				</div>
 			) : null}
 		</DetailDialog>

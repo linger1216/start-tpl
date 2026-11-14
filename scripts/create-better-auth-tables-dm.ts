@@ -17,6 +17,7 @@
 import "dotenv/config";
 
 import dmdb from "dmdb";
+import { upgradeTaskStatusIndex } from "./dm-index-upgrade";
 
 type Conn = {
 	execute: (sql: string, binds: unknown[], options: unknown, cb: (e: unknown, r: unknown) => void) => void;
@@ -40,10 +41,11 @@ const STATEMENTS: string[] = [
       "parent_id" varchar(32) default null,
       "name" varchar(32) not null,
       "path" varchar(128) not null,
+      "type" tinyint default 2 not null,
+      "perm" varchar(64),
       "icon" varchar(32) default null,
       "sort" int not null default 0,
       "visible" tinyint not null default 1,
-      "status" tinyint not null default 1,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
       "deleted_at" datetime default null,
@@ -65,7 +67,6 @@ const STATEMENTS: string[] = [
     )`,
 	`create unique index if not exists "uk_sys_dict_code" on ${S}."sys_dict" ("code")`,
 	`create table if not exists ${S}."sys_para" (
-      "id" varchar(32) not null,
       "para_key" varchar(64) not null,
       "para_value" text not null,
       "para_type" tinyint not null,
@@ -98,7 +99,6 @@ const STATEMENTS: string[] = [
       "obj_id" varchar(32) not null,
       "obj_type" tinyint not null,
       "created_at" datetime not null default current_timestamp,
-      "updated_at" datetime not null default current_timestamp,
       primary key ("id")
     )`,
 	`create unique index if not exists "uk_tag_rel_unique" on ${S}."sys_tag_relation" ("tag_id", "obj_type", "obj_id")`,
@@ -241,7 +241,6 @@ const STATEMENTS: string[] = [
 		"department_id" varchar(32) not null,
 		"user_id" varchar(32) not null,
 		"created_at" datetime default current_timestamp not null,
-		"updated_at" datetime default current_timestamp not null,
 		primary key ("id"),
 		constraint "uk_sys_dm_unique" unique ("department_id", "user_id"),
 		constraint "fk_sys_dm_department" foreign key ("department_id") references ${S}."sys_dept" ("id") on delete cascade,
@@ -310,7 +309,7 @@ const STATEMENTS: string[] = [
 	`create unique index if not exists "uk_notification_dedupe" on ${S}."sys_notification" ("dedupe_key")`,
 	`create index if not exists "idx_notification_source" on ${S}."sys_notification" ("source_type", "source_id", "type", "created_at")`,
 	`create table if not exists ${S}."sys_notification_delivery" (
-        "id" varchar(32) not null primary key, "notification_id" varchar(32) not null, "recipient_id" varchar(36) not null, "channel" varchar(16) not null, "target" varchar(255), "status" varchar(16) not null, "read_at" datetime, "attempts" int not null default 0, "next_attempt_at" datetime, "locked_until" datetime, "lock_token" varchar(32), "provider" varchar(64), "provider_message_id" varchar(255), "sent_at" datetime, "last_error" text, "created_at" datetime not null, "updated_at" datetime not null
+        "id" varchar(32) not null primary key, "notification_id" varchar(32) not null, "recipient_id" varchar(36) not null, "channel" varchar(16) not null, "target" varchar(255), "status" varchar(16) not null, "read_at" datetime, "attempts" int not null default 0, "next_attempt_at" datetime, "locked_until" datetime, "lock_token" varchar(32), "provider_message_id" varchar(255), "sent_at" datetime, "last_error" text, "created_at" datetime not null, "updated_at" datetime not null
   )`,
 	`create unique index if not exists "uk_notification_recipient_channel" on ${S}."sys_notification_delivery" ("notification_id","recipient_id","channel")`,
 	`create index if not exists "idx_delivery_recipient" on ${S}."sys_notification_delivery" ("recipient_id","channel","read_at","created_at")`,
@@ -399,11 +398,24 @@ const STATEMENTS: string[] = [
       "deleted_at" datetime,
       primary key ("id")
     )`,
+	`create table if not exists ${S}."tc_report_submission" (
+      "id" varchar(32) not null,
+      "report_id" varchar(32) not null,
+      "task_id" varchar(191) not null,
+      "submitter_id" varchar(36) not null,
+      "revision" int not null,
+      "payload" text default null,
+      "created_at" datetime default current_timestamp,
+      primary key ("id")
+    )`,
+	`create unique index if not exists "uk_report_submission_revision" on ${S}."tc_report_submission" ("report_id", "revision")`,
+	`create index if not exists "idx_report_submission_task" on ${S}."tc_report_submission" ("task_id", "created_at")`,
 	`create table if not exists ${S}."tc_task_report" (
       "id" varchar(32) not null,
       "task_id" varchar(191) not null,
       "draft" text default null,
       "revision" int not null default 0,
+      "current_submission_id" varchar(32) default null,
       "created_at" datetime default current_timestamp,
       "updated_at" datetime default current_timestamp,
       primary key ("id")
@@ -435,7 +447,8 @@ const STATEMENTS: string[] = [
       "updated_at" datetime not null default current_timestamp,
       primary key ("id")
     )`,
-	`create index if not exists "idx_task_status_created" on ${S}."tc_task" ("status")`,
+	`create index if not exists "idx_task_status_created" on ${S}."tc_task" ("status", "created_at")`,
+	`create index if not exists "idx_task_workflow" on ${S}."tc_task" ("workflow_id")`,
 	`create index if not exists "idx_task_creator_status" on ${S}."tc_task" ("creator_id", "status")`,
 	`create index if not exists "idx_task_parent" on ${S}."tc_task" ("parent_id")`,
 	`create table if not exists ${S}."tc_action" (
@@ -618,6 +631,11 @@ async function main() {
 		(await q(`select TABLE_NAME from SYS.ALL_TABLES where OWNER='${SCHEMA}'`)).map((r) => String(r.TABLE_NAME)),
 	);
 
+	// 任务索引迁移开始
+	// 只删除列定义不匹配的旧索引；随后 STATEMENTS 负责创建或补建。
+	await upgradeTaskStatusIndex(SCHEMA, q, run);
+	// 任务索引迁移结束
+
 	for (const sql of STATEMENTS) {
 		const isCreateTable = /create table/i.test(sql);
 		const tableName = isCreateTable ? sql.match(/"([a-z_]+)"\s*\(/)?.[1] : undefined;
@@ -689,6 +707,7 @@ async function main() {
 		}
 	}
 
+	// 任务批次迁移开始
 	// ── 填报模板 / 填报批次退役:版本表与批次两张表整体删除(开发库删掉重来,数据不迁移)──
 	for (const table of ["tc_report_template_version", "tc_report_batch_task", "tc_report_batch"]) {
 		if (existingTables.has(table)) {
@@ -696,17 +715,28 @@ async function main() {
 			console.log(`✓ 已删除 ${table}(版本/批次概念退役)`);
 		}
 	}
+	// 任务批次迁移结束
 
 	// ── 老库删列:列被合并 / 废弃时在这里登记(幂等;删列前先删挂在它上面的外键)──
 	// 达梦老库列名变更(`code` → `fn`)不走本脚本 —— 达梦 `ALTER TABLE RENAME COLUMN` 在 8.1+
 	// 才有,且**必须在所有列 drop 前**跑,迁移时人工执行:
 	//   alter table "sys_data_plugin" rename column "code" to "fn";
+	// 任务成员索引迁移开始
 	const memberPrimaryIndex = await q(
 		`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_member' and INDEX_NAME='idx_member_task_primary'`,
 	);
 	if (memberPrimaryIndex.length) await run(`drop index "idx_member_task_primary" on ${S}."tc_member"`);
+	// 任务成员索引迁移结束
 	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
+		{ table: "sys_notification_delivery", column: "provider" },
 		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+		// 菜单的「启用 / 停用」从来没人读(上下线走 visible,且带子树语义)—— 死列,删掉
+		{ table: "sys_menu", column: "status" },
+		// sys_para 的 id 是无意义代理键(主键是 para_key)—— 删掉
+		{ table: "sys_para", column: "id" },
+		// 这两张表只增不改(标签关联行 / 部门成员)—— `updated_at` 永远等于 created_at,白列
+		{ table: "sys_tag_relation", column: "updated_at" },
+		{ table: "sys_user_dept", column: "updated_at" },
 		// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
 		{ table: "tc_task_report", column: "version_id" },
 		{ table: "tc_task_report", column: "status" },

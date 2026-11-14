@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describeLog, logCategoryOf, type TaskLogItem } from "../src/lib/task-close-log.ts";
-import { statusLabelOf } from "../src/lib/task-close-spec.ts";
+import { describeLog, logCategoryOf, type TaskLogItem } from "../src/lib/task/close-log.ts";
+import { statusLabelOf } from "../src/lib/task/close-spec.ts";
 
 const statuses = [
 	{ value: "open", label: "进行中" },

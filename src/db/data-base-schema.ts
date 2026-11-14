@@ -100,14 +100,6 @@ export const sysMenu = mysqlTable(
 		sort: int("sort").notNull().default(0),
 		/** 1 显示 / 0 隐藏(隐藏的分组连带子树一起不显示) */
 		visible: tinyint("visible").notNull().default(1),
-		/**
-		 * 1 启用 / 0 停用。
-		 *
-		 * ⚠️ 表里有这一列,但**当前没有任何代码读它**:「上线 / 下线」仍然走 `visible`
-		 * (那是 0/1 且带子树语义的口径)。要不要把 status 接进菜单页,是另一件事 —— 别在
-		 * 这里顺手加过滤,否则运维把一行停用后菜单会静默消失。
-		 */
-		status: tinyint("status").notNull().default(1),
 		created_at: datetime("created_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date", fsp: 3 }).$defaultFn(() => new Date()),
 		/** 软删除时间(null = 未删除);口径与理由见 `lib/soft-delete.ts` */
@@ -171,16 +163,14 @@ export const sysDict = mysqlTable(
 export const sysPara = mysqlTable(
 	"sys_para",
 	{
-		/** 普通列(非主键):无意义短串(nanoid);业务永远按 `para_key` 找参数 */
-		id: varchar("id", { length: 32 }).notNull(),
-		/** 参数名,如 `log.enabled` —— **主键** */
+		/** 参数名,如 `log.enabled` —— **主键**;行标识也是它(界面按它找参数,不需要额外的 id 列) */
 		para_key: varchar("para_key", { length: 64 }).primaryKey(),
 		/** 参数值(text,不限 4000) */
 		para_value: text("para_value").notNull(),
 		/** 类型码:1 int / 2 bool / 3 string / 4 json(见 `lib/para-spec.ts`) */
 		para_type: tinyint("para_type").notNull(),
 		para_group: varchar("para_group", { length: 32 }),
-		/** 1 启用 / 0 停用(表里有,当前代码没读 —— 别顺手加过滤) */
+		/** 1 启用 / 0 停用(参数管理页可读可改;**不要**拿它当"生效开关" —— 代码不读它来跳过读取) */
 		status: tinyint("status").notNull().default(1),
 		/** 给人看的说明(界面直接展示,所以参数要自带文档) */
 		remark: varchar("remark", { length: 255 }),
@@ -260,8 +250,8 @@ export const sysTagRelation = mysqlTable(
 		tag_id: varchar("tag_id", { length: 32 }).notNull(),
 		obj_id: varchar("obj_id", { length: 32 }).notNull(),
 		obj_type: tinyint("obj_type").notNull(),
+		/** 只增不改的关联行 —— 不需要 `updated_at`(改了也不会被更新) */
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		index("idx_tag_rel_tag").on(table.tag_id),
@@ -525,8 +515,8 @@ export const sysUserDept = mysqlTable(
 		user_id: varchar("user_id", { length: 32 })
 			.notNull()
 			.references(() => sysUser.id, { onDelete: "cascade" }),
+		/** 只增不改的关联行(成员进出就是删 / 插)—— 不需要 `updated_at` */
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
 		uniqueIndex("uk_sys_dm_unique").on(table.department_id, table.user_id),
@@ -620,7 +610,6 @@ export const sysNotificationDelivery = mysqlTable(
 		next_attempt_at: datetime("next_attempt_at", { mode: "date" }),
 		locked_until: datetime("locked_until", { mode: "date" }),
 		lock_token: varchar("lock_token", { length: 32 }),
-		provider: varchar("provider", { length: 64 }),
 		provider_message_id: varchar("provider_message_id", { length: 255 }),
 		sent_at: datetime("sent_at", { mode: "date" }),
 		last_error: text("last_error"),
@@ -698,7 +687,7 @@ export const sysJobExecution = mysqlTable(
  * 审计日志 —— **只增不改**:每一次「写调用」是谁、什么时候、对什么、成功没有。
  *
  * 它由 `init.ts` 的 `auditMiddleware` **结构性**写入(不靠每个 resolver 记得加);
- * 只记 mutation,默认跳过 `page.*` 这类高频 UI 偏好写入(见 `lib/audit.ts` 与 `doc/审计日志.md`)。
+ * 只记 mutation,默认跳过 `page.*` 这类高频 UI 偏好写入(见 `lib/global-audit.ts` 与 `doc/审计日志.md`)。
  */
 export const sysLog = mysqlTable(
 	"sys_log",
@@ -709,7 +698,7 @@ export const sysLog = mysqlTable(
 		trace_id: varchar("trace_id", { length: 32 }),
 		/** tRPC 路径(如 `role.create`) */
 		path: varchar("path", { length: 64 }).notNull(),
-		/** 中文动作名(`lib/audit.ts` 的映射表给出,查不到落回 path) */
+		/** 中文动作名(`lib/global-audit.ts` 的映射表给出,查不到落回 path) */
 		label: varchar("label", { length: 64 }),
 		/** query / mutation(只有 mutation 入库,留着便于将来放开) */
 		type: varchar("type", { length: 16 }),
@@ -930,7 +919,7 @@ export const taskWorkflowTable = mysqlTable("tc_workflow", {
  * 软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
  *
  * `priority` —— `tinyint(1)` 存数字档位:`0` = P0(最高)、`1` = P1(高)、`2` = P2(普通);
- * 映射见 `lib/task-close-spec.ts` 的词表。允许 null:老数据没有,新建时可空。
+ * 映射见 `lib/task/close-spec.ts` 的词表。允许 null:老数据没有,新建时可空。
  */
 export const taskTable = mysqlTable(
 	"tc_task",
@@ -963,9 +952,12 @@ export const taskTable = mysqlTable(
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		// DB 现状:`idx_task_status_created` 只索引 status(单列);`idx_task_creator_status` 双列索引保留
-		index("idx_task_status_created").on(table.status),
+		// 列表页的实际查询:`deleted_at IS NULL` + 可选 `status` / `workflow_id`,
+		// 再 `ORDER BY created_at DESC` —— 索引要盖住「状态 + 排序」这一段
+		index("idx_task_status_created").on(table.status, table.created_at),
 		index("idx_task_creator_status").on(table.creator_id, table.status),
+		/** 按流程模板筛(「我的任务」按模板切换) */
+		index("idx_task_workflow").on(table.workflow_id),
 		index("idx_task_parent").on(table.parent_id),
 	],
 );
@@ -1074,7 +1066,7 @@ export const taskCommentTable = mysqlTable(
  * 与 `sys_log` 的分工(别混):
  *  - `sys_log` 是**全站合规台账**:中间件写、fire-and-forget、粗粒度(path + 尽力而为的 target + 入参快照);
  *  - 本表是**模块业务历史**:各 resolver 在**同一个事务里**写 —— 业务回滚则日志一起没,
- *    业务成功就一定有日志(故意与 `lib/audit.ts` 的"绝不拖累业务"相反,见 `doc/task-close.md`)。
+ *    业务成功就一定有日志(故意与 `lib/global-audit.ts` 的"绝不拖累业务"相反,见 `doc/task-close.md`)。
  *
  * 两条口径(改表前先读):
  *  1. `from_status` / `to_status` = 任务状态在**这次事件前后**的值;事件没动状态就双双 NULL
@@ -1102,7 +1094,7 @@ export const taskLogTable = mysqlTable(
 		actor_id: varchar("actor_id", { length: 36 }).notNull(),
 		/** 操作人姓名**快照** —— 账号将来被删,历史仍读得懂(与 sys_log.operator_name 同口径) */
 		actor_name: varchar("actor_name", { length: 64 }),
-		/** 事件专属补充(结构由 event 判别,见 lib/task-close-log.ts) */
+		/** 事件专属补充(结构由 event 判别,见 lib/task/close-log.ts) */
 		detail: json("detail"),
 		/** 事件时刻 —— **毫秒**精度(一个事务里可能写多行,秒精度会大量撞点) */
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -1146,8 +1138,34 @@ export const taskReportTable = mysqlTable(
 		task_id: varchar("task_id", { length: 191 }).notNull(),
 		draft: json("draft"),
 		revision: int("revision").notNull().default(0),
+		/** 手动「保存」时留的快照指针(子任务表单同步用;表格同步直接改父行,不用它) */
+		current_submission_id: varchar("current_submission_id", { length: 32 }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [uniqueIndex("uk_task_report_task").on(table.task_id)],
+);
+
+/**
+ * 子任务**手动保存**后的不可变快照(表单类填报用)。
+ *
+ * 表格同步是"改父任务那几行";表单只有一个对象、没法合并,所以每次保存追加一份快照,
+ * 父任务只读展示这些快照 —— 子任务没点保存,父任务就什么都看不到(没有实时兜底)。
+ */
+export const taskReportSubmissionTable = mysqlTable(
+	"tc_report_submission",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		/** → `tc_task_report.id`(子任务那一行) */
+		report_id: varchar("report_id", { length: 32 }).notNull(),
+		task_id: varchar("task_id", { length: 191 }).notNull(),
+		submitter_id: varchar("submitter_id", { length: 36 }).notNull(),
+		revision: int("revision").notNull(),
+		payload: json("payload"),
+		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("uk_report_submission_revision").on(table.report_id, table.revision),
+		index("idx_report_submission_task").on(table.task_id, table.created_at),
+	],
 );

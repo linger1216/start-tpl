@@ -4,7 +4,7 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
 
-import type { UserRow } from "./settings-users-table";
+import type { UserRow } from "./table";
 
 /**
  * 用户详情(只读)。

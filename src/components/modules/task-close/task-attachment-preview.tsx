@@ -15,7 +15,7 @@ import {
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { formatBytes } from "#/lib/format";
-import type { TaskAttachment } from "#/lib/task-payload";
+import type { TaskAttachment } from "#/lib/task/payload";
 
 /**
  * 文件预览器走 `React.lazy`:它把 Office / PDF / CAD 等 20 多条渲染链路打包在一起,

@@ -1,4 +1,4 @@
-import { PolicyStatusTag } from "#/components/modules/settings/policy-status-tag";
+import { PolicyStatusTag } from "#/components/modules/settings/data-scope/policy-status-tag";
 import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";

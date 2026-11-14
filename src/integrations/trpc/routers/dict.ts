@@ -8,7 +8,7 @@
  * 前端读它走 `trpc.dict.*`(`byCode` 是跨页面的按编码取值器);字典没有对应编码就回空数组(不编造候选)。
  *
  * Excel 的列契约(导出表头 / 导入字段 / 摊平)在
- * `src/components/modules/settings/settings-dictionary-excel.ts` —— **一行 = 一个字典项**,
+ * `src/components/modules/settings/dictionary/excel.ts` —— **一行 = 一个字典项**,
  * 导出与导入共用同一组表头,所以导出的文件能直接回导;`import` 的语义见那个过程的注释(并入、幂等)。
  */
 

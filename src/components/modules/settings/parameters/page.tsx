@@ -3,13 +3,10 @@ import { Cog, Plus, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsParametersDetail } from "#/components/modules/settings/settings-parameters-detail";
-import { PARA_EXCEL_COLUMNS, paraExcelRows } from "#/components/modules/settings/settings-parameters-excel";
-import {
-	type ParameterFormPayload,
-	SettingsParametersForm,
-} from "#/components/modules/settings/settings-parameters-form";
-import { type ParameterRow, parameterColumns } from "#/components/modules/settings/settings-parameters-table";
+import { SettingsParametersDetail } from "#/components/modules/settings/parameters/detail";
+import { PARA_EXCEL_COLUMNS, paraExcelRows } from "#/components/modules/settings/parameters/excel";
+import { type ParameterFormPayload, SettingsParametersForm } from "#/components/modules/settings/parameters/form";
+import { type ParameterRow, parameterColumns } from "#/components/modules/settings/parameters/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
@@ -137,7 +134,7 @@ export function SettingsParametersPage() {
 	const { table, persistColumns } = useLedgerTable({
 		columns,
 		data: filtered,
-		// 行标识用 `para_key`(`sys_para.id` 是库里的无意义短串,且"纯代码内置"的参数压根没落库)
+		// 行标识用 `para_key`(主键就是它;"纯代码内置"的参数压根没落库,但同样有 key)
 		getRowId: (row) => row.key,
 		prefKey: "settings.parameters",
 	});

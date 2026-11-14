@@ -28,8 +28,7 @@ if (matches.length) {
 		existing.path !== path ||
 		existing.perm !== perm ||
 		existing.type !== MENU_TYPE.BUTTON ||
-		existing.parent_id !== parent.id ||
-		existing.status !== 1
+		existing.parent_id !== parent.id
 	) {
 		throw new Error("填报模板权限点存在冲突或已删除，请在菜单管理中检查；未修改任何数据");
 	}
@@ -43,7 +42,6 @@ if (matches.length) {
 		icon: null,
 		sort: 90,
 		visible: 1,
-		status: 1,
 		type: MENU_TYPE.BUTTON,
 		perm,
 	});

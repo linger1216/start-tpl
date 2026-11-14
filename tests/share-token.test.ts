@@ -7,7 +7,7 @@ import { sysLog, sysShareToken } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { createCallerFactory } from "../src/integrations/trpc/init.ts";
 import { trpcRouter } from "../src/integrations/trpc/router.ts";
-import { flushAuditWrites } from "../src/lib/audit.ts";
+import { flushAuditWrites } from "../src/lib/global-audit.ts";
 import { clearShareTokenCache, matchShareToken } from "../src/lib/share-access.ts";
 import { assertRejects, caller, closeDb, TEST_PREFIX, testId, uniqueSuffix } from "./helpers.ts";
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SettingsSchedulerPage } from "#/components/modules/settings/settings-scheduler-page";
+import { SettingsSchedulerPage } from "#/components/modules/settings/scheduler/page";
 import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/scheduler")({

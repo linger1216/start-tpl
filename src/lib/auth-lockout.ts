@@ -30,7 +30,7 @@ const FAILURE_WINDOW_MS = 5 * 60 * 1000;
  * 锁定的剩余秒数 —— `locked_until > now()` 时返回正数,否则 0。
  * 用来给客户端说「再过 X 秒才能再试」。
  */
-export function lockoutRemainingMs(lockedUntil: Date | null): number {
+function lockoutRemainingMs(lockedUntil: Date | null): number {
 	if (!lockedUntil) return 0;
 	const diff = lockedUntil.getTime() - Date.now();
 	return diff > 0 ? diff : 0;
@@ -178,7 +178,7 @@ export function resetLockoutConfig(): void {
 }
 
 /** 当前生效的阈值(给单测断言用;生产代码用上面的常量即可)。 */
-export function effectiveLockoutConfig(): { threshold: number; durationMs: number; windowMs: number } {
+function effectiveLockoutConfig(): { threshold: number; durationMs: number; windowMs: number } {
 	return {
 		threshold: overrideConfig.threshold ?? LOCKOUT_THRESHOLD,
 		durationMs: overrideConfig.durationMs ?? LOCKOUT_DURATION_MS,

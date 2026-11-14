@@ -14,11 +14,11 @@ import { eq } from "drizzle-orm";
 
 import { taskWorkflowTable } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
-import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
+import { DEFAULT_WORKFLOW_ID } from "../src/lib/task/close-spec.ts";
 
 const rows = [
 	{
-		// 固定 id:脚本按它判重,派生项目引用它当默认模板,路由器按它禁删(见 lib/task-close-spec.ts)
+		// 固定 id:脚本按它判重,派生项目引用它当默认模板,路由器按它禁删(见 lib/task/close-spec.ts)
 		id: DEFAULT_WORKFLOW_ID,
 		payload: {
 			name: "默认事项流程",

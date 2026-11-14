@@ -182,7 +182,7 @@ export const roleRouter = createTRPCRouter({
 	 * | 库里已有 | 改排序 / 状态 / 备注(**留空的单元格不动库里的值**);和库里完全一样 → `duplicates` |
 	 * | 同一批里名字重复 | 第 2 条起报错(只导入第一条) |
 	 *
-	 * 列契约与表头在 `#/components/modules/settings/settings-roles-excel.ts`;导出的文件能直接回导。
+	 * 列契约与表头在 `#/components/modules/settings/roles/excel.ts`;导出的文件能直接回导。
 	 * 权限点复用「新增角色」(`sys:role:add`):导入本质就是批量新增,不另造新码(见 `lib/rbac.ts` 文件头)。
 	 */
 	import: protectedProcedure

@@ -13,7 +13,7 @@ import { roleRouter } from "./routers/role";
 import { schedulerRouter } from "./routers/scheduler";
 import { shareTokenRouter } from "./routers/share-token";
 import { tagRouter } from "./routers/tag";
-import { taskCloseRouter } from "./routers/task-close";
+import { taskCloseRouter } from "./routers/task/index";
 import { userRouter } from "./routers/user";
 
 export const trpcRouter = createTRPCRouter({

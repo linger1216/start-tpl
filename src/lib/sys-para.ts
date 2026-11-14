@@ -55,7 +55,7 @@ export const PARA_DEFAULTS: Record<string, { value: string; type: ParaType; grou
 		group: "界面偏好",
 		remark: "列表页默认每页多少条;只认 10 / 20 / 50 / 100,填别的按 20 处理;改完对之后打开的页面生效",
 	},
-	// 审计日志 —— 由 lib/audit.ts 读取(改参数即时生效,不用改代码)
+	// 审计日志 —— 由 lib/global-audit.ts 读取(改参数即时生效,不用改代码)
 	"log.enabled": {
 		value: "true",
 		type: PARA_TYPE.BOOL,

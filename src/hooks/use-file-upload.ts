@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
-import type { FileRow } from "#/components/modules/settings/settings-files-table";
+import type { FileRow } from "#/components/modules/settings/files/table";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError } from "#/lib/api/error";
 

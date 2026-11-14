@@ -4,13 +4,10 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsDataScopeDetail } from "#/components/modules/settings/settings-data-scope-detail";
-import {
-	type DataScopeFormPayload,
-	SettingsDataScopeForm,
-} from "#/components/modules/settings/settings-data-scope-form";
-import { SettingsDataScopePreviewDialog } from "#/components/modules/settings/settings-data-scope-preview-dialog";
-import { type DataScopeRow, dataScopeColumns } from "#/components/modules/settings/settings-data-scope-table";
+import { SettingsDataScopeDetail } from "#/components/modules/settings/data-scope/detail";
+import { type DataScopeFormPayload, SettingsDataScopeForm } from "#/components/modules/settings/data-scope/form";
+import { SettingsDataScopePreviewDialog } from "#/components/modules/settings/data-scope/preview-dialog";
+import { type DataScopeRow, dataScopeColumns } from "#/components/modules/settings/data-scope/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";

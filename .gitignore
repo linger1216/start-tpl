@@ -144,3 +144,11 @@ $RECYCLE.BIN/
 .cursor
 .gemini
 .grok
+
+# 审查会话的工作草稿:写在仓库根目录时**不入库**(证据留在 `doc/review/<日期>/`)
+/findings.md
+/task_plan.md
+/progress.md
+# 脚手架工具的本地痕迹(`.cta.json` 里带着别的项目的 projectName,别带进模板)
+.cursorrules
+.cta.json

@@ -1,9 +1,9 @@
-import { PolicyStatusTag } from "#/components/modules/settings/policy-status-tag";
+import { PolicyStatusTag } from "#/components/modules/settings/data-scope/policy-status-tag";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { type DataScopeRow, ruleShapeText } from "./settings-data-scope-table";
+import { type DataScopeRow, ruleShapeText } from "./table";
 
 /**
  * 数据范围规则详情(只读)。

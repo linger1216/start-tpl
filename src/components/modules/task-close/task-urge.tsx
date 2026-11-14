@@ -18,7 +18,7 @@ import {
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
-import { TASK_URGE_COOLDOWN_MINUTES } from "#/lib/task-close-spec";
+import { TASK_URGE_COOLDOWN_MINUTES } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 
 type Action = { id: string; assigneeName: string | null; lastUrgedAt: string | null };

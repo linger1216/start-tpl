@@ -4,13 +4,10 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import { SettingsDataPluginsDetail } from "#/components/modules/settings/settings-data-plugins-detail";
-import {
-	type PluginFormPayload,
-	SettingsDataPluginsForm,
-} from "#/components/modules/settings/settings-data-plugins-form";
-import { SettingsDataPluginsPreviewDialog } from "#/components/modules/settings/settings-data-plugins-preview-dialog";
-import { type PluginRow, pluginColumns } from "#/components/modules/settings/settings-data-plugins-table";
+import { SettingsDataPluginsDetail } from "#/components/modules/settings/data-plugins/detail";
+import { type PluginFormPayload, SettingsDataPluginsForm } from "#/components/modules/settings/data-plugins/form";
+import { SettingsDataPluginsPreviewDialog } from "#/components/modules/settings/data-plugins/preview-dialog";
+import { type PluginRow, pluginColumns } from "#/components/modules/settings/data-plugins/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";

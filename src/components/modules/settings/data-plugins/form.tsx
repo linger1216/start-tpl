@@ -16,7 +16,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
 import { PLUGIN_ITEM_KEY_MAX, PLUGIN_ITEM_VALUE_MAX, PLUGIN_ITEMS_MAX } from "#/lib/data-scope-spec";
-import type { PluginRow } from "./settings-data-plugins-table";
+import type { PluginRow } from "./table";
 
 /**
  * v2 (m20034) 起,新建插件的入参 —— 用户只能建「指定清单」类插件,**必须**给一份

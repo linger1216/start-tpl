@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Button, buttonVariants } from "#/components/ui/button";
-import { isInternalUrl } from "#/lib/task-payload";
+import { isInternalUrl } from "#/lib/task/payload";
 
 /**
  * 任务链接的内嵌预览 —— **直接铺在链接下方**(不再弹窗):一个 iframe。

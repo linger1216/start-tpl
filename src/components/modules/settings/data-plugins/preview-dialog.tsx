@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import type { PluginRow } from "#/components/modules/settings/settings-data-plugins-table";
+import type { PluginRow } from "#/components/modules/settings/data-plugins/table";
 import { PolicyContextBlock } from "#/components/modules/shared/policy-context-block";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";

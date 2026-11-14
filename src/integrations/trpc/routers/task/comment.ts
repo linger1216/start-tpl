@@ -6,7 +6,7 @@ import { sysFile, taskCommentTable, taskLogTable } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertAttachments,
 	assertTaskReadable,
@@ -15,11 +15,11 @@ import {
 	getTaskRow,
 	ID,
 	lockTask,
-	logTaskEvent,
 	nameMapOf,
 	pageInput,
 	publishMentions,
-} from "./task-shared";
+	writeTaskEvent,
+} from "./common";
 
 export const taskCommentRouter = createTRPCRouter({
 	// ────────────────────────────── 评论 ──────────────────────────────
@@ -99,7 +99,7 @@ export const taskCommentRouter = createTRPCRouter({
 					updated_at: now,
 				});
 				receivers = await createMentionNotifications(tx, task, input.content.trim(), me, input.mentionIds ?? [], id);
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: input.taskId,
 					event: "comment.create",
 					actor: me,
@@ -130,7 +130,7 @@ export const taskCommentRouter = createTRPCRouter({
 				.update(taskCommentTable)
 				.set({ ...softDeleted(), updated_at: new Date() })
 				.where(eq(taskCommentTable.id, row.id));
-			await logTaskEvent(tx, {
+			await writeTaskEvent(tx, {
 				taskId: task.id,
 				event: "comment.remove",
 				actor: me,

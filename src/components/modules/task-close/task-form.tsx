@@ -28,9 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
 import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
-import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task-close-spec";
-import { blankBlock, type TaskAttachment, type TaskLinkBlock } from "#/lib/task-payload";
-import { taskReportSchema } from "#/lib/task-report-spec";
+import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task/close-spec";
+import { blankBlock, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
+import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalDate } from "#/lib/time";
 import { cn } from "#/lib/utils";
 

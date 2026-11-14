@@ -207,6 +207,31 @@ test("秒传不产生第二行 ⇒ 删除就是直接删(不需要引用计数)"
 	assert.equal(await (await getStorage()).stat(a.bucket, a.objectKey), null, "删掉唯一一行后对象即清除");
 });
 
+test("并发上传同一内容:确认时按 checksum 收敛,只留一份对象与一行", async () => {
+	const hash = fakeHash(`race${SUFFIX}`);
+	// 两次 presign 都发生在对方 confirm 之前 —— 此刻还没有 status=1 的行,秒传谁都命不中
+	const a = await caller.file.presign({ name: `${TEST_PREFIX}race-a.${SUFFIX}.png`, size: 9, kind: "private", hash });
+	const b = await caller.file.presign({ name: `${TEST_PREFIX}race-b.${SUFFIX}.png`, size: 9, kind: "private", hash });
+	assert.equal(a.instant, false);
+	assert.equal(b.instant, false, "并发那份 presign 时还命不中秒传(status 仍是 0)");
+	created.push(a.objectKey, b.objectKey);
+	await put(a.uploadUrl, "race-body", "image/png");
+	await put(b.uploadUrl, "race-body", "image/png");
+
+	const aRow = await caller.file.confirm({ bucket: a.bucket, objectKey: a.objectKey, hash });
+	const bRow = await caller.file.confirm({ bucket: b.bucket, objectKey: b.objectKey, hash });
+	assert.equal(bRow.id, aRow.id, "确认时收敛到先到的那一条记录");
+	assert.equal(bRow.objectKey, a.objectKey, "复用先到的那份对象");
+	assert.equal(await (await getStorage()).stat(b.bucket, b.objectKey), null, "后到的那份对象被清掉");
+	assert.equal((await caller.file.list()).filter((row) => row.hash === hash).length, 1, "同样的内容在库里只剩一行");
+
+	// 之后同样的内容直接走秒传:一个字节都不发
+	const c = await caller.file.presign({ name: `${TEST_PREFIX}race-c.${SUFFIX}.png`, size: 9, kind: "private", hash });
+	assert.equal(c.instant, true);
+	assert.equal(c.file?.id, aRow.id);
+	assert.equal(c.uploadUrl, null);
+});
+
 test("秒传:后缀不同不命中(对象键里带着后缀,复用会永远对不上)", async () => {
 	const hash = fakeHash(`ccc${SUFFIX}`);
 	const png = await caller.file.presign({ name: `${TEST_PREFIX}ext.${SUFFIX}.png`, size: 12, kind: "private", hash });

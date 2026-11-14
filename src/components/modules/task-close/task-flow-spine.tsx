@@ -5,7 +5,7 @@ import { MentionList, type Participant, useMentionPicker } from "#/components/mo
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { useFileUpload } from "#/hooks/use-file-upload";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import type { WorkflowStatus } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 

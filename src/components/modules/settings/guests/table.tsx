@@ -4,6 +4,7 @@ import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
 import { isShareTokenExpired } from "#/lib/share-token-spec";
 import { createAppColumnHelper } from "#/lib/table";
+import { formatLocalDate } from "#/lib/time";
 
 /**
  * 访客令牌台账的一行(tRPC `shareToken.list` 出参)—— 与 `sys_share_token` 的列一一对应
@@ -68,10 +69,9 @@ export function shareTokenColumns({
 			header: "有效期至",
 			size: 130,
 			cell: (ctx) => {
-				const value = ctx.getValue();
-				return (
-					<span className="text-xs tabular-nums text-muted-foreground">{value ? value.slice(0, 10) : "长期有效"}</span>
-				);
+				// 存的是 ISO(UTC),给人看要折成本地日期 —— 直接 slice 会差一天
+				const value = formatLocalDate(ctx.getValue());
+				return <span className="text-xs tabular-nums text-muted-foreground">{value || "长期有效"}</span>;
 			},
 		}),
 		columnHelper.accessor("enabled", {

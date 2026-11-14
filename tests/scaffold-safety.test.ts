@@ -58,6 +58,7 @@ test("裁掉可选模块后仍能生成路由并通过类型检查", {
 			symlinkSync(path.join(root, "node_modules"), path.join(target, "node_modules"), "dir");
 			for (const [command, args] of [
 				[process.execPath, ["scripts/prune-features.mjs", "--root", ".", "--features", features]],
+				[process.execPath, ["scripts/check-schema-drift.mjs"]],
 				["./node_modules/.bin/tsr", ["generate"]],
 				["./node_modules/.bin/tsc", ["--noEmit"]],
 			] as const) {
@@ -78,6 +79,22 @@ test("裁掉可选模块后仍能生成路由并通过类型检查", {
 				const home = readFileSync(path.join(target, "src/routes/(main)/index.tsx"), "utf8");
 				assert.match(home, /EmptyState/);
 				assert.doesNotMatch(home, /WorkbenchPage/);
+			}
+			if (!features.split(",").includes("task-close")) {
+				const dmSetup = readFileSync(path.join(target, "scripts/create-better-auth-tables-dm.ts"), "utf8");
+				assert.doesNotMatch(dmSetup, /upgradeTaskStatusIndex/);
+				assert.doesNotMatch(dmSetup, /tc_report_batch|idx_member_task_primary/);
+				assert.doesNotMatch(dmSetup, /table: "tc_/);
+				const mysqlSetup = readFileSync(path.join(target, "scripts/create-system-tables.ts"), "utf8");
+				assert.doesNotMatch(mysqlSetup, /\{ table: "tc_task", index: "idx_task_/);
+				assert.doesNotMatch(mysqlSetup, /tc_report_batch|idx_action_unviewed/);
+				assert.doesNotMatch(mysqlSetup, /table: "tc_/);
+			}
+			if (!features.split(",").includes("demo")) {
+				const dmSetup = readFileSync(path.join(target, "scripts/create-better-auth-tables-dm.ts"), "utf8");
+				assert.doesNotMatch(dmSetup, /create table if not exists .*"demo_grid"|table: "demo_grid"/);
+				const mysqlSetup = readFileSync(path.join(target, "scripts/create-system-tables.ts"), "utf8");
+				assert.doesNotMatch(mysqlSetup, /table: "demo_grid"/);
 			}
 			if (features === "tests") {
 				const guards = spawnSync(

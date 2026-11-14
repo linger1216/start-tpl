@@ -5,7 +5,7 @@ import { TaskWorkflowGraph } from "#/components/modules/task-close/task-workflow
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
-import { statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
+import { statusLabelOf, type WorkflowStatus } from "#/lib/task/close-spec";
 
 /** 流程模板列表的详情投影。 */
 export type WorkflowDetail = {

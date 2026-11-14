@@ -21,7 +21,7 @@ import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
 import { useStableKeys } from "#/hooks/use-stable-keys";
 import { cn } from "#/lib/utils";
-import type { SettingsDictRow } from "./settings-dictionary-table";
+import type { SettingsDictRow } from "./table";
 
 /** 编辑弹窗的表单值 */
 export type DictFormValues = {

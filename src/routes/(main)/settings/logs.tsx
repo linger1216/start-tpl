@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsLogsPage } from "#/components/modules/settings/settings-logs-page";
+import { SettingsLogsPage } from "#/components/modules/settings/logs/page";
 import { ensurePageSize } from "#/hooks/use-para-prefs";
 
 export const Route = createFileRoute("/(main)/settings/logs")({

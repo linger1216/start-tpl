@@ -1,4 +1,4 @@
-import type { LogRow } from "#/components/modules/settings/settings-logs-table";
+import type { LogRow } from "#/components/modules/settings/logs/table";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { JsonBlock } from "#/components/ui/json-block";

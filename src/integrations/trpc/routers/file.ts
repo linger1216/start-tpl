@@ -13,7 +13,7 @@
  * 而 `getCurrentUserId()` 在没有请求上下文时恒为 null:别把校验写成"只认 `getCurrentUserId()`"。
  */
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, ne, or } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "#/db";
@@ -231,6 +231,38 @@ export const fileRouter = createTRPCRouter({
 				await storage.remove(input.bucket, input.objectKey);
 				await db.update(sysFile).set({ status: 2, updated_at: new Date() }).where(eq(sysFile.id, row.id));
 				throw new TRPCError({ code: "BAD_REQUEST", message: "实际大小超过上限,已丢弃" });
+			}
+
+			/**
+			 * ── 确认时再按 checksum 收敛一次:同样的内容**只留一份对象** ──
+			 *
+			 * `presign` 的秒传要求那一刻已有"同 hash + 同桶 + 同后缀 + 正常"的行;两份**并发**上传
+			 * 时两边都还没确认(`status=0`),谁都命不中,于是 MinIO 里会落下两份一模一样的字节。
+			 * 这里在确认这条路径上补一刀:命中已有正常行 ⇒ 删掉刚传上来的这份对象与它的登记行,
+			 * **返回那一条已有记录**(调用方据此拿到同一个 id,不会多出一份存储)。
+			 */
+			const hash = input.hash ?? row.hash;
+			if (hash) {
+				const [canonical] = await db
+					.select()
+					.from(sysFile)
+					.where(
+						and(
+							eq(sysFile.hash, hash),
+							eq(sysFile.bucket, input.bucket),
+							// 后缀决定对象键,不同后缀共用一个对象会永远对不上;老行没有后缀就按 null 比
+							row.ext ? eq(sysFile.ext, row.ext) : isNull(sysFile.ext),
+							eq(sysFile.status, 1),
+							ne(sysFile.id, row.id),
+						),
+					)
+					.limit(1);
+				if (canonical) {
+					await storage.remove(input.bucket, input.objectKey);
+					// 这一行是本次 `presign` 刚插的、还没交给任何人(非秒传路径不回 file),直接删干净
+					await db.delete(sysFile).where(eq(sysFile.id, row.id));
+					return await toFile(canonical);
+				}
 			}
 
 			await db

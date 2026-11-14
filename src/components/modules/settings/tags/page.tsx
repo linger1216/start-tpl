@@ -4,12 +4,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
-import {
-	SettingsTagsCreateDialog,
-	type TagCreateValues,
-} from "#/components/modules/settings/settings-tags-create-dialog";
-import { SettingsTagsForm, type TagFormValues, tagFormValues } from "#/components/modules/settings/settings-tags-form";
-import { SettingsTagsTree, type TagNode, type TagRow } from "#/components/modules/settings/settings-tags-tree";
+import { SettingsTagsCreateDialog, type TagCreateValues } from "#/components/modules/settings/tags/create-dialog";
+import { SettingsTagsForm, type TagFormValues, tagFormValues } from "#/components/modules/settings/tags/form";
+import { SettingsTagsTree, type TagNode, type TagRow } from "#/components/modules/settings/tags/tree";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";

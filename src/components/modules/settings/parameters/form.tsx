@@ -26,7 +26,7 @@ import {
 	type ParaType,
 	validateParaValue,
 } from "#/lib/para-spec";
-import type { ParameterRow } from "./settings-parameters-table";
+import type { ParameterRow } from "./table";
 
 export type ParameterFormPayload = {
 	key: string;

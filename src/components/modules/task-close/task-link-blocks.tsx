@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { TaskLinkPreview } from "#/components/modules/task-close/task-link-preview";
 import { ActionButton } from "#/components/ui/action-button";
-import { isInternalUrl, type TaskLinkBlock } from "#/lib/task-payload";
+import { isInternalUrl, type TaskLinkBlock } from "#/lib/task/payload";
 import { cn } from "#/lib/utils";
 
 /**

@@ -6,7 +6,7 @@ import { sysUser, taskActionTable, taskMemberTable } from "#/db/data-base-schema
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive } from "#/lib/soft-delete";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertCanManage,
 	getTaskRow,
@@ -14,10 +14,10 @@ import {
 	isTaskParticipant,
 	LIVE_ACTION_STATUS,
 	lockTask,
-	logTaskEvent,
 	memberRolesOf,
 	ROLE_ENUM,
-} from "./task-shared";
+	writeTaskEvent,
+} from "./common";
 
 export const taskMemberRouter = createTRPCRouter({
 	// ────────────────────────────── 成员 ──────────────────────────────
@@ -83,7 +83,7 @@ export const taskMemberRouter = createTRPCRouter({
 					})),
 				);
 				for (const userId of input.userIds)
-					await logTaskEvent(tx, {
+					await writeTaskEvent(tx, {
 						taskId: task.id,
 						event: "member.add",
 						actor: me,
@@ -126,7 +126,7 @@ export const taskMemberRouter = createTRPCRouter({
 							eq(taskMemberTable.role, input.role),
 						),
 					);
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "member.remove",
 					actor: me,
@@ -192,7 +192,7 @@ export const taskMemberRouter = createTRPCRouter({
 					.update(taskMemberTable)
 					.set({ role: "executor", updated_at: now })
 					.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.user_id, input.userId)));
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "member.transfer",
 					actor: me,

@@ -1,6 +1,6 @@
 import { Save, Undo2 } from "lucide-react";
 
-import type { DeptTreeNode } from "#/components/modules/settings/settings-departments-tree";
+import type { DeptTreeNode } from "#/components/modules/settings/departments/tree";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MemberZone } from "#/components/modules/shared/member-zone";
 import { ActionButton } from "#/components/ui/action-button";

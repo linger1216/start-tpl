@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { RoleRow } from "#/components/modules/settings/settings-roles-table";
+import type { RoleRow } from "#/components/modules/settings/roles/table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { type PermissionNode, PermissionSelect } from "#/components/modules/shared/permission-select";
 import { Button } from "#/components/ui/button";

@@ -1,6 +1,6 @@
 import type { ExcelColumn } from "#/lib/excel";
 
-import type { RoleRow } from "./settings-roles-table";
+import type { RoleRow } from "./table";
 
 /**
  * 角色台账的 Excel 列契约 —— 表头与列宽**只在这里写一份**。

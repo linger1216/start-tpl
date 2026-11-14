@@ -5,7 +5,7 @@ import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { PARA_TYPE, PARA_TYPE_META } from "#/lib/para-spec";
-import type { ParameterRow } from "./settings-parameters-table";
+import type { ParameterRow } from "./table";
 
 /**
  * 参数详情(只读)。
@@ -49,9 +49,6 @@ export function SettingsParametersDetail({
 				<>
 					{/* 字段直接内联写:哪一行要特殊渲染(徽章 / 完整 JSON / 自定义块)就地决定,不经过"字段声明"这层 */}
 					<div className="flex flex-col gap-0">
-						<DetailRow label="ID">
-							<span className="font-mono text-xs">{row.id}</span>
-						</DetailRow>
 						<DetailRow label="参数名">
 							<span className="font-mono text-xs">{row.key}</span>
 						</DetailRow>

@@ -4,9 +4,9 @@
 
 ## 代码与存储
 
-- `src/integrations/trpc/routers/task-close.ts`：组合入口；`task-query.ts`、`task-record.ts`、`task-member.ts`、`task-action.ts`、`task-comment.ts`、`task-workflow.ts`、`task-report.ts` 按职责实现接口，`task-shared.ts` 保存共用的授权与事务逻辑。
-- `src/lib/task-close-spec.ts` / `task-close-log.ts`：流程状态与活动日志的客户端安全词表。
-- `src/lib/task-report-spec.ts` / `task-report-summary.ts` / `task-report-excel.ts`：填报校验、汇总和受限 Excel 处理。
+- `src/integrations/trpc/routers/task/`：`index.ts` 是组合入口；`query.ts`、`record.ts`、`member.ts`、`action.ts`、`comment.ts`、`workflow.ts`、`report.ts` 按职责实现接口，`common.ts` 保存共用的授权与事务逻辑（它不是 router）。
+- `src/lib/task/close-spec.ts` / `task/close-log.ts`：流程状态与活动日志的客户端安全词表。
+- `src/lib/task/report-spec.ts` / `report-excel.ts` / `report-download.ts`：填报校验、受限 Excel 处理与导出下载。
 - `src/components/modules/task-close/`：任务列表、详情、流程模板、填报模板与填报界面。
 - `src/db/data-base-schema.ts`、`scripts/create-system-tables.ts`、`scripts/create-better-auth-tables-dm.ts`：模型及 MySQL、达梦初始化；`scripts/sync-table-meta.ts` 是表列注释唯一真源。
 
@@ -14,13 +14,12 @@
 | --- | --- |
 | `tc_workflow` | 可编辑的任务流程模板，`payload` 定义状态与转移 |
 | `tc_task` | 任务、创建人、说明内容及创建时固定的流程快照;`parent_id` / `report` 承载父子填报与数据规则 |
-| `tc_content_revision` | 说明 / 链接 / 附件的内部修订快照（**界面已不出入口**；留着是给旧附件保留归属） |
 | `tc_member` | 参与者与执行人关系；一个任务至多一个有效执行人 |
 | `tc_action` | 审批和征询的当前处理节点，通过 `root_action_id`、父节点和顺序组织 |
 | `tc_comment` | 自由文字、附件与结构化 @，不作为正式填报 |
 | `tc_log` | 与业务同事务、只增不改的活动历史 |
 | `tc_report_template` | 填报模板(单版本,`payload` 即当前结构;`shared` 控制可见性) |
-| `tc_task_report` / `tc_report_submission` | 每个任务各有一份填报草稿;`tc_report_submission` 为历史快照,当前流程不再写入 |
+| `tc_task_report` | 每个任务各有一份填报草稿(一任务一行,`draft` + `revision`) |
 
 ## 任务与权限
 
@@ -30,7 +29,7 @@
 **说明 / 链接 / 附件在 fan-out 时复制给子任务**;其中**说明**是"整件事"的描述 —— 父任务之后改说明,
 会同步写到全部子任务(链接 / 附件不走同步,详情页按整棵树取并集显示)。单执行人则是普通一条任务。数据范围挂在**成员**上(`members[].filter`,一条等值条件),缺省沿用任务级数据规则
 (`report.filter`);不配就是全部数据。**下发即复制**:子任务的填报是父任务母版行的独立副本,父子各存各的、互不加锁;
-子任务里点「保存」才把这份副本同步回父任务(接口 `reportSyncToParent`,只对子任务开放)。界面里「带数下发」是一个「数据」小字:展开后先导入 Excel(单行中文表头,
+子任务里点「保存」才把这份副本同步回父任务(接口 `reportSyncToParent`,只对子任务开放;表格按范围整片替换父行,表单追加一份不可变快照)。界面里「带数下发」是一个「数据」小字:展开后先导入 Excel(单行中文表头,
 空模版表头即可),再逐人配数据范围,多执行人必须配置互斥范围。
 
 任务卡片顶行左格是**发件抬头**:执行人圆牌 + 姓名(「发给谁」,`taskList.items.executorName` / `taskGet.children[].executorName` 由 `executorNamesOf` 从 `tc_member` 派生 —— fan-out 子任务创建人全都一样,只看 `creator_id` 分不出发给谁);fan-out 的父任务是分派容器、没有唯一收件人,退回类型图标块。
@@ -43,7 +42,7 @@
 
 | 内容 | 父子关系 |
 | --- | --- |
-| 填报数据 | 下发时复制；每个任务独立保存和检查 revision。子任务手动同步时，用自己的行替换父任务中属于该子任务范围的行 |
+| 填报数据 | 下发时复制；每个任务独立保存和检查 revision。**父任务的数据全靠子任务同步得来**：表格是「用自己的行替换父任务中属于本子任务范围的行」，表单是「每次点保存追加一份快照」，父任务只读这些快照 —— 子任务没点保存，父任务就看不到，没有实时兜底 |
 | 链接 / 附件 / 说明 | 创建时复制；详情读取整棵树的链接与附件并集，编辑使用当前任务自己的内容 |
 | 评论 / 动态 / 成员 | 按任务分别保存 |
 
@@ -63,6 +62,8 @@
 
 成员的写权限分两档：`memberAdd` 只要**任务相关方**（创建者 / 管理员 / 当前成员），陌生人不能把人拉进任务、更不能把自己加成执行人；`memberRemove` 仍是创建者或管理员。`taskGet.permissions.canAddMember` 与之同一判据，前端据此决定要不要显示「加成员」按钮。
 
+**删除任务**（`taskRemove`，软删）**只有任务创建者或管理员能做** —— 执行人、参与者一律拒绝。守卫是单独一条 `assertCanRemoveTask`（消息「只有任务创建者或管理员可以删除任务」），不跟「编辑 / 成员管理」共用 `assertCanManage`；前端也单独用 `taskGet.permissions.canRemove` 决定要不要显示「删除」，与后端同一判据。删父任务连带软删子任务，并终止未完成动作与待投递通知。
+
 新建 / 编辑任务的对话框按**四块**分区(区块标题 + `border-t` 细分隔线,不套卡片):
 基本信息(名称 · 描述 · 流程模板 · 执行人 · 截止时间 · 优先级)、填报区(填报模板与带数下发,仅新建)、
 链接区(清单式添加,站内 / 站外按 host 自动判定;每条带「预览」,**就地展开在链接下方**用 iframe 打开,不弹窗,展开的那条占满整行;站外站点若禁止嵌入会显示空白,可改走新标签)、附件区(任务相关方都能加)。编辑态只去掉填报区与「流程模板 / 执行人」。
@@ -74,6 +75,8 @@
 状态转移的可发起方只有三个任务角色:`creator`(创建人)/ `participant`(参与者)/ `executor`(执行者),数组 = 任一命中;任务非成员(且非创建人)不因模板边获得任何操作权。状态可标记为结束状态,进入该状态时事务内终止未完成动作及待发送通知;重新打开必须由模板显式定义转移边。
 
 填报模板是**单版本**结构:版本表已并入 `tc_report_template`(`schema` 列更名为 `payload`,编辑即覆盖),绑定引用(`tc_task_report.version_id` 等历史列名)存的就是模板 id。`shared = 1` 全员可见、`0` 仅创建人与管理员;删除为软删 —— 已绑定任务的历史填报仍读得到 payload,只是不能再用于新任务/绑定。管理入口在「填报模板」独立页面(带只读预览)。
+
+单版本指模板只保存当前定义，不代表已建任务会跟随更新。任务绑定时把填报结构复制到 `tc_task.report.schema`；之后编辑模板只影响新绑定的任务，不自动刷新已有任务的快照，也不改变已有填报行。流程模板同样在创建任务时复制，后续编辑不影响存量任务。两个模板的编辑界面都会提示这一行为；若将来需要传播模板修改，应先设计数据迁移和冲突处理。
 
 ## 审批与征询
 

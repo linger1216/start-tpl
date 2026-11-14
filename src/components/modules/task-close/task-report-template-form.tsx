@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { GripVertical, X } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import { useEffect, useState } from "react";
 import { ActionIconButton } from "#/components/ui/action-button";
@@ -24,19 +24,45 @@ import { TagInput } from "#/components/ui/tag-input";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { type TaskReportSchema, taskReportSchema } from "#/lib/task-report-spec";
+import { type TaskReportSchema, taskReportSchema } from "#/lib/task/report-spec";
 import { cn } from "#/lib/utils";
 
 const FIELD_TYPES = [
 	{ value: "text", label: "文本" },
+	{ value: "phone", label: "手机号码" },
+	{ value: "email", label: "邮箱" },
 	{ value: "integer", label: "整数" },
 	{ value: "decimal", label: "小数" },
 	{ value: "date", label: "日期" },
 	{ value: "datetime", label: "日期时间" },
 	{ value: "select", label: "单选" },
 	{ value: "multiselect", label: "多选" },
+	{ value: "attachment", label: "文件附件" },
+	{ value: "array", label: "数组" },
 ] as const;
 type FieldType = (typeof FIELD_TYPES)[number]["value"];
+/** 数组元素里能选的类型:去掉「数组」本身(只允许一层) */
+const ITEM_TYPES = FIELD_TYPES.filter((type) => type.value !== "array");
+type ItemFieldType = Exclude<FieldType, "array">;
+/** 数组元素里的一条字段 */
+type ItemField = {
+	key: string;
+	id: string;
+	idEdited: boolean;
+	label: string;
+	type: ItemFieldType;
+	required: boolean;
+	options: string[];
+};
+const newItemField = (): ItemField => ({
+	key: crypto.randomUUID(),
+	id: "",
+	idEdited: false,
+	label: "",
+	type: "text",
+	required: false,
+	options: [],
+});
 type Field = {
 	key: string;
 	id: string;
@@ -49,6 +75,8 @@ type Field = {
 	allowEmpty: boolean;
 	/** 单选 / 多选的候选值(直接喂给 `ui/tag-input` 的 TagInput) */
 	options: string[];
+	/** 数组类型:元素对象的字段(至少 1 个) */
+	itemFields: ItemField[];
 	original?: TaskReportSchema["fields"][number];
 };
 const newField = (): Field => ({
@@ -60,6 +88,7 @@ const newField = (): Field => ({
 	required: false,
 	allowEmpty: false,
 	options: [],
+	itemFields: [],
 });
 
 /**
@@ -158,6 +187,16 @@ export function TaskReportTemplateForm({
 				required: field.required,
 				allowEmpty: field.allowEmpty,
 				options: field.options ?? [],
+				itemFields: (field.itemFields ?? []).map((item) => ({
+					key: crypto.randomUUID(),
+					id: item.id,
+					// 已发布的标识被填报数据引用,不再随名称自动生成
+					idEdited: true,
+					label: item.label,
+					type: item.type as ItemFieldType,
+					required: item.required,
+					options: item.options ?? [],
+				})),
 				original: field,
 			})),
 		);
@@ -179,6 +218,28 @@ export function TaskReportTemplateForm({
 		setFields((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
 	};
 	const addField = () => setFields([...fields, newField()]);
+	// 字段顺序拖拽(HTML5 DnD,与字典项 / 列设置面板同款):整行可拖,拖过谁谁高亮,松手落在那一行
+	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const [overIndex, setOverIndex] = useState<number | null>(null);
+	const reorder = (from: number, to: number) =>
+		setFields((items) => {
+			if (from === to) return items;
+			const next = [...items];
+			const [moved] = next.splice(from, 1);
+			if (!moved) return items;
+			next.splice(to, 0, moved);
+			return next;
+		});
+	/** 数组元素字段的增删改(只动某一行的 itemFields) */
+	const setItems = (fieldKey: string, updater: (items: ItemField[]) => ItemField[]) =>
+		setFields((items) =>
+			items.map((item) => (item.key === fieldKey ? { ...item, itemFields: updater(item.itemFields) } : item)),
+		);
+	const addItem = (fieldKey: string) => setItems(fieldKey, (items) => [...items, newItemField()]);
+	const removeItem = (fieldKey: string, itemKey: string) =>
+		setItems(fieldKey, (items) => items.filter((item) => item.key !== itemKey));
+	const updateItem = (fieldKey: string, itemKey: string, patch: Partial<ItemField>) =>
+		setItems(fieldKey, (items) => items.map((item) => (item.key === itemKey ? { ...item, ...patch } : item)));
 	const editableTemplate =
 		!templateId ||
 		templates.some(
@@ -198,6 +259,16 @@ export function TaskReportTemplateForm({
 				required: field.required,
 				allowEmpty: field.type === "select" && field.allowEmpty,
 				options: field.type === "select" || field.type === "multiselect" ? field.options : undefined,
+				itemFields:
+					field.type === "array"
+						? field.itemFields.map((item) => ({
+								id: item.id.trim(),
+								label: item.label.trim(),
+								type: item.type,
+								required: item.required,
+								options: item.type === "select" || item.type === "multiselect" ? item.options : undefined,
+							}))
+						: undefined,
 			})),
 		});
 		if (!name.trim() || !result.success) {
@@ -271,14 +342,36 @@ export function TaskReportTemplateForm({
 							</Button>
 						</div>
 						{fields.map((field, index) => (
+							// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
 							<div
 								key={field.key}
+								draggable
+								onDragStart={() => setDragIndex(index)}
+								onDragEnd={() => {
+									setDragIndex(null);
+									setOverIndex(null);
+								}}
+								onDragOver={(event) => {
+									event.preventDefault();
+									setOverIndex(index);
+								}}
+								onDrop={(event) => {
+									event.preventDefault();
+									if (dragIndex !== null) reorder(dragIndex, index);
+									setDragIndex(null);
+									setOverIndex(null);
+								}}
 								className={cn(
 									"space-y-2 rounded-md border p-2.5",
 									fieldErrors[field.key] ? "border-destructive" : "border-border",
+									dragIndex === index && "opacity-50",
+									overIndex === index && dragIndex !== null && dragIndex !== index
+										? "bg-brand-faint ring-1 ring-primary/40"
+										: "",
 								)}
 							>
 								<div className="flex flex-wrap items-center gap-2">
+									<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
 									<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
 										{index + 1}
 									</span>
@@ -303,7 +396,18 @@ export function TaskReportTemplateForm({
 									<Select
 										items={FIELD_TYPES}
 										value={field.type}
-										onValueChange={(value) => update(field.key, { type: (value ?? "text") as FieldType })}
+										onValueChange={(value) => {
+											const type = (value ?? "text") as FieldType;
+											// 切进「数组」时先给一条空白元素字段;切走就清掉
+											update(field.key, {
+												type,
+												...(type === "array" && field.itemFields.length === 0
+													? { itemFields: [newItemField()] }
+													: type === "array"
+														? {}
+														: { itemFields: [] }),
+											});
+										}}
 									>
 										<SelectTrigger aria-label={`字段 ${index + 1} 类型`} size="sm" className="w-28">
 											<SelectValue />
@@ -350,6 +454,102 @@ export function TaskReportTemplateForm({
 										max={100}
 										placeholder="选项,逗号分隔或逐条回车添加(至少 1 项,不能重复)"
 									/>
+								)}
+								{field.type === "array" && (
+									<div className="space-y-2 rounded-md border border-dashed border-border p-2.5">
+										<div className="flex items-center justify-between gap-2">
+											<span className="text-xs font-medium text-muted-foreground">
+												数组内的字段(至少 1 个;不带数组)
+											</span>
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={field.itemFields.length >= 50}
+												onClick={() => addItem(field.key)}
+											>
+												添加元素字段
+											</Button>
+										</div>
+										{field.itemFields.map((item, itemIndex) => (
+											<div key={item.key} className="space-y-2">
+												<div className="flex flex-wrap items-center gap-2">
+													<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+														{itemIndex + 1}
+													</span>
+													<Input
+														aria-label={`元素字段 ${itemIndex + 1} 名称`}
+														placeholder="字段名称"
+														value={item.label}
+														className="h-8 min-w-32 flex-1"
+														onChange={(event) => {
+															const label = event.target.value;
+															updateItem(field.key, item.key, {
+																label,
+																...(item.idEdited ? {} : { id: slugId(label) }),
+															});
+														}}
+													/>
+													<Input
+														aria-label={`元素字段 ${itemIndex + 1} 标识`}
+														placeholder="自动生成"
+														value={item.id}
+														className="h-8 w-28 font-mono text-xs"
+														onChange={(event) =>
+															updateItem(field.key, item.key, { id: event.target.value, idEdited: true })
+														}
+													/>
+													<Select
+														items={ITEM_TYPES}
+														value={item.type}
+														onValueChange={(value) =>
+															updateItem(field.key, item.key, {
+																type: (value ?? "text") as ItemFieldType,
+															})
+														}
+													>
+														<SelectTrigger aria-label={`元素字段 ${itemIndex + 1} 类型`} size="sm" className="w-28">
+															<SelectValue />
+														</SelectTrigger>
+														<SelectContent>
+															{ITEM_TYPES.map((type) => (
+																<SelectItem key={type.value} value={type.value}>
+																	{type.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+													<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+														<Checkbox
+															aria-label={`元素字段 ${itemIndex + 1} 必填`}
+															checked={item.required}
+															onCheckedChange={(required) =>
+																updateItem(field.key, item.key, { required: required === true })
+															}
+														/>
+														必填
+													</span>
+													<ActionIconButton
+														label={`删除元素字段 ${itemIndex + 1}`}
+														tone="danger"
+														disabled={field.itemFields.length === 1}
+														onClick={() => removeItem(field.key, item.key)}
+													>
+														<X className="size-3.5" />
+													</ActionIconButton>
+												</div>
+												{(item.type === "select" || item.type === "multiselect") && (
+													<TagInput
+														value={item.options.map((value) => ({ value }))}
+														onChange={(next) =>
+															updateItem(field.key, item.key, { options: next.map((entry) => entry.value) })
+														}
+														max={100}
+														placeholder="选项,逗号分隔或逐条回车添加"
+													/>
+												)}
+											</div>
+										))}
+									</div>
 								)}
 								{fieldErrors[field.key] ? <p className="text-xs text-destructive">{fieldErrors[field.key]}</p> : null}
 							</div>

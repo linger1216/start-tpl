@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronDown, Info, Paperclip, Trash2, UserPlus } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,37 +11,33 @@ import { TaskAttachmentPreview } from "#/components/modules/task-close/task-atta
 import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
 import { TaskComments } from "#/components/modules/task-close/task-comments";
 import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
+import { TaskDetailHeader } from "#/components/modules/task-close/task-detail-header";
 import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-flow-spine";
 import { TaskForm, type TaskFormEditing, type TaskFormPayload } from "#/components/modules/task-close/task-form";
 import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { TaskLogList } from "#/components/modules/task-close/task-log";
+import { TaskMembers } from "#/components/modules/task-close/task-members";
 import { TaskReport } from "#/components/modules/task-close/task-report";
 import { TaskUrge } from "#/components/modules/task-close/task-urge";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
-import { RefreshButton } from "#/components/ui/refresh-button";
 import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Tag } from "#/components/ui/tag.tsx";
 import { Textarea } from "#/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
-import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf, statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
-import type { TaskAttachment } from "#/lib/task-payload";
-import { formatLocalDate, formatLocalMinute } from "#/lib/time";
-import { cn } from "#/lib/utils";
+import {
+	APPROVE_PRESETS,
+	REJECT_PRESETS,
+	ROLE_LABEL,
+	ROLE_WHY,
+	statusLabelOf,
+	type WorkflowStatus,
+} from "#/lib/task/close-spec";
+import type { TaskAttachment } from "#/lib/task/payload";
 import { TaskActionDialog } from "./task-action-dialog";
 
 /**
@@ -329,7 +325,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
 	const canSetStatus = !permissions.locked && statusOptions.length > 0;
 	/** 更多▾ 里有没有内容(转交 / 发起审批在场时降级的改状态 / 编辑 / 删除) */
-	const hasMoreActions = permissions.canTransfer || (canSetStatus && canApprove) || permissions.canManage;
+	const hasMoreActions =
+		permissions.canTransfer || (canSetStatus && canApprove) || permissions.canManage || permissions.canRemove;
 
 	/**
 	 * 走过的状态 + 首次到达时刻 —— 读活动日志里 `toStatus` 非空的行(与流程条同源)。
@@ -436,166 +433,43 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	return (
 		<div className="mx-auto flex w-full flex-col bg-card">
 			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
-			<header className="border-b border-dashed border-border bg-card">
-				<div className="px-8 pt-4 pb-5">
-					{/* 顶部左上:返回按钮(用户要求「顶部左上角」)。真锚点 + 按钮样式 ——
-					    `<a>` 里不能放 `<button>`,那样键盘焦点会重复 */}
-					<div className="mb-1.5">
-						<Link
-							to="/task-close"
-							className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2 text-muted-foreground" })}
-						>
-							<ArrowLeft className="size-3.5" />
-							返回我的任务
-						</Link>
-					</div>
-
-					<div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-						{/* 主信息:记录头 —— 宋体标题 + 一行中性元信息(章 + 日期) */}
-						<div className="min-w-0 flex-1">
-							<div className="flex justify-between gap-3">
-								<PageTitle>{task.name}</PageTitle>
-							</div>
-							{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
-							<MetaRow className="mt-2">
-								<span>
-									截止
-									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
-										{/* 日期字段按**天**显示 —— 选择器本来就只取到天,`00:00` 是假精度 */}
-										{task.dueAt ? formatLocalDate(task.dueAt) : "未设置"}
-									</strong>
-								</span>
-								<DocDot />
-								<span>
-									创建于
-									<strong className="ml-1.5 font-medium tabular-nums text-foreground">
-										{task.createdAt ? formatLocalMinute(task.createdAt) : PLACEHOLDER_EMPTY}
-									</strong>
-								</span>
-								<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
-									{priorityLabelOf(task.priority)}
-								</Tag>
-							</MetaRow>
-						</div>
-
-						{/* 右上动作组(收敛到 4 组):ⓘ + 主动作(发起审批/改状态取一) + 发起征询 + 更多▾;刷新殿后 */}
-						<div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
-							{/* 「为什么有这些按钮」—— 悬停 / 聚焦展开:当前身份 + 事项流程给这个身份的边,方便复核 */}
-							<TooltipProvider>
-								<Tooltip>
-									<TooltipTrigger
-										aria-label="为什么有这些按钮"
-										className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-									>
-										<Info className="size-3.5" />
-									</TooltipTrigger>
-									<TooltipContent side="bottom" align="end" className="block max-w-72">
-										<div className="text-xs font-medium">当前身份:{roleLabel}</div>
-										<p className="mt-1 text-xs leading-relaxed opacity-90">{roleWhy}</p>
-										<ul className="mt-1.5 grid gap-0.5 text-xs leading-relaxed opacity-90">
-											{tipLines.map((line) => (
-												<li key={line}>{line}</li>
-											))}
-										</ul>
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
-							{/* 主动作:发起审批优先;无审批边但有直改边时,改状态顶上 primary 位 */}
-							{canApprove ? (
-								<Button
-									size="sm"
-									title="发起审批;任务会锁定,等对方答复"
-									onClick={() => {
-										setActionAssignees([]);
-										setActionMode("approve");
-									}}
-								>
-									发起审批
-								</Button>
-							) : canSetStatus ? (
-								<Button
-									size="sm"
-									title="按事项流程直接更改状态"
-									onClick={() => {
-										setStatusTo(statusOptions[0]?.value ?? "");
-										setStatusOpen(true);
-									}}
-								>
-									更改状态
-								</Button>
-							) : null}
-							{permissions.canInitiateConsult ? (
-								<Button
-									variant="outline"
-									size="sm"
-									title="请某位成员给意见(不改状态、不锁任务)"
-									onClick={() => {
-										setActionAssignees([]);
-										setActionMode("consult");
-									}}
-								>
-									发起征询
-								</Button>
-							) : null}
-							{/* 更多▾:转交 / 改状态(发起审批在场时降级入菜单)/ 编辑 / 删除 */}
-							{hasMoreActions ? (
-								<DropdownMenu>
-									<DropdownMenuTrigger
-										render={
-											<Button variant="outline" size="sm" aria-label="更多操作">
-												更多
-												<ChevronDown className="size-3.5" />
-											</Button>
-										}
-									/>
-									<DropdownMenuContent align="end">
-										{permissions.canTransfer ? (
-											<DropdownMenuItem
-												onClick={() => {
-													setTransferTo("");
-													setTransferOpen(true);
-												}}
-											>
-												转交执行人
-											</DropdownMenuItem>
-										) : null}
-										{canSetStatus && canApprove ? (
-											<DropdownMenuItem
-												onClick={() => {
-													setStatusTo(statusOptions[0]?.value ?? "");
-													setStatusOpen(true);
-												}}
-											>
-												更改状态
-											</DropdownMenuItem>
-										) : null}
-										{(permissions.canTransfer || (canSetStatus && canApprove)) && permissions.canManage ? (
-											<DropdownMenuSeparator />
-										) : null}
-										{permissions.canManage ? (
-											<DropdownMenuItem onClick={() => setEditOpen(true)}>编辑</DropdownMenuItem>
-										) : null}
-										{permissions.canManage ? (
-											<DropdownMenuItem variant="destructive" onClick={() => setRemoveOpen(true)}>
-												删除
-											</DropdownMenuItem>
-										) : null}
-									</DropdownMenuContent>
-								</DropdownMenu>
-							) : null}
-							{myRole !== null ? (
-								<RefreshButton busy={detailQuery.isFetching} onClick={() => detailQuery.refetch()} />
-							) : null}
-						</div>
-					</div>
-
-					{task.description ? (
-						<p className="mt-3 p-4 min-w-0 flex-1 text-base leading-relaxed text-muted-foreground wrap-break-word">
-							{task.description}
-						</p>
-					) : null}
-				</div>
-			</header>
+			<TaskDetailHeader
+				task={task}
+				roleLabel={roleLabel}
+				roleWhy={roleWhy}
+				tipLines={tipLines}
+				canApprove={canApprove}
+				canConsult={permissions.canInitiateConsult}
+				canSetStatus={canSetStatus}
+				statusOptions={statusOptions}
+				hasMoreActions={hasMoreActions}
+				canTransfer={permissions.canTransfer}
+				canManage={permissions.canManage}
+				canRemove={permissions.canRemove}
+				showRefresh={myRole !== null}
+				refreshing={detailQuery.isFetching}
+				onApprove={() => {
+					setActionAssignees([]);
+					setActionMode("approve");
+				}}
+				onConsult={() => {
+					setActionAssignees([]);
+					setActionMode("consult");
+				}}
+				onSetStatus={(value) => {
+					setStatusTo(value);
+					setStatusOpen(true);
+				}}
+				onTransfer={() => {
+					setTransferTo("");
+					setTransferOpen(true);
+				}}
+				onEdit={() => setEditOpen(true)}
+				onRemove={() => setRemoveOpen(true)}
+				onRefresh={() => {
+					void detailQuery.refetch();
+				}}
+			/>
 
 			{/* ─── 流程脊 —— 只画状态(走到哪了);动作在右上角动作组 ─────────────── */}
 			<section className="grid gap-3 px-8 pt-5">
@@ -728,44 +602,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				<aside className="sticky top-18 self-start">
 					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
 						{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
-						<section className="grid gap-2 p-3.5">
-							<header className="flex items-center justify-between">
-								<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-									参与人{" "}
-									<span className="text-xs font-medium tabular-nums text-muted-foreground">{members.length + 1}</span>
-								</h2>
-								{permissions.canAddMember ? (
-									<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={() => setMemberOpen(true)}>
-										<UserPlus className="size-3.5" />
-									</Button>
-								) : null}
-							</header>
-							<ul className="grid gap-0.5">
-								<PeopleRow roleLabel="创建人" name={task.creatorName ?? PLACEHOLDER_EMPTY} main={false} />
-								{members.map((m) => (
-									<PeopleRow
-										key={`${m.userId}-${m.role}`}
-										roleLabel={roleText(m.role)}
-										name={m.name ?? m.userId}
-										main={m.role === "executor"}
-										onRemove={
-											permissions.canManage
-												? () =>
-														setPendingRemoveMember({
-															userId: m.userId,
-															role: m.role as "participant" | "executor",
-															name: m.name ?? m.userId,
-														})
-												: undefined
-										}
-										removing={memberRemoveMutation.isPending}
-									/>
-								))}
-								{members.length === 0 ? (
-									<li className="py-3 text-sm text-muted-foreground">还没有其他人。加人后他们能答复动作、参与讨论。</li>
-								) : null}
-							</ul>
-						</section>
+						<TaskMembers
+							creatorName={task.creatorName ?? null}
+							members={members}
+							canAddMember={permissions.canAddMember}
+							canManage={permissions.canManage}
+							removing={memberRemoveMutation.isPending}
+							onAdd={() => setMemberOpen(true)}
+							onRemove={setPendingRemoveMember}
+							roleText={roleText}
+						/>
 
 						<TaskUrge
 							actions={detailQuery.data.actions.filter(
@@ -1138,89 +984,8 @@ function roleText(role: string): string {
 	return ({ creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>)[role] ?? role;
 }
 
-/** 驳回的常用原因 —— 点一下填进输入框,省得每次从零打字 */
-const REJECT_PRESETS = [
-	"材料不完整",
-	"数据有误",
-	"信息不一致",
-	"不符合要求",
-	"依据不足",
-	"需补充说明",
-	"流程不符",
-	"重复提交",
-	"超出范围",
-];
-/** 通过的常用意见 */
-const APPROVE_PRESETS = ["情况属实", "符合要求", "材料齐全", "已核对无误", "同意办理"];
-
-/** 头部 ⓘ 用的身份名 —— 比 `roleText` 多「管理员 / 旁观」两种(那两个不是 `tc_member` 里的角色) */
-const ROLE_LABEL: Record<string, string> = {
-	admin: "管理员",
-	creator: "创建者",
-	executor: "执行者",
-	participant: "参与者",
-};
-
-/** ⓘ 里「为什么有这些按钮」的一句话 —— 与 `doc/task-close.md` 的「头部按钮(按事项流程派生)」同口径 */
-const ROLE_WHY: Record<string, string> = {
-	admin: "系统管理员:按流程模板与条件执行状态转移。",
-	creator: "任务创建人:编辑 / 删除 / 发起征询按身份;状态类按钮按模板里 who 含 creator 的边。",
-	executor: "执行者:转交 / 发起征询按身份;状态类按钮按模板里 who 含 executor 的边。",
-	participant: "参与者:发起征询按身份;状态类按钮按模板里 who 含 participant 的边。",
-	viewer: "你不在这条任务的流程里(既不是创建人、也不是成员):只能看,不能推进。",
-};
-
 /**
- * 参与人块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
- *
- * 头像与「评论与回复」`TaskComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
- * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
- * 「主执行」这个身份靠**角色标签**(页面上传的是 `主执行`)+ 名字加粗来区分,不靠颜色。
- *
- * 用 `bg-primary/85` + `text-paper`(`--ink` 底、反白首字同族的墨底圆牌,深色模式自动翻转);
- * **不要写 `bg-accent`** —— 它在本项目是浅灰面 `#f8fafc`,白字压上去直接看不见
- * (原型里的 `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。
- *
- * `roleLabel` 不是 HTML `role` 属性 —— prop 名刻意避开 ARIA 关键字,免得 biome 把
- * 「创建人/主执行」之类的中文字面误判成 ARIA role。
- */
-function PeopleRow({
-	roleLabel,
-	name,
-	main,
-	onRemove,
-	removing,
-}: {
-	roleLabel: string;
-	name: string;
-	main: boolean;
-	onRemove?: () => void;
-	removing?: boolean;
-}) {
-	return (
-		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
-			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
-			<div className="flex min-w-0 flex-1 items-center gap-2">
-				{/* 圆牌:墨底反白首字(与评论头像同款,就地内联 —— badge 合流层已拆) */}
-				<span
-					aria-hidden
-					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/85 text-xs font-heading font-bold leading-none text-paper"
-				>
-					{name.slice(0, 1)}
-				</span>
-				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
-			</div>
-			{onRemove ? (
-				<Button variant="ghost" size="icon-sm" aria-label="移出成员" disabled={removing} onClick={onRemove}>
-					<Trash2 className="size-3.5" />
-				</Button>
-			) : null}
-		</li>
-	);
-}
-
-/**
- * 「这条任务不存在」的识别 —— 服务端 `taskGet` 查不到活着的记录时抛 tRPC `NOT_FOUND`(`task-shared.ts` 的 `getTaskRow`)。
+ * 「这条任务不存在」的识别 —— 服务端 `taskGet` 查不到活着的记录时抛 tRPC `NOT_FOUND`(`task/common.ts` 的 `getTaskRow`)。
  *
  * 客户端拿到的是 `TRPCClientError`(实测 `@trpc/client` 的构造:`data = shape.data`,两者都挂在错误上),
  * 三种判据都认一遍:`data.code` 是字符串键 `"NOT_FOUND"`、`shape.code` 是数字码 `-32004`、`data.httpStatus` 是 404。

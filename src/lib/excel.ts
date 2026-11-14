@@ -9,6 +9,7 @@
 import * as XLSX from "xlsx";
 
 import { joinMultiValue } from "#/lib/multi-value";
+import { formatLocalDate } from "#/lib/time";
 
 /**
  * Excel 列定义:`key` 是行里的字段名,`label` 是表头,`width` 是列宽字符数。
@@ -133,6 +134,7 @@ function buildAndSave<Key extends string>({
 	const book = XLSX.utils.book_new();
 	XLSX.utils.book_append_sheet(book, sheet, sheetName);
 	// 日期只在用户点击导出时求值(不在渲染期),不参与 SSR 水合
-	const suffix = withDate ? `-${new Date().toISOString().slice(0, 10)}` : "";
+	// 本地日期:用 ISO(UTC)拼文件名,晚上导出会写成"明天"
+	const suffix = withDate ? `-${formatLocalDate(new Date())}` : "";
 	XLSX.writeFile(book, `${fileName}${suffix}.xlsx`);
 }

@@ -18,13 +18,13 @@ import {
 import { Button } from "#/components/ui/button";
 import { toApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { describeLog, logCategoryOf, type TaskLogCategory, type TaskLogItem } from "#/lib/task-close-log";
-import { statusLabelOf, type WorkflowStatus } from "#/lib/task-close-spec";
+import { describeLog, logCategoryOf, type TaskLogCategory, type TaskLogItem } from "#/lib/task/close-log";
+import { statusLabelOf, type WorkflowStatus } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /**
- * 事件 → 图标。**与 `lib/task-close-log.ts` 的事件码一一对应** ——
+ * 事件 → 图标。**与 `lib/task/close-log.ts` 的事件码一一对应** ——
  * 加事件要同时改:那边的事件联合 + `detail` 类型,这里一条,`doc/task-close.md` 那张表。
  */
 const TASK_LOG_ICON: Record<string, LucideIcon> = {

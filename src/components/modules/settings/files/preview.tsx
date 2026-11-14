@@ -1,7 +1,7 @@
 import { Download, FileText, Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import type { FileRow } from "#/components/modules/settings/settings-files-table";
+import type { FileRow } from "#/components/modules/settings/files/table";
 import { buttonVariants } from "#/components/ui/button";
 import {
 	type FilePreviewKind,
@@ -17,7 +17,7 @@ import { formatBytes } from "#/lib/format";
  * 静态引入会把 pdfjs 拖进页面主 chunk(和 `xlsx` 那组一个问题,见 `doc/界面约定.md` 的「数据能力」表)。
  */
 const SettingsFilePdf = lazy(async () => {
-	const mod = await import("#/components/modules/settings/settings-file-pdf");
+	const mod = await import("#/components/modules/settings/files/pdf");
 	return { default: mod.SettingsFilePdf };
 });
 

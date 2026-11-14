@@ -1,11 +1,11 @@
-import { mergeTRPCRouters } from "../init";
-import { taskActionRouter } from "./task-action";
-import { taskCommentRouter } from "./task-comment";
-import { taskMemberRouter } from "./task-member";
-import { taskQueryRouter } from "./task-query";
-import { taskRecordRouter } from "./task-record";
-import { taskReportRouter } from "./task-report";
-import { taskWorkflowRouter } from "./task-workflow";
+import { mergeTRPCRouters } from "../../init";
+import { taskActionRouter } from "./action";
+import { taskCommentRouter } from "./comment";
+import { taskMemberRouter } from "./member";
+import { taskQueryRouter } from "./query";
+import { taskRecordRouter } from "./record";
+import { taskReportRouter } from "./report";
+import { taskWorkflowRouter } from "./workflow";
 
 /** 保持 taskClose.* 接口路径，按职责组合任务路由。 */
 export const taskCloseRouter = mergeTRPCRouters(

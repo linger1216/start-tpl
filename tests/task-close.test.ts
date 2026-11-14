@@ -9,8 +9,8 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-
 import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
+import * as XLSX from "xlsx";
 
 import {
 	sysCasbinRule,
@@ -32,8 +32,8 @@ import {
 import { db } from "../src/db/index.ts";
 import { addUserRole, clearCasbinCache, removeAllRolesOfUser } from "../src/lib/casbin.ts";
 import { bucketFor } from "../src/lib/storage.ts";
-import { checkActionReminder } from "../src/lib/task-close-reminders.ts";
-import { DEFAULT_WORKFLOW_ID } from "../src/lib/task-close-spec.ts";
+import { checkActionReminder } from "../src/lib/task/close-reminders.ts";
+import { DEFAULT_WORKFLOW_ID } from "../src/lib/task/close-spec.ts";
 import {
 	assertRejects,
 	caller,
@@ -379,6 +379,35 @@ describe("任务闭环", () => {
 			"数据范围字段无效",
 		);
 	});
+	it("填报附件保存、读取及预览受任务权限约束", async () => {
+		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: "附件填报",
+			payload: { id: "files", kind: "OBJECT", fields: [{ id: "proof", label: "材料", type: "attachment" }] },
+		});
+		createdReportTemplateIds.push(template.id);
+		const task = await asA().taskClose.taskCreate({
+			name: taskName("填报附件"),
+			workflowId,
+			report: { reportId: template.id },
+		});
+		await assertRejects(
+			() => asA().taskClose.reportSaveDraft({ taskId: task.id, revision: 0, draft: { proof: [FAKE_ATTACH_ID] } }),
+			"附件不存在",
+		);
+		await asA().taskClose.reportSaveDraft({
+			taskId: task.id,
+			revision: 0,
+			draft: { proof: [ATTACH_FILE_ID, COMMENT_FILE_ID] },
+		});
+		const report = await asA().taskClose.reportGet({ taskId: task.id });
+		assert.deepEqual(new Set(report?.files.map((file) => file.id)), new Set([ATTACH_FILE_ID, COMMENT_FILE_ID]));
+		assert.ok((await asA().taskClose.attachmentUrl({ taskId: task.id, fileId: ATTACH_FILE_ID })).url);
+		await assertRejects(() => asB().taskClose.attachmentUrl({ taskId: task.id, fileId: ATTACH_FILE_ID }), "无权");
+		await assertRejects(
+			() => asA().taskClose.attachmentUrl({ taskId: task.id, fileId: FOREIGN_FILE_ID }),
+			"附件不存在",
+		);
+	});
 	it("填报模板在创建任务时固定,不能更换或移除;保存靠 revision 挡住覆盖", async () => {
 		const old = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "原填报",
@@ -639,6 +668,164 @@ describe("任务闭环", () => {
 
 		// 父任务没有父可同步
 		await assertRejects(() => asA().taskClose.reportSyncToParent({ taskId: parentId }), "只有子任务");
+		// 表单填报:父任务只认**子任务点过「保存」的快照**,不做实时兜底
+		const formTemplate = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
+			name: taskName("表单同步"),
+			payload: {
+				id: "form_sync",
+				kind: "OBJECT",
+				fields: [
+					{ id: "town", label: "街镇", type: "text", required: true },
+					{ id: "memo", label: "备注", type: "text" },
+					{ id: "proof", label: "材料", type: "attachment" },
+					{
+						id: "photos",
+						label: "照片",
+						type: "array",
+						itemFields: [{ id: "file", label: "附件", type: "attachment" }],
+					},
+				],
+			},
+		});
+		createdReportTemplateIds.push(formTemplate.id);
+		const formTask = await asA().taskClose.taskCreate({
+			name: taskName("表单父任务"),
+			workflowId,
+			report: { reportId: formTemplate.id },
+			members: [
+				{ userId: B.id, role: "executor" },
+				{ userId: C.id, role: "executor" },
+			],
+		});
+		const formChildren = await db.select().from(taskTable).where(eq(taskTable.parent_id, formTask.id));
+		assert.equal(formChildren.length, 2);
+		const formExecutors = await db
+			.select()
+			.from(taskMemberTable)
+			.where(
+				and(
+					inArray(
+						taskMemberTable.task_id,
+						formChildren.map((row) => row.id),
+					),
+					eq(taskMemberTable.role, "executor"),
+				),
+			);
+		/** 顺序不保证,按执行人反查 */
+		const formChildOf = (userId: string) =>
+			formChildren.find((child) => formExecutors.some((m) => m.task_id === child.id && m.user_id === userId));
+		const childBOfForm = formChildOf(B.id);
+		const childCOfForm = formChildOf(C.id);
+		assert.ok(childBOfForm && childCOfForm);
+		assert.equal(
+			(await asB().taskClose.reportGet({ taskId: childBOfForm.id }))?.canSyncToParent,
+			true,
+			"表单子任务也有「保存」",
+		);
+		// 自动保存草稿 ≠ 父任务可见
+		await asB().taskClose.reportSaveDraft({
+			taskId: childBOfForm.id,
+			revision: 0,
+			draft: { town: "甲镇", memo: "已填" },
+		});
+		assert.deepEqual(
+			(await asA().taskClose.reportGet({ taskId: formTask.id }))?.syncedChildren,
+			[],
+			"没点保存,父任务看不到子任务的表单内容",
+		);
+		// 点「保存」= 追加一份不可变快照
+		const formSynced = await asB().taskClose.reportSyncToParent({ taskId: childBOfForm.id });
+		assert.equal(formSynced.pushed, 1);
+		const parentFormView = await asA().taskClose.reportGet({ taskId: formTask.id });
+		assert.equal(parentFormView?.syncedChildren.length, 1);
+		assert.deepEqual(parentFormView?.syncedChildren[0]?.payload, { town: "甲镇", memo: "已填" });
+		assert.equal(parentFormView?.syncedChildren[0]?.executorName, B.name);
+		// 保存之后再改草稿(不再点保存):父任务看到的仍是那次快照
+		const edited = await asB().taskClose.reportSaveDraft({
+			taskId: childBOfForm.id,
+			revision: formSynced.revision,
+			draft: { town: "甲镇", memo: "又改了" },
+		});
+		assert.deepEqual(
+			(await asA().taskClose.reportGet({ taskId: formTask.id }))?.syncedChildren[0]?.payload,
+			{ town: "甲镇", memo: "已填" },
+			"同步后的改动要再点一次保存,父任务才更新",
+		);
+
+		// 附件:表单字段与**数组元素**里的附件,父任务都要能点开预览(按原始附件名);没保存的一律不给
+		const withFiles = await asB().taskClose.reportSaveDraft({
+			taskId: childBOfForm.id,
+			revision: edited.revision,
+			draft: {
+				town: "甲镇",
+				memo: "带附件",
+				proof: [ATTACH_FILE_ID],
+				photos: [{ file: [COMMENT_FILE_ID] }],
+			},
+		});
+		await assertRejects(
+			() => asA().taskClose.attachmentUrl({ taskId: formTask.id, fileId: ATTACH_FILE_ID }),
+			"附件不存在",
+		);
+		await asB().taskClose.reportSyncToParent({ taskId: childBOfForm.id });
+		assert.equal(withFiles.revision, edited.revision + 1, "每次保存草稿 revision 递增");
+		const parentWithFiles = await asA().taskClose.reportGet({ taskId: formTask.id });
+		const syncedPayload = parentWithFiles?.syncedChildren[0]?.payload as { proof?: string[]; photos?: unknown[] };
+		assert.deepEqual(syncedPayload.proof, [ATTACH_FILE_ID]);
+		assert.deepEqual(
+			new Set(parentWithFiles?.files.map((file) => file.id)),
+			new Set([ATTACH_FILE_ID, COMMENT_FILE_ID]),
+		);
+		assert.ok(
+			parentWithFiles?.files.every((file) => file.name === "attachment.txt"),
+			"父任务要按原名解出附件",
+		);
+		assert.equal(
+			(await asA().taskClose.attachmentUrl({ taskId: formTask.id, fileId: ATTACH_FILE_ID })).originName,
+			"attachment.txt",
+			"预览要拿到原始附件名",
+		);
+		assert.equal(
+			(await asA().taskClose.attachmentUrl({ taskId: formTask.id, fileId: COMMENT_FILE_ID })).originName,
+			"attachment.txt",
+			"数组元素里的附件同样能预览",
+		);
+		// 父任务导出**父子所有填报数据**:表单一列列不出多个子任务,所以另起一张「子任务填报」
+		const exported = await asA().taskClose.reportExcelDownload({ taskId: formTask.id, templateOnly: false });
+		const book = XLSX.read(Buffer.from(exported.fileBase64, "base64"), { type: "buffer" });
+		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报", "子任务填报(可读)", "子任务填报"]);
+		const childSheet = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[2] ?? ""] ?? {}, { header: 1 });
+		assert.deepEqual(childSheet[0], ["执行人", "街镇", "备注", "材料", "照片"]);
+		assert.equal(childSheet.length, 2, "只有一个子任务保存过,就只出一行");
+		assert.equal(childSheet[1]?.[0], B.name, "首列是执行人");
+		assert.equal(childSheet[1]?.[1], "甲镇");
+		assert.equal(childSheet[1]?.[3], "attachment.txt", "可读的子任务表里附件写的是文件名");
+		const childMachine = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[3] ?? ""] ?? {}, { header: 1 });
+		assert.equal(childMachine[1]?.[3], ATTACH_FILE_ID, "机器的子任务表里附件仍是 id");
+		// 子任务自己导出:可读表写文件名,机器表写 id(导入认的是后者)
+		const ownBook = XLSX.read(
+			Buffer.from(
+				(await asB().taskClose.reportExcelDownload({ taskId: childBOfForm.id, templateOnly: false })).fileBase64,
+				"base64",
+			),
+			{ type: "buffer" },
+		);
+		assert.deepEqual(ownBook.SheetNames, ["填报(可读)", "填报"]);
+		const sheetRows = (index: number) =>
+			XLSX.utils.sheet_to_json<string[]>(ownBook.Sheets[ownBook.SheetNames[index] ?? ""] ?? {}, { header: 1 });
+		// 字段顺序:街镇 / 备注 / 材料 / 照片 —— 材料是附件字段
+		assert.equal(sheetRows(0)[1]?.[2], "attachment.txt", "可读表:附件写文件名");
+		assert.equal(sheetRows(0)[1]?.[3], "1) 附件:attachment.txt", "可读表:数组写成条目");
+		assert.equal(sheetRows(1)[1]?.[2], ATTACH_FILE_ID, "机器表:附件仍是 id");
+
+		// 必填没填满不允许同步出去(父任务不该看到半截数据);草稿本身写不进空必填,直接落库模拟
+		await db
+			.update(taskReportTable)
+			.set({ draft: { town: "", memo: "只写了备注" } })
+			.where(eq(taskReportTable.task_id, childCOfForm.id));
+		await assertRejects(() => asC().taskClose.reportSyncToParent({ taskId: childCOfForm.id }), "必填");
+		assert.equal((await asA().taskClose.reportGet({ taskId: formTask.id }))?.syncedChildren.length, 1);
+
 		// 两个执行人的数据范围完全相同 → 建任务时就拦,不等到保存互相覆盖
 		await assertRejects(
 			() =>
@@ -1268,6 +1455,28 @@ describe("任务闭环", () => {
 		);
 		// 创建者与当前成员仍可加人
 		await asA().taskClose.memberAdd({ taskId: id, userIds: [C.id], role: "participant" });
+	});
+
+	it("删任务只有创建者或管理员能做(执行人 / 参与者一律拒绝)", async () => {
+		const id = await newTask("删任务权限");
+		await asA().taskClose.memberAdd({ taskId: id, userIds: [C.id], role: "participant" });
+
+		assert.equal((await asA().taskClose.taskGet({ id })).permissions.canRemove, true, "创建者能删");
+		assert.equal((await asB().taskClose.taskGet({ id })).permissions.canRemove, false, "执行人不能删");
+		assert.equal((await asC().taskClose.taskGet({ id })).permissions.canRemove, false, "参与者不能删");
+		await assertRejects(() => asB().taskClose.taskRemove({ id }), "创建者或管理员");
+		await assertRejects(() => asC().taskClose.taskRemove({ id }), "创建者或管理员");
+		assert.ok(await asA().taskClose.taskGet({ id }), "被拒的删除不能真把任务删掉");
+
+		// 管理员能删(模块既有口径:管理员什么都可以)—— 守卫与 permissions 同一判据
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			assert.equal((await asC().taskClose.taskGet({ id })).permissions.canRemove, true, "管理员能删");
+			await asC().taskClose.taskRemove({ id });
+		} finally {
+			await removeAllRolesOfUser(C.id);
+		}
+		await assertRejects(() => asA().taskClose.taskGet({ id }), "任务不存在");
 	});
 
 	it("同一个人不能以两个角色重复入表", async () => {

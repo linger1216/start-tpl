@@ -39,10 +39,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
 			\`name\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`path\` varchar(128) collate utf8mb4_unicode_ci not null,
+			\`type\` tinyint not null default 2,
+			\`perm\` varchar(64) collate utf8mb4_unicode_ci default null,
 			\`icon\` varchar(32) collate utf8mb4_unicode_ci default null,
 			\`sort\` int not null default 0,
 			\`visible\` tinyint(1) not null default 1,
-			\`status\` tinyint not null default 1,
 			\`created_at\` datetime(3) not null default current_timestamp(3),
 			\`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
 			\`deleted_at\` datetime default null,
@@ -70,7 +71,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_para",
 		ddl: `create table if not exists \`sys_para\` (
-			\`id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`para_key\` varchar(64) collate utf8mb4_unicode_ci not null,
 			\`para_value\` text collate utf8mb4_unicode_ci not null,
 			\`para_type\` tinyint not null,
@@ -109,7 +109,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`obj_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`obj_type\` tinyint not null,
 			\`created_at\` datetime not null default current_timestamp,
-			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_tag_rel_unique\` (\`tag_id\`, \`obj_type\`, \`obj_id\`),
 			key \`idx_tag_rel_tag\` (\`tag_id\`),
@@ -272,7 +271,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 			\`department_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`user_id\` varchar(32) collate utf8mb4_unicode_ci not null,
 			\`created_at\` datetime not null default current_timestamp,
-			\`updated_at\` datetime not null default current_timestamp on update current_timestamp,
 			primary key (\`id\`),
 			unique key \`uk_sys_dm_unique\` (\`department_id\`, \`user_id\`),
 			key \`idx_sys_dm_user\` (\`user_id\`),
@@ -353,7 +351,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_notification_delivery",
 		ddl: `create table if not exists \`sys_notification_delivery\` (
-    \`id\` varchar(32) not null primary key, \`notification_id\` varchar(32) not null, \`recipient_id\` varchar(36) not null, \`channel\` varchar(16) not null, \`target\` varchar(255), \`status\` varchar(16) not null, \`read_at\` datetime, \`attempts\` int not null default 0, \`next_attempt_at\` datetime, \`locked_until\` datetime, \`lock_token\` varchar(32), \`provider\` varchar(64), \`provider_message_id\` varchar(255), \`sent_at\` datetime, \`last_error\` text, \`created_at\` datetime not null, \`updated_at\` datetime not null,
+    \`id\` varchar(32) not null primary key, \`notification_id\` varchar(32) not null, \`recipient_id\` varchar(36) not null, \`channel\` varchar(16) not null, \`target\` varchar(255), \`status\` varchar(16) not null, \`read_at\` datetime, \`attempts\` int not null default 0, \`next_attempt_at\` datetime, \`locked_until\` datetime, \`lock_token\` varchar(32), \`provider_message_id\` varchar(255), \`sent_at\` datetime, \`last_error\` text, \`created_at\` datetime not null, \`updated_at\` datetime not null,
     unique key \`uk_notification_recipient_channel\` (\`notification_id\`,\`recipient_id\`,\`channel\`),
     key \`idx_delivery_recipient\` (\`recipient_id\`,\`channel\`,\`read_at\`,\`created_at\`),
     key \`idx_delivery_pending\` (\`status\`,\`next_attempt_at\`,\`locked_until\`)
@@ -473,12 +471,28 @@ const TABLES: Array<{ name: string; ddl: string }> = [
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)'`,
 	},
 	{
+		name: "tc_report_submission",
+		ddl: `create table if not exists \`tc_report_submission\` (
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`report_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`submitter_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`revision\` int not null,
+    \`payload\` json default null,
+    \`created_at\` datetime default current_timestamp,
+    primary key (\`id\`),
+    unique key \`uk_report_submission_revision\` (\`report_id\`, \`revision\`),
+    key \`idx_report_submission_task\` (\`task_id\`, \`created_at\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '子任务表单填报的保存快照(表单没有行可合并,父任务只读这些快照;没保存就看不见)'`,
+	},
+	{
 		name: "tc_task_report",
 		ddl: `create table if not exists \`tc_task_report\` (
     \`id\` varchar(32) not null,
     \`task_id\` varchar(191) not null,
     \`draft\` json default null,
     \`revision\` int not null default 0,
+    \`current_submission_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`created_at\` datetime default current_timestamp,
     \`updated_at\` datetime default current_timestamp,
     primary key (\`id\`),
@@ -505,6 +519,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`due_at\` datetime default null,
+    \`priority\` tinyint default null,
     \`payload\` json default null,
     \`workflow\` json not null,
     \`workflow_id\` varchar(191) collate utf8mb4_unicode_ci default null,
@@ -514,7 +529,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
     primary key (\`id\`),
-    key \`idx_task_status_created\` (\`status\`),
+    key \`idx_task_status_created\` (\`status\`, \`created_at\`),
+    key \`idx_task_workflow\` (\`workflow_id\`),
     key \`idx_task_creator_status\` (\`creator_id\`, \`status\`),
     key \`idx_task_parent\` (\`parent_id\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;parent_id/report 承载父子填报;软删走 deleted_at)'`,
@@ -791,6 +807,7 @@ for (const upgrade of COLUMN_UPGRADES) {
 	console.log(`✓ ${upgrade.table} 补列 ${upgrade.column}`);
 }
 
+// 任务批次迁移开始
 /**
  * **填报批次退役** —— 版本表已并入模板(上一轮已删),批次两张表一并删除:
  * `tc_report_batch` / `tc_report_batch_task` 是过程性簿记,不迁移;开发库删掉重来。
@@ -804,6 +821,7 @@ for (const upgrade of COLUMN_UPGRADES) {
 		console.log(`✓ 已删除 tc_report_batch / tc_report_batch_task(批次概念退役,数据规则并入建任务)`);
 	}
 }
+// 任务批次迁移结束
 
 /**
  * **老库改列型** —— `create table if not exists` 既不加列、也**不会**改已存在列的型。
@@ -919,7 +937,15 @@ for (const ren of COLUMN_RENAMES) {
  * 见上面 `COLUMN_RENAMES` 那一段。`COLUMN_DROPS` 只管**真删**。
  */
 const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }> = [
+	{ table: "sys_notification_delivery", column: "provider" },
 	{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
+	// 菜单的「启用 / 停用」从来没人读(上下线走 visible,且带子树语义)—— 死列,删掉
+	{ table: "sys_menu", column: "status" },
+	// sys_para 的 id 是无意义代理键(主键是 para_key),界面上也只是显示一行短串 —— 删掉
+	{ table: "sys_para", column: "id" },
+	// 这两张表只增不改(标签关联行 / 部门成员)—— `updated_at` 永远等于 created_at,白列
+	{ table: "sys_tag_relation", column: "updated_at" },
+	{ table: "sys_user_dept", column: "updated_at" },
 	// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
 	{ table: "tc_task_report", column: "version_id" },
 	{ table: "tc_task_report", column: "status" },
@@ -971,19 +997,40 @@ for (const drop of COLUMN_DROPS) {
  * 幂等:查 `information_schema.statistics`,已有同名索引就跳过。
  */
 const INDEX_UPGRADES: Array<{ table: string; index: string; columns: string }> = [
-	// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作(见 lib/task-close-reminders.ts)
+	// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作(见 lib/task/close-reminders.ts)
 	{ table: "tc_action", index: "idx_action_unviewed", columns: "`status`, `viewed_at`, `activated_at`" },
+	// 任务列表:「状态筛选 + 按创建时间排序」要盖住一段 —— 原来是只索引 status 的单列索引
+	{ table: "tc_task", index: "idx_task_status_created", columns: "`status`, `created_at`" },
+	// 「我的任务」按流程模板筛
+	{ table: "tc_task", index: "idx_task_workflow", columns: "`workflow_id`" },
 ];
 
 for (const upgrade of INDEX_UPGRADES) {
+	// 同名索引**列不一样**时要重建(老库里可能还是旧的单列版本)
 	const idxs = (
 		await db.execute(
-			sql`select index_name as name from information_schema.statistics where table_schema = database() and table_name = ${upgrade.table}`,
+			sql`select index_name as name, seq_in_index as seq, column_name as col
+				from information_schema.statistics
+				where table_schema = database() and table_name = ${upgrade.table}
+				order by index_name, seq_in_index`,
 		)
-	)[0] as unknown as Array<{ name: string }>;
-	if (idxs.some((row) => row.name === upgrade.index)) {
+	)[0] as unknown as Array<{ name: string; seq: number; col: string }>;
+	const want = upgrade.columns
+		.split(",")
+		.map((part) => part.trim().replace(/`/g, ""))
+		.join(",");
+	const have = idxs
+		.filter((row) => row.name === upgrade.index)
+		.sort((a, b) => a.seq - b.seq)
+		.map((row) => row.col)
+		.join(",");
+	if (have === want) {
 		console.log(`· ${upgrade.table}.${upgrade.index} 已存在,跳过`);
 		continue;
+	}
+	if (have) {
+		await db.execute(sql.raw(`alter table \`${upgrade.table}\` drop index \`${upgrade.index}\``));
+		console.log(`· ${upgrade.table}.${upgrade.index} 列已变(${have} → ${want}),重建`);
 	}
 	await db.execute(sql.raw(`alter table \`${upgrade.table}\` add index \`${upgrade.index}\` (${upgrade.columns})`));
 	console.log(`✓ ${upgrade.table} 补索引 ${upgrade.index}`);

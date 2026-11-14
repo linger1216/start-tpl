@@ -17,9 +17,9 @@ import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification } from "#/lib/notification";
 import { alive } from "#/lib/soft-delete";
 import { publish } from "#/lib/sse-bus";
-import type { TaskLogEvent } from "#/lib/task-close-log";
-import { taskPathOf, type WorkflowStatus } from "#/lib/task-close-spec";
-import { taskReportSchema } from "#/lib/task-report-spec";
+import type { TaskLogEvent } from "#/lib/task/close-log";
+import { taskPathOf, type WorkflowStatus } from "#/lib/task/close-spec";
+import { taskReportSchema } from "#/lib/task/report-spec";
 
 /** 任务路由共用的授权、事务锁、通知及活动日志逻辑。 */
 
@@ -110,6 +110,16 @@ export async function lockTask(tx: Tx, id: string): Promise<TaskRow> {
 export async function assertCanManage(task: TaskRow, meId: string) {
 	if (task.creator_id !== meId && !(await isAdminUser(meId))) {
 		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者或管理员能做这个操作" });
+	}
+}
+
+/**
+ * 删除任务 —— 破坏性动作,判据与 `assertCanManage` 相同(创建者或管理员),但**单独一条**、
+ * 单独的消息:口径要能被人一眼读出来,也不跟「编辑 / 成员管理」绑在一起被顺手放宽。
+ */
+export async function assertCanRemoveTask(task: TaskRow, meId: string) {
+	if (task.creator_id !== meId && !(await isAdminUser(meId))) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者或管理员可以删除任务" });
 	}
 }
 
@@ -346,13 +356,13 @@ export function detailOf(detail: unknown): Record<string, unknown> {
 /**
  * 写一行活动日志(`tc_log`)—— **必须传当前事务的 `tx`**:它与业务同生共死。
  *
- * ⚠️ 与 `lib/audit.ts` 的 `writeAudit` **故意相反**:那个是 fire-and-forget、"审计绝不拖累业务";
+ * ⚠️ 与 `lib/global-audit.ts` 的 `writeGlobalAudit` **故意相反**:那个是 fire-and-forget、"审计绝不拖累业务";
  * 这个**不吞错、不旁路** —— 业务成功就一定有历史,业务回滚历史也一起没(状态变了却没有留痕,
  * 正是本需求要消灭的东西)。别"顺手"改成 `void`。
  *
  * 两个状态列的口径:**事件前后的任务状态**,没动状态就传 null(「想去哪」放 `detail.intendedTo`)。
  */
-export async function logTaskEvent(
+export async function writeTaskEvent(
 	tx: Tx,
 	entry: {
 		taskId: string;

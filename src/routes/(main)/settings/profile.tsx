@@ -1,7 +1,7 @@
 // 系统设置 ▸ 个人资料(自己的账号:姓名 / 密码 / 邮箱验证)—— 入口在顶栏用户菜单
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsProfilePage } from "#/components/modules/settings/settings-profile-page";
+import { SettingsProfilePage } from "#/components/modules/settings/profile/page";
 
 export const Route = createFileRoute("/(main)/settings/profile")({
 	/**

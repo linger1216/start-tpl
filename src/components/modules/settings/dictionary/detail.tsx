@@ -3,7 +3,7 @@ import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import type { SettingsDictRow } from "./settings-dictionary-table";
+import type { SettingsDictRow } from "./table";
 
 /**
  * 字典详情(只读)。

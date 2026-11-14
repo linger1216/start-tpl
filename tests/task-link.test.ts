@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { isInternalUrl, normalizePayload, parseBlock } from "../src/lib/task-payload.ts";
+import { isInternalUrl, normalizePayload, parseBlock } from "../src/lib/task/payload.ts";
 
 describe("normalizePayload", () => {
 	it("trim URL / 去重 / 丢弃空与形状不对的 / 附件去重去空", () => {

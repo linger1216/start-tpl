@@ -80,11 +80,11 @@ src/
 │   ├── sys-para.ts / para-spec.ts / menu-spec.ts / notice.ts / sidebar-mode.ts
 │   ├── audit.ts / logger.ts / ids.ts / time.ts / format.ts / multi-value.ts / tree.ts / constants.ts
 │   ├── storage.ts / storage-minio.ts / menu-detail-path.ts / demo-store.ts / utils.ts
-│   ├── task-close-spec.ts / task-close-log.ts / task-content.ts # 任务闭环的规格 / 词表 / 内容块(客户端可引)
+│   ├── task/                     # 任务闭环的规格 / 词表 / 内容块(close-spec / close-log / payload / report-*,客户端可引)
 │   ├── data-scope*.ts / soft-delete.ts / reorder.ts / file-preview.ts …(完整清单见 doc/后端代码导读.md §7)
 ├── db/
 │   ├── index.ts                  # drizzle 实例(按 env 选 mysql2 / 达梦),导出 db
-│   ├── data-base-schema.ts       # 39 张表(25 张 sys_* + demo_grid + 13 张 tc_*:设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环…)
+│   ├── data-base-schema.ts       # 31 张表(设置 / 认证 / 权限 / 数据权限 / 日志 / 任务闭环 + demo_grid;改形状要同步四处,`pnpm db:check` 查漂移)
 │   ├── schema.ts                 # 走 drizzle 迁移的表(当前只剩 demo 的 todos)
 │   └── dm/                       # 达梦方言适配(连接 + SQL 翻译)
 ├── integrations/
@@ -179,7 +179,7 @@ docker compose up -d                                  # http://localhost:3000
 | `app` | `3000` | 生产产物(`Dockerfile` target `runtime`),healthcheck 打 `/api/auth/ok` |
 | `mysql` | `3307` | 默认 `mysql:8.4`;本机开发用的 9.1 用 `MYSQL_IMAGE=mysql:9.1` 对齐 |
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
-| `bootstrap` | — | profile `setup` 的一次性任务:建 39 张表 + 四个种子 + `db:minio:init` |
+| `bootstrap` | — | profile `setup` 的一次性任务:建 34 张系统表 + 四个种子 + `db:minio:init` |
 
 端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
 「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
@@ -233,7 +233,7 @@ pnpm build && pnpm start
 
 | 文件 | 管辖 | 迁移 |
 | --- | --- | --- |
-| `src/db/data-base-schema.ts` | **39 张表**(25 张 `sys_*` + `demo_grid` + 13 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 调度 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 / 访客令牌 / 任务闭环 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
+| `src/db/data-base-schema.ts` | **34 张表**(25 张 `sys_*` + `demo_grid` + 8 张 `tc_*`):菜单 / 字典 / 参数 / 标签 / 标签关系 / 用户 / 会话 / 账号 / 验证 / 账号锁定 / 限流 / 部门 / 角色 / 用户-部门 / casbin 策略 / 通知 / 调度 / 日志 / 演示网格 / 文件 / 数据策略 / 数据插件 / 访客令牌 / 任务闭环 | **不进 drizzle 迁移**:只在这里声明"读写的形状",DDL 由 `scripts/create-system-tables.ts`(`pnpm db:create`)维护,列级对账靠 `pnpm db:sync:meta` |
 | `src/db/schema.ts` | 走迁移的表 —— 当前只剩 demo 用的 `todos` | 由 drizzle 迁移管理(`pnpm db:generate` → `db:migrate`) |
 
 为什么不合成一个文件:若把系统表并进 `schema.ts`,下次 `db:generate` 会生成 `CREATE TABLE`,而库里已存在 → `db:migrate` 直接 1050 报错。
@@ -348,7 +348,7 @@ function UsersPage() {
 
 **没有通用 CRUD 套件** —— 原先的 `lib/crud/*`(mutation 套件 / Excel 套件 / 查询失效 / 列宽持久化)、`lib/validators/common.ts`、`store/use-query-params.ts` 都已在收敛重构里删掉。原因是它们把字段声明、校验与"成功后失效谁"藏进配置对象:两个字段还好,一到十几个字段、两种数据源、按页不同的失效范围,配置就开始打架,读代码的人还得在两处之间跳。
 
-现在的做法是**照抄一个真实页面**:`src/components/modules/settings/settings-parameters-page.tsx` 是本仓最完整的一条链路,工作台 `/` 的「台账表格(完整业务页骨架)」是同一条链路的可运行示例。照它拼装:
+现在的做法是**照抄一个真实页面**:`src/components/modules/settings/parameters/page.tsx` 是本仓最完整的一条链路,工作台 `/` 的「台账表格(完整业务页骨架)」是同一条链路的可运行示例。照它拼装:
 
 1. **表定义** —— 系统表加在 `src/db/data-base-schema.ts`(不进迁移,DDL 走 `pnpm db:create` + `pnpm db:sync:meta`);要交给 drizzle 迁移就加在 `src/db/schema.ts`
 2. **接口** —— 在 `src/integrations/trpc/routers/` 加一个域,再在 `router.ts` 注册;列表页**不需要**再写一套 keyword/status store:查询参数即组件状态

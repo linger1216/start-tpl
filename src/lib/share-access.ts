@@ -22,16 +22,16 @@ import { sysShareToken } from "#/db/data-base-schema";
 export const SHARE_GUEST = { id: "share-guest", name: "访客" } as const;
 
 /** 访客令牌的 cookie 名(httpOnly,前端 JS 摸不到) */
-export const SHARE_COOKIE_NAME = "share_token";
+const SHARE_COOKIE_NAME = "share_token";
 
 /** cookie 有效期(秒):过期后重新打开外链即可(令牌未变就还能进) */
-export const SHARE_COOKIE_MAX_AGE = 8 * 60 * 60;
+const SHARE_COOKIE_MAX_AGE = 8 * 60 * 60;
 
 /**
  * 访客**永不进入**的管理区前缀 —— 即使令牌的允许路径里写了 `/settings/*` 也按无效处理。
  * 此限制只约束页面入口,不约束管理员视角的数据查询。
  */
-export const SHARE_GUEST_BLOCKED_PREFIXES: readonly string[] = ["/settings"];
+const SHARE_GUEST_BLOCKED_PREFIXES: readonly string[] = ["/settings"];
 
 /** 访客可看的页面路径前缀清单(来自命中令牌的 `allowed_paths`) */
 export type ShareGuestPaths = readonly string[];
@@ -91,7 +91,7 @@ export async function matchShareToken(
 }
 
 /** 路径前缀匹配:`/demo/grid` 放行它自己和它的子路径 */
-export function isPathAllowedForToken(paths: ShareGuestPaths, path: string): boolean {
+function isPathAllowedForToken(paths: ShareGuestPaths, path: string): boolean {
 	return paths.some((p) => path === p || path.startsWith(`${p}/`));
 }
 

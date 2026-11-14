@@ -17,8 +17,8 @@ import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification } from "#/lib/notification";
 import { alive } from "#/lib/soft-delete";
 import { publish } from "#/lib/sse-bus";
-import { TASK_URGE_COOLDOWN_MINUTES, taskPathOf } from "#/lib/task-close-spec";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { TASK_URGE_COOLDOWN_MINUTES, taskPathOf } from "#/lib/task/close-spec";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	activateNextAction,
 	assertAttachments,
@@ -30,12 +30,12 @@ import {
 	LIVE_ACTION_STATUS,
 	lockAction,
 	lockTask,
-	logTaskEvent,
 	memberRolesOf,
 	publishMentions,
 	whoAllows,
 	workflowOf,
-} from "./task-shared";
+	writeTaskEvent,
+} from "./common";
 
 export const taskActionRouter = createTRPCRouter({
 	// ────────────────────────────── 动作 ──────────────────────────────
@@ -186,7 +186,7 @@ export const taskActionRouter = createTRPCRouter({
 					predecessor = nextId;
 				}
 				await notifyAssignee(id, input.assigneeId);
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "action.create",
 					actor: me,
@@ -377,7 +377,7 @@ export const taskActionRouter = createTRPCRouter({
 				.set({ status: "cancelled", updated_at: now })
 				.where(and(inArray(taskActionTable.id, ids), inArray(taskActionTable.status, [...LIVE_ACTION_STATUS])));
 			await cancelPendingNotifications(tx, "task_action", ids);
-			await logTaskEvent(tx, {
+			await writeTaskEvent(tx, {
 				taskId: task.id,
 				event: "action.withdraw",
 				actor: me,
@@ -528,7 +528,7 @@ export const taskActionRouter = createTRPCRouter({
 						movedTo = next;
 					}
 				}
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "action.respond",
 					actor: me,
@@ -603,7 +603,7 @@ export const taskActionRouter = createTRPCRouter({
 				receivers = await createMentionNotifications(tx, task, content, me, input.mentionIds ?? [], commentId);
 				const nextAction = await activateNextAction(tx, task, action, now);
 				if (nextAction) receivers.push(nextAction.assignee_id);
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: action.task_id,
 					event: "action.reply",
 					actor: me,

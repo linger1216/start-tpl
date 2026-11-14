@@ -1,7 +1,7 @@
 import { graphlib, layout } from "@dagrejs/dagre";
 import { useId } from "react";
 import type { WorkflowEdgeInput } from "#/components/modules/task-close/task-workflow-form";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import type { WorkflowStatus } from "#/lib/task/close-spec";
 
 /** 布局只读流程图；文字清单另行提供完整角色和状态名称。 */
 export function TaskWorkflowGraph({

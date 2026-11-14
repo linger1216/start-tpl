@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { CloudUpload } from "lucide-react";
+import { CloudUpload, Paperclip, Plus, Save, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
+import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -12,10 +14,14 @@ import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { TableResizeHandle } from "#/components/ui/table-resize-handle";
+import { useFileUpload } from "#/hooks/use-file-upload";
+import { useStableKeys } from "#/hooks/use-stable-keys";
 import { useTRPC } from "#/integrations/trpc/react";
 import type { TRPCRouter } from "#/integrations/trpc/router";
 import { toastApiError } from "#/lib/api/error";
-import { pasteReportGrid, type TaskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
+import { pasteReportGrid, type TaskReportSchema, validateTaskReport } from "#/lib/task/report-spec";
+import { formatLocalDateTime, parseLocalDateTime, toLocalMinuteInput } from "#/lib/time";
+import { cn } from "#/lib/utils";
 
 /** tRPC 错误码 —— `CONFLICT` 才是「别人改了」,其余失败不该引导用户去丢弃自己的修改 */
 function trpcCodeOf(error: unknown): string | null {
@@ -115,8 +121,15 @@ export function TaskReport({ taskId, canManage }: { taskId: string; canManage: b
 	);
 }
 
-type Value = string | number | boolean | string[] | null;
+type Value = string | number | boolean | string[] | Array<Record<string, Value>> | null;
 type Row = Record<string, Value>;
+/** reportGet 带回来的附件行(按 id 查文件名) */
+type ReportFile = ReportData["files"][number];
+/** 顶层字段与数组元素字段的公共形状(元素层没有 allowEmpty) */
+type ReportFieldLike = Omit<TaskReportSchema["fields"][number], "allowEmpty" | "required"> & {
+	allowEmpty?: boolean;
+	required?: boolean;
+};
 type ReportData = NonNullable<inferRouterOutputs<TRPCRouter>["taskClose"]["reportGet"]>;
 
 function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: TaskReportSchema; data: ReportData }) {
@@ -182,9 +195,18 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 	/** 这个格子有没有被校验点名 —— 有就把输入框标红,不用人对着下面的清单逐条找 */
 	const invalidOf = (row: number, field: string) =>
 		issues.some((issue) => issue.field === field && (schema.kind === "OBJECT" || issue.row === row));
+	/**
+	 * 改一格。用 `setDraft(prev => …)` 的**函数式**更新:`value` 可能是异步拿到的
+	 * (附件上传要几秒),写回时必须基于**当时最新的草稿**,而不是发起时的快照 ——
+	 * 否则上传期间别人(或用户自己)对同一行数组的新增 / 删除会被这次写回抹掉。
+	 */
 	const update = (index: number, field: string, value: Value) => {
-		const next = rows.map((row, i) => (i === index ? { ...row, [field]: value } : row));
-		setDraft(schema.kind === "TABLE" ? next : next[0]);
+		setDraft((prev) => {
+			const current: Row[] =
+				schema.kind === "TABLE" ? (Array.isArray(prev) ? (prev as Row[]) : []) : [(prev ?? {}) as Row];
+			const next = current.map((row, i) => (i === index ? { ...row, [field]: value } : row));
+			return schema.kind === "TABLE" ? next : next[0];
+		});
 		markDirty();
 		setIssues([]);
 	};
@@ -217,21 +239,53 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 			onError: toastApiError,
 		}),
 	);
+	/** 手动「保存」:没有父任务可同步时(表单 / 根任务)就是把防抖里那一次立刻落库 */
+	const saveNow = async () => {
+		if (conflicted || saveFailed) {
+			toast.error("上次保存未成功,请先按提示处理");
+			return;
+		}
+		const found =
+			schema.kind === "TABLE" && Array.isArray(draft) && draft.length === 0 ? [] : validateTaskReport(schema, draft);
+		setIssues(found);
+		if (found.length > 0) {
+			toast.error("有内容需要修正,尚未保存");
+			return;
+		}
+		try {
+			await save.mutateAsync({ taskId, revision, draft });
+			toast.success("已保存");
+		} catch {
+			/* 失败提示已由 mutation 的 onError 给出 */
+		}
+	};
 	const busy = sync.isPending || reset.isPending;
 	return (
 		<ReportSection
 			actions={
 				<div className="flex items-center">
-					{data.canSyncToParent ? (
-						<Button
-							variant="ghost"
-							size="sm"
-							disabled={busy || save.isPending || dirty || conflicted || syncConflict || !data.canEdit}
-							onClick={() => sync.mutate({ taskId })}
-						>
-							<CloudUpload className="size-3.5" />
-							{sync.isPending ? "同步中…" : "保存填报"}
-						</Button>
+					{data.canEdit ? (
+						data.canSyncToParent ? (
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={busy || save.isPending || dirty || conflicted || syncConflict}
+								onClick={() => sync.mutate({ taskId })}
+							>
+								<CloudUpload className="size-3.5" />
+								{sync.isPending ? "同步中…" : "保存填报"}
+							</Button>
+						) : (
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={save.isPending || conflicted || saveFailed}
+								onClick={() => void saveNow()}
+							>
+								<Save className="size-3.5" />
+								{save.isPending ? "保存中…" : "保存"}
+							</Button>
+						)
 					) : null}
 					<TaskReportExcel
 						taskId={taskId}
@@ -275,6 +329,34 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 			/>
 			<div className="grid gap-4">
 				<p className="text-sm text-muted-foreground">共 {rows.length} 条数据</p>
+				{schema.kind === "OBJECT" && data.syncedChildren.length > 0 ? (
+					<div className="grid gap-2">
+						<p className="text-sm font-medium text-foreground">子任务填报</p>
+						{data.syncedChildren.map((child) => (
+							<div key={child.taskId} className="grid gap-1.5 rounded-md border border-border p-2.5">
+								<span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+									<span>{child.executorName ? `执行人:${child.executorName}` : child.name}</span>
+									{child.syncedAt ? <span>保存于 {formatLocalDateTime(child.syncedAt)}</span> : null}
+								</span>
+								<dl className="grid gap-1 text-sm">
+									{schema.fields.map((field) => (
+										<div key={field.id} className="flex gap-2">
+											<dt className="w-24 shrink-0 text-muted-foreground">{field.label}</dt>
+											<dd className="min-w-0 flex-1 break-words">
+												<ReportValueView
+													taskId={taskId}
+													field={field}
+													value={(child.payload as Row | null)?.[field.id]}
+													files={data.files}
+												/>
+											</dd>
+										</div>
+									))}
+								</dl>
+							</div>
+						))}
+					</div>
+				) : null}
 				{schema.kind === "TABLE" && rows.length === 0 && <p className="text-sm text-muted-foreground">暂无数据行。</p>}
 				<div className={schema.kind === "TABLE" ? "overflow-x-auto" : "grid gap-3"}>
 					{/* 字段宽度未知就**均分**:table-fixed + 每列一只 col(操作列固定宽、不参与均分) */}
@@ -340,10 +422,12 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 													}}
 												>
 													<ReportField
+														taskId={taskId}
 														field={field}
 														value={row[field.id]}
 														invalid={invalidOf(index, field.id)}
 														disabled={!data.canEdit || busy || field.readOnly}
+														files={data.files}
 														onChange={(value) => update(index, field.id, value)}
 													/>
 												</td>
@@ -373,10 +457,12 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 						schema.fields.map((field) => (
 							<DetailRow key={field.id} label={field.label} align="center">
 								<ReportField
+									taskId={taskId}
 									field={field}
 									value={rows[0][field.id]}
 									invalid={invalidOf(0, field.id)}
 									disabled={!data.canEdit || busy || field.readOnly}
+									files={data.files}
 									onChange={(value) => update(0, field.id, value)}
 								/>
 							</DetailRow>
@@ -442,34 +528,75 @@ function TaskReportEditor({ taskId, schema, data }: { taskId: string; schema: Ta
 }
 
 function ReportField({
+	taskId,
 	field,
 	value,
 	disabled,
 	invalid,
+	files,
 	onChange,
 }: {
-	field: TaskReportSchema["fields"][number];
+	/** 现签附件地址要用它(预览弹窗) */
+	taskId: string;
+	field: ReportFieldLike;
 	value: Value | undefined;
 	disabled: boolean;
 	/** 校验点名了这个字段 —— 走 `aria-invalid`,与表单里的必填错同一套红 */
 	invalid?: boolean;
+	/** 附件字段要按 id 找文件名(reportGet 带回来的) */
+	files?: readonly ReportFile[];
 	onChange: (value: Value) => void;
 }) {
-	if (field.type === "multiselect")
+	/** 附件字段:选完即传,存 id 列表;展示用 reportGet 解析回来的文件名,点名字开预览 */
+	if (field.type === "attachment")
+		return (
+			<ReportAttachmentField
+				taskId={taskId}
+				field={field}
+				value={value}
+				disabled={disabled}
+				files={files}
+				onChange={onChange}
+			/>
+		);
+	/** 数组字段:元素是一组对象 —— 给「添加」按钮,一次加一个空对象再逐项填 */
+	if (field.type === "array")
+		return (
+			<ReportArrayField
+				taskId={taskId}
+				field={field}
+				value={value}
+				disabled={disabled}
+				invalid={invalid}
+				files={files}
+				onChange={onChange}
+			/>
+		);
+	if (field.type === "phone" || field.type === "email")
+		return (
+			<Input
+				aria-label={field.label}
+				aria-invalid={invalid || undefined}
+				type={field.type === "phone" ? "tel" : "email"}
+				inputMode={field.type === "phone" ? "tel" : "email"}
+				placeholder={field.type === "phone" ? "11 位手机号,如 13800138000" : "name@example.com"}
+				value={typeof value === "string" ? value : ""}
+				disabled={disabled}
+				onChange={(event) => onChange(event.target.value || null)}
+			/>
+		);
+	if (field.type === "multiselect") {
+		const picked = (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === "string");
 		return (
 			<div className="flex flex-wrap gap-3">
 				{field.options?.map((option) => (
 					<span key={option} className="flex items-center gap-2 text-sm">
 						<Checkbox
 							aria-label={`${field.label}: ${option}`}
-							checked={Array.isArray(value) && value.includes(option)}
+							checked={picked.includes(option)}
 							disabled={disabled}
 							onCheckedChange={(checked) =>
-								onChange(
-									checked
-										? [...(Array.isArray(value) ? value : []), option]
-										: (Array.isArray(value) ? value : []).filter((item) => item !== option),
-								)
+								onChange(checked ? [...picked, option] : picked.filter((item) => item !== option))
 							}
 						/>
 						{option}
@@ -477,6 +604,7 @@ function ReportField({
 				))}
 			</div>
 		);
+	}
 	if (field.type === "select")
 		return (
 			<Select
@@ -509,10 +637,8 @@ function ReportField({
 				: field.type === "datetime"
 					? "datetime-local"
 					: "text";
-	const display =
-		field.type === "datetime" && typeof value === "string" && !Number.isNaN(Date.parse(value))
-			? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-			: String(value ?? "");
+	// `datetime-local` 的 value 是**本地**墙上时间:存的是 ISO(UTC),这里折算过来,别直接 slice
+	const display = field.type === "datetime" ? toLocalMinuteInput(value as string | null) : String(value ?? "");
 	return (
 		<Input
 			aria-label={field.label}
@@ -524,9 +650,340 @@ function ReportField({
 			onChange={(event) => {
 				const raw = event.target.value;
 				onChange(
-					!raw ? null : kind === "number" ? Number(raw) : kind === "datetime-local" ? new Date(raw).toISOString() : raw,
+					!raw ? null : kind === "number" ? Number(raw) : kind === "datetime-local" ? parseLocalDateTime(raw) : raw,
 				);
 			}}
 		/>
+	);
+}
+
+/** 填报里的附件字段 —— 选完即传,值只存 `sys_file.id`;展示用 `reportGet` 带回的文件名 */
+function ReportAttachmentField({
+	taskId,
+	field,
+	value,
+	disabled,
+	files,
+	onChange,
+}: {
+	taskId: string;
+	field: ReportFieldLike;
+	value: Value | undefined;
+	disabled: boolean;
+	files?: readonly ReportFile[];
+	onChange: (value: Value) => void;
+}) {
+	const { upload } = useFileUpload();
+	const inputRef = useRef<HTMLInputElement | null>(null);
+	const [uploading, setUploading] = useState(false);
+	/**
+	 * **刚传上来的**那几个附件的名字与大小(按 id)。
+	 *
+	 * `reportGet.files` 是查询快照:上传只刷新文件列表,不会重取填报 —— 新附件的 id 不在里面,
+	 * 于是文件名回退成 id、预览显示 0B(用户报过这个现象,尤其是同一批里后传的那个)。
+	 * 上传结果本身就带 `originName / size`,就地记下来,不必等下一次查询。
+	 */
+	const [uploaded, setUploaded] = useState<Record<string, ReportFile>>({});
+	/** 点文件名开预览(地址现签,按原始附件名下载) */
+	const [picked, setPicked] = useState<ReportFile | null>(null);
+	const ids = (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === "string");
+	/** 当前值的最新快照:上传是异步的,合并要基于**完成时**的 id 列表,不能用在 `await` 之前的 */
+	const idsRef = useRef(ids);
+	idsRef.current = ids;
+	const fileOf = (id: string): ReportFile =>
+		files?.find((file) => file.id === id) ?? uploaded[id] ?? { id, name: id, size: 0, contentType: null };
+	const nameOf = (id: string) => fileOf(id).name;
+
+	async function pick(list: FileList | null) {
+		if (!list?.length) return;
+		setUploading(true);
+		try {
+			// 多选要攒齐再写一次(逐个 onChange 会拿同一个旧值)
+			const picked: string[] = [];
+			const meta: Record<string, ReportFile> = {};
+			// 20 个是服务端口径的上限,满了就一个都不发(不是至少发一个)
+			for (const file of Array.from(list).slice(0, 20 - idsRef.current.length)) {
+				const result = await upload(file, "private");
+				if (!result.ok) {
+					toast.error(result.message);
+					continue;
+				}
+				meta[result.row.id] = {
+					id: result.row.id,
+					name: result.row.originName,
+					size: result.row.size,
+					contentType: result.row.contentType,
+				};
+				if (!idsRef.current.includes(result.row.id) && !picked.includes(result.row.id)) picked.push(result.row.id);
+			}
+			if (Object.keys(meta).length > 0) setUploaded((prev) => ({ ...prev, ...meta }));
+			if (picked.length > 0) onChange([...idsRef.current, ...picked]);
+		} finally {
+			setUploading(false);
+			if (inputRef.current) inputRef.current.value = "";
+		}
+	}
+
+	return (
+		<div className="flex flex-wrap items-center gap-1.5">
+			{ids.map((id) => (
+				<span
+					key={id}
+					className="inline-flex max-w-56 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"
+				>
+					<button
+						type="button"
+						className="flex min-w-0 items-center gap-1 transition-colors hover:text-foreground hover:underline"
+						title={`预览 ${nameOf(id)}`}
+						onClick={() => setPicked(fileOf(id))}
+					>
+						<Paperclip className="size-3 shrink-0" />
+						<span className="truncate">{nameOf(id)}</span>
+					</button>
+					{disabled ? null : (
+						<button
+							type="button"
+							aria-label={`移除 ${nameOf(id)}`}
+							className="text-muted-foreground transition-colors hover:text-destructive"
+							onClick={() => onChange(ids.filter((item) => item !== id))}
+						>
+							<X className="size-3" />
+						</button>
+					)}
+				</span>
+			))}
+			{disabled ? null : (
+				<>
+					<Button
+						type="button"
+						variant="outline"
+						size="icon-sm"
+						aria-label={uploading ? "上传中" : `添加${field.label}`}
+						title={uploading ? "上传中…" : "添加附件"}
+						disabled={uploading || ids.length >= 20}
+						onClick={() => inputRef.current?.click()}
+					>
+						{uploading ? (
+							<span className="size-3.5 animate-pulse rounded-full bg-primary/60" />
+						) : (
+							<Plus className="size-4" />
+						)}
+					</Button>
+					<input
+						ref={inputRef}
+						type="file"
+						multiple
+						className="hidden"
+						aria-label={`${field.label} 附件`}
+						onChange={(event) => void pick(event.target.files)}
+					/>
+				</>
+			)}
+			<TaskAttachmentPreview
+				taskId={taskId}
+				attachment={picked}
+				open={picked !== null}
+				onOpenChange={(next) => {
+					if (!next) setPicked(null);
+				}}
+			/>
+		</div>
+	);
+}
+
+/**
+ * 只读展示一格填报值 —— 按**字段类型**渲染,不吐原始 JSON:
+ * 附件是能点开的附件名(原名),数组展开成「第 N 项」+ 元素字段,单选 / 多选走选项名。
+ */
+function ReportValueView({
+	taskId,
+	field,
+	value,
+	files,
+}: {
+	taskId: string;
+	field: ReportFieldLike;
+	value: Value | undefined;
+	files: readonly ReportFile[];
+}) {
+	if (field.type === "attachment") {
+		const ids = (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === "string");
+		if (ids.length === 0) return <>—</>;
+		return <ReportFileChips taskId={taskId} ids={ids} files={files} />;
+	}
+	if (field.type === "array") return <ReportArrayView taskId={taskId} field={field} value={value} files={files} />;
+	return <>{plainTextOf(field, value)}</>;
+}
+
+/** 数组字段的只读渲染 —— 元素没有 id,用「按位置稳定」的 key(与编辑侧同一套) */
+function ReportArrayView({
+	taskId,
+	field,
+	value,
+	files,
+}: {
+	taskId: string;
+	field: ReportFieldLike;
+	value: Value | undefined;
+	files: readonly ReportFile[];
+}) {
+	const items = (Array.isArray(value) ? value : []).filter(
+		(item): item is Record<string, Value> => !!item && typeof item === "object" && !Array.isArray(item),
+	);
+	const itemKeys = useStableKeys(items.length, "tc-read");
+	const itemFields = field.itemFields ?? [];
+	if (items.length === 0) return <>—</>;
+	return (
+		<div className="grid gap-1.5">
+			{items.map((item, index) => (
+				<div key={itemKeys[index]} className="grid gap-0.5 rounded-md border border-border p-1.5">
+					<span className="text-xs text-muted-foreground">第 {index + 1} 项</span>
+					{itemFields.map((sub) => (
+						<div key={sub.id} className="flex gap-2">
+							<span className="w-20 shrink-0 text-xs text-muted-foreground">{sub.label}</span>
+							<span className="min-w-0 flex-1 break-words">
+								<ReportValueView taskId={taskId} field={sub} value={item[sub.id]} files={files} />
+							</span>
+						</div>
+					))}
+				</div>
+			))}
+		</div>
+	);
+}
+
+/** 只读的附件名 —— 点开就是预览弹窗(表格单元格 / 表单字段 / 父任务看子任务填报共用) */
+function ReportFileChips({
+	taskId,
+	ids,
+	files,
+}: {
+	taskId: string;
+	ids: readonly string[];
+	files: readonly ReportFile[];
+}) {
+	const [picked, setPicked] = useState<ReportFile | null>(null);
+	return (
+		<>
+			<span className="flex flex-wrap items-center gap-1.5">
+				{ids.map((id) => {
+					const file = files.find((item) => item.id === id);
+					const name = file?.name ?? id;
+					return (
+						<button
+							key={id}
+							type="button"
+							className="inline-flex max-w-56 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+							title={`预览 ${name}`}
+							onClick={() => setPicked(file ?? { id, name: id, size: 0, contentType: null })}
+						>
+							<Paperclip className="size-3 shrink-0" />
+							<span className="truncate">{name}</span>
+						</button>
+					);
+				})}
+			</span>
+			<TaskAttachmentPreview
+				taskId={taskId}
+				attachment={picked}
+				open={picked !== null}
+				onOpenChange={(next) => {
+					if (!next) setPicked(null);
+				}}
+			/>
+		</>
+	);
+}
+
+/** 一个值的纯文本口径:单选 / 多选给选项名,其余原样(空值一律「—」) */
+function plainTextOf(field: ReportFieldLike, value: Value | undefined): string {
+	if (value == null || value === "") return "—";
+	if (field.type === "multiselect") {
+		const picked = (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === "string");
+		return picked.length === 0 ? "—" : picked.join("、");
+	}
+	if (field.type === "select") return String(value);
+	if (field.type === "datetime") return formatLocalDateTime(value as string) || String(value);
+	if (typeof value === "boolean") return value ? "是" : "否";
+	if (Array.isArray(value)) return value.length === 0 ? "—" : `${value.length} 项`;
+	return String(value);
+}
+
+/** 数组字段 —— 元素是一组对象:点「添加」加一个空对象,再逐项填 */
+function ReportArrayField({
+	taskId,
+	field,
+	value,
+	disabled,
+	invalid,
+	files,
+	onChange,
+}: {
+	taskId: string;
+	field: ReportFieldLike;
+	value: Value | undefined;
+	disabled: boolean;
+	invalid?: boolean;
+	files?: readonly ReportFile[];
+	onChange: (value: Value) => void;
+}) {
+	const items = (Array.isArray(value) ? value : []).filter(
+		(item): item is Record<string, Value> => !!item && typeof item === "object" && !Array.isArray(item),
+	);
+	/**
+	 * 元素数组的**最新值**。附件上传是异步的(几秒),回调里若用发起时的 `items` 快照重建数组,
+	 * 期间新增的元素会被整段抹掉 —— 现象就是「第二个元素里传的附件,上传完成却没保存上」。
+	 * 写回一律从 `itemsRef.current` 起算;再往上的 `update()` 也是函数式更新,两层都不吃旧快照。
+	 */
+	const itemsRef = useRef(items);
+	itemsRef.current = items;
+	const setItem = (index: number, key: string, next: Value) =>
+		onChange(itemsRef.current.map((item, i) => (i === index ? { ...item, [key]: next } : item)));
+	const itemFields = field.itemFields ?? [];
+	// 数组元素没有 id;用「按位置稳定」的 key(内容变化不重建),别用下标
+	const itemKeys = useStableKeys(items.length, "tc-array");
+	return (
+		<div className={cn("grid gap-2", invalid && "rounded-md ring-1 ring-destructive/40")}>
+			{items.length === 0 ? <p className="text-xs text-muted-foreground">还没有数据,点下面「添加」。</p> : null}
+			{items.map((item, index) => (
+				<div key={itemKeys[index]} className="grid gap-1.5 rounded-md border border-border p-2">
+					<div className="flex items-center justify-between gap-2">
+						<span className="text-xs text-muted-foreground">第 {index + 1} 项</span>
+						{disabled ? null : (
+							<ActionButton tone="danger" onClick={() => onChange(itemsRef.current.filter((_, i) => i !== index))}>
+								删除
+							</ActionButton>
+						)}
+					</div>
+					{itemFields.map((sub) => (
+						<div key={sub.id} className="grid gap-1">
+							<span className="text-xs text-muted-foreground">
+								{sub.label}
+								{sub.required ? " *" : ""}
+							</span>
+							<ReportField
+								taskId={taskId}
+								field={sub}
+								value={item[sub.id]}
+								disabled={disabled || sub.readOnly}
+								files={files}
+								onChange={(next) => setItem(index, sub.id, next)}
+							/>
+						</div>
+					))}
+				</div>
+			))}
+			{disabled ? null : (
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={items.length >= 200}
+					onClick={() => onChange([...itemsRef.current, {}])}
+				>
+					<Plus className="size-3.5" />
+					添加
+				</Button>
+			)}
+		</div>
 	);
 }

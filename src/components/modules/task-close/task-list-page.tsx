@@ -21,7 +21,7 @@ import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
 import { PAGE_SIZES } from "#/lib/constants";
-import type { WorkflowStatus } from "#/lib/task-close-spec";
+import type { WorkflowStatus } from "#/lib/task/close-spec";
 import { formatLocalDate } from "#/lib/time";
 
 /** 快捷区间 → 往回推的天数(含今天):今天 0 天 / 近 7 天 6 天 / 近 30 天 29 天 */

@@ -1,7 +1,7 @@
 import type { ExcelColumn } from "#/lib/excel";
 import { formatLocalMinute } from "#/lib/time";
 
-import { type LogRow, statusText } from "./settings-logs-table";
+import { type LogRow, statusText } from "./table";
 
 /** 导出列的业务字段名(与 `LOG_EXCEL_COLUMNS` 的 key 严格同集) */
 type LogExcelKey =

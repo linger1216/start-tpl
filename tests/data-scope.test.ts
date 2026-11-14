@@ -15,6 +15,7 @@ import { after, before, test } from "node:test";
 
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
+import { DEFAULT_STREET_NAMES as STREET_NAMES } from "../src/config/data-scope-regions.ts";
 import {
 	sysCasbinRule,
 	sysDataPlugin,
@@ -35,7 +36,6 @@ import {
 	loadDeptNodes,
 	loadPlugins,
 	resolvePluginValues,
-	STREET_NAMES,
 } from "../src/lib/data-scope-plugins.ts";
 import {
 	PLUGIN_ITEM_KEY_MAX,
@@ -491,6 +491,45 @@ test("插件求值只接受对象字符串字段，并去除空值和重复行",
 function ctxWithDepts(depts: PolicyDept[]): PolicyCtx {
 	return { user: { id: `${TEST_PREFIX}me`, name: "测试人" }, roles: [], depts, descendants: [] };
 }
+
+test("街镇插件使用部署配置，错误配置时不返回授权范围", async () => {
+	const previous = process.env.DATA_SCOPE_STREET_NAMES;
+	const ctx = ctxWithDepts([{ id: "test-street", name: "测试街镇", parentId: null, mine: true }]);
+	try {
+		process.env.DATA_SCOPE_STREET_NAMES = JSON.stringify(["测试街镇"]);
+		assert.deepEqual(await resolvePluginValues("my_street", { ctx }), [{ id: "test-street", name: "测试街镇" }]);
+		const nodes = await loadDeptNodes();
+		const child = nodes.find((node) => node.id === fixtureDeptIds[2]);
+		assert.ok(child);
+		process.env.DATA_SCOPE_STREET_NAMES = JSON.stringify([child.name]);
+		const tree = await resolvePluginValues("my_street_tree", {
+			ctx: ctxWithDepts([{ ...child, mine: true }]),
+		});
+		assert.deepEqual(tree, [{ id: child.id, name: child.name }]);
+		process.env.DATA_SCOPE_STREET_NAMES = "[]";
+		assert.deepEqual(await resolvePluginValues("my_street", { ctx }), []);
+		process.env.DATA_SCOPE_STREET_NAMES = "not-json";
+		assert.equal(await resolvePluginValues("my_street", { ctx }), null);
+		assert.equal(await resolvePluginValues("my_street_tree", { ctx }), null);
+	} finally {
+		if (previous === undefined) delete process.env.DATA_SCOPE_STREET_NAMES;
+		else process.env.DATA_SCOPE_STREET_NAMES = previous;
+	}
+});
+
+test("居村插件使用部署配置，错误配置时不返回授权范围", async () => {
+	const previous = process.env.DATA_SCOPE_NEIGHBORHOOD_TERMS;
+	const ctx = ctxWithDepts([{ id: "test-village", name: "示例社区", parentId: null, mine: true }]);
+	try {
+		process.env.DATA_SCOPE_NEIGHBORHOOD_TERMS = JSON.stringify(["社区"]);
+		assert.deepEqual(await resolvePluginValues("my_neighborhood", { ctx }), [{ id: "test-village", name: "示例社区" }]);
+		process.env.DATA_SCOPE_NEIGHBORHOOD_TERMS = "[42]";
+		assert.equal(await resolvePluginValues("my_neighborhood", { ctx }), null);
+	} finally {
+		if (previous === undefined) delete process.env.DATA_SCOPE_NEIGHBORHOOD_TERMS;
+		else process.env.DATA_SCOPE_NEIGHBORHOOD_TERMS = previous;
+	}
+});
 
 test("我的部门及以下:多个归属去重并带部门名,没有归属时为空", async () => {
 	const nodes = await loadDeptNodes();

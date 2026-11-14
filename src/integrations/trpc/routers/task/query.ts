@@ -24,13 +24,16 @@ import {
 	taskCommentTable,
 	taskLogTable,
 	taskMemberTable,
+	taskReportSubmissionTable,
+	taskReportTable,
 	taskTable,
 } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { alive } from "#/lib/soft-delete";
 import { getObjectUrl } from "#/lib/storage";
-import { parseBlocks } from "#/lib/task-payload";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { parseBlocks } from "#/lib/task/payload";
+import { reportAttachmentIds, taskReportSchema } from "#/lib/task/report-spec";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	type ActionRow,
 	assertTaskReadable,
@@ -44,7 +47,7 @@ import {
 	type WorkflowPayload,
 	whoAllows,
 	workflowOf,
-} from "./task-shared";
+} from "./common";
 
 type MemberRow = typeof taskMemberTable.$inferSelect;
 
@@ -224,6 +227,8 @@ async function permissionsOf(task: TaskRow, meId: string) {
 		canAddMember: isParticipant,
 		/** 创建者或管理员可以管理任务和成员。 */
 		canManage: isAdmin || isCreator,
+		/** 删除任务是破坏性动作,**单独一个开关**(判据:创建者或管理员)—— 与 `assertCanRemoveTask` 同一口径 */
+		canRemove: isAdmin || isCreator,
 		canTransfer: isAdmin || memberRoles.includes("executor"),
 	};
 }
@@ -515,6 +520,32 @@ export const taskQueryRouter = createTRPCRouter({
 			await assertTaskReadable(task, me.id);
 			const family = await familyTasks(task, me.id);
 			let owned = family.some((row) => attachmentIdsOf(row.payload).includes(input.fileId));
+			if (!owned) {
+				const snapshot = task.report as { schema?: unknown } | null;
+				const schema = taskReportSchema.safeParse(snapshot?.schema);
+				if (schema.success) {
+					const [report] = await db
+						.select({ draft: taskReportTable.draft })
+						.from(taskReportTable)
+						.where(eq(taskReportTable.task_id, task.id))
+						.limit(1);
+					owned = reportAttachmentIds(schema.data, report?.draft).includes(input.fileId);
+					// 父任务还要能预览**子任务已保存**的填报附件(与 reportGet 的可见集合同口径:
+					// 只看 current_submission_id 指向的那份快照,没保存的一律不放行)
+					if (!owned) {
+						const submissions = await db
+							.select({ payload: taskReportSubmissionTable.payload })
+							.from(taskReportTable)
+							.innerJoin(
+								taskReportSubmissionTable,
+								eq(taskReportSubmissionTable.id, taskReportTable.current_submission_id),
+							)
+							.innerJoin(taskTable, eq(taskTable.id, taskReportTable.task_id))
+							.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
+						owned = submissions.some((row) => reportAttachmentIds(schema.data, row.payload).includes(input.fileId));
+					}
+				}
+			}
 			if (!owned) {
 				const comments = await db
 					.select({ attachments: taskCommentTable.attachments })

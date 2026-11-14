@@ -6,12 +6,18 @@ import { sysUser, taskMemberTable, taskReportTable, taskTable, taskWorkflowTable
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { normalizePayload, taskPayloadSchema } from "#/lib/task-payload";
-import { reportRowSchema, type taskReportSchema, validateTaskReport } from "#/lib/task-report-spec";
-import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../init";
+import { normalizePayload, taskPayloadSchema } from "#/lib/task/payload";
+import {
+	reportAttachmentIds,
+	reportRowSchema,
+	type taskReportSchema,
+	validateTaskReport,
+} from "#/lib/task/report-spec";
+import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertAttachments,
 	assertCanManage,
+	assertCanRemoveTask,
 	assertTaskParticipant,
 	cancelLiveTaskActions,
 	getAvailableReportTemplate,
@@ -20,7 +26,6 @@ import {
 	ID,
 	isLocked,
 	lockTask,
-	logTaskEvent,
 	ROLE_ENUM,
 	type ScopeFilter,
 	stableJson,
@@ -28,7 +33,8 @@ import {
 	type WorkflowPayload,
 	whoAllows,
 	workflowOf,
-} from "./task-shared";
+	writeTaskEvent,
+} from "./common";
 
 /** 两组 AND 条件只有在同一字段要求不同值时才互斥。 */
 function scopesOverlap(a: ScopeFilter, b: ScopeFilter): boolean {
@@ -106,7 +112,7 @@ async function insertTask(
 		updated_at: now,
 	}));
 	if (members.length) await tx.insert(taskMemberTable).values(members);
-	await logTaskEvent(tx, {
+	await writeTaskEvent(tx, {
 		taskId: input.id,
 		event: "task.create",
 		actor,
@@ -231,7 +237,7 @@ export const taskRecordRouter = createTRPCRouter({
 					const fields = new Set<string>();
 					for (const condition of filter) {
 						const field = template?.schema.fields.find((item) => item.id === condition.field);
-						if (!field || field.type === "multiselect" || fields.has(condition.field))
+						if (!field || field.type === "multiselect" || field.type === "attachment" || fields.has(condition.field))
 							throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围字段无效或重复" });
 						fields.add(condition.field);
 					}
@@ -258,6 +264,7 @@ export const taskRecordRouter = createTRPCRouter({
 						throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
 					return input.report.rows;
 				})();
+				if (template) await assertAttachments(tx, reportAttachmentIds(template.schema, masterRows));
 
 				/** 母版行按过滤规则切片(规则 = 一组 field=value 的 AND;空规则 = 全部行) */
 				const rowsFor = (filter: Array<{ field: string; value: unknown }>) =>
@@ -336,7 +343,7 @@ export const taskRecordRouter = createTRPCRouter({
 								revision: 0,
 							});
 						}
-						await logTaskEvent(tx, {
+						await writeTaskEvent(tx, {
 							taskId: childId,
 							event: "task.create",
 							actor: me,
@@ -455,7 +462,7 @@ export const taskRecordRouter = createTRPCRouter({
 						.set({ description: nextDescription, updated_at: now })
 						.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
 				}
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "task.update",
 					actor: me,
@@ -495,7 +502,7 @@ export const taskRecordRouter = createTRPCRouter({
 					.set({ payload: nextPayload, updated_at: new Date() })
 					.where(eq(taskTable.id, task.id));
 				if (changed)
-					await logTaskEvent(tx, {
+					await writeTaskEvent(tx, {
 						taskId: task.id,
 						event: "task.update",
 						actor: me,
@@ -509,11 +516,12 @@ export const taskRecordRouter = createTRPCRouter({
 	 * 软删任务，并在同一事务终止未完成动作和待发送通知。
 	 *
 	 * 删父任务连带删子任务,避免保留脱离分派上下文的子任务。
+	 * **只有任务创建者或管理员能删**(`assertCanRemoveTask`)—— 执行人 / 参与者一律拒绝。
 	 */
 	taskRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
-		await assertCanManage(task, me.id);
+		await assertCanRemoveTask(task, me.id);
 		const now = new Date();
 		await db.transaction(async (tx) => {
 			await lockTask(tx, task.id);
@@ -534,9 +542,9 @@ export const taskRecordRouter = createTRPCRouter({
 					.set({ ...softDeleted(), updated_at: now })
 					.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
 				for (const row of children)
-					await logTaskEvent(tx, { taskId: row.id, event: "task.remove", actor: me, at: now });
+					await writeTaskEvent(tx, { taskId: row.id, event: "task.remove", actor: me, at: now });
 			}
-			await logTaskEvent(tx, { taskId: task.id, event: "task.remove", actor: me, at: now });
+			await writeTaskEvent(tx, { taskId: task.id, event: "task.remove", actor: me, at: now });
 		});
 		return { ok: true };
 	}),
@@ -583,7 +591,7 @@ export const taskRecordRouter = createTRPCRouter({
 					await cancelLiveTaskActions(tx, task.id, now);
 				await tx.update(taskTable).set({ status: input.to, updated_at: now }).where(eq(taskTable.id, task.id));
 				// 「直接改状态」以前**不留痕**(只有 action 才有记录),这里是它第一次被记进历史
-				await logTaskEvent(tx, {
+				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "task.transit",
 					actor: me,

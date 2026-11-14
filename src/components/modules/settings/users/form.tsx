@@ -1,7 +1,7 @@
 import { ImagePlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { UserRow } from "#/components/modules/settings/settings-users-table";
+import type { UserRow } from "#/components/modules/settings/users/table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect, type MultiSelectOption } from "#/components/modules/shared/multi-select";
 import { ActionButton } from "#/components/ui/action-button";
