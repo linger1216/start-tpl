@@ -276,8 +276,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				: members.some((member) => member.userId === meId)
 					? "participant"
 					: null;
-	/** `payload.type` 编辑界面不管它,但保存时**必须原样带回**(`taskUpdate` 整块替换 payload) */
-	const payloadType = (task.payload as { type?: string } | null)?.type;
 	// 状态图快照:状态清单(value+label)从这里取(展示一律用 label)
 	const statuses = statusesOf(task.workflow);
 	/** 本页所有「状态 value → 展示名」都走它,不再各写一遍闭包 */
@@ -608,7 +606,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						dueAt: payload.dueAt,
 						priority: payload.priority,
 						reminderConfig: payload.reminderConfig,
-						payload: { type: payloadType, links: payload.links, attachments: payload.attachments },
+						payload: { links: payload.links, attachments: payload.attachments },
 						expectedPayload: editPayloadBaseline.current,
 					})
 				}

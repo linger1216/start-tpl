@@ -445,7 +445,8 @@ export async function createMentionNotifications(
 		source: { type: "task", id: task.id },
 		title: `${author.name || "有人"} 在「${task.name}」的讨论里 @ 你`,
 		content: content.slice(0, 120),
-		payload: { path: taskPathOf(task.id), level: "info", commentId },
+		path: taskPathOf(task.id),
+		level: "info",
 		dedupeKey: `comment.mentioned:${commentId}`,
 		recipients: receivers.map((userId) => ({ userId, channel: "in_app" })),
 	});
@@ -473,7 +474,6 @@ export function notifyActionAssigned(
 		content: options.content,
 		path: taskPathOf(options.task.id),
 		level: "info",
-		payload: { actionId: options.actionId },
 		dedupeKey: `action.assigned:${options.actionId}`,
 		recipients: [{ userId: options.assigneeId, channel: "in_app" }],
 	});

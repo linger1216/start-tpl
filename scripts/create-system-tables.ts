@@ -343,7 +343,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_notification",
 		ddl: `create table if not exists \`sys_notification\` (
-    \`id\` varchar(32) not null primary key, \`type\` varchar(64) not null, \`source_type\` varchar(64), \`source_id\` varchar(191), \`title\` varchar(128) not null, \`content\` text, \`path\` varchar(255) default null, \`level\` varchar(16) not null default 'info', \`payload\` text, \`dedupe_key\` varchar(191) not null, \`created_at\` datetime not null,
+    \`id\` varchar(32) not null primary key, \`type\` varchar(64) not null, \`source_type\` varchar(64), \`source_id\` varchar(32), \`title\` varchar(128) not null, \`content\` text, \`path\` varchar(255) default null, \`level\` varchar(16) not null default 'info', \`operator_id\` varchar(36) default null, \`dedupe_key\` varchar(191) not null, \`created_at\` datetime not null,
     unique key \`uk_notification_dedupe\` (\`dedupe_key\`),
     key \`idx_notification_source\` (\`source_type\`, \`source_id\`, \`type\`, \`created_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
@@ -474,10 +474,9 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		name: "tc_task_report",
 		ddl: `create table if not exists \`tc_task_report\` (
     \`id\` varchar(32) not null,
-    \`task_id\` varchar(191) not null,
+    \`task_id\` varchar(32) not null,
     \`draft\` json default null,
     \`synced\` json default null,
-    \`synced_at\` datetime default null,
     \`revision\` int not null default 0,
     \`created_at\` datetime default current_timestamp,
     \`updated_at\` datetime default current_timestamp,
@@ -488,7 +487,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_workflow",
 		ddl: `create table if not exists \`tc_workflow\` (
-    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`payload\` json not null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
@@ -499,18 +498,18 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_task",
 		ddl: `create table if not exists \`tc_task\` (
-    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`name\` varchar(255) collate utf8mb4_unicode_ci not null,
     \`description\` text collate utf8mb4_unicode_ci default null,
     \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`executor_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`creator_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`executor_id\` varchar(36) collate utf8mb4_unicode_ci default null,
     \`due_at\` datetime default null,
     \`priority\` tinyint default null,
     \`payload\` json default null,
     \`workflow\` json not null,
-    \`workflow_id\` varchar(191) collate utf8mb4_unicode_ci default null,
-    \`parent_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`workflow_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`report\` json default null,
     \`reminder_config\` json default null,
     \`deleted_at\` datetime default null,
@@ -527,9 +526,9 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		name: "tc_task_reminder",
 		ddl: `create table if not exists \`tc_task_reminder\` (
     \`id\` varchar(36) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`action_id\` varchar(191) collate utf8mb4_unicode_ci default null,
-    \`recipient_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`action_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`recipient_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`kind\` varchar(20) collate utf8mb4_unicode_ci not null,
     \`offset_minutes\` int not null,
     \`channels\` json not null,
@@ -547,16 +546,16 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_action",
 		ddl: `create table if not exists \`tc_action\` (
-    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`root_action_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`parent_action_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`root_action_id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`parent_action_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`is_locking\` tinyint(1) not null,
     \`from_status\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`to_status\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`sequence\` int not null,
-    \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`assignee_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`creator_id\` varchar(36) collate utf8mb4_unicode_ci not null,
+    \`assignee_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`status\` varchar(16) collate utf8mb4_unicode_ci not null,
     \`viewed_at\` datetime default null,
     \`activated_at\` datetime default null,
@@ -573,8 +572,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_member",
 		ddl: `create table if not exists \`tc_member\` (
-    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`user_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
@@ -588,8 +587,8 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "tc_comment",
 		ddl: `create table if not exists \`tc_comment\` (
-    \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`author_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`content\` text collate utf8mb4_unicode_ci not null,
     \`attachments\` json default null,
@@ -606,11 +605,11 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 		name: "tc_log",
 		ddl: `create table if not exists \`tc_log\` (
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`task_id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`event\` varchar(48) collate utf8mb4_unicode_ci not null,
     \`from_status\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`to_status\` varchar(32) collate utf8mb4_unicode_ci default null,
-    \`target_id\` varchar(191) collate utf8mb4_unicode_ci default null,
+    \`target_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`actor_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`actor_name\` varchar(64) collate utf8mb4_unicode_ci default null,
     \`detail\` json default null,
@@ -690,6 +689,7 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{ table: "tc_task", column: "reminder_config", ddl: "json default null" },
 	{ table: "sys_notification", column: "path", ddl: "varchar(255) default null" },
 	{ table: "sys_notification", column: "level", ddl: "varchar(16) not null default 'info'" },
+	{ table: "sys_notification", column: "operator_id", ddl: "varchar(36) default null" },
 	{
 		table: "sys_menu",
 		column: "type",
@@ -722,13 +722,13 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{
 		table: "tc_task",
 		column: "workflow_id",
-		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci default null",
 	},
 	// 父子任务 + 填报规则(批次退役):parent_id 指向父任务;report 存 { reportId, filter }
 	{
 		table: "tc_task",
 		column: "parent_id",
-		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci default null",
 	},
 	{
 		table: "tc_task",
@@ -739,18 +739,13 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{
 		table: "tc_task",
 		column: "executor_id",
-		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+		ddl: "varchar(32) collate utf8mb4_unicode_ci default null",
 	},
 	// 填报「一表两槽」:draft = 工作稿,synced = 提交给父任务的那一版
 	{
 		table: "tc_task_report",
 		column: "synced",
 		ddl: "json default null",
-	},
-	{
-		table: "tc_task_report",
-		column: "synced_at",
-		ddl: "datetime default null",
 	},
 	// 填报模板合并版本表:schema → payload(结构搬进模板行)+ shared 可见性标志
 	{
@@ -890,6 +885,68 @@ for (const fix of COLUMN_TYPE_FIXES) {
 }
 
 /**
+ * **老库收窄 varchar** —— 列宽从 `191` 收到实际需要的长度。
+ *
+ * `191` 是 MySQL 老版本 `utf8mb4` 索引键上限(767 字节 ÷ 4)的兼容写法,现在早已不需要。
+ * 项目里的 id 全是 `nanoid()`(21 字符),用户 id 对齐 `sys_user.id`(36)。
+ * 收窄之后联合索引的键长小 6 倍,索引页与缓冲池压力同步下降。
+ *
+ * 幂等:按 `character_maximum_length` 判断,已经是目标宽度就跳过。
+ * 数据原样保留 —— 只是把「允许的最大长度」改小,现有值(21 / 36 字符)远小于新上限。
+ */
+const VARCHAR_NARROWINGS: Array<{ table: string; column: string; length: number }> = [
+	// 内部主键 / 外键(nanoid 21 字符)
+	{ table: "tc_workflow", column: "id", length: 32 },
+	{ table: "tc_task", column: "id", length: 32 },
+	{ table: "tc_task", column: "workflow_id", length: 32 },
+	{ table: "tc_task", column: "parent_id", length: 32 },
+	{ table: "tc_action", column: "id", length: 32 },
+	{ table: "tc_action", column: "task_id", length: 32 },
+	{ table: "tc_action", column: "root_action_id", length: 32 },
+	{ table: "tc_action", column: "parent_action_id", length: 32 },
+	{ table: "tc_member", column: "id", length: 32 },
+	{ table: "tc_member", column: "task_id", length: 32 },
+	{ table: "tc_task_report", column: "task_id", length: 32 },
+	{ table: "tc_task_reminder", column: "task_id", length: 32 },
+	{ table: "tc_task_reminder", column: "action_id", length: 32 },
+	{ table: "tc_comment", column: "task_id", length: 32 },
+	{ table: "tc_log", column: "task_id", length: 32 },
+	{ table: "tc_log", column: "target_id", length: 32 },
+	{ table: "tc_report_template", column: "id", length: 32 },
+	{ table: "sys_notification", column: "source_id", length: 32 },
+	// 用户 id(对齐 sys_user.id 的 36)
+	{ table: "tc_task", column: "creator_id", length: 36 },
+	{ table: "tc_task", column: "executor_id", length: 36 },
+	{ table: "tc_action", column: "creator_id", length: 36 },
+	{ table: "tc_action", column: "assignee_id", length: 36 },
+	{ table: "tc_task_reminder", column: "recipient_id", length: 36 },
+];
+
+for (const narrow of VARCHAR_NARROWINGS) {
+	const cols = (
+		await db.execute(
+			sql`select character_maximum_length as len from information_schema.columns
+				where table_schema = database() and table_name = ${narrow.table} and column_name = ${narrow.column}`,
+		)
+	)[0] as unknown as Array<{ len: number | string | null }>;
+	if (cols.length === 0) {
+		console.log(`· ${narrow.table}.${narrow.column} 不存在,跳过`);
+		continue;
+	}
+	const current = Number(cols[0]?.len ?? 0);
+	if (current <= narrow.length) {
+		console.log(`· ${narrow.table}.${narrow.column} 已是 varchar(${current}),跳过`);
+		continue;
+	}
+	await db.execute(
+		sql.raw(
+			`alter table \`${narrow.table}\` modify column \`${narrow.column}\` varchar(${narrow.length}) collate utf8mb4_unicode_ci`,
+		),
+	);
+	console.log(`✓ ${narrow.table}.${narrow.column} 收窄 varchar(${current}) → varchar(${narrow.length})`);
+}
+
+/**
  * **老库改列名** —— 字段被重命名时在这里登记一条。
  *
  * `column_rename` 用的也是 `ALTER TABLE ... CHANGE` 语法,MySQL 上它既能改列名、也能
@@ -907,19 +964,19 @@ const COLUMN_RENAMES: Array<{
 		table: "tc_action",
 		from: "created_id",
 		to: "creator_id",
-		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+		newType: "varchar(32) collate utf8mb4_unicode_ci not null",
 	},
 	{
 		table: "tc_action",
 		from: "handle_id",
 		to: "assignee_id",
-		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+		newType: "varchar(32) collate utf8mb4_unicode_ci not null",
 	},
 	{
 		table: "tc_action",
 		from: "serial_no",
 		to: "root_action_id",
-		newType: "varchar(191) collate utf8mb4_unicode_ci not null",
+		newType: "varchar(32) collate utf8mb4_unicode_ci not null",
 	},
 	// 数据权限 v1.3 (m18228):`code` → `fn`(user:字段名是函数体,叫 fn 更贴切)
 	{
@@ -972,6 +1029,11 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	// 这两张表只增不改(标签关联行 / 部门成员)—— `updated_at` 永远等于 created_at,白列
 	{ table: "sys_tag_relation", column: "updated_at" },
 	{ table: "sys_user_dept", column: "updated_at" },
+	// 通知的 path / level 升成真列之后,payload 只剩死写入(commentId / actionId / taskId 从没被读回);
+	// 唯一有人读的 operatorId 也升了列 —— 整列删掉
+	{ table: "sys_notification", column: "payload" },
+	// 父任务视图是读时组合(composeRows),没有任何查询读「提交时刻」—— 死列
+	{ table: "tc_task_report", column: "synced_at" },
 	// 填报合并版本表:version_id 概念移除,模板引用统一走 tc_task.report.reportId
 	{ table: "tc_task_report", column: "version_id" },
 	{ table: "tc_task_report", column: "status" },
@@ -1032,7 +1094,7 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	)[0] as unknown as Array<{ name: string }>;
 	if (trCols.some((row) => row.name === "current_submission_id") && subTables.length > 0) {
 		await db.execute(
-			sql`update tc_task_report r join tc_report_submission s on s.id = r.current_submission_id set r.synced = s.payload, r.synced_at = s.created_at where r.synced is null`,
+			sql`update tc_task_report r join tc_report_submission s on s.id = r.current_submission_id set r.synced = s.payload where r.synced is null`,
 		);
 		console.log("✓ tc_report_submission 最新快照回填到 tc_task_report.synced");
 	}

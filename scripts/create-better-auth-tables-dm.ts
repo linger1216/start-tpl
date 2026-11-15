@@ -304,7 +304,7 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "created_at")`,
 	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "created_at")`,
 	`create table if not exists ${S}."sys_notification" (
-        "id" varchar(32) not null primary key, "type" varchar(64) not null, "source_type" varchar(64), "source_id" varchar(191), "title" varchar(128) not null, "content" text, "path" varchar(255) default null, "level" varchar(16) default 'info' not null, "payload" text, "dedupe_key" varchar(191) not null, "created_at" datetime not null
+        "id" varchar(32) not null primary key, "type" varchar(64) not null, "source_type" varchar(64), "source_id" varchar(32), "title" varchar(128) not null, "content" text, "path" varchar(255) default null, "level" varchar(16) default 'info' not null, "operator_id" varchar(36) default null, "dedupe_key" varchar(191) not null, "created_at" datetime not null
   )`,
 	`create unique index if not exists "uk_notification_dedupe" on ${S}."sys_notification" ("dedupe_key")`,
 	`create index if not exists "idx_notification_source" on ${S}."sys_notification" ("source_type", "source_id", "type", "created_at")`,
@@ -401,10 +401,9 @@ const STATEMENTS: string[] = [
     )`,
 	`create table if not exists ${S}."tc_task_report" (
       "id" varchar(32) not null,
-      "task_id" varchar(191) not null,
+      "task_id" varchar(32) not null,
       "draft" text default null,
       "synced" text default null,
-      "synced_at" datetime default null,
       "revision" int not null default 0,
       "created_at" datetime default current_timestamp,
       "updated_at" datetime default current_timestamp,
@@ -412,7 +411,7 @@ const STATEMENTS: string[] = [
     )`,
 	`create unique index if not exists "uk_task_report_task" on ${S}."tc_task_report" ("task_id")`,
 	`create table if not exists ${S}."tc_workflow" (
-      "id" varchar(191) not null,
+      "id" varchar(32) not null,
       "payload" text not null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
@@ -420,18 +419,18 @@ const STATEMENTS: string[] = [
       primary key ("id")
     )`,
 	`create table if not exists ${S}."tc_task" (
-      "id" varchar(191) not null,
+      "id" varchar(32) not null,
       "name" varchar(255) not null,
       "description" text default null,
       "status" varchar(32) not null,
-      "creator_id" varchar(191) not null,
-      "executor_id" varchar(191),
+      "creator_id" varchar(36) not null,
+      "executor_id" varchar(36),
       "due_at" datetime default null,
       "priority" tinyint default null,
       "payload" text default null,
       "workflow" text not null,
-      "workflow_id" varchar(191),
-      "parent_id" varchar(191),
+      "workflow_id" varchar(32),
+      "parent_id" varchar(32),
       "report" text,
       "reminder_config" text,
       "deleted_at" datetime default null,
@@ -445,9 +444,9 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_task_parent" on ${S}."tc_task" ("parent_id")`,
 	`create table if not exists ${S}."tc_task_reminder" (
       "id" varchar(36) not null,
-      "task_id" varchar(191) not null,
-      "action_id" varchar(191) default null,
-      "recipient_id" varchar(191) not null,
+      "task_id" varchar(32) not null,
+      "action_id" varchar(32) default null,
+      "recipient_id" varchar(36) not null,
       "kind" varchar(20) not null,
       "offset_minutes" int not null,
       "channels" text not null,
@@ -462,16 +461,16 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_task_reminder_due" on ${S}."tc_task_reminder" ("status", "scheduled_at")`,
 	`create index if not exists "idx_task_reminder_task" on ${S}."tc_task_reminder" ("task_id", "status")`,
 	`create table if not exists ${S}."tc_action" (
-      "id" varchar(191) not null,
-      "task_id" varchar(191) not null,
-      "root_action_id" varchar(191) not null,
-      "parent_action_id" varchar(191) default null,
+      "id" varchar(32) not null,
+      "task_id" varchar(32) not null,
+      "root_action_id" varchar(32) not null,
+      "parent_action_id" varchar(32) default null,
       "is_locking" tinyint not null,
       "from_status" varchar(32) default null,
       "to_status" varchar(32) default null,
       "sequence" int not null,
-      "creator_id" varchar(191) not null,
-      "assignee_id" varchar(191) not null,
+      "creator_id" varchar(36) not null,
+      "assignee_id" varchar(36) not null,
       "status" varchar(16) not null,
       "viewed_at" datetime default null,
       "activated_at" datetime default null,
@@ -484,8 +483,8 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_action_parent" on ${S}."tc_action" ("parent_action_id")`,
 	`create index if not exists "idx_action_unviewed" on ${S}."tc_action" ("status", "viewed_at", "activated_at")`,
 	`create table if not exists ${S}."tc_member" (
-      "id" varchar(191) not null,
-      "task_id" varchar(191) not null,
+      "id" varchar(32) not null,
+      "task_id" varchar(32) not null,
       "user_id" varchar(36) not null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
@@ -495,8 +494,8 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_member_user" on ${S}."tc_member" ("user_id")`,
 	`create index if not exists "idx_member_task" on ${S}."tc_member" ("task_id")`,
 	`create table if not exists ${S}."tc_comment" (
-      "id" varchar(191) not null,
-      "task_id" varchar(191) not null,
+      "id" varchar(32) not null,
+      "task_id" varchar(32) not null,
       "author_id" varchar(36) not null,
       "content" text not null,
       "attachments" text default null,
@@ -509,11 +508,11 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_comment_author" on ${S}."tc_comment" ("author_id")`,
 	`create table if not exists ${S}."tc_log" (
       "id" varchar(32) not null,
-      "task_id" varchar(191) not null,
+      "task_id" varchar(32) not null,
       "event" varchar(48) not null,
       "from_status" varchar(32) default null,
       "to_status" varchar(32) default null,
-      "target_id" varchar(191) default null,
+      "target_id" varchar(32) default null,
       "actor_id" varchar(36) not null,
       "actor_name" varchar(64) default null,
       "detail" text default null,
@@ -690,18 +689,18 @@ async function main() {
 		{ table: "tc_report_template", column: "shared", ddl: "tinyint default 0 not null" },
 		{ table: "tc_report_template", column: "deleted_at", ddl: "datetime" },
 		// 流程模板来源(「我的任务」按模板筛):v1 起写入;旧任务 null(快照里没有模板 id,无法回填)
-		{ table: "tc_task", column: "workflow_id", ddl: "varchar(191)" },
+		{ table: "tc_task", column: "workflow_id", ddl: "varchar(32)" },
 		// 父子任务 + 填报规则(批次退役)
-		{ table: "tc_task", column: "parent_id", ddl: "varchar(191)" },
+		{ table: "tc_task", column: "parent_id", ddl: "varchar(32)" },
 		{ table: "tc_task", column: "report", ddl: "text" },
 		{ table: "tc_task", column: "reminder_config", ddl: "text" },
 		// 执行人下沉到任务列(原 tc_member.role=executor)
-		{ table: "tc_task", column: "executor_id", ddl: "varchar(191)" },
+		{ table: "tc_task", column: "executor_id", ddl: "varchar(36)" },
 		// 填报「一表两槽」:draft = 工作稿,synced = 提交给父任务的那一版
 		{ table: "tc_task_report", column: "synced", ddl: "text" },
-		{ table: "tc_task_report", column: "synced_at", ddl: "datetime" },
 		{ table: "sys_notification", column: "path", ddl: "varchar(255) default null" },
 		{ table: "sys_notification", column: "level", ddl: "varchar(16) default 'info' not null" },
+		{ table: "sys_notification", column: "operator_id", ddl: "varchar(36) default null" },
 		{ table: "sys_data_policy", column: "deleted_at", ddl: "datetime" },
 		{ table: "sys_data_plugin", column: "deleted_at", ddl: "datetime" },
 	];
@@ -772,7 +771,7 @@ async function main() {
 			existingTables.has("tc_report_submission")
 		) {
 			await run(
-				`update ${S}."tc_task_report" r set "synced" = (select s."payload" from ${S}."tc_report_submission" s where s."id" = r."current_submission_id"), "synced_at" = (select s."created_at" from ${S}."tc_report_submission" s where s."id" = r."current_submission_id") where r."current_submission_id" is not null`,
+				`update ${S}."tc_task_report" r set "synced" = (select s."payload" from ${S}."tc_report_submission" s where s."id" = r."current_submission_id") where r."current_submission_id" is not null`,
 			);
 		}
 	}

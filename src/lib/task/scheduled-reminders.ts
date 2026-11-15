@@ -330,7 +330,6 @@ async function runReminder(id: string, now: Date): Promise<number> {
 			content: entry.kind === "node" ? "您有一项未查看的审批或征询。" : "任务即将到达截止时间。",
 			path: taskPathOf(task.id),
 			level: "warn",
-			payload: { taskId: task.id, actionId: entry.action_id },
 			dedupeKey: `task.schedule:${id}`,
 			allowMissingTargets: true,
 			recipients: channels.map((channel) => ({

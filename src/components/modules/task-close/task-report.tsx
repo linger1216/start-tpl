@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CloudUpload, Plus, Save } from "lucide-react";
+import { CloudUpload, Pencil, Plus, Save } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
@@ -10,6 +10,7 @@ import { fieldColWidth, type ReportData, type Row, type Value } from "#/componen
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionButton } from "#/components/ui/action-button";
+import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { TableResizeHandle } from "#/components/ui/table-resize-handle";
@@ -51,7 +52,18 @@ export function TaskReport({ taskId }: { taskId: string }) {
 				<p className="text-sm text-muted-foreground">此任务没有配置填报。</p>
 			</ReportSection>
 		);
-	if (report.data.hasChildren) return <TaskReportComposed taskId={taskId} data={report.data} />;
+	if (report.data.hasChildren)
+		return (
+			<TaskReportComposed
+				taskId={taskId}
+				data={report.data}
+				onReload={async () => {
+					await report.refetch();
+					setReloadKey((key) => key + 1);
+				}}
+				reloadKey={reloadKey}
+			/>
+		);
 	return (
 		<TaskReportEditor
 			key={`${report.data.report.id}:${report.data.template.id}:${reloadKey}`}
@@ -66,15 +78,58 @@ export function TaskReport({ taskId }: { taskId: string }) {
 	);
 }
 
-/** 父任务填报:只读汇总(母版 + 各子任务已提交),按归属标注;不能整表导入。 */
-function TaskReportComposed({ taskId, data }: { taskId: string; data: ReportData }) {
+/**
+ * 父任务填报:组合视图(母版 + 各子任务已提交),按归属标注。
+ *
+ * 组合行是**读时拼出来的**,不落表。母版本身可以改 —— 点「编辑母版」展开编辑器,
+ * 保存时会按各子任务的 `filter` 重新下发一份 draft,**覆盖他们尚未提交的编辑**(已提交的不受影响)。
+ */
+function TaskReportComposed({
+	taskId,
+	data,
+	onReload,
+	reloadKey,
+}: {
+	taskId: string;
+	data: ReportData;
+	onReload: () => Promise<void>;
+	reloadKey: number;
+}) {
 	const schema = data.template.schema;
+	const [editing, setEditing] = useState(false);
 	return (
-		<ReportSection actions={<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} />}>
-			<p className="text-sm text-muted-foreground">父任务的填报由各执行人提交，这里只读汇总；不能整表导入。</p>
-			{data.composed.length === 0 ? (
-				<p className="text-sm text-muted-foreground">暂无填报数据。</p>
+		<ReportSection
+			actions={
+				<div className="flex items-center gap-2">
+					{data.canEdit ? (
+						<Button variant="ghost" size="sm" onClick={() => setEditing((prev) => !prev)}>
+							<Pencil className="size-3.5" />
+							{editing ? "收起母版" : "编辑母版"}
+						</Button>
+					) : null}
+					<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} />
+				</div>
+			}
+		>
+			{editing ? (
+				<Alert variant="warn" title="保存母版会重新下发给所有子任务">
+					按各子任务的负责范围重新切一份填报草稿给他们 —— **子任务里尚未提交的编辑会被覆盖**。
+					已经提交给父任务的那一版不受影响。
+				</Alert>
+			) : null}
+			{editing ? (
+				<TaskReportEditor
+					key={`master:${data.report.id}:${data.template.id}:${reloadKey}`}
+					taskId={taskId}
+					schema={schema}
+					data={data}
+					onReload={onReload}
+				/>
 			) : (
+				<p className="text-sm text-muted-foreground">父任务的填报由各执行人提交;下面是母版与已提交内容的汇总。</p>
+			)}
+			{!editing && data.composed.length === 0 ? <p className="text-sm text-muted-foreground">暂无填报数据。</p> : null}
+			{!editing ? (
 				<div className="min-w-0 overflow-x-auto">
 					<table className="w-full border-collapse text-left text-sm">
 						<thead>
@@ -111,7 +166,7 @@ function TaskReportComposed({ taskId, data }: { taskId: string; data: ReportData
 						</tbody>
 					</table>
 				</div>
-			)}
+			) : null}
 		</ReportSection>
 	);
 }

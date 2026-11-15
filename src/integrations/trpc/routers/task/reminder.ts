@@ -15,7 +15,6 @@ import { createNotification } from "#/lib/notification";
 import { CHANNELS, UNKNOWN_USER_LABEL } from "#/lib/notification-status";
 import { alive } from "#/lib/soft-delete";
 import { REMINDER_COOLDOWN_MINUTES, taskPathOf } from "#/lib/task/close-spec";
-import { bagOf } from "#/lib/task/json";
 import { eventKeyOf, redactDeliveryError, targetOf } from "#/lib/task/notification-target";
 import { channelsOf, reminderKindOf } from "#/lib/task/reminder-spec";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
@@ -147,7 +146,7 @@ export const taskReminderRouter = createTRPCRouter({
 						source_id: task.id,
 						title: "任务提醒已跳过",
 						dedupe_key: key,
-						payload: JSON.stringify({ operatorId: me.id, recipientId }),
+						operator_id: me.id,
 						created_at: new Date(),
 					});
 					output.push({ recipientId, status: "cooldown", notificationId: null });
@@ -161,7 +160,7 @@ export const taskReminderRouter = createTRPCRouter({
 					title: `任务提醒：${task.name}`,
 					content: "请及时查看并处理任务。",
 					path: taskPathOf(task.id),
-					payload: { operatorId: me.id },
+					operatorId: me.id,
 					dedupeKey: key,
 					allowMissingTargets: true,
 					recipients: input.channels.map((channel) => ({
@@ -279,19 +278,10 @@ export const taskReminderRouter = createTRPCRouter({
 				),
 			);
 		const eventById = new Map(events.map((event) => [event.id, event]));
-		/** `sys_notification.payload` 是文本列,解析失败就当没写操作人(不抛) */
-		const senderId = (payload: string | null) => {
-			try {
-				const operatorId = bagOf(JSON.parse(payload ?? "{}")).operatorId;
-				return typeof operatorId === "string" ? operatorId : "";
-			} catch {
-				return "";
-			}
-		};
 		const ids = [
 			...new Set(
 				[
-					...events.map((e) => senderId(e.payload)),
+					...events.map((e) => e.operator_id ?? ""),
 					...deliveries.map((d) => d.recipient_id),
 					...plannedRows.map((row) => row.recipient_id),
 				].filter(Boolean),
@@ -310,7 +300,7 @@ export const taskReminderRouter = createTRPCRouter({
 		}));
 		const records = deliveries.map((delivery) => {
 			const event = eventById.get(delivery.notification_id);
-			const sender = senderId(event?.payload ?? null);
+			const sender = event?.operator_id ?? "";
 			const error = redactDeliveryError(delivery.last_error, admin);
 			return {
 				kind: "delivery" as const,

@@ -584,7 +584,7 @@ export const sysNotification = mysqlTable(
 		id: varchar("id", { length: 32 }).primaryKey(),
 		type: varchar("type", { length: 64 }).notNull(),
 		source_type: varchar("source_type", { length: 64 }),
-		source_id: varchar("source_id", { length: 191 }),
+		source_id: varchar("source_id", { length: 32 }),
 		title: varchar("title", { length: 128 }).notNull(),
 		content: text("content"),
 		/**
@@ -596,8 +596,14 @@ export const sysNotification = mysqlTable(
 		path: varchar("path", { length: 255 }),
 		/** 展示级别 —— 铃铛图标色 / 台账短标签;住 JSON 里没法按级别筛 */
 		level: varchar("level", { length: 16 }).notNull().default("info"),
-		/** 各类通知**特有**的字段(`commentId` / `actionId` / `taskId` / `operatorId` …)—— 不再装 `path` / `level` */
-		payload: text("payload"),
+		/**
+		 * 触发这条通知的**操作人** —— 手动提醒 / 冷却跳过这类「谁点的」记录用。
+		 *
+		 * 从淘汰的 `payload` JSON 升出来:整张表只有这一个字段有人读
+		 * (`task/reminder.ts` 的提醒历史要显示「谁催的」)。其余曾写进 `payload` 的
+		 * `commentId` / `actionId` / `taskId` 都是死写入 —— 它们本来就记在 `source_type` / `source_id` 里。
+		 */
+		operator_id: varchar("operator_id", { length: 36 }),
 		dedupe_key: varchar("dedupe_key", { length: 191 }).notNull().unique(),
 		created_at: datetime("created_at", { mode: "date" })
 			.notNull()
@@ -918,7 +924,7 @@ export const sysDataPlugin = mysqlTable(
 
 /** 状态图模板(payload 装整套 statuses / initial / edges 定义)。 */
 export const taskWorkflowTable = mysqlTable("tc_workflow", {
-	id: varchar("id", { length: 191 }).primaryKey(),
+	id: varchar("id", { length: 32 }).primaryKey(),
 	payload: json("payload").notNull(),
 	created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 	updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -937,13 +943,13 @@ export const taskWorkflowTable = mysqlTable("tc_workflow", {
 export const taskTable = mysqlTable(
 	"tc_task",
 	{
-		id: varchar("id", { length: 191 }).primaryKey(),
+		id: varchar("id", { length: 32 }).primaryKey(),
 		name: varchar("name", { length: 255 }).notNull(),
 		description: text("description"),
 		status: varchar("status", { length: 32 }).notNull(),
-		creator_id: varchar("creator_id", { length: 191 }).notNull(),
+		creator_id: varchar("creator_id", { length: 36 }).notNull(),
 		/** → sys_user.id;任务**唯一执行人**(至多一个,由本列本身保证)。null = 未指派 */
-		executor_id: varchar("executor_id", { length: 191 }),
+		executor_id: varchar("executor_id", { length: 36 }),
 		due_at: datetime("due_at", { mode: "date" }),
 		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */
 		priority: tinyint("priority"),
@@ -954,9 +960,9 @@ export const taskTable = mysqlTable(
 		 * v1 起才记录:**旧任务为 null**(快照 JSON 里没有模板 id,无法回填)——
 		 * 「我的任务」按流程模板筛选靠它;模板后续怎么改都不影响已建任务(快照不变)。
 		 */
-		workflow_id: varchar("workflow_id", { length: 191 }),
+		workflow_id: varchar("workflow_id", { length: 32 }),
 		/** → `tc_task.id`(父任务)。null = 本身不是子任务;多执行人 + 填报模板建任务时 fan-out 产生 */
-		parent_id: varchar("parent_id", { length: 191 }),
+		parent_id: varchar("parent_id", { length: 32 }),
 		/**
 		 * 填报配置:模板 id、创建时的结构快照及可选筛选条件。
 		 * 填报值不在这里 —— 每个任务(含子任务)的 draft / synced 存在自己的 `tc_task_report` 行。null 表示未绑定。
@@ -984,9 +990,9 @@ export const taskReminderTable = mysqlTable(
 	"tc_task_reminder",
 	{
 		id: varchar("id", { length: 36 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		action_id: varchar("action_id", { length: 191 }),
-		recipient_id: varchar("recipient_id", { length: 191 }).notNull(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
+		action_id: varchar("action_id", { length: 32 }),
+		recipient_id: varchar("recipient_id", { length: 36 }).notNull(),
 		kind: varchar("kind", { length: 20 }).notNull(),
 		offset_minutes: int("offset_minutes").notNull(),
 		channels: json("channels").notNull(),
@@ -1012,16 +1018,16 @@ export const taskReminderTable = mysqlTable(
 export const taskActionTable = mysqlTable(
 	"tc_action",
 	{
-		id: varchar("id", { length: 191 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		root_action_id: varchar("root_action_id", { length: 191 }).notNull(),
-		parent_action_id: varchar("parent_action_id", { length: 191 }),
+		id: varchar("id", { length: 32 }).primaryKey(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
+		root_action_id: varchar("root_action_id", { length: 32 }).notNull(),
+		parent_action_id: varchar("parent_action_id", { length: 32 }),
 		is_locking: boolean("is_locking").notNull(),
 		from_status: varchar("from_status", { length: 32 }),
 		to_status: varchar("to_status", { length: 32 }),
 		sequence: int("sequence").notNull(),
-		creator_id: varchar("creator_id", { length: 191 }).notNull(),
-		assignee_id: varchar("assignee_id", { length: 191 }).notNull(),
+		creator_id: varchar("creator_id", { length: 36 }).notNull(),
+		assignee_id: varchar("assignee_id", { length: 36 }).notNull(),
 		status: varchar("status", { length: 16 }).notNull(),
 		viewed_at: datetime("viewed_at", { mode: "date" }),
 		activated_at: datetime("activated_at", { mode: "date" }),
@@ -1047,8 +1053,8 @@ export const taskActionTable = mysqlTable(
 export const taskMemberTable = mysqlTable(
 	"tc_member",
 	{
-		id: varchar("id", { length: 191 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
+		id: varchar("id", { length: 32 }).primaryKey(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
 		// user_id 长度跟 sys_user.id 对齐(36,nanoid 21 字符留余地)
 		user_id: varchar("user_id", { length: 36 }).notNull(),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -1077,8 +1083,8 @@ export const taskMemberTable = mysqlTable(
 export const taskCommentTable = mysqlTable(
 	"tc_comment",
 	{
-		id: varchar("id", { length: 191 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
+		id: varchar("id", { length: 32 }).primaryKey(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
 		author_id: varchar("author_id", { length: 36 }).notNull(),
 		content: text("content").notNull(),
 		/** JSON array of sys_file.id(varchar 32 strings);svc 层 join sys_file 取详情 */
@@ -1116,7 +1122,7 @@ export const taskLogTable = mysqlTable(
 		/** 主键(nanoid 21 字符;与 `sys_log.id` 同口径 —— 不参与任何外键,不用 191) */
 		id: varchar("id", { length: 32 }).primaryKey(),
 		/** → tc_task.id(不建外键:审计要留住已删任务) */
-		task_id: varchar("task_id", { length: 191 }).notNull(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
 		/** 事件码(英文,如 `task.transit` / `action.respond`);中文由前端注册表给,库里不存中文 */
 		event: varchar("event", { length: 48 }).notNull(),
 		/** 本次事件**之前**的任务状态(value);事件没动状态就是 null */
@@ -1124,7 +1130,7 @@ export const taskLogTable = mysqlTable(
 		/** 本次事件**之后**的任务状态(value);事件没动状态就是 null */
 		to_status: varchar("to_status", { length: 32 }),
 		/** 作用对象 id:tc_action.id / tc_comment.id / sys_user.id;`task.*` 事件为 null。类型由 event 决定 */
-		target_id: varchar("target_id", { length: 191 }),
+		target_id: varchar("target_id", { length: 32 }),
 		/** 操作人 → sys_user.id */
 		actor_id: varchar("actor_id", { length: 36 }).notNull(),
 		/** 操作人姓名**快照** —— 账号将来被删,历史仍读得懂(与 sys_log.operator_name 同口径) */
@@ -1170,13 +1176,11 @@ export const taskReportTable = mysqlTable(
 	"tc_task_report",
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
+		task_id: varchar("task_id", { length: 32 }).notNull(),
 		/** 工作稿:600ms 防抖自动保存写这里 */
 		draft: json("draft"),
 		/** 提交给父任务的那一版(点「提交」时从 draft 复制);null = 从未提交 */
 		synced: json("synced"),
-		/** 提交时刻 */
-		synced_at: datetime("synced_at", { mode: "date" }),
 		revision: int("revision").notNull().default(0),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),

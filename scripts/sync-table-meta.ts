@@ -112,7 +112,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_notification", column: "content", comment: "正文" },
 	{ table: "sys_notification", column: "path", comment: "站内跳转路径（白名单校验后落库）" },
 	{ table: "sys_notification", column: "level", comment: "展示级别" },
-	{ table: "sys_notification", column: "payload", comment: "各类通知特有的附加字段 JSON 文本" },
+	{ table: "sys_notification", column: "operator_id", comment: "触发这条通知的操作人" },
 	{ table: "sys_notification", column: "dedupe_key", comment: "通知幂等键" },
 	{ table: "sys_notification", column: "created_at", comment: "创建时间" },
 	{ table: "sys_notification_delivery", column: "id", comment: "主键" },

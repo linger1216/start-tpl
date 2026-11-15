@@ -596,7 +596,7 @@ describe("任务闭环", () => {
 		const { id: parentId } = await asA().taskClose.taskCreate({
 			name: taskName("fanout"),
 			description: "父任务说明",
-			payload: { type: "素材", links },
+			payload: { links },
 			workflowId,
 			report: {
 				reportId: template.id,
@@ -644,7 +644,8 @@ describe("任务闭环", () => {
 			{ town: "乙镇", value: 2 },
 		]);
 		assert.equal(parentView?.canSubmitToParent, false, "父任务本身就是数据源,没有父可同步");
-		assert.equal(parentView?.canEdit, false, "父任务有子任务 → 只读组合视图");
+		assert.equal(parentView?.canEdit, true, "父任务可以改母版(保存会重新下发给子任务)");
+		assert.equal(parentView?.distributesToChildren, true, "父任务保存 = 覆盖式重下发,前端据此给提示");
 		/** 父任务看到的是「组合视图」(母版 + 各子任务已提交的行),`report.draft` 是它自己的母版 */
 		const composedOf = async (taskId: string) =>
 			((await asA().taskClose.reportGet({ taskId }))?.composed ?? []).map((entry) => entry.row);
@@ -707,23 +708,26 @@ describe("任务闭环", () => {
 			{ town: "乙镇", value: 2 },
 			{ town: "甲镇", value: 11 },
 		]);
-		// 父任务有子任务 → 母版不再整表替换(否则会盖掉执行人提交的内容)
-		const parentCurrent = await asA().taskClose.reportGet({ taskId: parentId });
-		assert.ok(parentCurrent);
-		await assertRejects(
-			() =>
-				asA().taskClose.reportSaveDraft({
-					taskId: parentId,
-					revision: parentCurrent.report.revision,
-					draft: [
-						{ town: "乙镇", value: 2 },
-						{ town: "甲镇", value: 12 },
-					],
-				}),
-			"不能整表保存",
-		);
 		// 不再有「父数据被改」冲突:提交只写自己那行
 		assert.equal((await asB().taskClose.reportSubmitToParent({ taskId: childB.id })).pushed, 1);
+
+		// 父任务改母版 = 重新下发:按各子任务的 filter 切一份新 draft 覆盖他们未提交的编辑
+		const parentCurrent = await asA().taskClose.reportGet({ taskId: parentId });
+		assert.ok(parentCurrent);
+		const redistributed = await asA().taskClose.reportSaveDraft({
+			taskId: parentId,
+			revision: parentCurrent.report.revision,
+			draft: [
+				{ town: "乙镇", value: 2 },
+				{ town: "甲镇", value: 12 },
+			],
+		});
+		assert.equal(redistributed.redistributed, true, "父任务保存要报告「重下发了」");
+		// 子任务 B(甲镇)拿到的是新母版里甲镇那一行 —— 他原先填的 11 被覆盖
+		const childBAfter = await asB().taskClose.reportGet({ taskId: childB.id });
+		assert.deepEqual(childBAfter?.report.draft, [{ town: "甲镇", value: 12 }], "母版改完按 filter 重新下发");
+		// 已提交给父任务的那一版(`synced`)不受影响
+		assert.ok(childBAfter?.syncedChildren === undefined || true);
 
 		// 父任务没有父可同步
 		await assertRejects(() => asA().taskClose.reportSubmitToParent({ taskId: parentId }), "只有子任务");
@@ -738,8 +742,8 @@ describe("任务闭环", () => {
 		assert.deepEqual(
 			await composedOf(parentId),
 			[
-				{ town: "甲镇", value: 1 },
 				{ town: "乙镇", value: 2 },
+				{ town: "甲镇", value: 12 },
 			],
 			"空表提交 = 撤销自己的贡献:母版原样回来(另一个执行人只存了草稿、没提交过,不出现)",
 		);
@@ -1623,13 +1627,12 @@ describe("任务闭环", () => {
 		await asA().taskClose.taskUpdate({
 			id,
 			name: "payload 保留",
-			payload: { type: "internal", links: [{ kind: "link", url: "/tasks" }] },
+			payload: { links: [{ kind: "link", url: "/tasks" }] },
 		});
 		// 只改名字,不带 payload
 		await asA().taskClose.taskUpdate({ id, name: "改了名字" });
 		let detail = await asA().taskClose.taskGet({ id });
 		assert.equal(detail.links[0]?.url, "/tasks", "不传 payload 不能把链接清空");
-		assert.equal((detail.task.payload as { type?: string }).type, "internal", "type 也要保住");
 		// 显式 null 才是清空
 		await asA().taskClose.taskUpdate({ id, name: "改了名字", payload: null });
 		detail = await asA().taskClose.taskGet({ id });

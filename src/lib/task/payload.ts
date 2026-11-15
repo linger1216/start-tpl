@@ -27,8 +27,6 @@ export const MAX_LINKS = 30;
 
 /** `tc_task.payload` 的入参形状(任务创建 / 编辑都走它) */
 export const taskPayloadSchema = z.object({
-	/** 场景标签:内核不解释,由业务自己认 */
-	type: z.string().max(64).optional(),
 	/** 链接区(有序块)。空数组 = 没有链接 */
 	links: z.array(linkBlockSchema).max(MAX_LINKS).optional(),
 	/** 附件区:`sys_file.id` 列表(与 `tc_comment.attachments` 同形) */
@@ -105,10 +103,8 @@ export function normalizePayload(input: TaskPayload | null | undefined): TaskPay
 		0,
 		MAX_ATTACHMENTS,
 	);
-	const type = input.type?.trim() || undefined;
-	if (links.length === 0 && attachments.length === 0 && !type) return null;
+	if (links.length === 0 && attachments.length === 0) return null;
 	return {
-		...(type ? { type } : {}),
 		...(links.length > 0 ? { links } : {}),
 		...(attachments.length > 0 ? { attachments } : {}),
 	};

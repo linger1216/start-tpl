@@ -136,16 +136,5 @@ describe("通知", () => {
 			assert.ok(row, `应当写入(只是 path 被丢):${title}`);
 			assert.equal(row.path, null, `不该存下 ${title} 的非法路径`);
 		}
-		const rows = await db
-			.select({ payload: sysNotification.payload })
-			.from(sysNotificationDelivery)
-			.innerJoin(sysNotification, eq(sysNotification.id, sysNotificationDelivery.notification_id))
-			.where(eq(sysNotificationDelivery.recipient_id, TEST_USER.id));
-		assert.ok(
-			rows.every((row) => {
-				const data = row.payload ? JSON.parse(row.payload) : {};
-				return data.path == null || (data.path.startsWith("/") && !data.path.startsWith("//"));
-			}),
-		);
 	});
 });

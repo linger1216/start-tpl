@@ -14,6 +14,7 @@ import {
 	composeRows,
 	MAX_REPORT_BYTES,
 	MAX_REPORT_ROWS,
+	type ReportRow,
 	reportAttachmentIds,
 	reportRowsOf,
 	rowMatchesFilter,
@@ -148,6 +149,35 @@ function composedRowsOf(
 		};
 	});
 	return composeRows(reportRowsOf(schema, ownDraft), contributions);
+}
+
+/**
+ * 母版改动之后，按各子任务的 `filter` 重新切一份 draft 下发。
+ *
+ * **这是「覆盖式」下发**：子任务尚未提交的编辑会被冲掉（`synced` 不受影响 —— 已提交出去的
+ * 那一版还在父任务视图里）。调用方必须在 UI 上给足提示，这是设计上的取舍不是 bug。
+ *
+ * 只处理**表格**填报：表单没有「行」可切，父任务下的表单子任务本来就各自独立。
+ */
+async function redistributeToChildren(
+	tx: Tx,
+	parentId: string,
+	masterRows: readonly ReportRow[],
+	now: Date,
+): Promise<void> {
+	const children = await tx
+		.select({ id: taskTable.id, report: taskTable.report })
+		.from(taskTable)
+		.where(and(eq(taskTable.parent_id, parentId), alive(taskTable)));
+	if (!children.length) return;
+	for (const child of children) {
+		const filter = filterOf(child.report);
+		const sliced = masterRows.filter((row) => rowMatchesFilter(row, filter));
+		await tx
+			.update(taskReportTable)
+			.set({ draft: asTableValue(sliced), updated_at: now })
+			.where(eq(taskReportTable.task_id, child.id));
+	}
 }
 
 /**
@@ -351,7 +381,15 @@ export const taskReportRouter = createTRPCRouter({
 			 * 能不能**改自己的行**:父任务有子任务时,填报由各执行人提交 —— 父任务只读组合视图,
 			 * 母版也不再整片替换(否则会盖掉执行人提交的内容)。
 			 */
-			canEdit: canEditReport(task, me.id) && !hasChildren,
+			/**
+			 * 能不能改这一行 —— 创建人 / 当前执行人。
+			 *
+			 * 父任务(有子任务)也允许改:保存母版会**按各子任务的 filter 重新下发**一份 draft,
+			 * 覆盖他们尚未提交的编辑(已提交的 `synced` 不受影响)。前端必须就此给提示。
+			 */
+			canEdit: canEditReport(task, me.id),
+			/** 这份填报下有没有子任务 —— 前端据此提示「保存会覆盖子任务未提交的编辑」 */
+			distributesToChildren: hasChildren,
 			/** 子任务(表格 / 表单都行)能把本任务的填报提交给父任务;父任务自己就是数据源 */
 			canSubmitToParent: task.parent_id !== null,
 			/** 子任务**提交过**的填报;没提交的不会出现在这里 */
@@ -372,13 +410,10 @@ export const taskReportRouter = createTRPCRouter({
 				const task = await lockTask(tx, input.taskId);
 				if (!canEditReport(task, me.id))
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以填写" });
-				// 父任务(有子任务)是「分派容器」:填报由各执行人提交,母版不再整片替换
-				// (子任务拿的是下发时的副本,改母版传不到执行人手里,还会盖掉他们提交的内容)
-				if (await hasChildTasks(tx, task.id))
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: "父任务的填报由各执行人提交,不能整表保存",
-					});
+				// 父任务(有子任务)是「分派容器」→ 保存母版 = **重新下发**:
+				// 改完之后按各子任务的 `filter` 重新切一份 draft 给他们。
+				// ⚠️ 这会**覆盖子任务尚未提交的编辑**(`synced` 不受影响 —— 已提交出去的那一版还在)。
+				const distributing = await hasChildTasks(tx, task.id);
 				// 每个任务只写**自己那一行**:子任务是下发时复制出来的独立副本,父子互不加锁
 				const own = await reportRowOf(tx, task.id, true);
 				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
@@ -405,15 +440,17 @@ export const taskReportRouter = createTRPCRouter({
 						)
 							throw new TRPCError({ code: "BAD_REQUEST", message: `只读字段不可修改:${field.label}` });
 					}
+				const now = new Date();
+				const nextDraft = schema.kind === "TABLE" ? asTableValue(rows) : asFormValue(rows);
 				await tx
 					.update(taskReportTable)
-					.set({
-						draft: schema.kind === "TABLE" ? asTableValue(rows) : asFormValue(rows),
-						revision: own.revision + 1,
-						updated_at: new Date(),
-					})
+					.set({ draft: nextDraft, revision: own.revision + 1, updated_at: now })
 					.where(eq(taskReportTable.id, own.id));
-				return { revision: own.revision + 1 };
+				// 母版改了 → 按各子任务的 filter 重新切一份 draft 下发(覆盖他们未提交的编辑)
+				if (distributing && schema.kind === "TABLE") {
+					await redistributeToChildren(tx, task.id, rows, now);
+				}
+				return { revision: own.revision + 1, redistributed: distributing };
 			});
 		}),
 
@@ -445,7 +482,7 @@ export const taskReportRouter = createTRPCRouter({
 			const now = new Date();
 			await tx
 				.update(taskReportTable)
-				.set({ synced: own.draft, synced_at: now, updated_at: now })
+				.set({ synced: own.draft, updated_at: now })
 				.where(eq(taskReportTable.id, own.id));
 			await writeTaskEvent(tx, {
 				taskId: task.id,

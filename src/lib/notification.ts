@@ -23,8 +23,13 @@ export type NotificationInput = {
 	path?: string | null;
 	/** 展示级别 —— 落 `sys_notification.level` 列,默认 `info` */
 	level?: NoticeLevel;
-	/** 各类通知**特有**的附加字段(`commentId` / `actionId` / `taskId` / `operatorId` …) */
-	payload?: Record<string, unknown>;
+	/**
+	 * 触发这条通知的**操作人** —— 只给「谁点的」这类记录用(手动提醒 / 冷却跳过)。
+	 *
+	 * 这一列从淘汰的 `payload` JSON 升出来:整张表只有它有人读。原先还往里塞过
+	 * `commentId` / `actionId` / `taskId`,但那几个从来没被读回 —— 它们本来就记在 `source_type` / `source_id`。
+	 */
+	operatorId?: string | null;
 	dedupeKey: string;
 	recipients: readonly NotificationRecipient[];
 	/** 缺少外部渠道联系方式时保留失败投递，其他渠道仍可发送。 */
@@ -101,7 +106,7 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 		content: input.content ?? null,
 		path: safeNoticePath(input.path),
 		level: input.level ?? "info",
-		payload: input.payload ? JSON.stringify(input.payload) : null,
+		operator_id: input.operatorId ?? null,
 		dedupe_key: input.dedupeKey,
 		created_at: now,
 	});

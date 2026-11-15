@@ -276,7 +276,6 @@
         "scripts/delivery-runner.ts",
         "src/lib/notice-levels.ts",
         "src/lib/notice-path.ts",
-        "scripts/migrate-notice-path-level.ts",
         "src/lib/use-notice-sse.ts",
         "src/lib/sse-bus.ts",
         "tests/notice.test.ts",
