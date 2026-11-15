@@ -1,21 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, GitBranch, Layers, Pencil, Plus, Trash2, Workflow } from "lucide-react";
+import { Clock, GitBranch, Layers, Workflow } from "lucide-react";
 import { useMemo, useState } from "react";
-
-import { EmptyState } from "#/components/layout/empty-state";
-import { PageFrame } from "#/components/layout/page-frame";
-import { PageHeader } from "#/components/layout/page-header";
-import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
+import type { StatItem } from "#/components/modules/shared/stat-cards";
 import { TaskWorkflowDetail } from "#/components/modules/task-close/task-workflow-detail";
 import {
 	TaskWorkflowForm,
 	type WorkflowEditing,
 	type WorkflowFormPayload,
 } from "#/components/modules/task-close/task-workflow-form";
-import { Button } from "#/components/ui/button";
-import { Card } from "#/components/ui/card";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { RefreshButton } from "#/components/ui/refresh-button";
+import { TemplateCard, TemplateCardPageShell } from "#/components/modules/task-close/template-card";
+import { useConfirm } from "#/components/modules/task-close/use-confirm";
+
 import { Tag } from "#/components/ui/tag";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
@@ -67,7 +62,7 @@ export function TaskWorkflowsPage() {
 
 	const [form, setForm] = useState<"create" | WorkflowEditing | null>(null);
 	const [detailId, setDetailId] = useState<string | null>(null);
-	const [pendingDelete, setPendingDelete] = useState<ListItem | null>(null);
+	const del = useConfirm<ListItem>();
 
 	const listQuery = useQuery(trpc.taskClose.workflowList.queryOptions());
 
@@ -92,7 +87,7 @@ export function TaskWorkflowsPage() {
 
 	const removeMutation = useMutation(
 		trpc.taskClose.workflowRemove.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setPendingDelete(null), message: () => "流程模板已删除" }),
+			onSuccess: writeSuccess(invalidate, { close: del.dismiss, message: () => "流程模板已删除" }),
 			onError: toastApiError,
 		}),
 	);
@@ -147,68 +142,31 @@ export function TaskWorkflowsPage() {
 	}
 
 	return (
-		<PageFrame>
-			<PageHeader
-				title="流程模板"
-				description="任务闭环的状态图模板：状态集合、初始态、状态转移边。建任务时按模板复制一份快照,之后改模板不影响已建任务。"
-				actions={
-					<>
-						<RefreshButton busy={listQuery.isFetching} onClick={() => listQuery.refetch()} />
-						{canAdd ? (
-							<Button onClick={openCreate}>
-								<Plus className="size-4" />
-								新增模板
-							</Button>
-						) : null}
-					</>
-				}
-			/>
-
-			<StatCards items={stats} />
-
-			{items.length === 0 ? (
-				listQuery.isPending ? (
-					<Card>
-						<div className="py-12 text-center text-sm text-muted-foreground">加载中…</div>
-					</Card>
-				) : listQuery.isError ? (
-					<Card className="grid justify-items-center gap-3 py-12 text-sm text-muted-foreground">
-						<p>流程模板加载失败。</p>
-						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
-							{listQuery.isFetching ? "重试中…" : "重试"}
-						</Button>
-					</Card>
-				) : (
-					<EmptyState
-						icon={<Workflow className="size-6" />}
-						title="还没有流程模板"
-						description="流程模板定义任务的状态集合、初始态与状态转移边。建任务时选一个模板,它的定义会复制成任务快照。"
-						actions={
-							canAdd ? (
-								<Button onClick={openCreate}>
-									<Plus className="size-4" />
-									新增模板
-								</Button>
-							) : undefined
-						}
-					/>
-				)
-			) : (
-				<div className="flex flex-wrap gap-3">
-					{items.map((item) => (
-						<WorkflowCard
-							key={item.id}
-							item={item}
-							canEdit={canEdit}
-							canRemove={canRemove}
-							onView={() => setDetailId(item.id)}
-							onEdit={() => openEdit(item)}
-							onDelete={() => setPendingDelete(item)}
-						/>
-					))}
-				</div>
-			)}
-
+		<TemplateCardPageShell
+			title="流程模板"
+			description="任务闭环的状态图模板：状态集合、初始态、状态转移边。建任务时按模板复制一份快照,之后改模板不影响已建任务。"
+			stats={stats}
+			emptyIcon={<Workflow className="size-6" />}
+			emptyDescription="流程模板定义任务的状态集合、初始态与状态转移边。建任务时选一个模板,它的定义会复制成任务快照。"
+			isEmpty={items.length === 0}
+			isPending={listQuery.isPending}
+			isError={listQuery.isError}
+			isFetching={listQuery.isFetching}
+			canAdd={canAdd}
+			onCreate={openCreate}
+			onRefresh={() => void listQuery.refetch()}
+			cards={items.map((item) => (
+				<WorkflowCard
+					key={item.id}
+					item={item}
+					canEdit={canEdit}
+					canRemove={canRemove}
+					onView={() => setDetailId(item.id)}
+					onEdit={() => openEdit(item)}
+					onDelete={() => del.ask(item)}
+				/>
+			))}
+		>
 			<TaskWorkflowForm
 				open={form !== null}
 				onOpenChange={(next) => {
@@ -228,17 +186,13 @@ export function TaskWorkflowsPage() {
 				onEdit={canEdit && detailItem ? () => openEdit(detailItem) : undefined}
 			/>
 
-			<ConfirmDialog
-				open={pendingDelete !== null}
-				onOpenChange={(next) => {
-					if (!next) setPendingDelete(null);
-				}}
+			<del.Dialog
 				title="删除流程模板"
-				description={`「${pendingDelete?.name ?? ""}」会被软删,列表里不再出现;已建任务的状态图是快照,不受影响。`}
+				description={(t) => `「${t.name}」会被软删,列表里不再出现;已建任务的状态图是快照,不受影响。`}
 				isPending={removeMutation.isPending}
-				onConfirm={() => pendingDelete && removeMutation.mutate({ id: pendingDelete.id })}
+				onConfirm={(t) => removeMutation.mutate({ id: t.id })}
 			/>
-		</PageFrame>
+		</TemplateCardPageShell>
 	);
 }
 
@@ -265,68 +219,27 @@ function WorkflowCard({
 }) {
 	const def = parsed(item);
 	return (
-		<Card className="group relative flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
-			{/* 整卡可点:覆盖层按钮与操作按钮**同级**,不是父子 —— role="button" 的卡里再放 <button> 键盘焦点会重复 */}
-			<button
-				type="button"
-				aria-label={`查看流程模板 ${item.name}`}
-				onClick={onView}
-				className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-			/>
-			{/* 顶行:图标块(左) + 状态徽章 / 行内动作(右) */}
-			<div className="relative mb-4 flex items-start justify-between gap-2">
-				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">
-					<Workflow className="size-4.5" />
-				</div>
-				<div className="flex items-center gap-1.5">
-					{item.builtin ? (
-						<Tag variant="secondary" className="h-7 gap-1 px-2 text-xs">
-							<span aria-hidden className="size-1.5 rounded-full bg-hue-emerald" />
-							内置
-						</Tag>
-					) : (
-						<span className="flex h-7 items-center px-2 text-xs text-muted-foreground">自建</span>
-					)}
-					<div className="relative z-10 flex items-center gap-1">
-						{canEdit ? (
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								aria-label="编辑"
-								onClick={(event) => {
-									event.stopPropagation();
-									onEdit();
-								}}
-							>
-								<Pencil className="size-4" />
-							</Button>
-						) : null}
-						{canRemove && !item.builtin ? (
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								className="text-destructive"
-								aria-label="删除"
-								onClick={(event) => {
-									event.stopPropagation();
-									onDelete();
-								}}
-							>
-								<Trash2 className="size-4" />
-							</Button>
-						) : null}
-					</div>
-				</div>
-			</div>
-
-			<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{item.name}</h3>
-			<p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-				{def.statuses.length} 个状态 · {def.edges.length} 条转移边
-			</p>
-
-			{/* 预览区(浅底,限高):状态集合,初始态带圆点 + 高亮 */}
-			<div className="mb-3 max-h-24 overflow-hidden rounded-md bg-muted/50 p-3">
-				{def.statuses.length > 0 ? (
+		<TemplateCard
+			name={item.name}
+			viewLabel={`查看流程模板 ${item.name}`}
+			icon={<Workflow className="size-4.5" />}
+			badge={
+				item.builtin ? (
+					<Tag variant="secondary" className="h-7 gap-1 px-2 text-xs">
+						<span aria-hidden className="size-1.5 rounded-full bg-hue-emerald" />
+						内置
+					</Tag>
+				) : (
+					<span className="flex h-7 items-center px-2 text-xs text-muted-foreground">自建</span>
+				)
+			}
+			description={
+				<>
+					{def.statuses.length} 个状态 · {def.edges.length} 条转移边
+				</>
+			}
+			preview={
+				def.statuses.length ? (
 					<div className="flex flex-wrap items-center gap-1.5">
 						{def.statuses.map((status) => {
 							const isInitial = status.value === def.initial;
@@ -349,16 +262,19 @@ function WorkflowCard({
 					</div>
 				) : (
 					<span className="text-xs text-muted-foreground">未定义状态</span>
-				)}
-			</div>
-
-			{/* 底部 meta(推到最低) */}
-			<div className="mt-auto flex flex-wrap items-center gap-1.5">
+				)
+			}
+			meta={
 				<span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
 					<Clock className="size-3" />
 					{item.updatedAt ? `更新于 ${formatLocalMinute(item.updatedAt)}` : PLACEHOLDER_EMPTY}
 				</span>
-			</div>
-		</Card>
+			}
+			canEdit={canEdit}
+			canRemove={canRemove && !item.builtin}
+			onView={onView}
+			onEdit={onEdit}
+			onDelete={onDelete}
+		/>
 	);
 }

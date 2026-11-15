@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import {
@@ -9,20 +8,30 @@ import {
 	taskActionTable,
 	taskLogTable,
 	taskMemberTable,
+	taskReportTable,
 	taskReportTemplateTable,
 	taskTable,
 } from "#/db/data-base-schema";
 import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
-import { cancelPendingNotifications, createNotification } from "#/lib/notification";
+import { cancelPendingNotifications, createNotification, publishNotice } from "#/lib/notification";
 import { alive } from "#/lib/soft-delete";
-import { publish } from "#/lib/sse-bus";
 import type { TaskLogEvent } from "#/lib/task/close-log";
-import { taskPathOf, type WorkflowStatus } from "#/lib/task/close-spec";
+import {
+	isTerminalStatusOf,
+	MAX_NAME_LENGTH,
+	MAX_TEXT_LENGTH,
+	statusesOf,
+	taskPathOf,
+	type WorkflowStatus,
+} from "#/lib/task/close-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
-import { cancelActionReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
+import { cancelActionReminders, rescheduleTaskReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 
 /** 任务路由共用的授权、事务锁、通知及活动日志逻辑。 */
+
+/** 通知的频道 / 事件名真源在 `lib/notification.ts`;这里转出,任务各 router 从 common 拿即可 */
+export { publishNotice };
 
 export type TaskRow = typeof taskTable.$inferSelect;
 
@@ -34,7 +43,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** 只需要 `select` 的读口:`isLocked` 在事务内外都要能调 */
 type Reader = Pick<typeof db, "select">;
 
-/** 状态图快照形状(`tc_workflow.payload` / `tc_task.workflow`,见文档「JSON 字段形状」) */
+/** 状态图快照形状(`tc_workflow.payload` / `tc_task.workflow` 同一份 JSON) */
 export type WorkflowPayload = {
 	name?: string;
 	/** 状态:`value` 落库 / 边引用,`label` 展示名 */
@@ -43,31 +52,92 @@ export type WorkflowPayload = {
 	edges: { from: string; to: string; who: string[]; via: "direct" | "action" }[];
 };
 
-/** 成员角色 —— `tc_member.role` 的两种取值 */
-const MEMBER_ROLES = ["participant", "executor"] as const;
-
 /** 还活着、占着锁的 action 状态(`active` = 待答复,`queued` = 串行链中排队):有这些就说明任务被锁 */
 export const LIVE_ACTION_STATUS = ["active", "queued"] as const;
 
-/** 成员角色入参(`MEMBER_ROLES` 的 zod 形态) */
-export const ROLE_ENUM = z.enum(MEMBER_ROLES);
-
 /** 任务 id / 动作 id 都是 varchar(191)(nanoid),入参统一按这个长度校验 */
 export const ID = z.string().min(1).max(191);
+
+/**
+ * 各 id / 短枚举值的列宽 —— 与 `data-base-schema.ts` 一一对应。
+ *
+ * 之前这些 `z.string().min(1).max(N)` 在 10 个 router 里手抄了 20 多遍
+ * (用户 id 36 / 文件 id 32 / 状态 value 32),改列宽要改一批地方且必然漏。
+ */
+/** 用户 id(`sys_user.id` = 36) */
+export const USER_ID = z.string().min(1).max(36);
+/** 文件 id(`sys_file.id` = 32) */
+export const FILE_ID = z.string().min(1).max(32);
+/**
+ * 状态 value / 边端点 / 状态展示名 —— 都是 `varchar(32)` 的短串。
+ *
+ * label 存在 `tc_workflow.payload` 的 JSON 里(不占列宽),但编辑器一直按 32 卡,
+ * 与 value 同宽最简单;两者**不做区分**,免得出现「value 能填 32 字、label 只能 20 字」这种没人记得的差异。
+ */
+export const STATUS_VALUE = z.string().min(1).max(32);
+
+export const INVALID_DUE_AT_MESSAGE = "截止时间写成了一段没法解析的日期";
+export const validDueAt = (value: string) => !Number.isNaN(new Date(value).getTime());
+const dueAtField = z
+	.string()
+	.max(64)
+	.nullish()
+	.refine((value) => !value || validDueAt(value), { message: INVALID_DUE_AT_MESSAGE });
+export const taskCoreFields = {
+	name: z.string().min(1, "任务名称不能为空").max(MAX_NAME_LENGTH),
+	description: z.string().max(MAX_TEXT_LENGTH).nullish(),
+	dueAt: dueAtField,
+	priority: z.number().int().min(0).max(2).nullish(),
+};
 
 // ────────────────────────────── 取行 / 判定 ──────────────────────────────
 
 export const workflowOf = (task: TaskRow): WorkflowPayload => task.workflow as WorkflowPayload;
 
-/** 取一条活着的任务;取不到(含已软删)抛 `NOT_FOUND` —— 读路径都要过 `alive()` */
-export async function getTaskRow(id: string): Promise<TaskRow> {
-	const [row] = await db
+// ────────────────────────────── 授权 ──────────────────────────────
+
+/** 管理员身份统一判据。 */
+export const isAdminOf = (me: { id: string; isSuper?: boolean }) => isAdminUser(me.id, me.isSuper === true);
+
+/**
+ * 取一条活着的任务(取不到,含已软删,抛 `NOT_FOUND`)—— 读路径都要过 `alive()`。
+ * `forUpdate` 给事务内的写路径:改状态 / 提交填报前不加锁,并发下会丢转移。
+ */
+async function selectTaskRow(reader: Reader, id: string, forUpdate: boolean): Promise<TaskRow> {
+	const query = reader
 		.select()
 		.from(taskTable)
 		.where(and(eq(taskTable.id, id), alive(taskTable)))
 		.limit(1);
+	const [row] = forUpdate ? await query.for("update") : await query;
 	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
 	return row;
+}
+
+/** 读路径取任务(不加锁)。 */
+export const getTaskRow = (id: string): Promise<TaskRow> => selectTaskRow(db, id, false);
+
+/**
+ * 这批 userId **必须都是活着的用户**,否则 `NOT_FOUND`。
+ *
+ * 与 `sys_user` 建立关联前都要过一道:不校验的话,脏 id 会静默写成「无主的成员 / 处理人」,
+ * 那种数据最难查(列表里不显示,但权限判定又按它走)。
+ *
+ * `forUpdate` 给写路径:行锁住之后用户不会被并发软删,关联写完才放开。
+ */
+export async function assertUsersExist(
+	tx: Tx,
+	userIds: readonly string[],
+	message: string,
+	forUpdate = true,
+): Promise<void> {
+	if (!userIds.length) return;
+	const query = tx
+		.select({ id: sysUser.id })
+		.from(sysUser)
+		.where(and(inArray(sysUser.id, [...userIds]), alive(sysUser)));
+	const rows = forUpdate ? await query.for("update") : await query;
+	if (rows.length !== new Set(userIds).size) throw new TRPCError({ code: "NOT_FOUND", message });
 }
 
 /**
@@ -89,6 +159,16 @@ export async function assertAttachments(tx: Tx, attachIds: readonly string[]): P
 	}
 }
 
+/** 文件元数据统一投影；历史 Excel 仍可显示已删除附件的原名。 */
+export async function attachmentRows(reader: Reader, ids: readonly string[], includeInactive = false) {
+	const uniq = [...new Set(ids.filter(Boolean))];
+	if (!uniq.length) return [];
+	return reader
+		.select({ id: sysFile.id, name: sysFile.origin_name, size: sysFile.size, contentType: sysFile.content_type })
+		.from(sysFile)
+		.where(and(inArray(sysFile.id, uniq), includeInactive ? undefined : eq(sysFile.status, 1)));
+}
+
 /**
  * 任务的结构快照(`tc_task.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
  * (模板是单版本,payload 即当前结构),否则老任务一打开就"无法加载填报"。
@@ -107,46 +187,33 @@ export async function getTaskReportTemplate(task: { report: unknown }, reader: P
 	return { id: reportId, schema: taskReportSchema.parse(template.payload) };
 }
 
-/** 取任务并**锁行**(`for update`)—— 事务内改状态前必须走它,否则并发下会丢转移 */
-export async function lockTask(tx: Tx, id: string): Promise<TaskRow> {
-	const [row] = await tx
-		.select()
-		.from(taskTable)
-		.where(and(eq(taskTable.id, id), alive(taskTable)))
-		.limit(1)
-		.for("update");
-	if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "任务不存在" });
-	return row;
+/** 写路径取任务并**锁行**(`for update`)—— 事务内改状态 / 提交填报前必须走它。 */
+export const lockTask = (tx: Tx, id: string): Promise<TaskRow> => selectTaskRow(tx, id, true);
+
+/** 「创建者或管理员」的底层判据 —— 各守卫保留自己的消息,只共用这一句。 */
+async function isCreatorOrAdmin(creatorId: string, meId: string): Promise<boolean> {
+	return creatorId === meId || (await isAdminOf({ id: meId }));
 }
 
 /**
  * 只有**创建者或管理员**能做的写操作(`taskUpdate` / `taskRemove` / `memberRemove`)。
  *
  * 管理员判据是 `isAdminUser`(「系统管理员」角色)——「管理员什么都可以」是本模块的既定口径
- * (见 `doc/task-close.md` 权限矩阵),与 `permissionsOf` 下发的 `isAdmin` 同一判据,
+ * ,与 `permissionsOf` 下发的 `isAdmin` 同一判据,
  * 免得出现「前端显示能点、后端 403」。
  */
-export async function assertCanManage(task: TaskRow, meId: string) {
-	if (task.creator_id !== meId && !(await isAdminUser(meId))) {
-		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者或管理员能做这个操作" });
+export async function assertCanManage(task: TaskRow, meId: string, message = "只有任务创建者或管理员能做这个操作") {
+	if (!(await isCreatorOrAdmin(task.creator_id, meId))) {
+		throw new TRPCError({ code: "FORBIDDEN", message });
 	}
 }
 
-/**
- * 删除任务 —— 破坏性动作,判据与 `assertCanManage` 相同(创建者或管理员),但**单独一条**、
- * 单独的消息:口径要能被人一眼读出来,也不跟「编辑 / 成员管理」绑在一起被顺手放宽。
- */
-export async function assertCanRemoveTask(task: TaskRow, meId: string) {
-	if (task.creator_id !== meId && !(await isAdminUser(meId))) {
-		throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建者或管理员可以删除任务" });
-	}
-}
-
-/** 任务相关方:创建者 / 管理员 / 已在 `tc_member` 里的人。本模块「能看、能参与」的统一判据。 */
+/** 任务相关方:创建者 / 执行人 / 管理员 / 已在 `tc_member` 里的人。本模块「能看、能参与」的统一判据。 */
 export async function isTaskParticipant(task: TaskRow, meId: string, reader: Reader = db): Promise<boolean> {
 	if (task.creator_id === meId) return true;
-	if (await isAdminUser(meId)) return true;
-	return (await memberRolesOf(task.id, meId, reader)).length > 0;
+	if (task.executor_id === meId) return true;
+	if (await isAdminOf({ id: meId })) return true;
+	return isParticipantOf(task.id, meId, reader);
 }
 
 /**
@@ -173,17 +240,18 @@ export async function assertTaskReadable(task: TaskRow, meId: string): Promise<v
 	if (!(await isTaskReadable(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看这条任务" });
 }
 
-/** 这个人在这条任务上通过 `tc_member` 拿到的角色(不含 creator —— 那个是 `tc_task` 固有列) */
-export async function memberRolesOf(taskId: string, userId: string, reader: Reader = db): Promise<string[]> {
-	const rows = await reader
-		.select({ role: taskMemberTable.role })
+/** 这个人在这条任务上是不是**参与者**(`tc_member` 里有一行)—— 执行人是 `tc_task.executor_id`,不在本判据里 */
+export async function isParticipantOf(taskId: string, userId: string, reader: Reader = db): Promise<boolean> {
+	const [row] = await reader
+		.select({ id: taskMemberTable.id })
 		.from(taskMemberTable)
-		.where(and(eq(taskMemberTable.task_id, taskId), eq(taskMemberTable.user_id, userId)));
-	return rows.map((row) => row.role);
+		.where(and(eq(taskMemberTable.task_id, taskId), eq(taskMemberTable.user_id, userId)))
+		.limit(1);
+	return Boolean(row);
 }
 
 /**
- * `who` 协议判定(文档「who 协议」)。
+ * `who` 协议判定。
  *
  * - `who = []` → **false**:系统自带,前端不开(任何用户都不能据此发起);
  * - `"creator"` → 读 `tc_task.creator_id`,**不走 `tc_member`**;
@@ -196,18 +264,46 @@ export async function whoAllows(
 	task: TaskRow,
 	meId: string,
 	who: readonly string[],
-	memberRoles?: readonly string[],
-	reader: Reader = db,
+	options: { isMember?: boolean; reader?: Reader } = {},
 ): Promise<boolean> {
 	if (who.length === 0) return false;
 	if (who.includes("creator") && task.creator_id === meId) return true;
-	const wanted = MEMBER_ROLES.filter((role) => who.includes(role));
-	if (wanted.length === 0) return false;
-	const roles = memberRoles ?? (await memberRolesOf(task.id, meId, reader));
-	return wanted.some((role) => roles.includes(role));
+	if (who.includes("executor") && task.executor_id === meId) return true;
+	if (who.includes("participant") && (options.isMember ?? (await isParticipantOf(task.id, meId, options.reader ?? db))))
+		return true;
+	return false;
 }
 
-/** 任务被锁 = 存在 `is_locking=1` 且状态还活着的 action(文档「锁语义」) */
+// ────────────────────────────── 状态机 ──────────────────────────────
+
+/** 在流程快照中查找指定转移。 */
+export function findEdge(
+	workflow: WorkflowPayload,
+	edge: { from: string | null | undefined; to: string | null | undefined; via: "direct" | "action" },
+) {
+	return (workflow.edges ?? []).find((item) => item.from === edge.from && item.to === edge.to && item.via === edge.via);
+}
+
+/** 边的角色守卫；管理员仍须满足边存在及锁定检查。 */
+export async function assertEdgeWho(
+	task: TaskRow,
+	meId: string,
+	edge: WorkflowPayload["edges"][number],
+	admin: boolean,
+	tx: Tx,
+	message: string,
+) {
+	if (!admin && !(await whoAllows(task, meId, edge.who ?? [], { reader: tx })))
+		throw new TRPCError({ code: "FORBIDDEN", message });
+}
+
+/** 统一拒绝锁定任务的状态变更。 */
+export async function assertTaskUnlocked(taskId: string, reader: Reader = db) {
+	if (await isLocked(taskId, reader))
+		throw new TRPCError({ code: "BAD_REQUEST", message: "有未完成的审批动作,任务被锁定" });
+}
+
+/** 任务被锁 = 存在 `is_locking=1` 且状态还活着的 action */
 export async function isLocked(taskId: string, reader: Reader = db): Promise<boolean> {
 	const [row] = await reader
 		.select({ id: taskActionTable.id })
@@ -261,16 +357,32 @@ export async function lockAction(tx: Tx, actionId: string): Promise<{ task: Task
 	return { task, action };
 }
 
-/** 新绑定与模板删除串行，并校验模板可见性。 */
-export async function getAvailableReportTemplate(tx: Tx, templateId: string, me: { id: string; isSuper?: boolean }) {
-	const [template] = await tx
+/** 模板列表的可见范围。历史任务快照回落不使用此过滤，软删后仍须可读。 */
+export function visibleTemplateFilter(me: { id: string }, admin: boolean) {
+	return admin
+		? alive(taskReportTemplateTable)
+		: and(
+				alive(taskReportTemplateTable),
+				or(eq(taskReportTemplateTable.shared, 1), eq(taskReportTemplateTable.creator_id, me.id)),
+			);
+}
+
+/** 新绑定锁行；导入导出只读。两条路径保留各自的缺失错误。 */
+export async function resolveReportTemplate(
+	reader: Reader,
+	options: { templateId: string; me: { id: string; isSuper?: boolean }; forUpdate?: boolean },
+) {
+	const query = reader
 		.select()
 		.from(taskReportTemplateTable)
-		.where(and(eq(taskReportTemplateTable.id, templateId), alive(taskReportTemplateTable)))
-		.limit(1)
-		.for("update");
-	if (!template) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板已删除，无法用于新任务" });
-	if (!template.shared && template.creator_id !== me.id && !me.isSuper && !(await isAdminUser(me.id)))
+		.where(and(eq(taskReportTemplateTable.id, options.templateId), alive(taskReportTemplateTable)))
+		.limit(1);
+	const [template] = options.forUpdate ? await query.for("update") : await query;
+	if (!template) {
+		if (options.forUpdate) throw new TRPCError({ code: "NOT_FOUND", message: "填报模板已删除，无法用于新任务" });
+		throw new TRPCError({ code: "FORBIDDEN", message: "无权使用该填报模板" });
+	}
+	if (!template.shared && template.creator_id !== options.me.id && !(await isAdminOf(options.me)))
 		throw new TRPCError({ code: "FORBIDDEN", message: "无权使用该填报模板" });
 	return { ...template, schema: taskReportSchema.parse(template.payload) };
 }
@@ -278,13 +390,36 @@ export async function getAvailableReportTemplate(tx: Tx, templateId: string, me:
 /** 填报的「数据范围」:子任务按 `tc_task.report.filter` 过滤;父任务(无 filter)= 全部行。 */
 export type ScopeFilter = Array<{ field: string; value: unknown }>;
 
-/** 一批 user_id → 姓名。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */
-export async function nameMapOf(ids: readonly string[]): Promise<Map<string, string>> {
-	const unique = [...new Set(ids.filter(Boolean))];
+/** 一批 user_id → 姓名(空 / null 自动滤掉)。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */
+export async function nameMapOf(ids: readonly (string | null | undefined)[]): Promise<Map<string, string>> {
+	const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
 	if (unique.length === 0) return new Map();
 	const rows = await db.select({ id: sysUser.id, name: sysUser.name }).from(sysUser).where(inArray(sysUser.id, unique));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
+
+/**
+ * 一批 task_id → 执行人姓名 —— 卡面「发给谁」的来源。
+ *
+ * 执行人是 `tc_task.executor_id`(一个任务至多一名):fan-out 时一条子任务 = 一名执行人,
+ * 光看 `creator_id` 全都一样(都是派活的人),分不出发给谁。
+ */
+export async function executorNamesOf(taskIds: readonly string[]): Promise<Map<string, string>> {
+	if (taskIds.length === 0) return new Map();
+	const rows = await db
+		.select({ taskId: taskTable.id, executorId: taskTable.executor_id })
+		.from(taskTable)
+		.where(inArray(taskTable.id, [...taskIds]));
+	const names = await nameMapOf(rows.map((row) => row.executorId));
+	const map = new Map<string, string>();
+	for (const row of rows) {
+		const name = row.executorId ? names.get(row.executorId) : undefined;
+		if (name) map.set(row.taskId, name);
+	}
+	return map;
+}
+
+// ────────────────────────────── 通知 ──────────────────────────────
 
 /** 只接收任务成员的结构化 ID；评论与通知同事务提交。 */
 export async function createMentionNotifications(
@@ -317,8 +452,31 @@ export async function createMentionNotifications(
 	return receivers;
 }
 
-export function publishMentions(receivers: readonly string[]) {
-	for (const userId of receivers) publish({ channel: `notice:${userId}`, name: "notice.new", data: {} });
+/** 催办 / 看催办记录 / 撤回动作:动作发起人、任务创建人或管理员 */
+export async function isActionCreatorOrAdmin(
+	action: { creator_id: string },
+	task: { creator_id: string },
+	meId: string,
+): Promise<boolean> {
+	return meId === action.creator_id || meId === task.creator_id || (await isAdminOf({ id: meId }));
+}
+
+/** 指派通知共用信封；初次发起和串行推进保留各自的说明。 */
+export function notifyActionAssigned(
+	tx: Tx,
+	options: { actionId: string; assigneeId: string; task: TaskRow; content: string },
+) {
+	return createNotification(tx, {
+		type: "action.assigned",
+		source: { type: "task_action", id: options.actionId },
+		title: `轮到你:${options.task.name}`,
+		content: options.content,
+		path: taskPathOf(options.task.id),
+		level: "info",
+		payload: { actionId: options.actionId },
+		dedupeKey: `action.assigned:${options.actionId}`,
+		recipients: [{ userId: options.assigneeId, channel: "in_app" }],
+	});
 }
 
 /** 在任务行锁内推进串行节点；未激活节点不会产生待办或通知。 */
@@ -343,35 +501,13 @@ export async function activateNextAction(tx: Tx, task: TaskRow, action: ActionRo
 		.set({ status: "active", activated_at: now, updated_at: now })
 		.where(and(eq(taskActionTable.id, next.id), eq(taskActionTable.status, "queued")));
 	await scheduleNodeReminders(tx, task, { ...next, activated_at: now }, now);
-	await createNotification(tx, {
-		type: "action.assigned",
-		source: { type: "task_action", id: next.id },
-		title: `轮到你:${task.name}`,
+	await notifyActionAssigned(tx, {
+		actionId: next.id,
+		assigneeId: next.assignee_id,
+		task,
 		content: `串行${action.is_locking ? "审批" : "征询"}轮到你处理 —— 到「我的任务」查看`,
-		payload: { path: taskPathOf(task.id), level: "info", actionId: next.id },
-		dedupeKey: `action.assigned:${next.id}`,
-		recipients: [{ userId: next.assignee_id, channel: "in_app" }],
 	});
 	return next;
-}
-
-/** 稳定序列化(键排序)—— **只用来比**「内容区 / 附件有没有变」,别拿去存库 */
-export function stableJson(value: unknown): string {
-	if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-	if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-	const bag = value as Record<string, unknown>;
-	const body = Object.keys(bag)
-		.sort()
-		.map((key) => `${JSON.stringify(key)}:${stableJson(bag[key])}`)
-		.join(",");
-	return `{${body}}`;
-}
-
-export const hashReportRows = (rows: unknown) => createHash("sha256").update(stableJson(rows)).digest("hex");
-
-/** `tc_log.detail` 是 JSON 列,读出来可能是任何东西 —— 当袋子读,读不到就当空(绝不抛) */
-export function detailOf(detail: unknown): Record<string, unknown> {
-	return detail && typeof detail === "object" && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {};
 }
 
 /**
@@ -383,31 +519,69 @@ export function detailOf(detail: unknown): Record<string, unknown> {
  *
  * 两个状态列的口径:**事件前后的任务状态**,没动状态就传 null(「想去哪」放 `detail.intendedTo`)。
  */
-export async function writeTaskEvent(
-	tx: Tx,
-	entry: {
-		taskId: string;
-		event: TaskLogEvent;
-		actor: { id: string; name: string };
-		fromStatus?: string | null;
-		toStatus?: string | null;
-		targetId?: string | null;
-		detail?: unknown;
-		at?: Date;
-	},
-): Promise<void> {
-	await tx.insert(taskLogTable).values({
-		id: newId(),
-		task_id: entry.taskId,
-		event: entry.event,
-		from_status: entry.fromStatus ?? null,
-		to_status: entry.toStatus ?? null,
-		target_id: entry.targetId ?? null,
-		actor_id: entry.actor.id,
-		actor_name: entry.actor.name.slice(0, 64),
-		detail: entry.detail ?? null,
-		created_at: entry.at ?? new Date(),
-	});
+// ────────────────────────────── 日志 ──────────────────────────────
+
+type TaskEventEntry = {
+	taskId: string;
+	event: TaskLogEvent;
+	actor: { id: string; name: string };
+	fromStatus?: string | null;
+	toStatus?: string | null;
+	targetId?: string | null;
+	detail?: unknown;
+	at?: Date;
+};
+
+/** 一批活动日志必须与业务同事务，任何插入失败都回滚。 */
+export async function writeTaskEvents(tx: Tx, entries: readonly TaskEventEntry[]): Promise<void> {
+	if (!entries.length) return;
+	await tx.insert(taskLogTable).values(
+		entries.map((entry) => ({
+			id: newId(),
+			task_id: entry.taskId,
+			event: entry.event,
+			from_status: entry.fromStatus ?? null,
+			to_status: entry.toStatus ?? null,
+			target_id: entry.targetId ?? null,
+			actor_id: entry.actor.id,
+			actor_name: entry.actor.name.slice(0, 64),
+			detail: entry.detail ?? null,
+			created_at: entry.at ?? new Date(),
+		})),
+	);
+}
+
+export async function writeTaskEvent(tx: Tx, entry: TaskEventEntry): Promise<void> {
+	await writeTaskEvents(tx, [entry]);
+}
+
+/** 取任务的填报表行(一任务一行);读口可传事务。事务内要锁行就带 `forUpdate`。 */
+export async function reportRowOf(reader: Reader, taskId: string, forUpdate = false) {
+	const query = reader.select().from(taskReportTable).where(eq(taskReportTable.task_id, taskId)).limit(1);
+	const [row] = forUpdate ? await query.for("update") : await query;
+	return row ?? null;
+}
+
+/** 这条任务下面还有没有活着的子任务 —— 父任务是「分派容器」时用它挡下对母版的写入。 */
+export async function hasChildTasks(reader: Reader, taskId: string): Promise<boolean> {
+	const [row] = await reader
+		.select({ id: taskTable.id })
+		.from(taskTable)
+		.where(and(eq(taskTable.parent_id, taskId), alive(taskTable)))
+		.limit(1);
+	return Boolean(row);
+}
+
+/**
+ * 推进任务状态(事务内):进终态先取消未完成动作;终态进出时重排提醒。
+ * `taskTransit`(直接改)与 `actionRespond`(审批通过)共用。
+ */
+export async function applyStatusMove(tx: Tx, task: TaskRow, next: string, now: Date): Promise<void> {
+	const statuses = statusesOf(task.workflow);
+	if (isTerminalStatusOf(statuses, next)) await cancelLiveTaskActions(tx, task.id, now);
+	await tx.update(taskTable).set({ status: next, updated_at: now }).where(eq(taskTable.id, task.id));
+	if (isTerminalStatusOf(statuses, task.status) || isTerminalStatusOf(statuses, next))
+		await rescheduleTaskReminders(tx, { ...task, status: next }, now);
 }
 
 export const pageInput = {

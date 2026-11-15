@@ -16,7 +16,22 @@ export type DeliveryProvider = {
 };
 export type DeliveryProviders = { email: DeliveryProvider; sms: DeliveryProvider };
 
-const MAX_ATTEMPTS = 5;
+/**
+ * **实际最多投几次**(含首次)。
+ *
+ * `claimDelivery` 会先把 `attempts` 自增,所以判据里读到的 `attempts` 是「**本次**是第几次」(1 起)。
+ * 两个判据都在**同一个坐标系**里,一律 `>=` / `<`:
+ *  · `claimDelivery`:`attempts >= ATTEMPT_LIMIT` 判死(第 6 次进来才发现次数用尽);
+ *  · 结果回写:`attempts >= MAX_DELIVERIES` 判 failed,`< MAX_DELIVERIES` 才排下次重试。
+ *    —— 回写读到的是**本次**序号,第 5 次失败就是最后一次,当场置 `failed`。
+ *
+ * 旧实现回写用 `< 5` 排重试、`>= 5` 判 failed,但 claim 用的是 `> 5` ——
+ * 于是第 5 次失败会被写成「`pending` 但 `next_attempt_at = null`」,吊在那儿等第 6 次
+ * claim 才判死。现在两处同一坐标系,第 5 次失败当场 `failed`,不留悬空 `pending`。
+ */
+const MAX_DELIVERIES = 5;
+const ATTEMPT_LIMIT = MAX_DELIVERIES + 1;
+
 const LEASE_MS = 120_000;
 
 /** 开发驱动不会把打印日志伪装成真实投递。可在 Worker 启动时注入真实 SMS provider。 */
@@ -75,12 +90,12 @@ async function claimDelivery(id: string, now: Date) {
 			.update(sysNotificationAttempt)
 			.set({ status: "failed", error: "租约过期，投递结果未知", finished_at: now })
 			.where(and(eq(sysNotificationAttempt.delivery_id, id), eq(sysNotificationAttempt.status, "processing")));
-		if (row.delivery.attempts > MAX_ATTEMPTS) {
+		if (row.delivery.attempts >= ATTEMPT_LIMIT) {
 			await tx
 				.update(sysNotificationDelivery)
 				.set({
 					status: "failed",
-					attempts: MAX_ATTEMPTS,
+					attempts: MAX_DELIVERIES,
 					last_error: "重试次数已用尽，上次投递结果未知",
 					locked_until: null,
 					lock_token: null,
@@ -132,12 +147,12 @@ export async function processNotificationDelivery(
 		const result = await tx
 			.update(sysNotificationDelivery)
 			.set({
-				status: error ? (delivery.attempts >= MAX_ATTEMPTS ? "failed" : "pending") : "sent",
+				status: error ? (delivery.attempts >= MAX_DELIVERIES ? "failed" : "pending") : "sent",
 				provider_message_id: providerMessageId,
 				sent_at: error ? null : finished,
 				last_error: error,
 				next_attempt_at:
-					error && delivery.attempts < MAX_ATTEMPTS
+					error && delivery.attempts < MAX_DELIVERIES
 						? new Date(finished.getTime() + Math.min(3_600_000, 30_000 * 2 ** (delivery.attempts - 1)))
 						: null,
 				locked_until: null,

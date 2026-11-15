@@ -304,10 +304,11 @@ const STATEMENTS: string[] = [
 	`create index if not exists "idx_sys_log_operator" on ${S}."sys_log" ("operator_id", "created_at")`,
 	`create index if not exists "idx_sys_log_path" on ${S}."sys_log" ("path", "created_at")`,
 	`create table if not exists ${S}."sys_notification" (
-        "id" varchar(32) not null primary key, "type" varchar(64) not null, "source_type" varchar(64), "source_id" varchar(191), "title" varchar(128) not null, "content" text, "payload" text, "dedupe_key" varchar(191) not null, "created_at" datetime not null
+        "id" varchar(32) not null primary key, "type" varchar(64) not null, "source_type" varchar(64), "source_id" varchar(191), "title" varchar(128) not null, "content" text, "path" varchar(255) default null, "level" varchar(16) default 'info' not null, "payload" text, "dedupe_key" varchar(191) not null, "created_at" datetime not null
   )`,
 	`create unique index if not exists "uk_notification_dedupe" on ${S}."sys_notification" ("dedupe_key")`,
 	`create index if not exists "idx_notification_source" on ${S}."sys_notification" ("source_type", "source_id", "type", "created_at")`,
+	`create index if not exists "idx_notification_level" on ${S}."sys_notification" ("level", "created_at")`,
 	`create table if not exists ${S}."sys_notification_delivery" (
         "id" varchar(32) not null primary key, "notification_id" varchar(32) not null, "recipient_id" varchar(36) not null, "channel" varchar(16) not null, "target" varchar(255), "status" varchar(16) not null, "read_at" datetime, "attempts" int not null default 0, "next_attempt_at" datetime, "locked_until" datetime, "lock_token" varchar(32), "provider_message_id" varchar(255), "sent_at" datetime, "last_error" text, "created_at" datetime not null, "updated_at" datetime not null
   )`,
@@ -398,24 +399,13 @@ const STATEMENTS: string[] = [
       "deleted_at" datetime,
       primary key ("id")
     )`,
-	`create table if not exists ${S}."tc_report_submission" (
-      "id" varchar(32) not null,
-      "report_id" varchar(32) not null,
-      "task_id" varchar(191) not null,
-      "submitter_id" varchar(36) not null,
-      "revision" int not null,
-      "payload" text default null,
-      "created_at" datetime default current_timestamp,
-      primary key ("id")
-    )`,
-	`create unique index if not exists "uk_report_submission_revision" on ${S}."tc_report_submission" ("report_id", "revision")`,
-	`create index if not exists "idx_report_submission_task" on ${S}."tc_report_submission" ("task_id", "created_at")`,
 	`create table if not exists ${S}."tc_task_report" (
       "id" varchar(32) not null,
       "task_id" varchar(191) not null,
       "draft" text default null,
+      "synced" text default null,
+      "synced_at" datetime default null,
       "revision" int not null default 0,
-      "current_submission_id" varchar(32) default null,
       "created_at" datetime default current_timestamp,
       "updated_at" datetime default current_timestamp,
       primary key ("id")
@@ -435,6 +425,7 @@ const STATEMENTS: string[] = [
       "description" text default null,
       "status" varchar(32) not null,
       "creator_id" varchar(191) not null,
+      "executor_id" varchar(191),
       "due_at" datetime default null,
       "priority" tinyint default null,
       "payload" text default null,
@@ -484,7 +475,6 @@ const STATEMENTS: string[] = [
       "status" varchar(16) not null,
       "viewed_at" datetime default null,
       "activated_at" datetime default null,
-      "last_urged_at" datetime default null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
       primary key ("id")
@@ -497,14 +487,13 @@ const STATEMENTS: string[] = [
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
       "user_id" varchar(36) not null,
-      "role" varchar(16) not null,
       "created_at" datetime not null default current_timestamp,
       "updated_at" datetime not null default current_timestamp,
       primary key ("id")
     )`,
-	`create unique index if not exists "uk_member_unique" on ${S}."tc_member" ("task_id", "user_id", "role")`,
-	`create index if not exists "idx_member_user_role" on ${S}."tc_member" ("user_id", "role")`,
-	`create index if not exists "idx_member_task_role" on ${S}."tc_member" ("task_id", "role")`,
+	`create unique index if not exists "uk_member_unique" on ${S}."tc_member" ("task_id", "user_id")`,
+	`create index if not exists "idx_member_user" on ${S}."tc_member" ("user_id")`,
+	`create index if not exists "idx_member_task" on ${S}."tc_member" ("task_id")`,
 	`create table if not exists ${S}."tc_comment" (
       "id" varchar(191) not null,
       "task_id" varchar(191) not null,
@@ -676,7 +665,6 @@ async function main() {
 		{ table: "sys_user", column: "phone", ddl: "varchar(32)" },
 		{ table: "tc_action", column: "viewed_at", ddl: "datetime" },
 		{ table: "tc_action", column: "activated_at", ddl: "datetime" },
-		{ table: "tc_action", column: "last_urged_at", ddl: "datetime" },
 		{ table: "sys_scheduled_job", column: "cron_expression", ddl: "varchar(128)" },
 		{ table: "sys_scheduled_job", column: "timezone", ddl: "varchar(64) default 'UTC' not null" },
 		{ table: "sys_scheduled_job", column: "timeout_seconds", ddl: "int default 60 not null" },
@@ -707,6 +695,13 @@ async function main() {
 		{ table: "tc_task", column: "parent_id", ddl: "varchar(191)" },
 		{ table: "tc_task", column: "report", ddl: "text" },
 		{ table: "tc_task", column: "reminder_config", ddl: "text" },
+		// 执行人下沉到任务列(原 tc_member.role=executor)
+		{ table: "tc_task", column: "executor_id", ddl: "varchar(191)" },
+		// 填报「一表两槽」:draft = 工作稿,synced = 提交给父任务的那一版
+		{ table: "tc_task_report", column: "synced", ddl: "text" },
+		{ table: "tc_task_report", column: "synced_at", ddl: "datetime" },
+		{ table: "sys_notification", column: "path", ddl: "varchar(255) default null" },
+		{ table: "sys_notification", column: "level", ddl: "varchar(16) default 'info' not null" },
 		{ table: "sys_data_policy", column: "deleted_at", ddl: "datetime" },
 		{ table: "sys_data_plugin", column: "deleted_at", ddl: "datetime" },
 	];
@@ -746,7 +741,41 @@ async function main() {
 		`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_member' and INDEX_NAME='idx_member_task_primary'`,
 	);
 	if (memberPrimaryIndex.length) await run(`drop index "idx_member_task_primary" on ${S}."tc_member"`);
+	// 执行人下沉到 tc_task.executor_id:先回填,再把成员表的旧 UK / 旧索引换成单列版本(必须在删 role 列之前)
+	const memberRoleMeta = await q(
+		`select COLUMN_NAME as c from SYS.ALL_TAB_COLUMNS where OWNER='${SCHEMA}' and TABLE_NAME='tc_member'`,
+	);
+	if (memberRoleMeta.some((row) => String(row.C ?? row.c).toLowerCase() === "role")) {
+		await run(
+			`update ${S}."tc_task" t set "executor_id" = (select min(m."user_id") from ${S}."tc_member" m where m."task_id" = t."id" and m."role" = 'executor') where t."executor_id" is null`,
+		);
+		// 老库唯一键带 role ⇒ 同一人可以在同一任务留两行(既执行人又参与者);删 role 后 UK 收成
+		// (task_id, user_id),重复行会让建唯一索引失败。执行人已上提到 tc_task.executor_id,
+		// executor 行可以删;参与者行留下。
+		await run(`delete from ${S}."tc_member" where "role" = 'executor'`);
+		const oldMemberIndexes = await q(
+			`select INDEX_NAME as n from SYS.ALL_INDEXES where OWNER='${SCHEMA}' and TABLE_NAME='tc_member' and INDEX_NAME in ('uk_member_unique','idx_member_user_role','idx_member_task_role')`,
+		);
+		for (const row of oldMemberIndexes) await run(`drop index "${String(row.N ?? row.n)}" on ${S}."tc_member"`);
+		await run(`create unique index "uk_member_unique" on ${S}."tc_member" ("task_id", "user_id")`);
+		await run(`create index "idx_member_user" on ${S}."tc_member" ("user_id")`);
+		await run(`create index "idx_member_task" on ${S}."tc_member" ("task_id")`);
+	}
 	// 任务成员索引迁移结束
+	// 旧快照表 → tc_task_report.synced(删 current_submission_id 之前;表/列都在才跑,幂等)
+	{
+		const trCols = await q(
+			`select COLUMN_NAME as c from SYS.ALL_TAB_COLUMNS where OWNER='${SCHEMA}' and TABLE_NAME='tc_task_report'`,
+		);
+		if (
+			trCols.some((row) => String(row.C ?? row.c).toLowerCase() === "current_submission_id") &&
+			existingTables.has("tc_report_submission")
+		) {
+			await run(
+				`update ${S}."tc_task_report" r set "synced" = (select s."payload" from ${S}."tc_report_submission" s where s."id" = r."current_submission_id"), "synced_at" = (select s."created_at" from ${S}."tc_report_submission" s where s."id" = r."current_submission_id") where r."current_submission_id" is not null`,
+			);
+		}
+	}
 	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
 		{ table: "sys_notification_delivery", column: "provider" },
 		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },
@@ -761,6 +790,10 @@ async function main() {
 		{ table: "tc_task_report", column: "version_id" },
 		{ table: "tc_task_report", column: "status" },
 		{ table: "tc_member", column: "is_primary" },
+		// 执行人下沉到 tc_task.executor_id,该列废弃(回填在「任务成员索引迁移」段完成)
+		{ table: "tc_member", column: "role" },
+		// 填报快照表退役:提交的那一版改存 tc_task_report.synced
+		{ table: "tc_task_report", column: "current_submission_id" },
 		// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 		{ table: "sys_data_plugin", column: "produces" },
 		// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃

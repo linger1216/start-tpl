@@ -39,6 +39,18 @@ const HTML_RESPONSE_PATTERN = /unexpected token '<?'|is not valid json|<!doctype
 const HTML_RESPONSE_HINT =
 	"接口返回的是 HTML 而不是 JSON:当前访问的域名没有被转发到本应用(或代理没放行 POST /api/trpc)。本机开发请直接用 http://localhost:3000 打开;用自定义域名时,需把 /api/trpc 一并代理到 dev 服务。";
 
+/**
+ * tRPC 客户端错误的 `code`(取不到返回 null)。
+ *
+ * 三种取值口径都保留(`data.code` / `shape.data.code` / `httpStatus`)—— 这是实测出来的兼容层,
+ * 只认一种会在某个版本上静默失效。调用方(详情页的 403/404 判据、填报的 CONFLICT 判据)都基于它。
+ */
+export function trpcErrorCode(error: unknown): string | null {
+	const err = error as { data?: { code?: unknown }; shape?: { data?: { code?: unknown } } } | null | undefined;
+	const code = err?.data?.code ?? err?.shape?.data?.code;
+	return typeof code === "string" ? code : null;
+}
+
 /** 任意错误 → ApiError */
 export function toApiError(e: unknown): ApiError {
 	if (e instanceof ApiError) return e;

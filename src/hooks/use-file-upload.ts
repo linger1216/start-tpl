@@ -88,5 +88,19 @@ export function useFileUpload() {
 		[trpc, presign, confirm, queryClient],
 	);
 
-	return { upload };
+	const uploadMany = useCallback(
+		async (list: FileList, options: { kind: UploadKind; limit: number; existing: number }) => {
+			const rows: FileRow[] = [];
+			const failed: string[] = [];
+			for (const file of Array.from(list).slice(0, Math.max(0, options.limit - options.existing))) {
+				const result = await upload(file, options.kind);
+				if (result.ok) rows.push(result.row);
+				else failed.push(result.message);
+			}
+			return { rows, failed };
+		},
+		[upload],
+	);
+
+	return { upload, uploadMany };
 }

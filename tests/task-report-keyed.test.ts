@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { updateKeyedItem } from "../src/lib/task/report-keyed.ts";
+import { updateKeyedItem } from "../src/lib/task/report-spec.ts";
 
 test("异步结果按原始行身份写回，行被删除时丢弃结果", () => {
 	const first = { name: "甲" };

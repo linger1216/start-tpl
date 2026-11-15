@@ -9,13 +9,14 @@ test("任务创建人和各成员行均提供针对个人的提醒入口", () =>
 		createElement(TaskMembers, {
 			creatorId: "creator",
 			creatorName: "甲",
-			members: [{ userId: "executor", role: "executor", name: "乙" }],
+			executorId: "executor",
+			executorName: "乙",
+			members: [],
 			canAddMember: false,
 			canManage: false,
 			removing: false,
 			onAdd() {},
 			onRemove() {},
-			roleText: () => "执行人",
 			onRemind() {},
 		}),
 	);

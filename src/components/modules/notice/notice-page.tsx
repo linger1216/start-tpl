@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
 import { Bell, CheckCheck, MailOpen, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { NoticeDeliveryHistory } from "#/components/modules/notice/notice-delivery-history";
 import { NoticeForm, type NoticeFormPayload } from "#/components/modules/notice/notice-form";
 import { type NoticeRow, noticeColumns } from "#/components/modules/notice/notice-table";
+import { useNoticeOpen, useNoticeRead, useNoticeReadAll } from "#/components/modules/notice/use-notice-open";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
@@ -36,7 +35,6 @@ const PAGE_LIMIT = 500;
 export function NoticePage() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const router = useRouter();
 	const [keyword, setKeyword] = useState("");
 	const [composing, setComposing] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
@@ -51,15 +49,9 @@ export function NoticePage() {
 		await queryClient.invalidateQueries(trpc.notice.pathFilter());
 	};
 
-	const readMutation = useMutation(trpc.notice.read.mutationOptions({ onSuccess: invalidate }));
-	const readAllMutation = useMutation(
-		trpc.notice.readAll.mutationOptions({
-			onSuccess: async (outcome) => {
-				await invalidate();
-				if (outcome.updated > 0) toast.success(`已把 ${outcome.updated} 条标为已读`);
-			},
-		}),
-	);
+	const openNotice = useNoticeOpen(invalidate);
+	const readOnly = useNoticeRead(invalidate);
+	const readAllMutation = useNoticeReadAll(invalidate);
 	const createMutation = useMutation(
 		trpc.notice.create.mutationOptions({
 			onSuccess: writeSuccess(invalidate, {
@@ -86,15 +78,11 @@ export function NoticePage() {
 			noticeColumns({
 				onDetail: (row) => {
 					setViewing(row);
-					if (!row.read) readMutation.mutate({ id: row.id });
+					if (!row.read) readOnly.mutate({ id: row.id });
 				},
-				onOpen: (row) => {
-					if (!row.read) readMutation.mutate({ id: row.id });
-					if (!row.path) return;
-					void router.navigate({ to: row.path }).catch(() => toast.error("这条通知的跳转地址已失效"));
-				},
+				onOpen: (row) => void openNotice(row),
 			}),
-		[readMutation, router],
+		[openNotice, readOnly],
 	);
 
 	const { table, persistColumns } = useLedgerTable({

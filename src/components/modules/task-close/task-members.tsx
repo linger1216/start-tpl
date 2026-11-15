@@ -1,12 +1,17 @@
 import { Trash2, UserPlus } from "lucide-react";
+import { BlockHeader } from "#/components/modules/task-close/block-header";
+import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { roleLabelOf } from "#/lib/task/close-spec";
 import { cn } from "#/lib/utils";
 
 export function TaskMembers({
 	creatorId,
 	creatorName,
+	executorId,
+	executorName,
 	members,
 	canAddMember,
 	canManage,
@@ -14,69 +19,65 @@ export function TaskMembers({
 	onAdd,
 	onRemove,
 	onRemind,
-	roleText,
 }: {
 	creatorId: string;
 	creatorName: string | null;
-	/** 原始成员表:**可能包含创建人本人**(fan-out 父任务的执行人就是他) */
-	members: Array<{ userId: string; role: string; name: string | null }>;
+	/** 唯一执行人(至多一个);与创建人重复时只在创建人那行标注 */
+	executorId: string | null;
+	executorName: string | null;
+	/** 参与者集合(不含创建人 / 执行人) */
+	members: Array<{ userId: string; name: string | null }>;
 	canAddMember: boolean;
 	canManage: boolean;
 	removing: boolean;
 	onAdd: () => void;
-	onRemove: (member: { userId: string; role: "participant" | "executor"; name: string }) => void;
+	onRemove: (member: { userId: string; name: string }) => void;
 	onRemind?: (person: { id: string; name: string }) => void;
-	roleText: (role: string) => string;
 }) {
-	/**
-	 * 创建人也可能是执行人(fan-out 父任务:父任务的执行人 = 创建人)。
-	 * 这时只在创建人那一行标「创建人 · 执行人」,成员列表里**不再重复一行**;人数按人去重。
-	 */
-	const creatorRoles = members.filter((member) => member.userId === creatorId).map((member) => member.role);
-	const others = members.filter((member) => member.userId !== creatorId);
-	const creatorLabel = creatorRoles.length
-		? `创建人 · ${creatorRoles.map((role) => roleText(role)).join(" · ")}`
-		: "创建人";
+	/** fan-out 父任务的执行人就是创建人 —— 这时只在创建人那行标「创建人 · 执行者」,不重复一行 */
+	const creatorIsExecutor = !!executorId && executorId === creatorId;
+	const showExecutor = !!executorId && executorId !== creatorId;
+	const total = new Set([creatorId, ...(executorId ? [executorId] : []), ...members.map((m) => m.userId)]).size;
 	return (
 		<section className="grid gap-2 p-3.5">
-			<header className="flex items-center justify-between">
-				<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-					参与人 <span className="text-xs font-medium tabular-nums text-muted-foreground">{others.length + 1}</span>
-				</h2>
-				{canAddMember ? (
-					<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={onAdd}>
-						<UserPlus className="size-3.5" />
-					</Button>
-				) : null}
-			</header>
+			<BlockHeader
+				title="参与人"
+				count={total}
+				actions={
+					canAddMember ? (
+						<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={onAdd}>
+							<UserPlus className="size-3.5" />
+						</Button>
+					) : null
+				}
+			/>
 			<ul className="grid gap-0.5">
 				<PeopleRow
-					roleLabel={creatorLabel}
+					roleLabel={creatorIsExecutor ? `创建人 · ${roleLabelOf("executor")}` : "创建人"}
 					name={creatorName ?? PLACEHOLDER_EMPTY}
-					main={false}
+					main={creatorIsExecutor}
 					onRemind={onRemind ? () => onRemind({ id: creatorId, name: creatorName ?? PLACEHOLDER_EMPTY }) : undefined}
 				/>
-				{others.map((m) => (
+				{showExecutor ? (
 					<PeopleRow
-						key={`${m.userId}-${m.role}`}
-						roleLabel={roleText(m.role)}
+						roleLabel={roleLabelOf("executor")}
+						name={executorName ?? executorId}
+						main
+						onRemind={onRemind ? () => onRemind({ id: executorId, name: executorName ?? executorId }) : undefined}
+					/>
+				) : null}
+				{members.map((m) => (
+					<PeopleRow
+						key={m.userId}
+						roleLabel={roleLabelOf("participant")}
 						name={m.name ?? m.userId}
-						main={m.role === "executor"}
+						main={false}
 						onRemind={onRemind ? () => onRemind({ id: m.userId, name: m.name ?? m.userId }) : undefined}
-						onRemove={
-							canManage
-								? () =>
-										onRemove({
-											userId: m.userId,
-											role: m.role as "participant" | "executor",
-											name: m.name ?? m.userId,
-										})
-								: undefined
-						}
+						onRemove={canManage ? () => onRemove({ userId: m.userId, name: m.name ?? m.userId }) : undefined}
 						removing={removing}
 					/>
 				))}
-				{members.length === 0 ? (
+				{!showExecutor && members.length === 0 ? (
 					<li className="py-3 text-sm text-muted-foreground">还没有其他人。加人后他们能答复动作、参与讨论。</li>
 				) : null}
 			</ul>
@@ -89,14 +90,10 @@ export function TaskMembers({
  *
  * 头像与「评论与回复」`TaskComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
  * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
- * 「主执行」这个身份靠**角色标签**(页面上传的是 `主执行`)+ 名字加粗来区分,不靠颜色。
- *
- * 用 `bg-primary/85` + `text-paper`(`--ink` 底、反白首字同族的墨底圆牌,深色模式自动翻转);
- * **不要写 `bg-accent`** —— 它在本项目是浅灰面 `#f8fafc`,白字压上去直接看不见
- * (原型里的 `--color-accent` 是品牌蓝,与本项目的 `--accent` 同名不同物)。
+ * 「执行」这个身份靠**角色标签** + 名字加粗来区分,不靠颜色。
  *
  * `roleLabel` 不是 HTML `role` 属性 —— prop 名刻意避开 ARIA 关键字,免得 biome 把
- * 「创建人/主执行」之类的中文字面误判成 ARIA role。
+ * 「创建人/执行」之类的中文字面误判成 ARIA role。
  */
 function PeopleRow({
 	roleLabel,
@@ -117,13 +114,8 @@ function PeopleRow({
 		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
 			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
 			<div className="flex min-w-0 flex-1 items-center gap-2">
-				{/* 圆牌:墨底反白首字(与评论头像同款,就地内联 —— badge 合流层已拆) */}
-				<span
-					aria-hidden
-					className="flex size-5.5 shrink-0 items-center justify-center rounded-full bg-primary/85 text-xs font-heading font-bold leading-none text-paper"
-				>
-					{name.slice(0, 1)}
-				</span>
+				{/* 圆牌:墨底反白首字(与卡面 / 评论头像共用 InitialsCircle) */}
+				<InitialsCircle name={name} className="size-5.5 text-xs" />
 				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemind && (

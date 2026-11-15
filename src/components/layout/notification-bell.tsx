@@ -1,9 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-
+import { useNoticeOpen, useNoticeReadAll } from "#/components/modules/notice/use-notice-open";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import {
@@ -14,7 +12,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { useTRPC } from "#/integrations/trpc/react";
-import { noticeLevelStyle } from "#/lib/notice-levels";
+import { noticeLevelOf } from "#/lib/notice-levels";
 import { formatLocalMinute } from "#/lib/time";
 import { useNoticeSse } from "#/lib/use-notice-sse";
 
@@ -33,8 +31,9 @@ import { useNoticeSse } from "#/lib/use-notice-sse";
 export function NotificationBell() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const router = useRouter();
 	const [open, setOpen] = useState(false);
+	const invalidate = () => queryClient.invalidateQueries(trpc.notice.pathFilter());
+	const openNotice = useNoticeOpen(invalidate);
 
 	// 60 秒轮询兜底,SSE 到达时立即刷新。
 	const listQuery = useQuery({ ...trpc.notice.list.queryOptions(), refetchInterval: 60_000 });
@@ -42,37 +41,16 @@ export function NotificationBell() {
 	// 订阅 SSE:有新通知就直接 invalidate 缓存,轮询周期里也能秒级收到。
 	useNoticeSse();
 
-	const readMutation = useMutation(
-		trpc.notice.read.mutationOptions({
-			onSuccess: async () => {
-				await queryClient.invalidateQueries(trpc.notice.pathFilter());
-			},
-		}),
-	);
-	const readAllMutation = useMutation(
-		trpc.notice.readAll.mutationOptions({
-			onSuccess: async (outcome) => {
-				await queryClient.invalidateQueries(trpc.notice.pathFilter());
-				if (outcome.updated > 0) toast.success(`已把 ${outcome.updated} 条标为已读`);
-			},
-		}),
-	);
+	const readAllMutation = useNoticeReadAll(invalidate);
 
 	const items = listQuery.data?.items ?? [];
 	const unread = listQuery.data?.unread ?? 0;
-	const pending = readMutation.isPending || readAllMutation.isPending;
+	const pending = readAllMutation.isPending;
 
-	/** 点一条:先标已读,再按 `path` 跳转(没有 path 的就只标已读) */
-	async function handleClick(item: (typeof items)[number]) {
+	/** 点一条:收起下拉(铃铛独有),其余交给 `openNotice` */
+	function handleClick(item: (typeof items)[number]) {
 		setOpen(false);
-		if (!item.read) await readMutation.mutateAsync({ id: item.id }).catch(() => {});
-		if (!item.path) return;
-		try {
-			await router.navigate({ to: item.path });
-		} catch {
-			// `path` 是可以被数据携带的:校验在写入时就做了,这里只是兜底,别白屏
-			toast.error("这条通知的跳转地址已失效", { description: item.path });
-		}
+		void openNotice(item);
 	}
 
 	return (
@@ -103,7 +81,7 @@ export function NotificationBell() {
 				) : (
 					<div className="max-h-[60vh] overflow-auto py-1">
 						{items.map((item) => {
-							const { Icon, tone } = noticeLevelStyle(item.level);
+							const { Icon, tone } = noticeLevelOf(item.level);
 							return (
 								<DropdownMenuItem
 									key={item.id}

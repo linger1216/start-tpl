@@ -2,7 +2,7 @@ import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared
 import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { NOTICE_LEVEL_SHORT_LABEL } from "#/lib/notice-levels";
+import { noticeLevelOf } from "#/lib/notice-levels";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 与 `trpc.notice.list` 的出参一一对应 */
@@ -40,7 +40,7 @@ export function noticeColumns({
 		columnHelper.accessor("level", {
 			header: "类型",
 			size: 90,
-			cell: (ctx) => <Tag variant="outline">{NOTICE_LEVEL_SHORT_LABEL[ctx.getValue()] ?? ctx.getValue()}</Tag>,
+			cell: (ctx) => <Tag variant="outline">{noticeLevelOf(ctx.getValue()).shortLabel}</Tag>,
 		}),
 		columnHelper.accessor("title", {
 			header: "标题",

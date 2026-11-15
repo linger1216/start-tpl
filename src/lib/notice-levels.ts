@@ -51,12 +51,15 @@ export const NOTICE_LEVELS = [
 
 export type NoticeLevel = (typeof NOTICE_LEVELS)[number]["value"];
 
-/** 级别 → 表格短标签。`Record<string, string>` 是有意的:认不出的级别由调用方回落到原始值 */
-export const NOTICE_LEVEL_SHORT_LABEL: Record<string, string> = Object.fromEntries(
-	NOTICE_LEVELS.map((level) => [level.value, level.shortLabel]),
-);
+/** 级别清单的 value 数组 —— zod `z.enum` 与表单下拉共用,加级别只改一处 */
+export const NOTICE_LEVEL_VALUES = NOTICE_LEVELS.map((level) => level.value) as [NoticeLevel, ...NoticeLevel[]];
 
-/** 级别 → 图标 / 颜色(铃铛用)。认不出的级别(含 `null`)回落到 `info` */
-export function noticeLevelStyle(level?: string | null): { Icon: LucideIcon; tone: string } {
+/**
+ * 级别 → 整条定义(含 `label` / `shortLabel` / `Icon` / `tone`)。认不出的级别(含 `null`)落到 `info`。
+ *
+ * 之前是两个函数干同一件事:`noticeLevelStyle()` 返回 `{Icon, tone}`、`NOTICE_LEVEL_SHORT_LABEL`
+ * 用 `Object.fromEntries` 又算了一遍短标签。调用点各取自己需要的字段即可。
+ */
+export function noticeLevelOf(level?: string | null): (typeof NOTICE_LEVELS)[number] {
 	return NOTICE_LEVELS.find((item) => item.value === level) ?? NOTICE_LEVELS[0];
 }

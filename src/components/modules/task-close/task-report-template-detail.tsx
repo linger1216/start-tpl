@@ -27,15 +27,7 @@ export function TaskReportTemplateDetail({
 			title={`填报模板 · ${row?.name ?? ""}`}
 			description="编辑影响后续绑定；已绑定任务保留原有结构。"
 			tag={parsed?.success ? <Tag variant="outline">{parsed.data.kind === "TABLE" ? "表格" : "表单"}</Tag> : null}
-			meta={
-				row
-					? {
-							id: row.id,
-							createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-							updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
-						}
-					: null
-			}
+			meta={row ? { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } : null}
 			onEdit={row && onEdit ? () => onEdit(row) : undefined}
 		>
 			{row && parsed?.success ? (

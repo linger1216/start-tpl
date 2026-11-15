@@ -13,7 +13,7 @@ import {
 } from "#/components/ui/dialog";
 
 /**
- * 任务交互弹窗外壳(模块私有,不进 shared)—— 详情页 6 个表单型弹窗
+ * 任务交互弹窗外壳(模块私有,不进 shared)—— 详情页 6 个表单弹窗 + 建任务弹窗共用
  * (改状态 / 转交 / 发起审批·征询 / 加入成员 / 附件 / 驳回)的**同一骨架**在这里收口:
  * DialogContent(lg + DIALOG_FIT)→ Header(title + 可省略 description)→ Body(默认 `space-y-1 py-1`)→
  * Footer(取消 ghost disabled=pending · 动作按钮 disabled=pending||confirmDisabled,文案 pending?"X中…":confirmText)。
@@ -31,6 +31,10 @@ export function TaskActionDialog({
 	onConfirm,
 	bodyClassName,
 	contentClassName,
+	footerNote,
+	cancelText = "取消",
+	cancelVariant = "ghost",
+	afterContent,
 	children,
 }: {
 	open: boolean;
@@ -47,6 +51,10 @@ export function TaskActionDialog({
 	bodyClassName?: string;
 	/** 换弹窗宽度用(如 `sm:max-w-2xl`);默认 `sm:max-w-lg` */
 	contentClassName?: string;
+	footerNote?: ReactNode;
+	cancelText?: string;
+	cancelVariant?: "ghost" | "outline";
+	afterContent?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
@@ -58,14 +66,16 @@ export function TaskActionDialog({
 				</DialogHeader>
 				<DialogBody className={bodyClassName ?? "space-y-1 py-1"}>{children}</DialogBody>
 				<DialogFooter>
-					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-						取消
+					{footerNote}
+					<Button variant={cancelVariant} onClick={() => onOpenChange(false)} disabled={pending}>
+						{cancelText}
 					</Button>
 					<Button disabled={pending || confirmDisabled} onClick={onConfirm}>
 						{pending ? pendingText : confirmText}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
+			{afterContent}
 		</Dialog>
 	);
 }

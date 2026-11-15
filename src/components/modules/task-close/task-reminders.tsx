@@ -2,40 +2,61 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "#/components/ui/button";
+import { BlockHeader } from "#/components/modules/task-close/block-header";
+import { InfoTooltip } from "#/components/modules/task-close/info-tooltip";
+import { InspectorSection } from "#/components/modules/task-close/inspector-section";
+import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { Checkbox } from "#/components/ui/checkbox";
-import {
-	DIALOG_FIT,
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { Tag } from "#/components/ui/tag";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { newId } from "#/lib/ids";
+import { channelLabel, deliveryStatusLabel } from "#/lib/notification-status";
+import { REMINDER_COOLDOWN_MINUTES } from "#/lib/task/close-spec";
+import { CHANNEL_LABELS, REMINDER_CHANNELS, type ReminderChannel } from "#/lib/task/reminder-spec";
 import { formatLocalMinute } from "#/lib/time";
 
-const CHANNELS = [
-	["in_app", "站内"],
-	["email", "邮件"],
-	["sms", "短信"],
-] as const;
-type Channel = (typeof CHANNELS)[number][0];
-const channelLabelOf = (channel: string) => CHANNELS.find(([value]) => value === channel)?.[1] ?? channel;
-const STATUS: Record<string, string> = {
-	pending: "等待投递",
-	processing: "投递中",
-	sent: "已发送",
-	failed: "投递失败",
-	cancelled: "已取消",
-};
 type Recipient = { id: string; name: string };
+
+/**
+ * 即将发生的提醒预览(右下角那个图标) —— 排期不在列表里展示,但用户要能预判"接下来会提醒谁、什么时候"。
+ *
+ * 取数走 `taskReminderSchedulePreview`(只给未来待发的,升序,前 5 条 + 总数 + 最后一次)。
+ */
+function ReminderPlanPreview({ taskId }: { taskId: string }) {
+	const trpc = useTRPC();
+	const query = useQuery(trpc.taskClose.taskReminderSchedulePreview.queryOptions({ taskId }));
+	const plan = query.data;
+	return (
+		<InfoTooltip
+			icon={<CalendarClock className="size-4" />}
+			label="预览即将发生的提醒"
+			delay={120}
+			triggerClassName="text-muted-foreground transition-colors hover:text-foreground"
+			contentClassName="max-w-[21rem]"
+		>
+			{query.isPending ? (
+				<span>正在算…</span>
+			) : !plan || plan.items.length === 0 ? (
+				<span>没有待发的提醒。</span>
+			) : (
+				<div className="grid gap-0.5 text-left">
+					<span className="font-medium">即将发生的提醒(共 {plan.total} 次)</span>
+					{plan.items.map((item) => (
+						<span key={item.id} className="tabular-nums">
+							{formatLocalMinute(item.scheduledAt)} · {item.reminder === "executor" ? "截止提醒" : "未查看提醒"} →{" "}
+							{item.recipientName}
+						</span>
+					))}
+					{plan.total > plan.items.length && plan.last ? (
+						<span className="text-background/70">…最后一次 {formatLocalMinute(plan.last)}</span>
+					) : null}
+					<span className="text-background/70">周末与法定节假日不提醒(调休上班日照常)。</span>
+				</div>
+			)}
+		</InfoTooltip>
+	);
+}
 
 /**
  * 任务提醒记录 —— **只列真正投递过的**(即时提醒 / 节点催办 / 到点发出去的定时提醒)。
@@ -43,50 +64,6 @@ type Recipient = { id: string; name: string };
  * 定时提醒的排期(待发 / 已取消)是内部行为,不在页面上展示:没到点的东西列出来,
  * 会让人误以为"已经提醒过了";到点真发出去之后,它就以一条普通投递记录出现在这里。
  */
-/**
- * 即将发生的提醒预览(右下角那个图标) —— 排期不在列表里展示,但用户要能预判"接下来会提醒谁、什么时候"。
- *
- * 取数走 `taskReminderPreview`(只给未来待发的,升序,前 5 条 + 总数 + 最后一次)。
- */
-function ReminderPlanPreview({ taskId }: { taskId: string }) {
-	const trpc = useTRPC();
-	const query = useQuery(trpc.taskClose.taskReminderPreview.queryOptions({ taskId }));
-	const plan = query.data;
-	return (
-		<TooltipProvider delay={120}>
-			<Tooltip>
-				<TooltipTrigger
-					aria-label="预览即将发生的提醒"
-					className="text-muted-foreground transition-colors hover:text-foreground"
-				>
-					<CalendarClock className="size-4" />
-				</TooltipTrigger>
-				<TooltipContent side="top" align="end" className="block max-w-[21rem]">
-					{query.isPending ? (
-						<span>正在算…</span>
-					) : !plan || plan.items.length === 0 ? (
-						<span>没有待发的提醒。</span>
-					) : (
-						<div className="grid gap-0.5 text-left">
-							<span className="font-medium">即将发生的提醒(共 {plan.total} 次)</span>
-							{plan.items.map((item) => (
-								<span key={item.id} className="tabular-nums">
-									{formatLocalMinute(item.scheduledAt)} · {item.reminder === "executor" ? "截止提醒" : "未查看提醒"} →{" "}
-									{item.recipientName}
-								</span>
-							))}
-							{plan.total > plan.items.length && plan.last ? (
-								<span className="text-background/70">…最后一次 {formatLocalMinute(plan.last)}</span>
-							) : null}
-							<span className="text-background/70">周末与法定节假日不提醒(调休上班日照常)。</span>
-						</div>
-					)}
-				</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
-	);
-}
-
 export function TaskReminders({
 	taskId,
 	recipient,
@@ -104,11 +81,8 @@ export function TaskReminders({
 	const empty = planned.length === 0 && records.length === 0;
 	return (
 		<>
-			<section className="grid gap-2 border-t border-border p-3.5">
-				<div className="flex items-center justify-between gap-2">
-					<h2 className="text-base font-semibold">任务提醒</h2>
-					<ReminderPlanPreview taskId={taskId} />
-				</div>
+			<InspectorSection>
+				<BlockHeader title="任务提醒" actions={<ReminderPlanPreview taskId={taskId} />} />
 				{history.isPending ? (
 					<p className="text-sm text-muted-foreground">正在读取提醒记录…</p>
 				) : history.isError ? (
@@ -124,9 +98,7 @@ export function TaskReminders({
 									<Tag variant="outline">计划</Tag>
 									<span>{item.reminder === "executor" ? "截止提醒" : "未查看提醒"}</span>
 									<span className="text-muted-foreground">→ {item.recipientName}</span>
-									<span className="text-muted-foreground">
-										· {item.channels.map((channel) => channelLabelOf(channel)).join("、")}
-									</span>
+									<span className="text-muted-foreground">· {item.channels.map(channelLabel).join("、")}</span>
 								</p>
 								<p className="text-xs text-muted-foreground tabular-nums">{formatLocalMinute(item.scheduledAt)}</p>
 							</li>
@@ -140,12 +112,12 @@ export function TaskReminders({
 											item.status === "sent" ? "secondary" : item.status === "failed" ? "destructive" : "outline"
 										}
 									>
-										{STATUS[item.status] ?? item.status}
+										{deliveryStatusLabel(item.status)}
 									</Tag>
 									<span>
 										{item.senderName ?? "系统"} → {item.recipientName ?? "接收人"}
 									</span>
-									<span className="text-muted-foreground">· {channelLabelOf(item.channel)}</span>
+									<span className="text-muted-foreground">· {channelLabel(item.channel)}</span>
 								</p>
 								<p className="text-xs text-muted-foreground">{formatLocalMinute(item.createdAt)}</p>
 								{item.error && <p className="text-xs text-destructive">{item.error}</p>}
@@ -158,7 +130,7 @@ export function TaskReminders({
 						? `计划 ${plannedTotal} 条,这里只列最近的 ${planned.length} 条(完整计划看右上角预览);下面是最近 200 条投递记录。`
 						: "「计划」是还没到点的提醒,到了点真发出去才会变成投递记录。"}
 				</p>
-			</section>
+			</InspectorSection>
 			{recipient && <ReminderDialog taskId={taskId} recipient={recipient} onClose={onClose} />}
 		</>
 	);
@@ -167,7 +139,7 @@ export function TaskReminders({
 function ReminderDialog({ taskId, recipient, onClose }: { taskId: string; recipient: Recipient; onClose: () => void }) {
 	const trpc = useTRPC();
 	const client = useQueryClient();
-	const [channels, setChannels] = useState<Channel[]>(["in_app"]);
+	const [channels, setChannels] = useState<ReminderChannel[]>(["in_app"]);
 	const [requestId] = useState(() => newId());
 	const [submitted, setSubmitted] = useState(false);
 	const [result, setResult] = useState<"sent" | "cooldown" | "reused" | null>(null);
@@ -176,7 +148,7 @@ function ReminderDialog({ taskId, recipient, onClose }: { taskId: string; recipi
 			onSuccess: async (response) => {
 				const status = response.results[0]?.status ?? "sent";
 				setResult(status);
-				if (status === "cooldown") toast.info("该参与人处于 30 分钟冷却期，已跳过提醒。");
+				if (status === "cooldown") toast.info(`该参与人处于 ${REMINDER_COOLDOWN_MINUTES} 分钟冷却期，已跳过提醒。`);
 				else toast.success("提醒已提交", { description: "投递情况可在提醒记录中查看。" });
 				await client.invalidateQueries(trpc.taskClose.reminderHistory.queryFilter({ taskId }));
 			},
@@ -184,59 +156,51 @@ function ReminderDialog({ taskId, recipient, onClose }: { taskId: string; recipi
 		}),
 	);
 	return (
-		<Dialog
+		<TaskActionDialog
 			open
 			onOpenChange={(open) => {
 				if (!open && !send.isPending) onClose();
 			}}
+			title={`提醒 ${recipient.name}`}
+			description={`选择提醒方式。同一收件人在 ${REMINDER_COOLDOWN_MINUTES} 分钟内只接收一次即时提醒。`}
+			pending={send.isPending}
+			confirmDisabled={result !== null || !channels.length}
+			confirmText={result ? "已提交" : submitted ? "重试发送" : "发送提醒"}
+			pendingText="发送中…"
+			cancelText={result ? "关闭" : "取消"}
+			cancelVariant="outline"
+			contentClassName="sm:max-w-2xl"
+			bodyClassName="grid gap-4"
+			onConfirm={() => {
+				setSubmitted(true);
+				send.mutate({ taskId, recipientIds: [recipient.id], channels, requestId });
+			}}
 		>
-			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
-				<DialogHeader>
-					<DialogTitle>提醒 {recipient.name}</DialogTitle>
-					<DialogDescription>选择提醒方式。同一收件人在 30 分钟内只接收一次即时提醒。</DialogDescription>
-				</DialogHeader>
-				<DialogBody className="grid gap-4">
-					<fieldset>
-						<legend className="mb-2 text-sm font-medium">提醒方式</legend>
-						<div className="flex flex-wrap gap-4">
-							{CHANNELS.map(([channel, label]) => (
-								<label key={channel} htmlFor={`instant-${channel}`} className="flex items-center gap-2 text-sm">
-									<Checkbox
-										id={`instant-${channel}`}
-										disabled={submitted || send.isPending}
-										checked={channels.includes(channel)}
-										onCheckedChange={(checked) =>
-											setChannels((current) =>
-												checked ? [...current, channel] : current.filter((item) => item !== channel),
-											)
-										}
-									/>
-									{label}
-								</label>
-							))}
-						</div>
-					</fieldset>
-					{result && (
-						<p className="text-sm">
-							{result === "cooldown" ? "冷却中，已跳过" : result === "reused" ? "已提交过" : "已提交"}
-						</p>
-					)}
-				</DialogBody>
-				<DialogFooter>
-					<Button variant="outline" disabled={send.isPending} onClick={onClose}>
-						{result ? "关闭" : "取消"}
-					</Button>
-					<Button
-						disabled={result !== null || send.isPending || !channels.length}
-						onClick={() => {
-							setSubmitted(true);
-							send.mutate({ taskId, recipientIds: [recipient.id], channels, requestId });
-						}}
-					>
-						{result ? "已提交" : send.isPending ? "发送中…" : submitted ? "重试发送" : "发送提醒"}
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+			<fieldset>
+				<legend className="mb-2 text-sm font-medium">提醒方式</legend>
+				<div className="flex flex-wrap gap-4">
+					{REMINDER_CHANNELS.map((channel) => (
+						<label key={channel} htmlFor={`instant-${channel}`} className="flex items-center gap-2 text-sm">
+							<Checkbox
+								id={`instant-${channel}`}
+								disabled={submitted || send.isPending}
+								checked={channels.includes(channel)}
+								onCheckedChange={(checked) =>
+									setChannels((current) =>
+										checked ? [...current, channel] : current.filter((item) => item !== channel),
+									)
+								}
+							/>
+							{CHANNEL_LABELS[channel]}
+						</label>
+					))}
+				</div>
+			</fieldset>
+			{result && (
+				<p className="text-sm">
+					{result === "cooldown" ? "冷却中，已跳过" : result === "reused" ? "已提交过" : "已提交"}
+				</p>
+			)}
+		</TaskActionDialog>
 	);
 }

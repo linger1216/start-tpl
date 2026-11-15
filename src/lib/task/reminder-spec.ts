@@ -1,16 +1,25 @@
 import { z } from "zod";
+import { CHANNEL_LABELS, CHANNELS, type Channel, isChannel } from "#/lib/notification-status";
 
-/** 提醒方式:站内 / 短信 / 邮件(多选、不重复) */
-export const REMINDER_CHANNELS = ["in_app", "sms", "email"] as const;
-export type ReminderChannel = (typeof REMINDER_CHANNELS)[number];
-export const CHANNEL_LABELS: Record<ReminderChannel, string> = {
-	in_app: "站内",
-	email: "邮件",
-	sms: "短信",
-};
+/** 提醒方式 —— 真源在 `notification-status.ts`;本模块沿用 `ReminderChannel` 这个名字 */
+export type ReminderChannel = Channel;
+export { CHANNEL_LABELS, CHANNELS as REMINDER_CHANNELS };
+export type { Channel };
+
+/**
+ * `tc_reminder.channels` / `tc_reminder.kind` 这类 JSON 列读出来的松散值 —— 收口在这里。
+ * 不认识的渠道丢掉(库里可能留着退役渠道);`kind` 只认两档,认不出当「截止提醒」。
+ */
+export function channelsOf(value: unknown): ReminderChannel[] {
+	return Array.isArray(value) ? value.filter(isChannel) : [];
+}
+
+export function reminderKindOf(value: unknown): "executor" | "node" {
+	return value === "node" ? "node" : "executor";
+}
 
 const channels = z
-	.array(z.enum(REMINDER_CHANNELS))
+	.array(z.enum(CHANNELS))
 	.max(3)
 	.refine((values) => new Set(values).size === values.length);
 
@@ -70,8 +79,6 @@ export function defaultTaskReminders(): TaskReminderConfig {
 		node: { afterMinutes: 60, channels: ["in_app"] },
 	};
 }
-
-export const DEFAULT_TASK_REMINDERS = defaultTaskReminders();
 
 export const taskReminderConfigSchema = z
 	.object({ executor: executorReminderRuleSchema, node: nodeRule })

@@ -25,7 +25,6 @@ import {
 	taskLogTable,
 	taskMemberTable,
 	taskReminderTable,
-	taskReportSubmissionTable,
 	taskReportTable,
 	taskReportTemplateTable,
 	taskTable,
@@ -225,11 +224,6 @@ export async function createTaskFixture(): Promise<TaskFixture> {
 				await db.delete(taskMemberTable).where(inArray(taskMemberTable.task_id, ids));
 				await db.delete(taskCommentTable).where(inArray(taskCommentTable.task_id, ids));
 				await db.delete(taskLogTable).where(inArray(taskLogTable.task_id, ids));
-				const reportIds = (
-					await db.select({ id: taskReportTable.id }).from(taskReportTable).where(inArray(taskReportTable.task_id, ids))
-				).map((row) => row.id);
-				if (reportIds.length)
-					await db.delete(taskReportSubmissionTable).where(inArray(taskReportSubmissionTable.report_id, reportIds));
 				await db.delete(taskReportTable).where(inArray(taskReportTable.task_id, ids));
 				await db.delete(taskTable).where(inArray(taskTable.id, ids));
 			}

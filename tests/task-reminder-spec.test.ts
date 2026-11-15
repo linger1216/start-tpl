@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-	DEFAULT_TASK_REMINDERS,
+	defaultTaskReminders,
 	executorReminderEvents,
 	executorSummaryOf,
 	nodeReminderEvents,
@@ -43,9 +43,9 @@ function fakeCalendar({
 
 describe("提醒配置", () => {
 	it("默认值:截止提醒默认关,节点未查看默认 1 小时站内", () => {
-		assert.deepEqual(taskReminderConfigSchema.parse(undefined), DEFAULT_TASK_REMINDERS);
-		assert.equal(DEFAULT_TASK_REMINDERS.executor.cadence, "off");
-		assert.deepEqual(DEFAULT_TASK_REMINDERS.node, { afterMinutes: 60, channels: ["in_app"] });
+		assert.deepEqual(taskReminderConfigSchema.parse(undefined), defaultTaskReminders());
+		assert.equal(defaultTaskReminders().executor.cadence, "off");
+		assert.deepEqual(defaultTaskReminders().node, { afterMinutes: 60, channels: ["in_app"] });
 	});
 
 	it("校验:时间写法、窗口范围、开着就得选方式、节点时长范围", () => {
@@ -99,8 +99,8 @@ describe("提醒配置", () => {
 			executor: { offsets: [60, 180], channels: ["in_app"] },
 			node: { offsets: [60], channels: ["in_app"] },
 		};
-		assert.deepEqual(readTaskReminderConfig(legacy), DEFAULT_TASK_REMINDERS);
-		assert.deepEqual(readTaskReminderConfig(null), DEFAULT_TASK_REMINDERS);
+		assert.deepEqual(readTaskReminderConfig(legacy), defaultTaskReminders());
+		assert.deepEqual(readTaskReminderConfig(null), defaultTaskReminders());
 		assert.equal(
 			readTaskReminderConfig({
 				executor: { cadence: "daily", time: "10:00", daysBefore: 2, channels: ["email"] },

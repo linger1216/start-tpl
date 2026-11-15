@@ -1,36 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-
 import { MultiSelect } from "#/components/modules/shared/multi-select";
-import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
+import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
 import { TaskLinkEditor } from "#/components/modules/task-close/task-link-editor";
 import { TaskReminderConfigEditor } from "#/components/modules/task-close/task-reminder-config";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
-import { ActionButton, ActionIconButton } from "#/components/ui/action-button";
+import { TaskScopeEditor } from "#/components/modules/task-close/task-scope-editor";
+import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
+import { ActionIconButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { DatePicker } from "#/components/ui/date-picker";
 import { DetailRow } from "#/components/ui/detail-row";
-import {
-	DIALOG_FIT,
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import type { SearchSelectOption } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import { useTRPC } from "#/integrations/trpc/react";
-import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/task/close-spec";
-import { blankBlock, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
+import { blankBlock, MAX_ATTACHMENTS, MAX_LINKS, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
 import { reminderSummaryOf, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalDate } from "#/lib/time";
@@ -46,11 +36,23 @@ function fromDateInput(date: string): string | null {
 	return date ? new Date(`${date}T00:00:00`).toISOString() : null;
 }
 
-/** 优先级 Select 的固定选项 —— 「未设置」(null)放最前,允许保留旧值不变 */
-const PRIORITY_OPTIONS: { value: TaskPriority | null; label: string }[] = [
-	{ value: null, label: "未设置" },
-	...TASK_PRIORITIES.map((value) => ({ value, label: TASK_PRIORITY_LABEL[value] })),
+/**
+ * 优先级 Select 的固定选项 —— 「未设置」放最前,允许保留旧值不变。
+ *
+ * **value 一律是字符串**:Base UI 的 `Select` 只收 `string`,而落库的 `priority` 是 `0|1|2|null`。
+ * 之前硬把 number 塞进去(靠 `as unknown as string` 骗过类型),这里统一 `"null"` / `"0"` / `"1"` / `"2"`,
+ * 进出各转一次 —— 转换只在 `parsePriority` 一处。
+ */
+const PRIORITY_OPTIONS: { value: string; label: string }[] = [
+	{ value: "null", label: "未设置" },
+	...TASK_PRIORITIES.map((value) => ({ value: String(value), label: TASK_PRIORITY_LABEL[value] })),
 ];
+
+/** `"0"|"1"|"2"` → `0|1|2`;其余(含 `"null"` / 空串)一律「未设置」 */
+function parsePriority(value: string | null): TaskPriority | null {
+	const n = Number(value);
+	return (TASK_PRIORITIES as readonly number[]).includes(n) ? (n as TaskPriority) : null;
+}
 
 /** 编辑态回填 —— 模板与成员是建任务时定的,之后各有自己的接口;链接 / 附件随任务本身走 */
 export type TaskFormEditing = {
@@ -65,12 +67,21 @@ export type TaskFormEditing = {
 	reminderConfig: TaskReminderConfig;
 };
 
-export type TaskFormPayload = {
+/** 两种模式共有的字段 */
+type TaskFormCommon = {
 	name: string;
 	description: string | null;
 	dueAt: string | null;
 	/** 提交时:`null` = 没选,`0|1|2` = 选定档;接口上 `undefined` 表示「不动旧值」,**这里**总是显式传值 */
 	priority: number | null;
+	reminderConfig: TaskReminderConfig;
+};
+
+/**
+ * **创建**任务的载荷 —— 流程模板 / 填报模板 / 执行人都在这一步定死,之后各有自己的接口。
+ * 附件只传 id(`sys_file.id`),不传对象。
+ */
+export type CreateTaskPayload = TaskFormCommon & {
 	workflowId: string;
 	/** 绑定填报模板;`rows` = 文件导入带进来的初始行 */
 	report: {
@@ -82,10 +93,23 @@ export type TaskFormPayload = {
 	/** 执行人(可多选:多个 = 每人各下发一条子任务)+ 各自的数据范围(空数组 = 全部数据) */
 	executors: Array<{ userId: string; filter: Array<{ field: string; value: string | number | boolean | null }> }>;
 	links: TaskLinkBlock[];
-	/** 附件 id 列表(`sys_file.id`) */
 	attachments: string[];
-	reminderConfig: TaskReminderConfig;
 };
+
+/** **编辑**任务的载荷 —— 只有任务本身的字段,流程 / 填报 / 执行人不可改 */
+export type EditTaskPayload = TaskFormCommon & {
+	links: TaskLinkBlock[];
+	attachments: string[];
+};
+
+/**
+ * 提交方向与模式**绑在一起**:编辑态只能配 `onEdit`(收 `EditTaskPayload`),创建态只能配 `onCreate`。
+ * 之前是一个联合入参 `onSubmit(payload: CreateTaskPayload | EditTaskPayload)`,两个调用点各自 `as` 一次 ——
+ * 类型等于没约束。
+ */
+type TaskFormSubmit =
+	| { editing: TaskFormEditing; onEdit: (payload: EditTaskPayload) => void; onCreate?: undefined }
+	| { editing: null; onCreate: (payload: CreateTaskPayload) => void; onEdit?: undefined };
 
 type Option = SearchSelectOption<string>;
 
@@ -154,27 +178,23 @@ export function TaskForm({
 	open,
 	onOpenChange,
 	pending,
-	editing,
-	workflowOptions,
+	workflowOptions = [],
 	userOptions,
-	onSubmit,
-}: {
+	...submit
+}: TaskFormSubmit & {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
 	pending: boolean;
-	/** 非空 = 编辑态 */
-	editing: TaskFormEditing | null;
-	workflowOptions: Option[];
+	/** 只有新建态用得到(编辑态流程模板不可改);不传就当作空 */
+	workflowOptions?: Option[];
 	userOptions: Option[];
-	onSubmit: (payload: TaskFormPayload) => void;
 }) {
+	const editing = submit.editing;
 	const trpc = useTRPC();
 	const templates = useQuery({ ...trpc.taskClose.reportTemplateList.queryOptions(), enabled: open && !editing });
 	const [reportTemplateId, setReportTemplateId] = useState("");
 	/** 三个可选区的展开态(收起时不卸载,填到一半的东西不丢) */
 	const [fold, setFold] = useState({ report: false, links: false, attach: false, reminder: false });
-	/** 数据范围卡片的展开态:key = 执行人 id(null = 都收起) */
-	const [scopeOpen, setScopeOpen] = useState<string | null>(null);
 	const [importedRows, setImportedRows] = useState<Array<Record<string, string | number | boolean | string[] | null>>>(
 		[],
 	);
@@ -193,7 +213,7 @@ export function TaskForm({
 	const [links, setLinks] = useState<TaskLinkBlock[]>([]);
 	const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
 	/** 预览已保存任务的附件 */
-	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
+	const preview = useAttachmentPreview<TaskAttachment>(editing?.id);
 
 	// 打开时回填;模板缺省取第一个,避免"没选模板点保存"这种可避免的报错
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 打开时取一次初始值，后台刷新不能覆盖用户输入
@@ -227,7 +247,6 @@ export function TaskForm({
 
 	/** 清空带数下发的全部选择(换模板 / 换来源 / 打开弹窗时) */
 	const resetReportRule = () => {
-		setScopeOpen(null);
 		setImportedRows([]);
 		setRules({});
 	};
@@ -240,524 +259,335 @@ export function TaskForm({
 	);
 	const selectedKind = selectedSchema?.success ? selectedSchema.data.kind : "OBJECT";
 	const selectedFields = selectedSchema?.success ? selectedSchema.data.fields : [];
-	/** 过滤字段(multiselect 不做过滤:值是数组,等值比较没意义) */
-	const filterFieldOptions = selectedFields.filter((field) => field.type !== "multiselect");
-	/** 一行数据里某字段出现过的值(下拉候选) */
-	const valuesOf = (field: string) => {
-		const seen = new Map<string, unknown>();
-		for (const row of importedRows) {
-			const value =
-				row && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>)[field] : null;
-			const key = JSON.stringify(value ?? null);
-			if (!seen.has(key)) seen.set(key, value ?? null);
-		}
-		return [...seen.entries()].map(([key, value]) => ({ value: key, label: String(value ?? "空") }));
-	};
-	/** 一条规则命中的行数(规则 = field + value 的等值;空规则 = 全部行) */
-	const matchedOf = (rule?: { field: string; value: string }) => {
-		if (!rule?.field || !rule.value) return importedRows.length;
-		const target = JSON.parse(rule.value);
-		return importedRows.filter((row) => ((row as Record<string, unknown>)[rule.field] ?? null) === target).length;
-	};
+	/** 过滤字段 —— 与服务端 `taskCreate` 的判据逐字同口径:多选(值是数组)与附件(值是 id 列表)不能做等值比较 */
+	const filterFieldOptions = selectedFields.filter(
+		(field) => field.type !== "multiselect" && field.type !== "attachment",
+	);
 	/** 规则的接口形态:一条等值条件 */
 	const ruleToFilter = (rule?: { field: string; value: string }) =>
 		rule?.field && rule.value
 			? [{ field: rule.field, value: JSON.parse(rule.value) as string | number | boolean | null }]
 			: [];
-	/** 卡片上那句「字段 = 值」 */
-	const ruleSummaryOf = (rule?: { field: string; value: string }) => {
-		if (!rule?.field) return "全部数据";
-		const fieldLabel = filterFieldOptions.find((field) => field.id === rule.field)?.label ?? rule.field;
-		if (!rule.value) return `${fieldLabel} = 未选值`;
-		return `${fieldLabel} = ${String(JSON.parse(rule.value) ?? "空")}`;
-	};
 	/** 规则挂在谁身上:选了执行人 = 每人一条;没选 = 任务本身 */
 	const ruleTargets = executorIds.length
 		? executorIds.map((id) => ({ key: id, label: userOptions.find((option) => option.value === id)?.label ?? id }))
 		: [{ key: "", label: "本任务" }];
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
-				<DialogHeader className="shrink-0">
-					<DialogTitle>{editing ? "编辑任务" : "新增任务"}</DialogTitle>
-					<DialogDescription>
-						{editing
-							? "可改名称 / 描述 / 截止时间 / 优先级;成员与状态走详情页。"
-							: "状态从模板的初始状态开始;执行人能发起「改状态」动作。"}
-					</DialogDescription>
-				</DialogHeader>
+		<TaskActionDialog
+			open={open}
+			onOpenChange={onOpenChange}
+			title={editing ? "编辑任务" : "新增任务"}
+			description={
+				editing
+					? "可改名称 / 描述 / 截止时间 / 优先级;成员与状态走详情页。"
+					: "状态从模板的初始状态开始;执行人能发起「改状态」动作。"
+			}
+			pending={pending}
+			confirmDisabled={!canSubmit}
+			confirmText="保存"
+			pendingText="保存中…"
+			contentClassName="sm:max-w-2xl"
+			bodyClassName="space-y-2 py-1"
+			footerNote={
+				missingRequired.length ? (
+					<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
+						还缺 {missingRequired.length} 项必填:{missingRequired.join("、")}
+					</span>
+				) : !reminderValid ? (
+					<button
+						type="button"
+						className="text-xs text-destructive sm:mr-auto"
+						onClick={() => setFold((prev) => ({ ...prev, reminder: true }))}
+					>
+						请完善通知提醒方式
+					</button>
+				) : executorIds.length > 1 ? (
+					<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
+						将下发 {executorIds.length} 条任务
+					</span>
+				) : null
+			}
+			onConfirm={() => {
+				const common = {
+					name: name.trim(),
+					description: description.trim() || null,
+					dueAt: fromDateInput(due),
+					priority,
+					reminderConfig,
+					links,
+					attachments: attachments.map((file) => file.id),
+				};
+				// 编辑态只认任务本身的字段;流程 / 填报 / 执行人在创建时定死
+				if (submit.editing) return submit.onEdit(common);
+				submit.onCreate({
+					...common,
+					workflowId,
+					report: reportTemplateId
+						? {
+								reportId: reportTemplateId,
+								...(importedRows.length ? { rows: importedRows } : {}),
+							}
+						: null,
+					reportFilter: ruleToFilter(rules[""]),
+					executors: executorIds.map((id) => ({ userId: id, filter: ruleToFilter(rules[id]) })),
+				});
+			}}
+			afterContent={preview.dialog}
+		>
+			{editing ? (
+				<Alert variant="danger" title="批注" className="mb-3">
+					本次修改只影响这条任务本身;流程模板与执行人是建任务时定的,到任务详情页调整。
+				</Alert>
+			) : null}
 
-				<DialogBody className="space-y-2 py-1">
-					{editing ? (
-						<Alert variant="danger" title="批注" className="mb-3">
-							本次修改只影响这条任务本身;流程模板与执行人是建任务时定的,到任务详情页调整。
-						</Alert>
-					) : null}
+			<section>
+				<h3 className="mb-1 flex max-w-xl items-baseline gap-2 font-heading text-base font-bold tracking-[-0.01em] text-foreground">
+					基本信息
+					<span className="flex-1 self-center border-t border-border" />
+				</h3>
+				<DetailRow label="任务名称" htmlFor="tc-name" className="max-w-xl">
+					<Input
+						id="tc-name"
+						aria-required="true"
+						className="h-9 text-base sm:h-8 sm:text-sm"
+						value={name}
+						onChange={(e) => setName(e.target.value)}
+						placeholder="比如:3 号机组巡检"
+					/>
+				</DetailRow>
 
-					<section>
-						<h3 className="mb-1 flex max-w-xl items-baseline gap-2 font-heading text-base font-bold tracking-[-0.01em] text-foreground">
-							基本信息
-							<span className="flex-1 self-center border-t border-border" />
-						</h3>
-						<DetailRow label="任务名称" htmlFor="tc-name" className="max-w-xl">
-							<Input
-								id="tc-name"
-								aria-required="true"
-								className="h-9 text-base sm:h-8 sm:text-sm"
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="比如:3 号机组巡检"
-							/>
-						</DetailRow>
-
-						{editing ? null : (
-							<>
-								<DetailRow label="流程模板" className="max-w-xl">
-									<Select
-										items={workflowOptions}
-										value={workflowId || null}
-										onValueChange={(next) => setWorkflowId(next ? String(next) : "")}
-									>
-										<SelectTrigger size="sm" className="w-full">
-											<SelectValue placeholder="请选择流程模板" />
-										</SelectTrigger>
-										<SelectContent>
-											{workflowOptions.map((item) => (
-												<SelectItem key={item.value} value={item.value}>
-													{item.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</DetailRow>
-								<DetailRow label="执行人" className="max-w-xl">
-									<div className="space-y-1.5">
-										<MultiSelect
-											options={userOptions}
-											value={executorIds}
-											onChange={setExecutorIds}
-											placeholder="搜索姓名…"
-											emptyText="没有匹配的人"
-											maxHeight={132}
-										/>
-										{executorIds.length > 1 ? (
-											<Alert variant="warn" title="注意">
-												选了 <b className="tabular-nums">{executorIds.length}</b> 位执行人,会各自下发 1 条任务,共{" "}
-												<b className="tabular-nums">{executorIds.length}</b> 条。
-											</Alert>
-										) : (
-											<p className="text-xs text-muted-foreground">可不选,之后再指派。</p>
-										)}
-									</div>
-								</DetailRow>
-							</>
-						)}
-						<DetailRow label="截止时间" htmlFor="tc-due" className="max-w-xl">
-							<DatePicker id="tc-due" value={due} onChange={setDue} placeholder="选择日期" />
-						</DetailRow>
-
-						<DetailRow label="优先级" className="max-w-xl">
+				{editing ? null : (
+					<>
+						<DetailRow label="流程模板" className="max-w-xl">
 							<Select
-								items={PRIORITY_OPTIONS}
-								value={priority}
-								onValueChange={(next) => {
-									// `next` 可能是 `0|1|2` 或在「未设置」分支里被传回 `""`,
-									// 统一归到 number | null:空串 / 非 number / 越界 → null
-									const raw = next as unknown;
-									setPriority(typeof raw === "number" && (raw === 0 || raw === 1 || raw === 2) ? raw : null);
-								}}
+								items={workflowOptions}
+								value={workflowId || null}
+								onValueChange={(next) => setWorkflowId(next ? String(next) : "")}
 							>
 								<SelectTrigger size="sm" className="w-full">
-									<SelectValue placeholder="未设置" />
+									<SelectValue placeholder="请选择流程模板" />
 								</SelectTrigger>
 								<SelectContent>
-									{PRIORITY_OPTIONS.map((item) => (
-										<SelectItem key={String(item.value ?? "null")} value={item.value as unknown as string}>
+									{workflowOptions.map((item) => (
+										<SelectItem key={item.value} value={item.value}>
 											{item.label}
 										</SelectItem>
 									))}
 								</SelectContent>
 							</Select>
 						</DetailRow>
-
-						{/* 描述移到最后:前面几个字段填完通常已经想清楚了;多数任务描述很短,rows=2 够 */}
-						<DetailRow label="描述" htmlFor="tc-desc" hint="可空" className="max-w-xl">
-							<Textarea
-								id="tc-desc"
-								rows={2}
-								className="text-base sm:text-sm"
-								value={description}
-								onChange={(e) => setDescription(e.target.value)}
-								placeholder="补充说明"
-							/>
+						<DetailRow label="执行人" className="max-w-xl">
+							<div className="space-y-1.5">
+								<MultiSelect
+									options={userOptions}
+									value={executorIds}
+									onChange={setExecutorIds}
+									placeholder="搜索姓名…"
+									emptyText="没有匹配的人"
+									maxHeight={132}
+								/>
+								{executorIds.length > 1 ? (
+									<Alert variant="warn" title="注意">
+										选了 <b className="tabular-nums">{executorIds.length}</b> 位执行人,会各自下发 1 条任务,共{" "}
+										<b className="tabular-nums">{executorIds.length}</b> 条。
+									</Alert>
+								) : (
+									<p className="text-xs text-muted-foreground">可不选,之后再指派。</p>
+								)}
+							</div>
 						</DetailRow>
-					</section>
+					</>
+				)}
+				<DetailRow label="截止时间" htmlFor="tc-due" className="max-w-xl">
+					<DatePicker id="tc-due" value={due} onChange={setDue} placeholder="选择日期" />
+				</DetailRow>
 
-					{editing ? null : (
-						<FoldSection
-							title="填报区"
-							meta={
-								reportTemplateId
-									? [
-											selectedTemplate?.name ?? "已选模板",
-											importedRows.length ? `已导入 ${importedRows.length} 行` : null,
-										]
-											.filter(Boolean)
-											.join(" · ")
-									: "未配置 · 选表格模板后可导入 Excel 并按人划范围"
-							}
-							open={fold.report}
-							onToggle={() => setFold((prev) => ({ ...prev, report: !prev.report }))}
-						>
-							<DetailRow
-								label="填报模板"
-								hint={
-									reportTemplateId && selectedKind === "TABLE"
-										? "需先导入 Excel 底表,再为每位执行人划定数据范围。"
-										: undefined
-								}
+				<DetailRow label="优先级" className="max-w-xl">
+					<Select
+						items={PRIORITY_OPTIONS}
+						value={priority === null ? "null" : String(priority)}
+						onValueChange={(next) => setPriority(parsePriority(next))}
+					>
+						<SelectTrigger size="sm" className="w-full">
+							<SelectValue placeholder="未设置" />
+						</SelectTrigger>
+						<SelectContent>
+							{PRIORITY_OPTIONS.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</DetailRow>
+
+				{/* 描述移到最后:前面几个字段填完通常已经想清楚了;多数任务描述很短,rows=2 够 */}
+				<DetailRow label="描述" htmlFor="tc-desc" hint="可空" className="max-w-xl">
+					<Textarea
+						id="tc-desc"
+						rows={2}
+						className="text-base sm:text-sm"
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+						placeholder="补充说明"
+					/>
+				</DetailRow>
+			</section>
+
+			{editing ? null : (
+				<FoldSection
+					title="填报区"
+					meta={
+						reportTemplateId
+							? [selectedTemplate?.name ?? "已选模板", importedRows.length ? `已导入 ${importedRows.length} 行` : null]
+									.filter(Boolean)
+									.join(" · ")
+							: "未配置 · 选表格模板后可导入 Excel 并按人划范围"
+					}
+					open={fold.report}
+					onToggle={() => setFold((prev) => ({ ...prev, report: !prev.report }))}
+				>
+					<DetailRow
+						label="填报模板"
+						hint={
+							reportTemplateId && selectedKind === "TABLE"
+								? "需先导入 Excel 底表,再为每位执行人划定数据范围。"
+								: undefined
+						}
+					>
+						<div className="flex flex-wrap items-center gap-2">
+							<Select
+								value={reportTemplateId || null}
+								onValueChange={(value) => {
+									setReportTemplateId(value ?? "");
+									resetReportRule();
+								}}
+								items={(templates.data ?? []).map((template) => ({
+									value: template.id,
+									label: template.name,
+								}))}
 							>
-								<div className="flex flex-wrap items-center gap-2">
-									<Select
-										value={reportTemplateId || null}
-										onValueChange={(value) => {
-											setReportTemplateId(value ?? "");
+								<SelectTrigger className="min-w-48 flex-1" aria-label="填报模板">
+									<SelectValue placeholder="不配置填报" />
+								</SelectTrigger>
+								<SelectContent>
+									{(templates.data ?? []).map((template) => (
+										<SelectItem key={template.id} value={template.id}>
+											{template.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							{reportTemplateId ? (
+								<>
+									<ActionIconButton
+										label="清除填报模板"
+										onClick={() => {
+											setReportTemplateId("");
 											resetReportRule();
 										}}
-										items={(templates.data ?? []).map((template) => ({
-											value: template.id,
-											label: template.name,
-										}))}
 									>
-										<SelectTrigger className="min-w-48 flex-1" aria-label="填报模板">
-											<SelectValue placeholder="不配置填报" />
-										</SelectTrigger>
-										<SelectContent>
-											{(templates.data ?? []).map((template) => (
-												<SelectItem key={template.id} value={template.id}>
-													{template.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-									{reportTemplateId ? (
-										<>
-											<ActionIconButton
-												label="清除填报模板"
-												onClick={() => {
-													setReportTemplateId("");
-													resetReportRule();
-												}}
-											>
-												<X className="size-3.5" />
-											</ActionIconButton>
-											{/* 下载模版 / 文件导入:排在「清除」右边,只出图标,不占一条 */}
-											{selectedKind === "TABLE" && selectedSchema?.success ? (
-												<TaskReportExcel
-													reportId={reportTemplateId}
-													schema={selectedSchema.data}
-													canEdit
-													disabled={false}
-													onImport={(value) => {
-														setImportedRows((Array.isArray(value) ? value : [value]) as typeof importedRows);
-													}}
-												/>
-											) : null}
-										</>
+										<X className="size-3.5" />
+									</ActionIconButton>
+									{/* 下载模版 / 文件导入:排在「清除」右边,只出图标,不占一条 */}
+									{selectedKind === "TABLE" && selectedSchema?.success ? (
+										<TaskReportExcel
+											reportId={reportTemplateId}
+											schema={selectedSchema.data}
+											canEdit
+											onImport={(value) => {
+												setImportedRows((Array.isArray(value) ? value : [value]) as typeof importedRows);
+											}}
+										/>
 									) : null}
-								</div>
-							</DetailRow>
-
-							{reportTemplateId && selectedKind === "TABLE" ? (
-								selectedSchema?.success ? (
-									<div className="space-y-2.5">
-										{importedRows.length > 0 ? (
-											<div className="flex items-center gap-2 rounded-md border border-hue-blue-line bg-hue-blue-soft px-3 py-2">
-												<span className="text-xs font-medium text-hue-blue-fg">已导入</span>
-												<span className="text-sm font-semibold text-hue-blue-fg tabular-nums">
-													{importedRows.length}
-												</span>
-												<span className="text-xs text-hue-blue-fg">行 · 列顺序见「ⓘ」</span>
-											</div>
-										) : (
-											<p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-												还没有数据。用「文件导入」选一份 Excel,或用「下载模版」先填。
-											</p>
-										)}
-										{importedRows.length > 0 && filterFieldOptions.length > 0 ? (
-											<div className="space-y-2">
-												<p className="text-xs font-medium tracking-wider text-muted-foreground">数据范围 · 按执行人</p>
-												<div className="space-y-2">
-													{ruleTargets.map((target) => {
-														const rule = rules[target.key];
-														const values = rule?.field ? valuesOf(rule.field) : [];
-														const opened = scopeOpen === target.key;
-														const hit = matchedOf(rule);
-														const avatarTone = RANDOM_PALETTE[stableIndex(target.key || "self", RANDOM_PALETTE.length)];
-														const setRule = (next: { field: string; value: string }) =>
-															setRules((prev) => ({ ...prev, [target.key]: next }));
-														return (
-															<article
-																key={target.key || "self"}
-																className={cn(
-																	"overflow-hidden rounded-md border transition-colors",
-																	opened ? "border-hue-blue-line" : "border-border",
-																)}
-															>
-																<div className="flex items-center gap-2.5 px-3 py-2">
-																	{/* 点色圆头像(同 Tag 的稳定哈希选色,同人同色) */}
-																	<span
-																		className={cn(
-																			"flex size-6.5 shrink-0 items-center justify-center rounded-full text-xs font-bold leading-none",
-																			avatarTone,
-																		)}
-																	>
-																		{target.label.slice(0, 1)}
-																	</span>
-																	<span
-																		className="min-w-0 max-w-28 shrink-0 truncate text-sm font-medium text-foreground"
-																		title={target.label}
-																	>
-																		{target.label}
-																	</span>
-																	<span
-																		className={cn(
-																			"min-w-0 flex-1 truncate text-xs",
-																			rule?.field ? "text-foreground" : "text-muted-foreground",
-																		)}
-																	>
-																		{ruleSummaryOf(rule)}
-																	</span>
-																	<span
-																		className={cn(
-																			"shrink-0 rounded-sm px-1.5 py-0.5 text-xs tabular-nums",
-																			hit > 0 ? "bg-success-soft text-success-fg" : "bg-danger-soft text-danger-fg",
-																		)}
-																	>
-																		命中 {hit} 行
-																	</span>
-																	<ActionButton onClick={() => setScopeOpen(opened ? null : target.key)}>
-																		{opened ? "收起" : "编辑"}
-																	</ActionButton>
-																	<ActionIconButton
-																		label={`清除 ${target.label} 的数据范围`}
-																		disabled={!rule?.field}
-																		onClick={() => {
-																			setRules((prev) => {
-																				const next = { ...prev };
-																				delete next[target.key];
-																				return next;
-																			});
-																			setScopeOpen(null);
-																		}}
-																	>
-																		<X className="size-3.5" />
-																	</ActionIconButton>
-																</div>
-																{opened ? (
-																	<div className="grid grid-cols-2 gap-2 border-t border-hue-blue-line bg-hue-blue-soft/50 px-3 py-2.5">
-																		<div>
-																			<span className="mb-1 block text-[11px] tracking-wider text-muted-foreground">
-																				字段
-																			</span>
-																			<Select
-																				items={filterFieldOptions.map((field) => ({
-																					value: field.id,
-																					label: field.label,
-																				}))}
-																				value={rule?.field || null}
-																				onValueChange={(value) => setRule({ field: value ?? "", value: "" })}
-																			>
-																				<SelectTrigger
-																					size="sm"
-																					className="w-full"
-																					aria-label={`${target.label} 数据范围字段`}
-																				>
-																					<SelectValue placeholder="不限字段" />
-																				</SelectTrigger>
-																				<SelectContent>
-																					{filterFieldOptions.map((field) => (
-																						<SelectItem key={field.id} value={field.id}>
-																							{field.label}
-																						</SelectItem>
-																					))}
-																				</SelectContent>
-																			</Select>
-																		</div>
-																		<div>
-																			<span className="mb-1 block text-[11px] tracking-wider text-muted-foreground">
-																				值
-																			</span>
-																			<Select
-																				items={values}
-																				value={rule?.value || null}
-																				disabled={!rule?.field}
-																				onValueChange={(value) => {
-																					if (!rule?.field) return;
-																					setRule({ field: rule.field, value: value ?? "" });
-																				}}
-																			>
-																				<SelectTrigger
-																					size="sm"
-																					className="w-full"
-																					aria-label={`${target.label} 数据范围值`}
-																				>
-																					<SelectValue placeholder={rule?.field ? "选择值" : "先选字段"} />
-																				</SelectTrigger>
-																				<SelectContent>
-																					{values.map((item) => (
-																						<SelectItem key={item.value} value={item.value}>
-																							{item.label}
-																						</SelectItem>
-																					))}
-																				</SelectContent>
-																			</Select>
-																		</div>
-																	</div>
-																) : null}
-															</article>
-														);
-													})}
-												</div>
-												<p className="text-xs text-muted-foreground">
-													未划范围的人默认拿到全部 {importedRows.length} 行；多个执行人的范围必须互斥。
-												</p>
-											</div>
-										) : null}
-									</div>
-								) : (
-									<p className="text-sm text-destructive">填报模板结构无效,无法导入。</p>
-								)
+								</>
 							) : null}
-						</FoldSection>
-					)}
+						</div>
+					</DetailRow>
 
-					<FoldSection
-						title="链接区"
-						meta={
-							links.length
-								? [
-										`${links.length} / 30`,
-										links
-											.slice(0, 2)
-											.map((block) => block.url)
-											.join("、"),
-									]
-										.filter(Boolean)
-										.join(" · ")
-								: "0 / 30 · 还没有链接"
-						}
-						open={fold.links}
-						onToggle={() => setFold((prev) => ({ ...prev, links: !prev.links }))}
-						action={
-							<Button
-								variant="outline"
-								size="icon-sm"
-								aria-label="添加链接"
-								title="添加链接"
-								disabled={pending || links.length >= 30}
-								onClick={() => setLinks((prev) => [...prev, blankBlock()])}
-							>
-								<Plus className="size-4" />
-							</Button>
-						}
-					>
-						<TaskLinkEditor value={links} onChange={setLinks} disabled={pending} />
-					</FoldSection>
-
-					<FoldSection
-						title="附件区"
-						meta={
-							attachments.length
-								? [
-										`${attachments.length} / 20`,
-										attachments
-											.slice(0, 2)
-											.map((file) => file.name)
-											.join("、"),
-									].join(" · ")
-								: "0 / 20 · 还没有附件"
-						}
-						open={fold.attach}
-						onToggle={() => setFold((prev) => ({ ...prev, attach: !prev.attach }))}
-						action={<TaskAttachmentAddButton value={attachments} onChange={setAttachments} disabled={pending} />}
-					>
-						{/* 附件:选完即传,提交只带 id 列表(与评论附件同一链路);点条目就地预览 */}
-						<AttachmentChips
-							attachments={attachments}
-							onOpen={editing ? setPreviewAttachment : undefined}
-							onRemove={(id) => setAttachments((prev) => prev.filter((item) => item.id !== id))}
-							disabled={pending}
-						/>
-					</FoldSection>
-					<FoldSection
-						title="通知"
-						meta={reminderSummaryOf(reminderConfig)}
-						open={fold.reminder}
-						onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}
-					>
-						<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} dueAt={fromDateInput(due)} />
-					</FoldSection>
-				</DialogBody>
-				<DialogFooter>
-					{missingRequired.length ? (
-						<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
-							还缺 {missingRequired.length} 项必填:{missingRequired.join("、")}
-						</span>
-					) : !reminderValid ? (
-						<button
-							type="button"
-							className="text-xs text-destructive sm:mr-auto"
-							onClick={() => setFold((prev) => ({ ...prev, reminder: true }))}
-						>
-							请完善通知提醒方式
-						</button>
-					) : executorIds.length > 1 ? (
-						<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
-							将下发 {executorIds.length} 条任务
-						</span>
+					{reportTemplateId && selectedKind === "TABLE" ? (
+						selectedSchema?.success ? (
+							<TaskScopeEditor
+								rows={importedRows}
+								fields={filterFieldOptions}
+								targets={ruleTargets}
+								rules={rules}
+								onChange={setRules}
+							/>
+						) : (
+							<p className="text-sm text-destructive">填报模板结构无效,无法导入。</p>
+						)
 					) : null}
-					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-						取消
-					</Button>
-					<Button
-						disabled={pending || !canSubmit}
-						onClick={() =>
-							onSubmit({
-								name: name.trim(),
-								description: description.trim() || null,
-								dueAt: fromDateInput(due),
-								priority,
-								reminderConfig,
-								workflowId,
-								report: reportTemplateId
-									? {
-											reportId: reportTemplateId,
-											...(importedRows.length ? { rows: importedRows } : {}),
-										}
-									: null,
-								reportFilter: ruleToFilter(rules[""]),
-								executors: executorIds.map((id) => ({ userId: id, filter: ruleToFilter(rules[id]) })),
-								links,
-								attachments: attachments.map((file) => file.id),
-							})
-						}
-					>
-						{pending ? "保存中…" : "保存"}
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-			{editing && (
-				<TaskAttachmentPreview
-					taskId={editing.id}
-					attachment={previewAttachment}
-					open={previewAttachment !== null}
-					onOpenChange={(next) => {
-						if (!next) setPreviewAttachment(null);
-					}}
-				/>
+				</FoldSection>
 			)}
-		</Dialog>
+
+			<FoldSection
+				title="链接区"
+				meta={
+					links.length
+						? [
+								`${links.length} / ${MAX_LINKS}`,
+								links
+									.slice(0, 2)
+									.map((block) => block.url)
+									.join("、"),
+							]
+								.filter(Boolean)
+								.join(" · ")
+						: `0 / ${MAX_LINKS} · 还没有链接`
+				}
+				open={fold.links}
+				onToggle={() => setFold((prev) => ({ ...prev, links: !prev.links }))}
+				action={
+					<Button
+						variant="outline"
+						size="icon-sm"
+						aria-label="添加链接"
+						title="添加链接"
+						disabled={pending || links.length >= MAX_LINKS}
+						onClick={() => setLinks((prev) => [...prev, blankBlock()])}
+					>
+						<Plus className="size-4" />
+					</Button>
+				}
+			>
+				<TaskLinkEditor value={links} onChange={setLinks} disabled={pending} />
+			</FoldSection>
+
+			<FoldSection
+				title="附件区"
+				meta={
+					attachments.length
+						? [
+								`${attachments.length} / 20`,
+								attachments
+									.slice(0, 2)
+									.map((file) => file.name)
+									.join("、"),
+							].join(" · ")
+						: `0 / ${MAX_ATTACHMENTS} · 还没有附件`
+				}
+				open={fold.attach}
+				onToggle={() => setFold((prev) => ({ ...prev, attach: !prev.attach }))}
+				action={<TaskAttachmentAddButton value={attachments} onChange={setAttachments} disabled={pending} />}
+			>
+				{/* 附件:选完即传,提交只带 id 列表(与评论附件同一链路);点条目就地预览 */}
+				<AttachmentChips
+					attachments={attachments}
+					onOpen={editing ? preview.preview : undefined}
+					onRemove={(id) => setAttachments((prev) => prev.filter((item) => item.id !== id))}
+					disabled={pending}
+				/>
+			</FoldSection>
+			<FoldSection
+				title="通知"
+				meta={reminderSummaryOf(reminderConfig)}
+				open={fold.reminder}
+				onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}
+			>
+				<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} dueAt={fromDateInput(due)} />
+			</FoldSection>
+		</TaskActionDialog>
 	);
 }

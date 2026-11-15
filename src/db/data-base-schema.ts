@@ -11,7 +11,7 @@
  *  - 外链访客一张:**`sys_share_token`**(外链免登令牌 —— 用户管理 ▸ 访客管理,见 `lib/share-access.ts`);
  *  - 运行记录:`sys_notification*`(通知)/ `sys_log`(审计日志)/ `sys_file`(文件元数据)/
  *    `sys_scheduled_job` / `sys_job_execution`(调度,见 `lib/scheduler.ts`);
- *  - 任务闭环 `tc_*`(见 `doc/task-close.md`);
+ *  - 任务闭环 `tc_*`;
  *  - 示例一张:**`demo_grid`**(演示业务;唯一不带 `sys_` 前缀的表)。
  *
  * 为什么单独一个文件、而不是并进 `src/db/schema.ts`:
@@ -587,13 +587,26 @@ export const sysNotification = mysqlTable(
 		source_id: varchar("source_id", { length: 191 }),
 		title: varchar("title", { length: 128 }).notNull(),
 		content: text("content"),
+		/**
+		 * 站内跳转路径 —— **白名单校验后**才落库(非法值写 NULL)。
+		 *
+		 * 从 `payload` JSON 里升出来的列:每条通知都可能带,读侧要按它判断「能不能打开」,
+		 * 前端已把它当行字段用。住 JSON 里没法索引、还得每次 `JSON.parse` + 正则重校验。
+		 */
+		path: varchar("path", { length: 255 }),
+		/** 展示级别 —— 铃铛图标色 / 台账短标签;住 JSON 里没法按级别筛 */
+		level: varchar("level", { length: 16 }).notNull().default("info"),
+		/** 各类通知**特有**的字段(`commentId` / `actionId` / `taskId` / `operatorId` …)—— 不再装 `path` / `level` */
 		payload: text("payload"),
 		dedupe_key: varchar("dedupe_key", { length: 191 }).notNull().unique(),
 		created_at: datetime("created_at", { mode: "date" })
 			.notNull()
 			.$defaultFn(() => new Date()),
 	},
-	(table) => [index("idx_notification_source").on(table.source_type, table.source_id, table.type, table.created_at)],
+	(table) => [
+		index("idx_notification_source").on(table.source_type, table.source_id, table.type, table.created_at),
+		index("idx_notification_level").on(table.level, table.created_at),
+	],
 );
 
 export const sysNotificationDelivery = mysqlTable(
@@ -901,7 +914,7 @@ export const sysDataPlugin = mysqlTable(
 // `scripts/create-system-tables.ts` 维护(走 `pnpm db:create`),列注释由
 // `scripts/sync-table-meta.ts` 维护 —— 别在下面 DDL 字面上塞 COLUMN COMMENT,
 // 两边都写必然漂移。
-// 详细设计:`doc/task-close.md`。
+// 详细设计见代码与 `doc/界面约定.md`。
 
 /** 状态图模板(payload 装整套 statuses / initial / edges 定义)。 */
 export const taskWorkflowTable = mysqlTable("tc_workflow", {
@@ -929,6 +942,8 @@ export const taskTable = mysqlTable(
 		description: text("description"),
 		status: varchar("status", { length: 32 }).notNull(),
 		creator_id: varchar("creator_id", { length: 191 }).notNull(),
+		/** → sys_user.id;任务**唯一执行人**(至多一个,由本列本身保证)。null = 未指派 */
+		executor_id: varchar("executor_id", { length: 191 }),
 		due_at: datetime("due_at", { mode: "date" }),
 		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */
 		priority: tinyint("priority"),
@@ -944,7 +959,7 @@ export const taskTable = mysqlTable(
 		parent_id: varchar("parent_id", { length: 191 }),
 		/**
 		 * 填报配置:模板 id、创建时的结构快照及可选筛选条件。
-		 * 子任务另存同步基线;每个任务的草稿保存在自己的 `tc_task_report` 行。null 表示未绑定。
+		 * 填报值不在这里 —— 每个任务(含子任务)的 draft / synced 存在自己的 `tc_task_report` 行。null 表示未绑定。
 		 */
 		report: json("report"),
 		/** 提醒配置；旧任务为空时使用默认节点提醒。 */
@@ -1010,7 +1025,6 @@ export const taskActionTable = mysqlTable(
 		status: varchar("status", { length: 16 }).notNull(),
 		viewed_at: datetime("viewed_at", { mode: "date" }),
 		activated_at: datetime("activated_at", { mode: "date" }),
-		last_urged_at: datetime("last_urged_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
@@ -1024,14 +1038,11 @@ export const taskActionTable = mysqlTable(
 );
 
 /**
- * 任务-成员关系表 —— 谁对这个任务有哪些角色。
+ * 任务-参与人关系表 —— 谁参与了这条任务(**不含创建人 / 执行人**)。
  *
- * `creator` 是任务固有属性(`tc_task.creator_id`),不入此表。
- * 角色 `participant` / `executor` 由此表维护。
- * 同一用户只能有一个任务角色,事务中检查。
- * 不加 `deleted_at`(与 `sys_user_dept` 同档;纯关联表真删,审计走 `sys_log`)。
- * 不建外键(惯例:审计保留已删用户 / 已删任务)。
- * 「每个 task 至多 1 个执行人」靠应用层事务保证;真出过脏数据再加 generated column + 单独 UK。
+ * `creator` 是任务固有属性(`tc_task.creator_id`),`executor` 也是(`tc_task.executor_id`)——
+ * 两个单例都由**列**保证唯一;本表只承载"参与者"这个**集合**(一人一行)。
+ * 不加 `deleted_at`(纯关联表真删,审计走 `sys_log`);不建外键(审计保留已删用户 / 已删任务)。
  */
 export const taskMemberTable = mysqlTable(
 	"tc_member",
@@ -1040,18 +1051,16 @@ export const taskMemberTable = mysqlTable(
 		task_id: varchar("task_id", { length: 191 }).notNull(),
 		// user_id 长度跟 sys_user.id 对齐(36,nanoid 21 字符留余地)
 		user_id: varchar("user_id", { length: 36 }).notNull(),
-		// varchar(16) + TS 联合类型:与 who 协议同形态,编译期挡拼写错
-		role: varchar("role", { length: 16 }).notNull(),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		/** 同一 task + user + role 唯一(同人同角色不重复入) */
-		uniqueIndex("uk_member_unique").on(table.task_id, table.user_id, table.role),
-		/** 「我作为 X 角色参与了哪些 task」(用户视角入口) */
-		index("idx_member_user_role").on(table.user_id, table.role),
-		/** 「这个 task 上的 X 角色有哪些人」(任务详情) */
-		index("idx_member_task_role").on(table.task_id, table.role),
+		/** 同一 task + user 唯一(一人一行) */
+		uniqueIndex("uk_member_unique").on(table.task_id, table.user_id),
+		/** 「我参与了哪些 task」(用户视角入口) */
+		index("idx_member_user").on(table.user_id),
+		/** 「这个 task 有哪些参与者」(任务详情) */
+		index("idx_member_task").on(table.task_id),
 	],
 );
 
@@ -1092,7 +1101,7 @@ export const taskCommentTable = mysqlTable(
  * 与 `sys_log` 的分工(别混):
  *  - `sys_log` 是**全站合规台账**:中间件写、fire-and-forget、粗粒度(path + 尽力而为的 target + 入参快照);
  *  - 本表是**模块业务历史**:各 resolver 在**同一个事务里**写 —— 业务回滚则日志一起没,
- *    业务成功就一定有日志(故意与 `lib/global-audit.ts` 的"绝不拖累业务"相反,见 `doc/task-close.md`)。
+ *    业务成功就一定有日志(故意与 `lib/global-audit.ts` 的"绝不拖累业务"相反)。
  *
  * 两条口径(改表前先读):
  *  1. `from_status` / `to_status` = 任务状态在**这次事件前后**的值;事件没动状态就双双 NULL
@@ -1162,36 +1171,15 @@ export const taskReportTable = mysqlTable(
 	{
 		id: varchar("id", { length: 32 }).primaryKey(),
 		task_id: varchar("task_id", { length: 191 }).notNull(),
+		/** 工作稿:600ms 防抖自动保存写这里 */
 		draft: json("draft"),
+		/** 提交给父任务的那一版(点「提交」时从 draft 复制);null = 从未提交 */
+		synced: json("synced"),
+		/** 提交时刻 */
+		synced_at: datetime("synced_at", { mode: "date" }),
 		revision: int("revision").notNull().default(0),
-		/** 手动「保存」时留的快照指针(子任务表单同步用;表格同步直接改父行,不用它) */
-		current_submission_id: varchar("current_submission_id", { length: 32 }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [uniqueIndex("uk_task_report_task").on(table.task_id)],
-);
-
-/**
- * 子任务**手动保存**后的不可变快照(表单类填报用)。
- *
- * 表格同步是"改父任务那几行";表单只有一个对象、没法合并,所以每次保存追加一份快照,
- * 父任务只读展示这些快照 —— 子任务没点保存,父任务就什么都看不到(没有实时兜底)。
- */
-export const taskReportSubmissionTable = mysqlTable(
-	"tc_report_submission",
-	{
-		id: varchar("id", { length: 32 }).primaryKey(),
-		/** → `tc_task_report.id`(子任务那一行) */
-		report_id: varchar("report_id", { length: 32 }).notNull(),
-		task_id: varchar("task_id", { length: 191 }).notNull(),
-		submitter_id: varchar("submitter_id", { length: 36 }).notNull(),
-		revision: int("revision").notNull(),
-		payload: json("payload"),
-		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
-	},
-	(table) => [
-		uniqueIndex("uk_report_submission_revision").on(table.report_id, table.revision),
-		index("idx_report_submission_task").on(table.task_id, table.created_at),
-	],
 );

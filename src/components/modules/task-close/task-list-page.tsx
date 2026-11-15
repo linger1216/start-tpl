@@ -6,23 +6,23 @@ import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
+import { AsyncState } from "#/components/modules/task-close/async-state";
 import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
-import { TaskForm, type TaskFormPayload } from "#/components/modules/task-close/task-form";
+import { type CreateTaskPayload, TaskForm } from "#/components/modules/task-close/task-form";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { writeSuccess } from "#/hooks/use-ledger-write";
-import { PAGE_SIZE_KEY, useParaRaw } from "#/hooks/use-para-prefs";
+import { PAGE_SIZE_KEY, parsePageSize, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError, toastApiError } from "#/lib/api/error";
-import { PAGE_SIZES } from "#/lib/constants";
-import type { WorkflowStatus } from "#/lib/task/close-spec";
+import { toastApiError } from "#/lib/api/error";
+import { priorityLabelOf, statusesOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
 import { formatLocalDate } from "#/lib/time";
+import { cn } from "#/lib/utils";
 
 /** 快捷区间 → 往回推的天数(含今天):今天 0 天 / 近 7 天 6 天 / 近 30 天 29 天 */
 const PRESET_DAYS: Record<string, number> = { today: 0, "7d": 6, "30d": 29 };
@@ -32,6 +32,19 @@ function shiftDays(days: number): Date {
 	const date = new Date();
 	date.setDate(date.getDate() + days);
 	return date;
+}
+
+/** 快捷筛选的文字按钮:静置是次级文字,选中时淡底 + 主色(同一排里一眼看出哪些生效) */
+function QuickFilter({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+	return (
+		<ActionButton
+			aria-pressed={active}
+			onClick={onClick}
+			className={cn("rounded-full px-2 py-0.5", active && "bg-brand-soft font-medium text-primary hover:no-underline")}
+		>
+			{children}
+		</ActionButton>
+	);
 }
 
 /**
@@ -53,15 +66,12 @@ export function TaskListPage() {
 	const [mineOnly, setMineOnly] = useState(true);
 	/** 只看「有动作正轮到我处理」的 —— 与卡面「待你处理」同一判据 */
 	const [pendingOnly, setPendingOnly] = useState(false);
+	/** 快捷筛选:优先级(可多选)与期限(临期 / 超期,互斥) */
+	const [priorities, setPriorities] = useState<number[]>([]);
+	const [deadline, setDeadline] = useState<"" | "soon" | "overdue">("");
 	const [page, setPage] = useState(1);
-	// 读 `page.size` 参数 —— loader 已 prefetch,首帧就有;fallback 20 兜底。
-	// 不复用 `usePageSize()`:它内部 useQuery + useMemo 在 React 19 + sonner dev 拦截下
-	// 会误报 hook queue 错,直接 `useParaRaw` + 同步解析更稳。
-	const pageSizeRaw = useParaRaw(PAGE_SIZE_KEY);
-	const pageSize = useMemo(() => {
-		const parsed = Number(pageSizeRaw);
-		return Number.isFinite(parsed) && (PAGE_SIZES as readonly number[]).includes(parsed) ? parsed : 20;
-	}, [pageSizeRaw]);
+	// 读 `page.size` 参数 —— loader 已 prefetch,首帧就有;`parsePageSize` 兜底 20
+	const pageSize = parsePageSize(useParaRaw(PAGE_SIZE_KEY));
 	const [createOpen, setCreateOpen] = useState(false);
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
@@ -93,6 +103,8 @@ export function TaskListPage() {
 				createdBefore,
 				mine: mineOnly,
 				pending: pendingOnly || undefined,
+				priority: priorities.length ? [...priorities].sort() : undefined,
+				deadline: deadline || undefined,
 				page,
 				pageSize,
 			},
@@ -102,8 +114,14 @@ export function TaskListPage() {
 
 	const workflowsQuery = useQuery(trpc.taskClose.workflowList.queryOptions());
 	const usersQuery = useQuery({ ...trpc.user.list.queryOptions(), enabled: createOpen });
-	const workflowOptions = (workflowsQuery.data ?? []).map((row) => ({ value: row.id, label: row.name }));
-	const userOptions = (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name }));
+	const workflowOptions = useMemo(
+		() => (workflowsQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
+		[workflowsQuery.data],
+	);
+	const userOptions = useMemo(
+		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
+		[usersQuery.data],
+	);
 
 	/**
 	 * 列表投影**不带状态图快照** —— 所以用**所有模板状态清单的并集**建 `value → label`,
@@ -113,7 +131,7 @@ export function TaskListPage() {
 	const statusLabels = useMemo(() => {
 		const map = new Map<string, string>();
 		for (const row of workflowsQuery.data ?? []) {
-			const statuses = (row.payload as { statuses?: WorkflowStatus[] } | null)?.statuses ?? [];
+			const statuses = statusesOf(row.payload);
 			for (const item of statuses) if (!map.has(item.value)) map.set(item.value, item.label);
 		}
 		return map;
@@ -134,7 +152,7 @@ export function TaskListPage() {
 		}),
 	);
 
-	function submit(payload: TaskFormPayload) {
+	function submit(payload: CreateTaskPayload) {
 		createMutation.mutate({
 			name: payload.name,
 			description: payload.description,
@@ -302,59 +320,93 @@ export function TaskListPage() {
 						<TabsTrigger value="30d">近 30 天</TabsTrigger>
 					</TabsList>
 				</Tabs>
-				{/*
-				  用 `Switch` 自带的 `label`:文字在按钮**内部**,读屏能念出开关名,
-				  点文字也能切换。包一层 `<label>` 不行 —— `Switch` 是 `<button>` 不是 input。
-				*/}
-				<span className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
-					<Switch
-						label="只看待我处理"
-						checked={pendingOnly}
-						onCheckedChange={(next) => {
-							setPendingOnly(next);
+			</div>
+
+			{/*
+			  快捷筛选:一排**文字按钮**,点一下就过滤(再点取消)。
+			  — 优先级可多选(P0/P1/P2);临期 / 超期 互斥(都是"期限压力",同时成立没有意义);
+			  — 待我处理 / 只看与我相关 原来是开关,改成同一排文字按钮,保持一致。
+			*/}
+			<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+				<span className="text-xs text-muted-foreground">快捷筛选</span>
+				{TASK_PRIORITIES.map((value) => (
+					<QuickFilter
+						key={value}
+						active={priorities.includes(value)}
+						onClick={() => {
+							setPriorities((prev) =>
+								prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
+							);
 							setPage(1);
 						}}
-					/>
-					<Switch
-						label="只看与我相关"
-						checked={mineOnly}
-						onCheckedChange={(next) => {
-							setMineOnly(next);
-							setPage(1);
-						}}
-					/>
-				</span>
+					>
+						{priorityLabelOf(value)}
+					</QuickFilter>
+				))}
+				<span className="h-3 w-px bg-border" />
+				<QuickFilter
+					active={deadline === "soon"}
+					onClick={() => {
+						setDeadline((prev) => (prev === "soon" ? "" : "soon"));
+						setPage(1);
+					}}
+				>
+					临期
+				</QuickFilter>
+				<QuickFilter
+					active={deadline === "overdue"}
+					onClick={() => {
+						setDeadline((prev) => (prev === "overdue" ? "" : "overdue"));
+						setPage(1);
+					}}
+				>
+					超期
+				</QuickFilter>
+				<span className="h-3 w-px bg-border" />
+				<QuickFilter
+					active={pendingOnly}
+					onClick={() => {
+						setPendingOnly((prev) => !prev);
+						setPage(1);
+					}}
+				>
+					待我处理
+				</QuickFilter>
+				<QuickFilter
+					active={mineOnly}
+					onClick={() => {
+						setMineOnly((prev) => !prev);
+						setPage(1);
+					}}
+				>
+					只看与我相关
+				</QuickFilter>
 			</div>
 
 			{/* 三态分开:加载 / 出错 / 真的没有 —— 把「取不到」说成「没有」会让人以为工作被清空了 */}
-			{listQuery.isError ? (
-				<Card>
-					<div className="grid justify-items-center gap-3 py-12 text-center text-sm text-muted-foreground">
-						<p>{toApiError(listQuery.error).message || "任务列表加载失败。"}</p>
-						<Button variant="outline" size="sm" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
-							{listQuery.isFetching ? "重试中…" : "重试"}
-						</Button>
-					</div>
-				</Card>
-			) : items.length === 0 ? (
-				<Card>
-					<div className="py-12 text-center text-sm text-muted-foreground">
-						{listQuery.isPending
-							? "加载中…"
-							: pendingOnly
+			<Card>
+				<AsyncState
+					pending={listQuery.isPending}
+					error={listQuery.isError ? listQuery.error : undefined}
+					isFetching={listQuery.isFetching}
+					onRetry={() => listQuery.refetch()}
+					empty={
+						items.length === 0
+							? pendingOnly
 								? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
-								: "没有任务。点右上角「新增任务」起一个。"}
+								: "没有任务。点右上角「新增任务」起一个。"
+							: null
+					}
+				>
+					<div className="flex flex-wrap gap-3">
+						{items.map((item) => (
+							<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
+								<TaskCard task={item} statusLabel={labelOf} />
+							</TaskCardLink>
+						))}
 					</div>
-				</Card>
-			) : (
-				<div className="flex flex-wrap gap-3">
-					{items.map((item) => (
-						<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
-							<TaskCard task={item} statusLabel={labelOf} />
-						</TaskCardLink>
-					))}
-				</div>
-			)}
+				</AsyncState>
+			</Card>
 
 			<PaginationControl
 				page={page}
@@ -372,7 +424,7 @@ export function TaskListPage() {
 				editing={null}
 				workflowOptions={workflowOptions}
 				userOptions={userOptions}
-				onSubmit={submit}
+				onCreate={submit}
 			/>
 		</PageFrame>
 	);

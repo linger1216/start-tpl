@@ -15,10 +15,8 @@ const statuses = [
 	{ value: "done", label: "待核验" },
 ];
 
-const ROLE_TEXT = { creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>;
 const ctx = {
 	statusLabel: (value: string) => statusLabelOf(statuses, value),
-	roleLabel: (role: string) => ROLE_TEXT[role] ?? role,
 };
 
 function item(part: Partial<TaskLogItem>): TaskLogItem {
@@ -101,14 +99,10 @@ describe("活动日志文本", () => {
 	});
 
 	it("成员 / 评论:对象与摘要要落到文字上", () => {
-		const added = describeLog(item({ event: "member.add", targetName: "王五", detail: { role: "executor" } }), ctx);
+		const added = describeLog(item({ event: "member.add", targetName: "王五" }), ctx);
 		assert.equal(added.title, "加入成员:王五");
-		assert.equal(added.note, "角色:执行者");
 
-		const removed = describeLog(
-			item({ event: "member.remove", targetName: "王五", detail: { role: "participant" } }),
-			ctx,
-		);
+		const removed = describeLog(item({ event: "member.remove", targetName: "王五" }), ctx);
 		assert.equal(removed.title, "移出成员:王五");
 
 		const comment = describeLog(item({ event: "comment.create", excerpt: "看过了", detail: { attachments: 2 } }), ctx);
@@ -138,13 +132,15 @@ describe("活动日志文本", () => {
 	});
 
 	it("填报事件有专属文案", () => {
-		for (const event of ["report.bind", "report.sync", "report.reset"] as const)
-			assert.notEqual(describeLog(item({ event }), ctx).note, "未知事件类型", `${event} 要有专属分支`);
+		const submit = describeLog(item({ event: "report.submit", detail: { pushed: 3 } }), ctx);
+		assert.equal(submit.title, "提交填报给父任务");
+		assert.equal(submit.note, "本次提交 3 行");
 	});
 
 	it("类别取事件码前缀;流程条只认动过状态的行", () => {
 		assert.equal(logCategoryOf("member.add"), "member");
 		assert.equal(logCategoryOf("task.transit"), "task");
+		assert.equal(logCategoryOf("report.submit"), "report");
 		assert.equal(logCategoryOf("brand.new"), null);
 	});
 });

@@ -1,57 +1,75 @@
-import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull, lte } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "#/db";
-import {
-	sysNotification,
-	sysUser,
-	taskActionTable,
-	taskMemberTable,
-	taskReminderTable,
-	taskTable,
-} from "#/db/data-base-schema";
+import { sysUser, taskActionTable, taskReminderTable, taskTable } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification, type NotificationChannel } from "#/lib/notification";
-import { taskPathOf } from "#/lib/task/close-spec";
-import { executorReminderEvents, nodeReminderEvents, readTaskReminderConfig } from "#/lib/task/reminder-spec";
+import { isClosedSnapshot, taskPathOf } from "#/lib/task/close-spec";
+import { eventKeyOf, targetOf } from "#/lib/task/notification-target";
+import {
+	channelsOf,
+	executorReminderEvents,
+	nodeReminderEvents,
+	readTaskReminderConfig,
+} from "#/lib/task/reminder-spec";
 import { isWorkingDay, nextWorkingDayAt } from "#/lib/workday";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Task = typeof taskTable.$inferSelect;
 
-function terminal(task: Task): boolean {
-	const workflow = task.workflow as { statuses?: Array<{ value: string; terminal?: boolean }> } | null;
-	return !!task.deleted_at || !!workflow?.statuses?.some((s) => s.value === task.status && s.terminal);
+/** 结束(终态或软删)的任务不再排提醒 —— 判据在 `close-spec.isClosedSnapshot`,与其它调用点同源 */
+const terminal = (task: Task) => isClosedSnapshot(task.workflow, task.status, task.deleted_at);
+
+/**
+ * 一条排期的**身份** —— 「同一条」的判据只有这一份。
+ *
+ * 两处都用它:`insertScheduled` 拿它当 DB 里的 `event_key`,`rescheduleTaskReminders` 拿它比内存里的期望值。
+ * 之前两处各抄一遍字段列表,加字段必然漏改一处。
+ */
+function scheduleKeyOf(row: typeof taskReminderTable.$inferInsert): string {
+	return eventKeyOf("task.schedule", [
+		row.task_id,
+		row.kind,
+		row.action_id,
+		row.recipient_id,
+		row.offset_minutes,
+		Math.floor(row.scheduled_at.getTime() / 1000),
+		[...channelsOf(row.channels)].sort(),
+	]);
 }
 
-/** The task lock serializes changes; the deterministic key also protects each logical event. */
-async function insertScheduled(tx: Tx, value: typeof taskReminderTable.$inferInsert): Promise<void> {
-	const key = `task.schedule:${createHash("sha256")
-		.update(
-			JSON.stringify([
-				value.task_id,
-				value.kind,
-				value.action_id,
-				value.recipient_id,
-				value.offset_minutes,
-				Math.floor(value.scheduled_at.getTime() / 1000),
-				[...(value.channels as string[])].sort(),
-			]),
-		)
-		.digest("hex")}`;
-	const [existing] = await tx.select().from(taskReminderTable).where(eq(taskReminderTable.event_key, key)).limit(1);
-	if (existing) {
-		if (existing.status === "cancelled")
+/** 持任务锁批量对齐排期；按幂等键复活取消行，已发送事件不重复创建。 */
+async function insertScheduled(tx: Tx, values: Array<typeof taskReminderTable.$inferInsert>, now: Date): Promise<void> {
+	const byKey = new Map<string, typeof taskReminderTable.$inferInsert>();
+	for (const value of values) {
+		const key = scheduleKeyOf(value);
+		if (!byKey.has(key)) byKey.set(key, { ...value, event_key: key });
+	}
+	const entries = [...byKey.entries()];
+	// 限制 IN 与多行 INSERT 的参数量，兼容双库驱动。
+	for (let index = 0; index < entries.length; index += 200) {
+		const chunk = entries.slice(index, index + 200);
+		const existing = await tx
+			.select({ id: taskReminderTable.id, key: taskReminderTable.event_key, status: taskReminderTable.status })
+			.from(taskReminderTable)
+			.where(
+				inArray(
+					taskReminderTable.event_key,
+					chunk.map(([key]) => key),
+				),
+			);
+		const existingKeys = new Set(existing.map((row) => row.key));
+		const restore = existing.filter((row) => row.status === "cancelled").map((row) => row.id);
+		if (restore.length)
 			await tx
 				.update(taskReminderTable)
-				.set({ status: "pending", updated_at: value.updated_at })
-				.where(eq(taskReminderTable.id, existing.id));
-		return;
+				.set({ status: "pending", updated_at: now })
+				.where(inArray(taskReminderTable.id, restore));
+		const missing = chunk.filter(([key]) => !existingKeys.has(key)).map(([, value]) => value);
+		if (missing.length) await tx.insert(taskReminderTable).values(missing);
 	}
-	await tx.insert(taskReminderTable).values({ ...value, event_key: key });
 }
 
-/** Called while the task row is locked. Existing pending external deliveries are also cancelled. */
+/** 任务行已加锁时调用;顺带取消该任务已排的待投递外部通知。 */
 export async function cancelTaskReminders(
 	tx: Tx,
 	taskId: string,
@@ -110,25 +128,26 @@ export async function scheduleNodeReminders(
 	action: { id: string; assignee_id: string; activated_at: Date | null },
 	now: Date,
 ): Promise<void> {
-	if (!task.reminder_config || !action.activated_at || terminal(task)) return;
+	if (!action.activated_at || terminal(task)) return;
 	const config = readTaskReminderConfig(task.reminder_config);
-	for (const event of nodeReminderEvents(config.node, action.activated_at, now, { isWorkday: isWorkingDay })) {
+	const values = nodeReminderEvents(config.node, action.activated_at, now, { isWorkday: isWorkingDay }).map((event) => {
 		const id = newId();
-		await insertScheduled(tx, {
+		return {
 			id,
 			task_id: task.id,
 			action_id: action.id,
 			recipient_id: action.assignee_id,
-			kind: "node",
+			kind: "node" as const,
 			offset_minutes: event.offset,
 			channels: config.node.channels,
 			scheduled_at: event.at,
-			status: "pending",
+			status: "pending" as const,
 			event_key: id,
 			created_at: now,
 			updated_at: now,
-		});
-	}
+		};
+	});
+	await insertScheduled(tx, values, now);
 }
 
 /** Replace future schedules only when the relevant task settings or executor change. */
@@ -138,16 +157,13 @@ export async function rescheduleTaskReminders(
 	now: Date,
 	kind?: "executor" | "node",
 ): Promise<void> {
-	if (!task.reminder_config || terminal(task)) {
+	if (terminal(task)) {
 		await cancelTaskReminders(tx, task.id, now, kind);
 		return;
 	}
 	const config = readTaskReminderConfig(task.reminder_config);
-	const members = await tx
-		.select({ userId: taskMemberTable.user_id })
-		.from(taskMemberTable)
-		.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.role, "executor")));
-	const recipients = members.map((m) => m.userId);
+	// 截止提醒只发给**唯一执行人**(执行人现在是 `tc_task.executor_id`,不再是成员表里的一种角色)
+	const recipients = task.executor_id ? [task.executor_id] : [];
 	const actions = await tx
 		.select()
 		.from(taskActionTable)
@@ -201,13 +217,20 @@ export async function rescheduleTaskReminders(
 				kind ? eq(taskReminderTable.kind, kind) : undefined,
 			),
 		);
+	/**
+	 * 「库里这行」与「期望值」是不是同一条。
+	 *
+	 * **刻意逐字段比、不拿 `event_key` 比**:行可能是历史版本写进去的,`event_key` 的算法改过一次
+	 * (旧版内联 sha256,新版走 `eventKeyOf` —— 逐字相同,但不能赌库里没有更早的行)。
+	 * 字段清单与 `scheduleKeyOf` 必须保持一致 —— 改一处要同时改另一边(没有测试兜,靠人看)。
+	 */
 	const matches = (row: typeof taskReminderTable.$inferSelect, item: (typeof desired)[number]) =>
 		row.kind === item.kind &&
 		row.action_id === item.actionId &&
 		row.recipient_id === item.userId &&
 		row.offset_minutes === item.offset &&
 		Math.floor(row.scheduled_at.getTime() / 1000) === Math.floor(item.at.getTime() / 1000) &&
-		JSON.stringify([...(row.channels as string[])].sort()) === JSON.stringify([...item.channels].sort());
+		JSON.stringify([...channelsOf(row.channels)].sort()) === JSON.stringify([...item.channels].sort());
 	const sent = await tx
 		.select()
 		.from(taskReminderTable)
@@ -232,24 +255,26 @@ export async function rescheduleTaskReminders(
 			.where(inArray(taskReminderTable.id, ids));
 		await cancelPendingNotifications(tx, "task_scheduled_reminder", ids);
 	}
-	for (const item of desired) {
-		if (item.at <= now || existing.some((row) => matches(row, item))) continue;
-		const id = newId();
-		await insertScheduled(tx, {
-			id,
-			task_id: task.id,
-			action_id: item.actionId,
-			recipient_id: item.userId,
-			kind: item.kind,
-			offset_minutes: item.offset,
-			channels: item.channels,
-			scheduled_at: item.at,
-			status: "pending",
-			event_key: id,
-			created_at: now,
-			updated_at: now,
+	const additions = desired
+		.filter((item) => item.at > now && !existing.some((row) => matches(row, item)))
+		.map((item) => {
+			const id = newId();
+			return {
+				id,
+				task_id: task.id,
+				action_id: item.actionId,
+				recipient_id: item.userId,
+				kind: item.kind,
+				offset_minutes: item.offset,
+				channels: item.channels,
+				scheduled_at: item.at,
+				status: "pending" as const,
+				event_key: id,
+				created_at: now,
+				updated_at: now,
+			};
 		});
-	}
+	await insertScheduled(tx, additions, now);
 }
 
 async function runReminder(id: string, now: Date): Promise<number> {
@@ -269,26 +294,10 @@ async function runReminder(id: string, now: Date): Promise<number> {
 				: [];
 			eligible &&=
 				!!action && action.status === "active" && !action.viewed_at && action.assignee_id === entry.recipient_id;
-			// The pre-upgrade worker used these keys for the default first and second reminders.
-			if (eligible && entry.action_id && (entry.offset_minutes === 60 || entry.offset_minutes === 180)) {
-				const key = `action.unviewed:${entry.action_id}:${entry.offset_minutes === 60 ? 1 : 2}`;
-				const [old] = await tx
-					.select({ id: sysNotification.id })
-					.from(sysNotification)
-					.where(eq(sysNotification.dedupe_key, key))
-					.limit(1);
-				if (old) eligible = false;
-			}
 		} else {
-			const members = await tx
-				.select({ userId: taskMemberTable.user_id })
-				.from(taskMemberTable)
-				.where(and(eq(taskMemberTable.task_id, task.id), eq(taskMemberTable.role, "executor")));
 			eligible &&=
 				!!task.due_at &&
-				(members.length
-					? members.some((m) => m.userId === entry.recipient_id)
-					: task.creator_id === entry.recipient_id);
+				(task.executor_id ? task.executor_id === entry.recipient_id : task.creator_id === entry.recipient_id);
 		}
 		const [user] = await tx.select().from(sysUser).where(eq(sysUser.id, entry.recipient_id)).limit(1);
 		eligible &&= !!user && !user.deleted_at;
@@ -319,22 +328,15 @@ async function runReminder(id: string, now: Date): Promise<number> {
 			source: { type: "task_scheduled_reminder", id },
 			title: `${entry.kind === "node" ? "待查看" : "截止提醒"}：${task.name}`,
 			content: entry.kind === "node" ? "您有一项未查看的审批或征询。" : "任务即将到达截止时间。",
-			payload: { path: taskPathOf(task.id), taskId: task.id, actionId: entry.action_id, level: "warn" },
+			path: taskPathOf(task.id),
+			level: "warn",
+			payload: { taskId: task.id, actionId: entry.action_id },
 			dedupeKey: `task.schedule:${id}`,
 			allowMissingTargets: true,
 			recipients: channels.map((channel) => ({
 				userId: user.id,
 				channel,
-				target:
-					channel === "email"
-						? z.string().email().safeParse(user.email).success
-							? user.email
-							: null
-						: channel === "sms"
-							? user.phone && /^\+?[0-9][0-9 -]{5,30}$/.test(user.phone)
-								? user.phone
-								: null
-							: null,
+				target: targetOf(channel, user),
 			})),
 		});
 		await tx.update(taskReminderTable).set({ status: "sent", updated_at: now }).where(eq(taskReminderTable.id, id));

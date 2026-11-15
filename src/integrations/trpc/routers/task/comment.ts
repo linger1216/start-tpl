@@ -2,22 +2,27 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
-import { sysFile, taskCommentTable, taskLogTable } from "#/db/data-base-schema";
-import { isAdminUser } from "#/lib/casbin";
+import { taskCommentTable, taskLogTable } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
+import { MAX_MENTIONS, MAX_TEXT_LENGTH } from "#/lib/task/close-spec";
+import { bagOf } from "#/lib/task/json";
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertAttachments,
 	assertTaskReadable,
+	attachmentRows,
 	createMentionNotifications,
-	detailOf,
+	FILE_ID,
 	getTaskRow,
 	ID,
+	isAdminOf,
 	lockTask,
 	nameMapOf,
 	pageInput,
-	publishMentions,
+	publishNotice,
+	USER_ID,
 	writeTaskEvent,
 } from "./common";
 
@@ -35,18 +40,7 @@ export const taskCommentRouter = createTRPCRouter({
 
 		const nameOf = await nameMapOf(rows.map((row) => row.author_id));
 		const fileIds = [...new Set(rows.flatMap((row) => (row.attachments as string[] | null) ?? []))];
-		const files =
-			fileIds.length === 0
-				? []
-				: await db
-						.select({
-							id: sysFile.id,
-							name: sysFile.origin_name,
-							size: sysFile.size,
-							contentType: sysFile.content_type,
-						})
-						.from(sysFile)
-						.where(and(inArray(sysFile.id, fileIds), eq(sysFile.status, 1)));
+		const files = await attachmentRows(db, fileIds);
 		const fileOf = new Map(files.map((file) => [file.id, file]));
 
 		return rows.map((row) => ({
@@ -72,9 +66,9 @@ export const taskCommentRouter = createTRPCRouter({
 		.input(
 			z.object({
 				taskId: ID,
-				content: z.string().min(1, "评论内容不能为空").max(5000),
-				attachments: z.array(z.string().min(1).max(32)).max(20).optional(),
-				mentionIds: z.array(z.string().min(1).max(36)).max(100).optional(),
+				content: z.string().min(1, "评论内容不能为空").max(MAX_TEXT_LENGTH),
+				attachments: z.array(FILE_ID).max(MAX_ATTACHMENTS).optional(),
+				mentionIds: z.array(USER_ID).max(MAX_MENTIONS).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -108,7 +102,7 @@ export const taskCommentRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			publishMentions(receivers);
+			publishNotice(receivers);
 			return { id };
 		}),
 
@@ -122,7 +116,7 @@ export const taskCommentRouter = createTRPCRouter({
 			.limit(1);
 		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "评论不存在" });
 		const task = await getTaskRow(row.task_id);
-		if (row.author_id !== me.id && !(await isAdminUser(me.id))) {
+		if (row.author_id !== me.id && !(await isAdminOf(me))) {
 			throw new TRPCError({ code: "FORBIDDEN", message: "只能删除自己的评论(管理员除外)" });
 		}
 		await db.transaction(async (tx) => {
@@ -160,14 +154,14 @@ export const taskCommentRouter = createTRPCRouter({
 			.select()
 			.from(taskLogTable)
 			.where(eq(taskLogTable.task_id, input.taskId))
-			// 同一毫秒撞点时用 id 兜底 —— 只为**稳定**,不表示语义(见 doc/task-close.md「活动日志」)
+			// 同一毫秒撞点时用 id 兜底 —— 只为**稳定**,不表示语义
 			.orderBy(desc(taskLogTable.created_at), desc(taskLogTable.id))
 			.limit(pageSize)
 			.offset((page - 1) * pageSize);
 
 		// 要查名字的人:操作人(快照缺失时兜底)+ 各事件的主对象
 		const personIds = rows.flatMap((row) => {
-			const detail = detailOf(row.detail);
+			const detail = bagOf(row.detail);
 			const ids = [row.actor_name ? "" : row.actor_id];
 			if (row.event === "member.add" || row.event === "member.remove" || row.event === "member.transfer") {
 				ids.push(row.target_id ?? "");
@@ -199,7 +193,7 @@ export const taskCommentRouter = createTRPCRouter({
 
 		return {
 			items: rows.map((row) => {
-				const detail = detailOf(row.detail);
+				const detail = bagOf(row.detail);
 				const assigneeId = typeof detail.assigneeId === "string" ? detail.assigneeId : null;
 				const replyOf = typeof detail.consultOf === "string" ? detail.consultOf : null;
 				const personId =

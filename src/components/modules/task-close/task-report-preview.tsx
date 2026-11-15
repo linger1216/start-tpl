@@ -1,8 +1,7 @@
-import { Checkbox } from "#/components/ui/checkbox";
+import { ReportField } from "#/components/modules/task-close/report-fields";
 import { DetailRow } from "#/components/ui/detail-row";
-import { Input } from "#/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
 import type { TaskReportSchema } from "#/lib/task/report-spec";
 
 /**
@@ -56,61 +55,14 @@ function previewLabel(field: TaskReportSchema["fields"][number]): string {
 
 /** 按类型渲染一个**禁用**的占位控件(值一律为空) */
 function PreviewControl({ field }: { field: TaskReportSchema["fields"][number] }) {
-	switch (field.type) {
-		case "integer":
-			return <Input type="number" placeholder="0" disabled className="h-8 max-w-48" />;
-		case "decimal":
-			return <Input type="number" step="any" placeholder="0.00" disabled className="h-8 max-w-48" />;
-		case "date":
-			return <Input type="date" disabled className="h-8 max-w-48" />;
-		case "datetime":
-			return <Input type="datetime-local" disabled className="h-8 max-w-48" />;
-		case "select":
-			return (
-				<Select
-					items={[
-						...(field.allowEmpty ? [{ value: null, label: "（空）" }] : []),
-						...(field.options ?? []).map((option) => ({ value: option, label: option })),
-					]}
-					disabled
-				>
-					<SelectTrigger aria-label={`${field.label} 选项`} disabled className="h-8 max-w-48">
-						<SelectValue placeholder="从选项中选择" />
-					</SelectTrigger>
-					<SelectContent>
-						{field.allowEmpty && <SelectItem value={null}>（空）</SelectItem>}
-						{(field.options ?? []).map((option) => (
-							<SelectItem key={option} value={option}>
-								{option}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-			);
-		case "phone":
-			return <Input type="tel" placeholder="11 位手机号" disabled className="h-8 max-w-48" />;
-		case "email":
-			return <Input type="email" placeholder="name@example.com" disabled className="h-8 max-w-48" />;
-		case "attachment":
-			return <span className="text-sm text-muted-foreground">附件:填报时上传(最多 20 个)</span>;
-		case "array":
-			return (
-				<span className="text-sm text-muted-foreground">
-					数组:填报时可「添加」多条 ——
-					{(field.itemFields ?? []).map((item) => item.label).join(" / ") || "未配置元素字段"}
-				</span>
-			);
-		case "multiselect":
-			return (
-				<span className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-					{(field.options ?? []).map((option) => (
-						<span key={option} className="flex items-center gap-1.5 text-sm">
-							<Checkbox disabled /> {option}
-						</span>
-					))}
-				</span>
-			);
-		default:
-			return <Input placeholder="文本" disabled className="h-8 max-w-72" />;
-	}
+	if (field.type === "attachment")
+		return <span className="text-sm text-muted-foreground">附件:填报时上传(最多 {MAX_ATTACHMENTS} 个)</span>;
+	if (field.type === "array")
+		return (
+			<span className="text-sm text-muted-foreground">
+				数组:填报时可「添加」多条 ——
+				{(field.itemFields ?? []).map((item) => item.label).join(" / ") || "未配置元素字段"}
+			</span>
+		);
+	return <ReportField field={field} value={undefined} disabled onChange={() => {}} />;
 }

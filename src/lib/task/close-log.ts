@@ -9,7 +9,10 @@
  * 见 `components/modules/task-close/task-log.tsx` 的注册表。
  */
 
-/** 17 个事件码 —— **加事件要同时改**:这里 + 界面注册表 + `doc/task-close.md` */
+import { REJECT_NOTE_PREFIX } from "#/lib/task/close-spec";
+import { bagOf } from "#/lib/task/json";
+
+/** 事件码 —— **加事件要同时改**:这里 + 界面注册表 */
 const TASK_LOG_EVENTS = [
 	"task.create",
 	"task.update",
@@ -24,15 +27,13 @@ const TASK_LOG_EVENTS = [
 	"member.add",
 	"member.remove",
 	"member.transfer",
-	"report.bind",
-	"report.sync",
-	"report.reset",
+	"report.submit",
 ] as const;
 
 export type TaskLogEvent = (typeof TASK_LOG_EVENTS)[number];
 
 /** 事件名(短标签;`describeLog()` 会再拼上对象与状态,别把它当完整句子用) */
-export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
+const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"task.create": "创建任务",
 	"task.update": "修改任务",
 	"task.remove": "删除任务",
@@ -46,20 +47,20 @@ export const TASK_LOG_LABEL: Record<TaskLogEvent, string> = {
 	"member.add": "加入成员",
 	"member.remove": "移出成员",
 	"member.transfer": "转交",
-	"report.bind": "配置填报",
-	"report.sync": "同步填报到父任务",
-	"report.reset": "从父任务重新载入填报",
+	"report.submit": "提交填报给父任务",
 };
 
 /**
  * 事件类别 = 事件码的前缀 —— **不落库**(存了就是第二个真源,迟早和 `event` 打架),
  * 需要"只看状态 / 只看成员"时用 `logCategoryOf()` 现算。
  */
-export type TaskLogCategory = "task" | "action" | "comment" | "member";
+export type TaskLogCategory = "task" | "action" | "comment" | "member" | "report";
 
 export function logCategoryOf(event: string): TaskLogCategory | null {
 	const [head] = event.split(".");
-	return head === "task" || head === "action" || head === "comment" || head === "member" ? head : null;
+	return head === "task" || head === "action" || head === "comment" || head === "member" || head === "report"
+		? head
+		: null;
 }
 
 /**
@@ -93,17 +94,10 @@ const TASK_LOG_FIELD_LABEL: Record<string, string> = {
 	payload: "内容 / 附件",
 };
 
-export type LogTextContext = {
+type LogTextContext = {
 	/** 状态 value → 展示名(传 `(v) => statusLabelOf(statuses, v)`) */
 	statusLabel: (value: string) => string;
-	/** 成员角色 → 展示名(复用调用点既有的 `roleText`,不在这里再维护一份角色词表) */
-	roleLabel: (role: string) => string;
 };
-
-/** 把 `detail` 当袋子读 —— 库里的 JSON 可能是任何东西,读不到就当没有,绝不抛 */
-function bag(detail: unknown): Record<string, unknown> {
-	return detail && typeof detail === "object" && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {};
-}
 
 function text(value: unknown): string | null {
 	return typeof value === "string" && value.length > 0 ? value : null;
@@ -115,12 +109,12 @@ function bool(value: unknown): boolean {
 
 /**
  * 一行日志 → 两行文字:**标题**(动作本身,不含人名,界面自己配头像 / 人名)
- * + **附注**(驳回原因 / 改了哪些字段 / 角色;没有就 null)。
+ * + **附注**(驳回原因 / 改了哪些字段;没有就 null)。
  *
  * 认不出的 `event` 不崩:标题回退成事件码本身,附注给一句人话。
  */
 export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: string; note: string | null } {
-	const detail = bag(item.detail);
+	const detail = bagOf(item.detail);
 	const from = item.fromStatus ? ctx.statusLabel(item.fromStatus) : null;
 	const to = item.toStatus ? ctx.statusLabel(item.toStatus) : null;
 	/** `甲 → 乙`;有一头缺就只写存在的那头 */
@@ -132,7 +126,7 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 		case "task.update": {
 			const fields = Array.isArray(detail.fields) ? detail.fields : [];
 			const names = fields
-				.map((field) => text(bag(field).key))
+				.map((field) => text(bagOf(field).key))
 				.filter((key): key is string => key !== null)
 				.map((key) => TASK_LOG_FIELD_LABEL[key] ?? key);
 			const parts = [
@@ -165,7 +159,7 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 				title: approved
 					? `${TASK_LOG_LABEL["action.respond"]}:通过${moved ? `(${arrow(from, to)})` : ""}`
 					: `${TASK_LOG_LABEL["action.respond"]}:驳回${moved ? `(${arrow(from, to)})` : ""}`,
-				note: note ? `驳回原因:${note}` : null,
+				note: note ? `${REJECT_NOTE_PREFIX}${note}` : null,
 			};
 		}
 		case "action.reply": {
@@ -189,19 +183,17 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 		case "comment.remove":
 			return { title: TASK_LOG_LABEL["comment.remove"], note: item.excerpt ? `“${item.excerpt}”` : null };
 		case "member.add": {
-			const role = text(detail.role);
 			const who = item.targetName ?? item.targetId;
 			return {
 				title: who ? `${TASK_LOG_LABEL["member.add"]}:${who}` : TASK_LOG_LABEL["member.add"],
-				note: role ? `角色:${ctx.roleLabel(role)}` : null,
+				note: null,
 			};
 		}
 		case "member.remove": {
-			const role = text(detail.role);
 			const who = item.targetName ?? item.targetId;
 			return {
 				title: who ? `${TASK_LOG_LABEL["member.remove"]}:${who}` : TASK_LOG_LABEL["member.remove"],
-				note: role ? `角色:${ctx.roleLabel(role)}` : null,
+				note: null,
 			};
 		}
 		case "member.transfer": {
@@ -211,15 +203,11 @@ export function describeLog(item: TaskLogItem, ctx: LogTextContext): { title: st
 				note: "新执行人(主);原执行人改为参与者",
 			};
 		}
-		case "report.bind":
-			return { title: TASK_LOG_LABEL["report.bind"], note: null };
-		case "report.reset":
-			return { title: TASK_LOG_LABEL["report.reset"], note: null };
-		case "report.sync": {
-			const pushed = text(detail.pushed);
+		case "report.submit": {
+			const pushed = typeof detail.pushed === "number" ? String(detail.pushed) : null;
 			return {
-				title: TASK_LOG_LABEL["report.sync"],
-				note: pushed ? `本次推送 ${pushed} 行` : null,
+				title: TASK_LOG_LABEL["report.submit"],
+				note: pushed ? `本次提交 ${pushed} 行` : null,
 			};
 		}
 		default:

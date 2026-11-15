@@ -2,7 +2,7 @@
  * 结构化填报(`taskClose.report*`)的端到端回归 —— 走**真实的库**,直调 procedure。
  *
  * 这个文件盯的是**填报这一侧的边界**:模板的可见性(谁能用谁能改)、绑定的口子、
- * 草稿的并发与校验、表单填报同步给父任务、Excel 的进出。
+ * 草稿的并发与校验、表单填报提交给父任务、Excel 的进出。
  *
  * 身份口径与其它任务测试一致(`callerAs`,HTTP 入口不可达):夹具里的用户**不带 `isSuper`**,
  * 走的是真判定路径 —— 「谁能不能看 / 能不能改」这类断言才有意义。
@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { and, eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
-import { sysFile, taskMemberTable, taskReportTemplateTable, taskTable } from "../src/db/data-base-schema.ts";
+import { sysFile, taskReportTemplateTable, taskTable } from "../src/db/data-base-schema.ts";
 import { db } from "../src/db/index.ts";
 import { assertRejects, callerAs, closeDb } from "./helpers.ts";
 import { createTaskFixture, FORM_SCHEMA, TABLE_SCHEMA, type TaskFixture } from "./task-fixtures.ts";
@@ -63,14 +63,7 @@ async function childOf(parentId: string, executorId: string): Promise<string> {
 	const rows = await db
 		.select({ id: taskTable.id })
 		.from(taskTable)
-		.innerJoin(taskMemberTable, eq(taskMemberTable.task_id, taskTable.id))
-		.where(
-			and(
-				eq(taskTable.parent_id, parentId),
-				eq(taskMemberTable.role, "executor"),
-				eq(taskMemberTable.user_id, executorId),
-			),
-		);
+		.where(and(eq(taskTable.parent_id, parentId), eq(taskTable.executor_id, executorId)));
 	assert.ok(rows[0]?.id, "多执行人 ⇒ 分派出了子任务");
 	return rows[0].id;
 }
@@ -102,7 +95,7 @@ describe("填报模板:可见性与发布/删除的权限", () => {
 		// 乙(非创建人、非管理员)改不动
 		await assertRejects(
 			() =>
-				asB().taskClose.reportTemplatePublish({
+				asB().taskClose.reportTemplateUpdate({
 					id: templateId,
 					payload: TABLE_SCHEMA,
 				}),
@@ -113,12 +106,13 @@ describe("填报模板:可见性与发布/删除的权限", () => {
 			"只有模板创建人或管理员可以删除",
 		);
 		// 管理员可以
-		await admin().taskClose.reportTemplatePublish({
+		const updated = await admin().taskClose.reportTemplateUpdate({
 			id: templateId,
 			name: "管理员改过的名字",
 			payload: TABLE_SCHEMA,
 			shared: true,
 		});
+		assert.deepEqual(updated, { ok: true });
 		const listed = await asB().taskClose.reportTemplateList();
 		assert.ok(
 			listed.some((item) => item.id === templateId && item.name === "管理员改过的名字"),
@@ -147,41 +141,6 @@ describe("填报模板:可见性与发布/删除的权限", () => {
 });
 
 describe("填报的绑定与读取", () => {
-	it("没绑填报的任务可以后绑一次;绑了就不能再换", async () => {
-		const taskId = await newTask("后绑定");
-		const templateId = await fx.newTemplate(TABLE_SCHEMA);
-		const bound = await asA().taskClose.reportBind({ taskId, reportId: templateId });
-		assert.ok(bound.id);
-		// 再绑一次 → 拒
-		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId, reportId: templateId }),
-			"填报模板在创建任务时确定，不能更换或移除",
-		);
-	});
-
-	it("子任务不能单独绑;已分派的任务也不能再绑", async () => {
-		const templateId = await fx.newTemplate(TABLE_SCHEMA);
-		// 建父任务(带执行人 → 自动分派子任务)
-		const { id: parentId } = await asA().taskClose.taskCreate({
-			name: `__test__填报-分派-${fx.suffix}`,
-			workflowId: fx.workflowId,
-			members: [
-				{ userId: fx.b.id, role: "executor" },
-				{ userId: fx.c.id, role: "executor" },
-			],
-		});
-		const childId = await childOf(parentId, fx.b.id);
-		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: childId, reportId: templateId }),
-			"子任务不能单独绑定填报模板",
-		);
-		// 父任务已分派 ⇒ 也不能再绑
-		await assertRejects(
-			() => asA().taskClose.reportBind({ taskId: parentId, reportId: templateId }),
-			"已分派的任务不能再绑定填报模板",
-		);
-	});
-
 	it("reportGet:附件要解出文件名;无关的人进不来", async () => {
 		const templateId = await fx.newTemplate({
 			id: "with_file",
@@ -283,7 +242,7 @@ describe("填报草稿:谁能写、并发与校验", () => {
 	});
 });
 
-describe("表单填报同步给父任务", () => {
+describe("表单填报提交给父任务", () => {
 	async function parentAndChild() {
 		const templateId = await fx.newTemplate(FORM_SCHEMA);
 		const { id: parentId } = await asA().taskClose.taskCreate({
@@ -299,7 +258,7 @@ describe("表单填报同步给父任务", () => {
 		return { parentId, childId, templateId };
 	}
 
-	it("点「保存填报」⇒ 父任务看得到子任务那份(带执行人)", async () => {
+	it("点「提交给父任务」⇒ 父任务看得到子任务那份(带执行人)", async () => {
 		const { parentId, childId } = await parentAndChild();
 		await asB().taskClose.reportSaveDraft({
 			taskId: childId,
@@ -310,7 +269,7 @@ describe("表单填报同步给父任务", () => {
 		let parent = await asA().taskClose.reportGet({ taskId: parentId });
 		assert.equal(parent?.syncedChildren.length, 0, "没点保存 ⇒ 父任务看不到");
 
-		const synced = await asB().taskClose.reportSyncToParent({ taskId: childId });
+		const synced = await asB().taskClose.reportSubmitToParent({ taskId: childId });
 		assert.equal(synced.pushed, 1);
 		parent = await asA().taskClose.reportGet({ taskId: parentId });
 		assert.equal(parent?.syncedChildren.length, 1);
@@ -318,35 +277,35 @@ describe("表单填报同步给父任务", () => {
 		assert.equal((parent?.syncedChildren[0].payload as { company: string }).company, "联通信");
 	});
 
-	it("父任务导出:父子填报分两张表,子任务一行一个执行人", async () => {
+	it("父任务导出:组合成一张表,首列执行人", async () => {
 		const { parentId, childId } = await parentAndChild();
 		await asB().taskClose.reportSaveDraft({
 			taskId: childId,
 			revision: 0,
 			draft: { company: "联通信", owner: "张三", items: [] },
 		});
-		await asB().taskClose.reportSyncToParent({ taskId: childId });
+		await asB().taskClose.reportSubmitToParent({ taskId: childId });
 		const file = await asA().taskClose.reportExcelDownload({ taskId: parentId, templateOnly: false });
 		const book = XLSX.read(file.fileBase64, { type: "base64" });
-		assert.ok(book.SheetNames.includes("父任务填报"));
-		assert.ok(book.SheetNames.includes("子任务填报"), "父任务导出要带上子任务那份");
-		const childSheetName = "子任务填报";
-		const childSheet = XLSX.utils.sheet_to_json(book.Sheets[childSheetName], { header: 1 }) as unknown[][];
-		assert.equal(childSheet[0]?.[0], "执行人", "子任务表首列是执行人");
-		assert.equal(childSheet[1]?.[0], fx.b.name);
-		assert.ok(String(childSheet[1]?.[1]).includes("联通信"), "子任务表带上企业名称");
+		assert.deepEqual(book.SheetNames, ["填报(可读)", "填报"]);
+		const dataSheet = "填报";
+		const sheet = XLSX.utils.sheet_to_json(book.Sheets[dataSheet], { header: 1 }) as unknown[][];
+		assert.equal(sheet[0]?.[0], "执行人", "首列是执行人");
+		const childRow = sheet.find((row) => row[0] === fx.b.name);
+		assert.ok(childRow, "子任务那行首列是执行人");
+		assert.ok(String(childRow?.[1]).includes("联通信"), "子任务那行带上企业名称");
 	});
 
 	it("同步的权限与边界:父任务不能同步、无关人不能同步", async () => {
 		const { parentId, childId } = await parentAndChild();
-		await assertRejects(() => asA().taskClose.reportSyncToParent({ taskId: parentId }), "只有子任务可以同步");
+		await assertRejects(() => asA().taskClose.reportSubmitToParent({ taskId: parentId }), "只有子任务可以提交");
 		await assertRejects(
-			() => asC().taskClose.reportSyncToParent({ taskId: childId }),
-			"只有任务创建人或当前执行人可以同步",
+			() => asC().taskClose.reportSubmitToParent({ taskId: childId }),
+			"只有任务创建人或当前执行人可以提交",
 		);
 	});
 
-	it("表单填报没填完不许同步", async () => {
+	it("表单填报没填完不许提交", async () => {
 		const templateId = await fx.newTemplate({
 			id: "need_more",
 			kind: "OBJECT",
@@ -363,7 +322,7 @@ describe("表单填报同步给父任务", () => {
 			],
 		});
 		const childId = await childOf(parentId, fx.c.id);
-		await assertRejects(() => asC().taskClose.reportSyncToParent({ taskId: childId }), "此项必填");
+		await assertRejects(() => asC().taskClose.reportSubmitToParent({ taskId: childId }), "此项必填");
 	});
 });
 

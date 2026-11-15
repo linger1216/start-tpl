@@ -1,30 +1,21 @@
 import { ArrowRight, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-
+import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { DetailRow } from "#/components/ui/detail-row";
-import {
-	DIALOG_FIT,
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useStableKeys } from "#/hooks/use-stable-keys";
 import type { WorkflowStatus } from "#/lib/task/close-spec";
+import { MAX_WORKFLOW_EDGES, MAX_WORKFLOW_STATUSES, ROLE_LABEL, VIA_LABEL } from "#/lib/task/close-spec";
 import { cn } from "#/lib/utils";
 
-/** `who` 协议的取值(与 `doc/task-close.md` 的 who 协议一致;`[]` 是系统自带,编辑器不产出) */
+/** `who` 协议的取值(与流程模板的 who 协议一致;`[]` 是系统自带,编辑器不产出) */
 type WorkflowWho = "creator" | "participant" | "executor";
 
-/** 一条状态转移边 —— 与 `tc_workflow.payload.edges` 同形(`who` 见 `doc/task-close.md` 的 who 协议) */
+/** 一条状态转移边 —— 与 `tc_workflow.payload.edges` 同形(who 取值见 `close-spec.ts`) */
 export type WorkflowEdgeInput = {
 	from: string;
 	to: string;
@@ -49,9 +40,6 @@ type DraftEdge = WorkflowEdgeInput & { key: string };
 let edgeSeed = 0;
 const draftEdge = (edge: WorkflowEdgeInput): DraftEdge => ({ ...edge, key: `edge-${edgeSeed++}` });
 
-/** 单次编辑最多 200 条边(与 `normalizeWorkflow` 的上限一致) */
-const MAX_EDGES = 200;
-
 /** 新建模板时的起步值 —— 给一套能立刻保存的最小状态机,省得对着空表单发愣 */
 const BLANK: Omit<WorkflowEditing, "id"> = {
 	name: "",
@@ -68,14 +56,14 @@ const BLANK: Omit<WorkflowEditing, "id"> = {
 };
 
 const WHO_OPTIONS: { value: WorkflowWho; label: string }[] = [
-	{ value: "creator", label: "创建者" },
-	{ value: "participant", label: "参与者" },
-	{ value: "executor", label: "执行者" },
+	{ value: "creator", label: ROLE_LABEL.creator },
+	{ value: "participant", label: ROLE_LABEL.participant },
+	{ value: "executor", label: ROLE_LABEL.executor },
 ];
 
 const VIA_OPTIONS: { value: "direct" | "action"; label: string }[] = [
-	{ value: "direct", label: "直接改" },
-	{ value: "action", label: "审批动作" },
+	{ value: "direct", label: VIA_LABEL.direct },
+	{ value: "action", label: VIA_LABEL.action },
 ];
 
 /**
@@ -149,7 +137,7 @@ export function TaskWorkflowForm({
 	}
 
 	function addEdge() {
-		if (edges.length >= MAX_EDGES) return;
+		if (edges.length >= MAX_WORKFLOW_EDGES) return;
 		const first = statuses[0]?.value ?? "";
 		setEdges((prev) => [...prev, draftEdge({ from: first, to: first, who: ["creator"], via: "direct" })]);
 	}
@@ -197,232 +185,227 @@ export function TaskWorkflowForm({
 		edges.every((edge) => statusValues.includes(edge.from) && statusValues.includes(edge.to) && edge.who.length > 0);
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
-				<DialogHeader className="shrink-0">
-					<DialogTitle>{editing ? "编辑流程模板" : "新增流程模板"}</DialogTitle>
-					<DialogDescription>
-						「直接改」的边不建动作,创建者直接改状态;「审批动作」的边会锁住任务,等答复结算。
-						{editing ? "保存后，已创建的任务仍使用原来的流程。" : null}
-					</DialogDescription>
-				</DialogHeader>
-				<DialogBody className="space-y-4 py-1 pr-1">
-					<DetailRow label="模板名称" htmlFor="tcw-name">
-						<Input
-							id="tcw-name"
-							className="h-8 text-sm"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							placeholder="比如:默认事项流程"
-						/>
-					</DetailRow>
+		<TaskActionDialog
+			open={open}
+			onOpenChange={onOpenChange}
+			title={editing ? "编辑流程模板" : "新增流程模板"}
+			description={
+				<>
+					「直接改」的边不建动作,创建者直接改状态;「审批动作」的边会锁住任务,等答复结算。
+					{editing ? "保存后，已创建的任务仍使用原来的流程。" : null}
+				</>
+			}
+			pending={pending}
+			confirmDisabled={!canSubmit}
+			confirmText="保存"
+			pendingText="保存中…"
+			onConfirm={() =>
+				onSubmit({
+					name: name.trim(),
+					statuses,
+					initial,
+					edges: edges.map((edge) => ({
+						from: edge.from,
+						to: edge.to,
+						who: edge.who,
+						via: edge.via,
+					})),
+				})
+			}
+			contentClassName="sm:max-w-2xl"
+			bodyClassName="space-y-4 py-1 pr-1"
+		>
+			<DetailRow label="模板名称" htmlFor="tcw-name">
+				<Input
+					id="tcw-name"
+					className="h-8 text-sm"
+					value={name}
+					onChange={(e) => setName(e.target.value)}
+					placeholder="比如:默认事项流程"
+				/>
+			</DetailRow>
 
-					<div className="space-y-4">
-						<div className="space-y-2">
-							<div className="flex items-center justify-between">
-								<span className="text-sm font-medium">状态</span>
-								<ActionButton disabled={statuses.length >= 30} onClick={addStatus}>
-									新增状态
-								</ActionButton>
-							</div>
-							<p className="text-xs text-muted-foreground">
-								每行:标识(英文,落库与边引用用)+ 展示名(界面只显示它)。改标识会把边与初始态一起改名。
-							</p>
-							{statuses.map((status, index) => (
-								<div key={statusKeys[index]} className="flex flex-wrap items-center gap-3">
-									<Input
-										value={status.value}
-										aria-label={`第 ${index + 1} 个状态标识`}
-										placeholder="标识,如 open"
-										className="h-8 w-32 font-mono text-xs"
-										onChange={(event) => patchStatus(index, { value: event.target.value })}
-									/>
-									<Input
-										value={status.label}
-										aria-label={`第 ${index + 1} 个状态展示名`}
-										placeholder="展示名,如 进行中"
-										className="h-8 w-40 text-sm"
-										onChange={(event) => patchStatus(index, { label: event.target.value })}
-									/>
-									<span className="flex items-center gap-1.5 text-xs">
-										<Checkbox
-											aria-label={`第 ${index + 1} 个状态为结束状态`}
-											checked={status.terminal === true}
-											onCheckedChange={(checked) => patchStatus(index, { terminal: checked })}
-										/>
-										结束状态
-									</span>
-									<ActionButton tone="danger" disabled={statuses.length <= 1} onClick={() => removeStatus(index)}>
-										删除
-									</ActionButton>
-								</div>
-							))}
-						</div>
-						<DetailRow label="初始态">
-							<Select
-								items={statusOptions}
-								value={initial || null}
-								onValueChange={(next) => setInitial(next ? String(next) : "")}
-							>
-								<SelectTrigger size="sm" className="w-full">
-									<SelectValue placeholder="先从上面加状态" />
-								</SelectTrigger>
-								<SelectContent>
-									{statusOptions.map((item) => (
-										<SelectItem key={item.value} value={item.value}>
-											{item.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</DetailRow>
+			<div className="space-y-4">
+				<div className="space-y-2">
+					<div className="flex items-center justify-between">
+						<span className="text-sm font-medium">状态</span>
+						<ActionButton disabled={statuses.length >= MAX_WORKFLOW_STATUSES} onClick={addStatus}>
+							新增状态
+						</ActionButton>
 					</div>
-
-					<div className="space-y-2">
-						<div className="flex items-center justify-between">
-							<span className="text-sm font-medium">状态转移边</span>
-							<Button variant="outline" size="sm" onClick={addEdge} disabled={edges.length >= MAX_EDGES}>
-								<Plus className="size-3.5" />
-								新增转移边
-							</Button>
+					<p className="text-xs text-muted-foreground">
+						每行:标识(英文,落库与边引用用)+ 展示名(界面只显示它)。改标识会把边与初始态一起改名。
+					</p>
+					{statuses.map((status, index) => (
+						<div key={statusKeys[index]} className="flex flex-wrap items-center gap-3">
+							<Input
+								value={status.value}
+								aria-label={`第 ${index + 1} 个状态标识`}
+								placeholder="标识,如 open"
+								className="h-8 w-32 font-mono text-xs"
+								onChange={(event) => patchStatus(index, { value: event.target.value })}
+							/>
+							<Input
+								value={status.label}
+								aria-label={`第 ${index + 1} 个状态展示名`}
+								placeholder="展示名,如 进行中"
+								className="h-8 w-40 text-sm"
+								onChange={(event) => patchStatus(index, { label: event.target.value })}
+							/>
+							<span className="flex items-center gap-1.5 text-xs">
+								<Checkbox
+									aria-label={`第 ${index + 1} 个状态为结束状态`}
+									checked={status.terminal === true}
+									onCheckedChange={(checked) => patchStatus(index, { terminal: checked })}
+								/>
+								结束状态
+							</span>
+							<ActionButton tone="danger" disabled={statuses.length <= 1} onClick={() => removeStatus(index)}>
+								删除
+							</ActionButton>
 						</div>
-						{duplicateKeys.size > 0 ? (
-							<p className="text-xs text-destructive">
-								同一对状态只能有一条边:把重复的转移删掉,或在「直接改 / 审批动作」里二选一。
-							</p>
-						) : (
-							<p className="text-xs text-muted-foreground">
-								想让某对状态
-								<span className="font-medium text-foreground">必须</span>
-								走审批,就只留审批边、别加对应的直接边。
-							</p>
-						)}
-						{edges.length === 0 ? (
-							<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-								还没有转移边。点「新增转移边」加一条。
-							</p>
-						) : (
-							<div className="space-y-2">
-								{edges.map((edge) => (
-									<div
-										key={edge.key}
-										className={cn(
-											"space-y-2 rounded-xl border p-2.5",
-											duplicateKeys.has(edge.key) ? "border-destructive/50 bg-destructive/5" : "border-border",
-										)}
-									>
-										<div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
-											<Select
-												items={statusOptions}
-												value={edge.from || null}
-												onValueChange={(next) => patchEdge(edge.key, { from: next ? String(next) : "" })}
-											>
-												<SelectTrigger size="sm" className="w-full">
-													<SelectValue placeholder="从" />
-												</SelectTrigger>
-												<SelectContent>
-													{statusOptions.map((item) => (
-														<SelectItem key={item.value} value={item.value}>
-															{item.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<ArrowRight className="size-3.5 justify-self-center text-muted-foreground" />
-											<Select
-												items={statusOptions}
-												value={edge.to || null}
-												onValueChange={(next) => patchEdge(edge.key, { to: next ? String(next) : "" })}
-											>
-												<SelectTrigger size="sm" className="w-full">
-													<SelectValue placeholder="到" />
-												</SelectTrigger>
-												<SelectContent>
-													{statusOptions.map((item) => (
-														<SelectItem key={item.value} value={item.value}>
-															{item.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<div className="justify-self-end">
-												<ActionButton
-													tone="danger"
-													onClick={() => setEdges((prev) => prev.filter((item) => item.key !== edge.key))}
-												>
-													删除
-												</ActionButton>
-											</div>
-										</div>
-										<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-											<Select
-												items={VIA_OPTIONS}
-												value={edge.via}
-												onValueChange={(next) => patchEdge(edge.key, { via: next === "action" ? "action" : "direct" })}
-											>
-												<SelectTrigger size="sm" className="w-28">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													{VIA_OPTIONS.map((item) => (
-														<SelectItem key={item.value} value={item.value}>
-															{item.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											{/* `who` 的含义随 via 变:直接改是"谁能改",审批是"谁能发起" */}
-											<span className="text-xs text-muted-foreground">
-												{edge.via === "action" ? "谁可发起审批" : "谁可直接改"}
-											</span>
-											{WHO_OPTIONS.map((option) => (
-												<span key={option.value} className="flex items-center gap-1.5">
-													<Checkbox
-														aria-label={`选择${option.label}`}
-														checked={edge.who.includes(option.value)}
-														onCheckedChange={(checked) => toggleWho(edge.key, option.value, checked === true)}
-													/>
-													<button
-														type="button"
-														tabIndex={-1}
-														className="text-xs text-foreground"
-														onClick={() => toggleWho(edge.key, option.value, !edge.who.includes(option.value))}
-													>
-														{option.label}
-													</button>
-												</span>
-											))}
-										</div>
-									</div>
-								))}
-							</div>
-						)}
-					</div>
-				</DialogBody>
-				<DialogFooter>
-					<Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-						取消
-					</Button>
-					<Button
-						disabled={pending || !canSubmit}
-						onClick={() =>
-							onSubmit({
-								name: name.trim(),
-								statuses,
-								initial,
-								edges: edges.map((edge) => ({
-									from: edge.from,
-									to: edge.to,
-									who: edge.who,
-									via: edge.via,
-								})),
-							})
-						}
+					))}
+				</div>
+				<DetailRow label="初始态">
+					<Select
+						items={statusOptions}
+						value={initial || null}
+						onValueChange={(next) => setInitial(next ? String(next) : "")}
 					>
-						{pending ? "保存中…" : "保存"}
+						<SelectTrigger size="sm" className="w-full">
+							<SelectValue placeholder="先从上面加状态" />
+						</SelectTrigger>
+						<SelectContent>
+							{statusOptions.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</DetailRow>
+			</div>
+
+			<div className="space-y-2">
+				<div className="flex items-center justify-between">
+					<span className="text-sm font-medium">状态转移边</span>
+					<Button variant="outline" size="sm" onClick={addEdge} disabled={edges.length >= MAX_WORKFLOW_EDGES}>
+						<Plus className="size-3.5" />
+						新增转移边
 					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+				</div>
+				{duplicateKeys.size > 0 ? (
+					<p className="text-xs text-destructive">
+						同一对状态只能有一条边:把重复的转移删掉,或在「直接改 / 审批动作」里二选一。
+					</p>
+				) : (
+					<p className="text-xs text-muted-foreground">
+						想让某对状态
+						<span className="font-medium text-foreground">必须</span>
+						走审批,就只留审批边、别加对应的直接边。
+					</p>
+				)}
+				{edges.length === 0 ? (
+					<p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+						还没有转移边。点「新增转移边」加一条。
+					</p>
+				) : (
+					<div className="space-y-2">
+						{edges.map((edge) => (
+							<div
+								key={edge.key}
+								className={cn(
+									"space-y-2 rounded-xl border p-2.5",
+									duplicateKeys.has(edge.key) ? "border-destructive/50 bg-destructive/5" : "border-border",
+								)}
+							>
+								<div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]">
+									<Select
+										items={statusOptions}
+										value={edge.from || null}
+										onValueChange={(next) => patchEdge(edge.key, { from: next ? String(next) : "" })}
+									>
+										<SelectTrigger size="sm" className="w-full">
+											<SelectValue placeholder="从" />
+										</SelectTrigger>
+										<SelectContent>
+											{statusOptions.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									<ArrowRight className="size-3.5 justify-self-center text-muted-foreground" />
+									<Select
+										items={statusOptions}
+										value={edge.to || null}
+										onValueChange={(next) => patchEdge(edge.key, { to: next ? String(next) : "" })}
+									>
+										<SelectTrigger size="sm" className="w-full">
+											<SelectValue placeholder="到" />
+										</SelectTrigger>
+										<SelectContent>
+											{statusOptions.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									<div className="justify-self-end">
+										<ActionButton
+											tone="danger"
+											onClick={() => setEdges((prev) => prev.filter((item) => item.key !== edge.key))}
+										>
+											删除
+										</ActionButton>
+									</div>
+								</div>
+								<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+									<Select
+										items={VIA_OPTIONS}
+										value={edge.via}
+										onValueChange={(next) => patchEdge(edge.key, { via: next === "action" ? "action" : "direct" })}
+									>
+										<SelectTrigger size="sm" className="w-28">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{VIA_OPTIONS.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									{/* `who` 的含义随 via 变:直接改是"谁能改",审批是"谁能发起" */}
+									<span className="text-xs text-muted-foreground">
+										{edge.via === "action" ? "谁可发起审批" : "谁可直接改"}
+									</span>
+									{WHO_OPTIONS.map((option) => (
+										<span key={option.value} className="flex items-center gap-1.5">
+											<Checkbox
+												aria-label={`选择${option.label}`}
+												checked={edge.who.includes(option.value)}
+												onCheckedChange={(checked) => toggleWho(edge.key, option.value, checked === true)}
+											/>
+											<button
+												type="button"
+												tabIndex={-1}
+												className="text-xs text-foreground"
+												onClick={() => toggleWho(edge.key, option.value, !edge.who.includes(option.value))}
+											>
+												{option.label}
+											</button>
+										</span>
+									))}
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		</TaskActionDialog>
 	);
 }

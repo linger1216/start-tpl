@@ -1,8 +1,8 @@
 import { db, dmPool } from "../src/db/index.ts";
-import { checkUnviewedActions } from "../src/lib/task/close-reminders.ts";
+import { runScheduledTaskReminders } from "../src/lib/task/scheduled-reminders.ts";
 
 const handlers: Record<string, () => Promise<unknown>> = {
-	"task-close.unviewed": checkUnviewedActions,
+	"task-close.unviewed": runScheduledTaskReminders,
 };
 
 // Worker 异常退出时不要让子进程继续持有外部副作用。

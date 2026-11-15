@@ -1,21 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Paperclip, Trash2, X } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Paperclip, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
-import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
-import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
-import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
+import { AsyncState } from "#/components/modules/task-close/async-state";
+import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
+import { AttachmentChip, TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
+import { MentionTextarea, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
+import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
+import { useAttachmentUpload } from "#/components/modules/task-close/use-attachment-upload";
+import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { useFileUpload } from "#/hooks/use-file-upload";
+
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toApiError, toastApiError } from "#/lib/api/error";
+import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { REJECT_NOTE_PREFIX } from "#/lib/task/close-spec";
 import type { TaskAttachment } from "#/lib/task/payload";
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -50,17 +53,22 @@ export function TaskComments({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const textRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const [content, setContent] = useState("");
 	const [attachments, setAttachments] = useState<Pending[]>([]);
-	const [uploading, setUploading] = useState(false);
+	const { uploading, pick: pickFiles } = useAttachmentUpload({
+		limit: MAX_ATTACHMENTS,
+		existing: () => attachments.length,
+		onRows: (rows) => setAttachments((prev) => [...prev, ...rows.map((row) => ({ id: row.id, name: row.originName }))]),
+		resetInput: () => {
+			if (fileRef.current) fileRef.current.value = "";
+		},
+	});
 	/** 正在预览的**已有**评论附件 */
-	const [preview, setPreview] = useState<TaskAttachment | null>(null);
-	/** 待确认删除的评论 —— 删除是破坏性操作,先弹 `ConfirmDialog`(非空即打开) */
-	const [pendingRemove, setPendingRemove] = useState<{ id: string; authorName: string | null } | null>(null);
+	const preview = useAttachmentPreview<TaskAttachment>(taskId);
+	const del = useConfirm<{ id: string; authorName: string | null }>();
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
 	// 评论也会进活动日志(`tc_log`)—— 失效要连日志一起,否则「动态」卡还停在发评论之前
@@ -87,24 +95,6 @@ export function TaskComments({
 		}),
 	);
 
-	async function pickFiles(files: FileList | null) {
-		if (!files || files.length === 0) return;
-		setUploading(true);
-		try {
-			for (const file of Array.from(files).slice(0, MAX_FILES - attachments.length)) {
-				const result = await upload(file, "private");
-				if (!result.ok) {
-					toast.error(result.message);
-					continue;
-				}
-				setAttachments((prev) => [...prev, { id: result.row.id, name: result.row.originName }]);
-			}
-		} finally {
-			setUploading(false);
-			if (fileRef.current) fileRef.current.value = "";
-		}
-	}
-
 	const items = listQuery.data ?? [];
 	const canSubmit = content.trim().length > 0 && !uploading && !createMutation.isPending;
 
@@ -122,54 +112,29 @@ export function TaskComments({
 		<div className="grid gap-5">
 			{/* ci —— 评论输入(原型的样:avatar + 边框 field + 工具条 + 发送) */}
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
-				<Avatar initials="我" />
+				<InitialsCircle name="我" className="size-9 text-[13px]" />
 				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
 				<div className="rounded-lg border border-border bg-card">
-					<textarea
-						ref={textRef}
-						rows={3}
+					<MentionTextarea
 						value={content}
-						onChange={(event) => {
-							setContent(event.target.value);
-							mention.track(event.target.value, event.target.selectionStart);
-						}}
+						onChange={setContent}
+						mention={mention}
+						textRef={textRef}
+						rows={3}
 						placeholder="说点什么…  输入 @ 提及成员"
-						aria-label="评论"
-						aria-labelledby={labelledBy}
+						ariaLabel="评论"
+						ariaLabelledBy={labelledBy}
 						className="block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-[1.55] placeholder:text-muted-foreground sm:text-sm"
-						onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-							// @选单在场时,↑↓/Enter/Tab/Esc 归它管 —— 别把"回车发送"带出来
-							if (mention.onKeyDown(event)) return;
-							if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-								event.preventDefault();
-								submit();
-							}
-						}}
-						onBlur={() => mention.close()}
+						onPrimaryAction={submit}
 					/>
-					{mention.state ? (
-						<MentionList
-							options={mention.options}
-							highlight={mention.highlight}
-							onPick={(person) => mention.insert(person, content)}
-						/>
-					) : null}
 					{attachments.length > 0 ? (
 						<div className="flex flex-wrap gap-1.5 px-3 pt-2">
 							{attachments.map((file) => (
-								<span
+								<AttachmentChip
 									key={file.id}
-									className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-0.5 text-xs"
-								>
-									{file.name}
-									<button
-										type="button"
-										aria-label={`移除 ${file.name}`}
-										onClick={() => setAttachments((prev) => prev.filter((f) => f.id !== file.id))}
-									>
-										<X className="size-3" />
-									</button>
-								</span>
+									file={file}
+									onRemove={(id) => setAttachments((prev) => prev.filter((f) => f.id !== id))}
+								/>
 							))}
 						</div>
 					) : null}
@@ -180,7 +145,7 @@ export function TaskComments({
 								variant="ghost"
 								size="sm"
 								aria-label="附件"
-								disabled={uploading || attachments.length >= MAX_FILES}
+								disabled={uploading || attachments.length >= MAX_ATTACHMENTS}
 								onClick={() => fileRef.current?.click()}
 							>
 								<Paperclip className="size-3.5" />
@@ -210,17 +175,18 @@ export function TaskComments({
 			    外包一层 `bg-card` + 圆角 + 描边,与上半部「评论输入」Card 视觉一致;
 			    缺了它下半部会透出 PageFrame 的画布色,看起来「上半有框、下半没框」割裂。 */}
 			{listQuery.isError ? (
-				<p className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card py-3 pl-12 text-xs text-muted-foreground">
-					<span>{toApiError(listQuery.error).message || "评论加载失败。"}</span>
-					<Button variant="outline" size="xs" disabled={listQuery.isFetching} onClick={() => listQuery.refetch()}>
-						{listQuery.isFetching ? "重试中…" : "重试"}
-					</Button>
-				</p>
+				<AsyncState
+					inline
+					pending={false}
+					error={listQuery.error}
+					isFetching={listQuery.isFetching}
+					onRetry={() => listQuery.refetch()}
+				/>
 			) : (
 				<ul className="grid gap-4.5 rounded-lg bg-card p-4">
 					{items.map((item) => (
 						<li key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3 group">
-							<Avatar initials={(item.authorName ?? "?").slice(0, 1)} />
+							<InitialsCircle name={item.authorName ?? "?"} className="size-9 text-[13px]" />
 							<div className="min-w-0 pt-0.5">
 								{/* 名字 + 时间 + 删除同一行:删除是**纯图标**(ActionIconButton 的行内规格),
 								    紧跟在日期右侧、与文字同一视觉水平;悬停/键盘聚焦才显形 */}
@@ -235,7 +201,7 @@ export function TaskComments({
 											tone="danger"
 											label="删除评论"
 											disabled={removeMutation.isPending}
-											onClick={() => setPendingRemove({ id: item.id, authorName: item.authorName })}
+											onClick={() => del.ask({ id: item.id, authorName: item.authorName })}
 											className={cn(
 												"opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
 											)}
@@ -245,7 +211,7 @@ export function TaskComments({
 									) : null}
 								</div>
 								{/* 驳回原因走「批注」Alert(左红竖线 + 批注小标);普通评论是正文 */}
-								{item.content.startsWith("驳回原因:") ? (
+								{item.content.startsWith(REJECT_NOTE_PREFIX) ? (
 									<Alert variant="danger" title="批注" className="mt-1">
 										{item.content}
 									</Alert>
@@ -255,7 +221,7 @@ export function TaskComments({
 								{item.attachments.length > 0 ? (
 									<div className="mt-1.5">
 										{/* 复用任务附件的预览弹窗:chip 可点 → 预览 / 下载 */}
-										<TaskAttachmentList attachments={item.attachments} onOpen={setPreview} />
+										<TaskAttachmentList attachments={item.attachments} onOpen={preview.preview} />
 									</div>
 								) : null}
 							</div>
@@ -264,46 +230,15 @@ export function TaskComments({
 				</ul>
 			)}
 
-			{/* 删除评论 —— 破坏性操作,先确认(软删:从讨论流里消失,历史仍留痕) */}
-			<ConfirmDialog
-				open={pendingRemove !== null}
-				onOpenChange={(next) => {
-					if (!next) setPendingRemove(null);
-				}}
-				title="删除评论"
-				description={`删除「${pendingRemove?.authorName ?? PLACEHOLDER_EMPTY}」的这条评论?删除后讨论流里不再显示。`}
-				isPending={removeMutation.isPending}
-				onConfirm={() => {
-					if (!pendingRemove) return;
-					removeMutation.mutate({ id: pendingRemove.id }, { onSuccess: () => setPendingRemove(null) });
-				}}
-			/>
+			{preview.dialog}
 
-			<TaskAttachmentPreview
-				taskId={taskId}
-				attachment={preview}
-				open={preview !== null}
-				onOpenChange={(next) => {
-					if (!next) setPreview(null);
-				}}
+			{/* 删除评论 —— 破坏性操作,先确认(软删:从讨论流里消失,历史仍留痕) */}
+			<del.Dialog
+				title="删除评论"
+				description={(t) => `删除「${t.authorName ?? PLACEHOLDER_EMPTY}」的这条评论?删除后讨论流里不再显示。`}
+				isPending={removeMutation.isPending}
+				onConfirm={(t) => removeMutation.mutate({ id: t.id }, { onSuccess: del.dismiss })}
 			/>
 		</div>
 	);
 }
-
-/** 与 `commentCreate` 入参的 `.max(20)` 对齐 */
-const MAX_FILES = 20;
-
-/**
- * 评论流里的头像 —— **墨底正圆 + 反白首字 + 宋体**(36px,模块内联,无共享文件)。
- * 2026-10:task-close-badge 受章层整体拆掉后,这里的"人"只剩这一个格子:内联小圆牌即可,
- * 不再为此保留跨页共享件(成员列表同款圆牌就地内联,同一人两处同形)。
- */
-const Avatar = ({ initials }: { initials: string }) => (
-	<span
-		aria-hidden
-		className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/85 text-[13px] font-heading font-bold leading-none text-paper"
-	>
-		{initials}
-	</span>
-);

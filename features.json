@@ -36,6 +36,8 @@
         "tests/task-close.test.ts",
         "tests/mention-ranges.test.ts",
         "tests/task-close-log.test.ts",
+        "tests/task-close-view.test.ts",
+        "tests/task-notification-redaction.test.ts",
         "tests/task-link.test.ts",
         "doc/task-close.md",
         "doc/task-forms.md",
@@ -53,8 +55,8 @@
         "#/lib/task/report-download"
       ],
       "rules": [
-        { "file": "scripts/job-runner.ts", "kind": "imports", "from": ["../src/lib/task/close-reminders.ts"] },
-        { "file": "scripts/job-runner.ts", "kind": "lines", "matches": ["\"task-close.unviewed\": checkUnviewedActions,"] },
+        { "file": "scripts/job-runner.ts", "kind": "imports", "from": ["../src/lib/task/scheduled-reminders.ts"] },
+        { "file": "scripts/job-runner.ts", "kind": "lines", "matches": ["\"task-close.unviewed\": runScheduledTaskReminders,"] },
         { "file": "scripts/worker.ts", "kind": "lines", "matches": ["await scheduler.registerJob({ name: \"task-close.unviewed\", handler: \"task-close.unviewed\", intervalSeconds: 60 });"] },
         { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t`create table if not exists .*\\.\"tc_", "end": "^    \\)`,$" },
         { "file": "scripts/create-better-auth-tables-dm.ts", "kind": "block", "begin": "^\\t// 动作列名须在建索引前统一", "end": "^\\t// 任务动作列名迁移结束$" },
@@ -273,6 +275,8 @@
         "src/lib/sms-console-provider.ts",
         "scripts/delivery-runner.ts",
         "src/lib/notice-levels.ts",
+        "src/lib/notice-path.ts",
+        "scripts/migrate-notice-path-level.ts",
         "src/lib/use-notice-sse.ts",
         "src/lib/sse-bus.ts",
         "tests/notice.test.ts",
@@ -289,6 +293,7 @@
         "#/lib/notification",
         "#/lib/notification-delivery",
         "#/lib/notice-levels",
+        "#/lib/notice-path",
         "#/lib/use-notice-sse",
         "#/lib/sse-bus",
         "./notification-bell"

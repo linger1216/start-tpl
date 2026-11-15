@@ -5,7 +5,7 @@
  *
  * ⚠️ 那个库的年数据是**写死的**,只覆盖到 `WORKDAY_DATA_LAST_YEAR`;之后的日期它退回「只看周末」,
  * 于是法定节假日会被当工作日。所以**每年要升级一次 `chinese-workday`** ——
- * 升级点就是这里(同时改 `WORKDAY_DATA_LAST_YEAR`)与 `doc/task-close.md` 的提醒一节。
+ * 升级点就是这里(同时改 `WORKDAY_DATA_LAST_YEAR`)与提醒配置那一节。
  */
 import { isWorkday } from "chinese-workday";
 

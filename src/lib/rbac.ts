@@ -342,7 +342,7 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	// 任务表单和填报模板管理页共用列表，任一页面可见即可读取。
 	"taskClose.reportTemplateList": [pagePermOf("/task-close"), pagePermOf("/task-close/report-templates")],
 	"taskClose.reportTemplateCreate": "sys:tc_report_template:add",
-	"taskClose.reportTemplatePublish": "sys:tc_report_template:edit",
+	"taskClose.reportTemplateUpdate": "sys:tc_report_template:edit",
 	"taskClose.reportTemplateRemove": "sys:tc_report_template:remove",
 };
 
@@ -443,20 +443,18 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",
-	"taskClose.actionUrgeHistory",
 	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
-	"taskClose.reminderCandidates",
+	// 提醒对象直接取「参与人」列表(taskGet.members),不再单开候选接口
 	"taskClose.reminderHistory",
-	"taskClose.taskReminderPreview",
+	"taskClose.taskReminderSchedulePreview",
 	"taskClose.commentList",
 	// 活动日志:与上面同口径(任务可见即可读);行级隔离靠 taskId 本身
 	"taskClose.logList",
 	// 类别 2:流程模板详情 —— 模板是「全系统一份」的配置,不看部门
-	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 routers/task-query.ts)
+	// 类别 3:任务附件取地址 —— 只放行挂在该任务上的文件,权限口径与「任务可见即可读」一致(见 `routers/task/query.ts`)
 	"taskClose.attachmentUrl",
 	// 类别 3:截止提醒预览 —— 纯算,**不读任何行**,所以没有"这行归谁看"的问题
-	"taskClose.reminderPreview",
-	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
+	"taskClose.reminderRulePreview",
 ];
 
 /**
@@ -475,13 +473,11 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"notice.readAll",
 	// 类别 2:任务闭环(tc_close)—— 本模块还没有菜单 / 按钮,硬配权限码等于造出「没人能被授予」的
 	// 假权限,结果是所有账号集体失权。它的授权是**任务级**的,由 `who` 协议在 resolver 内判定
-	// (创建者 / 参与者 / 执行者的角色存在 `tc_member`,RBAC 的角色模型表达不了)。
+	// (创建者 / 执行人在 `tc_task` 的列上,参与者 / 参与者在 `tc_member`,RBAC 的角色模型表达不了)。
 	// 等菜单建起来、权限点收窄到「谁能进任务页」时,再按页面码挪进 `PERM_BY_PATH`。
 	"taskClose.taskCreate",
-	"taskClose.reportBind",
 	"taskClose.reportSaveDraft",
-	"taskClose.reportSyncToParent",
-	"taskClose.reportResetFromParent",
+	"taskClose.reportSubmitToParent",
 	"taskClose.reportExcelDownload",
 	"taskClose.reportExcelPreview",
 	"taskClose.taskUpdate",
@@ -493,7 +489,6 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	"taskClose.taskTransfer",
 	"taskClose.actionCreate",
 	"taskClose.actionView",
-	"taskClose.actionUrge",
 	"taskClose.reminderSend",
 	"taskClose.actionWithdraw",
 	"taskClose.actionRespond",
@@ -554,11 +549,9 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",
-	"taskClose.actionUrgeHistory",
 	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
-	"taskClose.reminderCandidates",
 	"taskClose.reminderHistory",
-	"taskClose.taskReminderPreview",
+	"taskClose.taskReminderSchedulePreview",
 	"taskClose.commentList",
 	// 活动日志(只读):同「任务可见即可读」,不做页面码 —— 它与详情页一体,锁了会把详情页打死
 	"taskClose.logList",
@@ -566,6 +559,5 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.attachmentUrl",
 	// 类别 3:截止提醒预览 —— **纯算**:工作日日历是内置数据,不读库、不看任何人的数据,
 	// 只是把"我会在哪几天几点被提醒"算出来给建任务弹窗用(hover 那个图标)
-	"taskClose.reminderPreview",
-	// 类别 3:还没归属任何任务的上传草稿取地址(建任务弹窗里点预览用)
+	"taskClose.reminderRulePreview",
 ];

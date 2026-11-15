@@ -163,8 +163,70 @@ export function useMentionPicker(
 	};
 }
 
+/**
+ * 输入框 + @选单的成套渲染:评论页与征询回复共用,省得各自再把 hook 的三步各接一遍。
+ * `onPrimaryAction` 给了才拦 Cmd/Ctrl+Enter(评论页用它「发送」)。
+ */
+export function MentionTextarea({
+	value,
+	onChange,
+	mention,
+	textRef,
+	rows,
+	placeholder,
+	ariaLabel,
+	ariaLabelledBy,
+	className,
+	onPrimaryAction,
+}: {
+	value: string;
+	onChange: (next: string) => void;
+	mention: ReturnType<typeof useMentionPicker>;
+	textRef: RefObject<HTMLTextAreaElement | null>;
+	rows: number;
+	placeholder: string;
+	ariaLabel: string;
+	ariaLabelledBy?: string;
+	className: string;
+	onPrimaryAction?: () => void;
+}) {
+	return (
+		<>
+			<textarea
+				ref={textRef}
+				rows={rows}
+				value={value}
+				onChange={(event) => {
+					onChange(event.target.value);
+					mention.track(event.target.value, event.target.selectionStart);
+				}}
+				placeholder={placeholder}
+				aria-label={ariaLabel}
+				aria-labelledby={ariaLabelledBy}
+				className={className}
+				onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+					// @选单在场时,↑↓/Enter/Tab/Esc 归它管 —— 别把「回车发送」带出来
+					if (mention.onKeyDown(event)) return;
+					if (onPrimaryAction && (event.metaKey || event.ctrlKey) && event.key === "Enter") {
+						event.preventDefault();
+						onPrimaryAction();
+					}
+				}}
+				onBlur={() => mention.close()}
+			/>
+			{mention.state ? (
+				<MentionList
+					options={mention.options}
+					highlight={mention.highlight}
+					onPick={(person) => mention.insert(person, value)}
+				/>
+			) : null}
+		</>
+	);
+}
+
 /** 候选单 —— 浮在输入框正下方(常规流);点击不偷焦点(`onMouseDown` 抢先拦掉) */
-export function MentionList({
+function MentionList({
 	options,
 	highlight,
 	onPick,

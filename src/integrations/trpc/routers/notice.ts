@@ -6,6 +6,9 @@ import { sysNotification, sysNotificationAttempt, sysNotificationDelivery, sysUs
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "#/integrations/trpc/init";
 import { isAdminUser, isPermissionConfigured } from "#/lib/casbin";
 import { notifyMany } from "#/lib/notice";
+import { NOTICE_LEVEL_VALUES } from "#/lib/notice-levels";
+import { NOTICE_PATH_MAX } from "#/lib/notice-path";
+import { NOTICE_BODY_MAX, NOTICE_PAGE_LIMIT, NOTIFICATION_TITLE_MAX } from "#/lib/notification-status";
 import { alive } from "#/lib/soft-delete";
 
 /**
@@ -22,25 +25,10 @@ async function assertMayReadDelivery(user: { id: string; isSuper?: boolean } | n
 	throw new TRPCError({ code: "FORBIDDEN", message: "没有权限查看投递记录" });
 }
 
-function payloadOf(raw: string | null): { path: string | null; level: string } {
-	try {
-		const value: unknown = raw ? JSON.parse(raw) : null;
-		if (value && typeof value === "object") {
-			const payload = value as Record<string, unknown>;
-			const path =
-				typeof payload.path === "string" && /^\/(?!\/)[A-Za-z0-9\-/_.[\]]*$/.test(payload.path) ? payload.path : null;
-			return { path, level: typeof payload.level === "string" ? payload.level : "info" };
-		}
-	} catch {
-		/* 损坏的数据不影响列表 */
-	}
-	return { path: null, level: "info" };
-}
-
 export const noticeRouter = createTRPCRouter({
 	/** 投递管理包含跨用户信息，必须具备独立权限。 */
 	history: protectedProcedure
-		.input(z.object({ limit: z.number().int().min(1).max(500).default(100) }).optional())
+		.input(z.object({ limit: z.number().int().min(1).max(NOTICE_PAGE_LIMIT).default(100) }).optional())
 		.query(async ({ ctx, input }) => {
 			await assertMayReadDelivery(ctx.user);
 			const rows = await db
@@ -85,7 +73,7 @@ export const noticeRouter = createTRPCRouter({
 	 * 拉回来在客户端分页)。上限 500 是防止有人一次把几万条拖下来。
 	 */
 	list: protectedProcedure
-		.input(z.object({ limit: z.number().int().min(1).max(500).default(10) }).optional())
+		.input(z.object({ limit: z.number().int().min(1).max(NOTICE_PAGE_LIMIT).default(10) }).optional())
 		.query(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
 			const mine = and(
@@ -109,7 +97,8 @@ export const noticeRouter = createTRPCRouter({
 					id: delivery.id,
 					title: notification.title,
 					body: notification.content,
-					...payloadOf(notification.payload),
+					path: notification.path,
+					level: notification.level,
 					read: delivery.read_at !== null,
 					createTime: delivery.created_at.toISOString(),
 				})),
@@ -145,10 +134,10 @@ export const noticeRouter = createTRPCRouter({
 			z.object({
 				// 与 `sys_user.id` 的 varchar(36) 对齐;BA 默认生成 32 位,但 uuid 配置下是 36 位
 				userIds: z.array(z.string().max(36)).min(1, "至少要选一个收件人").max(500, "一次最多通知 500 人"),
-				title: z.string().min(1, "标题不能为空").max(128),
-				body: z.string().max(255).optional(),
-				path: z.string().max(255).optional(),
-				level: z.enum(["info", "success", "warn", "danger"]).default("info"),
+				title: z.string().min(1, "标题不能为空").max(NOTIFICATION_TITLE_MAX),
+				body: z.string().max(NOTICE_BODY_MAX).optional(),
+				path: z.string().max(NOTICE_PATH_MAX).optional(),
+				level: z.enum(NOTICE_LEVEL_VALUES).default("info"),
 			}),
 		)
 		.mutation(async ({ input }) => {

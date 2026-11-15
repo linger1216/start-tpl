@@ -11,8 +11,6 @@ type NoticePayload = {
 	level?: NoticeLevel;
 };
 
-const NOTICE_PATH_RE = /^\/(?!\/)[A-Za-z0-9\-/_.[\]]*$/;
-
 export async function notifyMany(userIds: readonly string[], payload: NoticePayload): Promise<number> {
 	const recipients = [...new Set(userIds)];
 	if (!recipients.length) return 0;
@@ -29,7 +27,8 @@ export async function notifyMany(userIds: readonly string[], payload: NoticePayl
 		// (手动通知 255、退回原因 2000)—— 在这里截到 255 会静默砍掉业务数据。
 		title: payload.title,
 		content: payload.body ?? null,
-		payload: { path: NOTICE_PATH_RE.test(path) ? path : null, level: payload.level ?? "info" },
+		path,
+		level: payload.level,
 		dedupeKey: newId(),
 		recipients: recipients.map((userId) => ({ userId, channel: "in_app" })),
 	});

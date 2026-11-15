@@ -1,7 +1,7 @@
 import { graphlib, layout } from "@dagrejs/dagre";
 import { useId } from "react";
 import type { WorkflowEdgeInput } from "#/components/modules/task-close/task-workflow-form";
-import type { WorkflowStatus } from "#/lib/task/close-spec";
+import { VIA_LABEL, type WorkflowStatus } from "#/lib/task/close-spec";
 
 /** 布局只读流程图；文字清单另行提供完整角色和状态名称。 */
 export function TaskWorkflowGraph({
@@ -54,7 +54,7 @@ export function TaskWorkflowGraph({
 							/>
 							<rect x={route.x - 27} y={route.y - 10} width="54" height="20" rx="4" className="fill-background" />
 							<text x={route.x} y={route.y + 4} textAnchor="middle" className="fill-muted-foreground text-[11px]">
-								{edge.via === "action" ? "审批" : "直接修改"}
+								{VIA_LABEL[edge.via]}
 							</text>
 						</g>
 					);

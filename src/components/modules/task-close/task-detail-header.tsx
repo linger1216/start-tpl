@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ChevronDown, Info } from "lucide-react";
-
+import { InfoTooltip } from "#/components/modules/task-close/info-tooltip";
+import { PriorityTag } from "#/components/modules/task-close/priority-tag";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -10,11 +11,8 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { Tag } from "#/components/ui/tag.tsx";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf } from "#/lib/task/close-spec";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
 
 /**
@@ -35,7 +33,6 @@ export function TaskDetailHeader({
 	hasMoreActions,
 	canTransfer,
 	canManage,
-	canRemove,
 	showRefresh,
 	refreshing,
 	onApprove,
@@ -62,9 +59,8 @@ export function TaskDetailHeader({
 	statusOptions: readonly { value: string; label: string }[];
 	hasMoreActions: boolean;
 	canTransfer: boolean;
+	/** 创建者或管理员:编辑 + 删除(判据与服务端 `assertCanManage` 同一口径) */
 	canManage: boolean;
-	/** 删除任务:只有创建者或管理员 */
-	canRemove: boolean;
 	showRefresh: boolean;
 	refreshing: boolean;
 	onApprove: () => void;
@@ -112,34 +108,28 @@ export function TaskDetailHeader({
 									{task.createdAt ? formatLocalMinute(task.createdAt) : PLACEHOLDER_EMPTY}
 								</strong>
 							</span>
-							<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
-								{priorityLabelOf(task.priority)}
-							</Tag>
+							<PriorityTag priority={task.priority} />
 						</MetaRow>
 					</div>
 
 					{/* 右上动作组(收敛到 4 组):ⓘ + 主动作(发起审批/改状态取一) + 发起征询 + 更多▾;刷新殿后 */}
 					<div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
 						{/* 「为什么有这些按钮」—— 悬停 / 聚焦展开:当前身份 + 事项流程给这个身份的边,方便复核 */}
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger
-									aria-label="为什么有这些按钮"
-									className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-								>
-									<Info className="size-3.5" />
-								</TooltipTrigger>
-								<TooltipContent side="bottom" align="end" className="block max-w-72">
-									<div className="text-xs font-medium">当前身份:{roleLabel}</div>
-									<p className="mt-1 text-xs leading-relaxed opacity-90">{roleWhy}</p>
-									<ul className="mt-1.5 grid gap-0.5 text-xs leading-relaxed opacity-90">
-										{tipLines.map((line) => (
-											<li key={line}>{line}</li>
-										))}
-									</ul>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<InfoTooltip
+							icon={<Info className="size-3.5" />}
+							label="为什么有这些按钮"
+							side="bottom"
+							triggerClassName="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+							contentClassName="max-w-72"
+						>
+							<div className="text-xs font-medium">当前身份:{roleLabel}</div>
+							<p className="mt-1 text-xs leading-relaxed opacity-90">{roleWhy}</p>
+							<ul className="mt-1.5 grid gap-0.5 text-xs leading-relaxed opacity-90">
+								{tipLines.map((line) => (
+									<li key={line}>{line}</li>
+								))}
+							</ul>
+						</InfoTooltip>
 						{/* 主动作:发起审批优先;无审批边但有直改边时,改状态顶上 primary 位 */}
 						{canApprove ? (
 							<Button size="sm" title="发起审批;任务会锁定,等对方答复" onClick={onApprove}>
@@ -180,7 +170,7 @@ export function TaskDetailHeader({
 									) : null}
 									{(canTransfer || (canSetStatus && canApprove)) && canManage ? <DropdownMenuSeparator /> : null}
 									{canManage ? <DropdownMenuItem onClick={onEdit}>编辑</DropdownMenuItem> : null}
-									{canRemove ? (
+									{canManage ? (
 										<DropdownMenuItem variant="destructive" onClick={onRemove}>
 											删除
 										</DropdownMenuItem>

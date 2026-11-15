@@ -1,10 +1,10 @@
-import { ArrowRight, Lock, Paperclip, ReplyIcon, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Lock, Paperclip, ReplyIcon, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
-import { MentionList, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
+import { AttachmentChip } from "#/components/modules/task-close/task-content-attachments";
+import { MentionTextarea, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
+import { useAttachmentUpload } from "#/components/modules/task-close/use-attachment-upload";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
-import { useFileUpload } from "#/hooks/use-file-upload";
 import type { WorkflowStatus } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -15,7 +15,7 @@ import { cn } from "#/lib/utils";
  * 当前节点在锁定期画成带锁的 `warn` 节点。
  *
  * ⚠️ **这里不放动作**。状态类按钮(发起审批 / 改状态)按用户要求留在**记录头右上角**的动作组里
- * (见 `task-detail-page.tsx` 与 `doc/task-close.md` 的「按钮去向」)—— 脊只回答「走到哪了」。
+ * (见 `task-detail-page.tsx`)—— 脊只回答「走到哪了」。
  * 同一个入口别在两处各握一半,否则人会来回找。
  */
 export function TaskFlowSpine({
@@ -28,7 +28,7 @@ export function TaskFlowSpine({
 }: {
 	statuses: WorkflowStatus[];
 	current: string;
-	/** 走过的状态(**不含**当前态) */
+	/** 走过的状态(含当前态,渲染时单独标出) */
 	visited: Set<string>;
 	/** 状态 value → 首次到达时刻(ISO);给走过的节点当注脚 */
 	reachedAt: Map<string, string>;
@@ -99,14 +99,10 @@ export function TaskFlowSpine({
 }
 
 /** 动作条里的一条待办 —— 文案由页面拼(页面才有状态 label) */
-export type TodoItem = {
+type TodoItem = {
 	id: string;
 	/** 一句话,如「甲 发起 进行中 → 待核验」;征询是「甲 发起征询」 */
 	title: string;
-	/** 「待答复」/「已发起」 */
-	stateLabel: string;
-	/** 只有「待答复」的能通过 / 驳回 / 回复 */
-	actionable: boolean;
 	/** **征询**不摊通过 / 驳回,只出「回复」(意见落成评论) */
 	consult: boolean;
 };
@@ -143,13 +139,19 @@ export function TaskTodoStrip({
 	onReply: (id: string, content: string, attachments: string[], mentionIds: string[]) => void;
 	onView: (id: string) => Promise<void>;
 }) {
-	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const textRef = useRef<HTMLTextAreaElement | null>(null);
 	const [replyFor, setReplyFor] = useState<string | null>(null);
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<ReplyFile[]>([]);
-	const [uploading, setUploading] = useState(false);
+	const { uploading, pick: pickReplyFiles } = useAttachmentUpload({
+		limit: MAX_REPLY_FILES,
+		existing: () => files.length,
+		onRows: (rows) => setFiles((prev) => [...prev, ...rows.map((row) => ({ id: row.id, name: row.originName }))]),
+		resetInput: () => {
+			if (fileRef.current) fileRef.current.value = "";
+		},
+	});
 	// 选单状态挂在**回复行是否打开**上:切换待办/关闭时把 @词 的踪迹一并清掉
 	const mention = useMentionPicker(participants, setText, textRef);
 
@@ -165,24 +167,6 @@ export function TaskTodoStrip({
 		setText("");
 		setFiles([]);
 		mention.reset();
-	}
-
-	async function pickReplyFiles(list: FileList | null) {
-		if (!list || list.length === 0) return;
-		setUploading(true);
-		try {
-			for (const file of Array.from(list).slice(0, MAX_REPLY_FILES - files.length)) {
-				const result = await upload(file, "private");
-				if (!result.ok) {
-					toast.error(result.message);
-					continue;
-				}
-				setFiles((prev) => [...prev, { id: result.row.id, name: result.row.originName }]);
-			}
-		} finally {
-			setUploading(false);
-			if (fileRef.current) fileRef.current.value = "";
-		}
 	}
 
 	function submitReply(id: string) {
@@ -210,17 +194,13 @@ export function TaskTodoStrip({
 					<li key={item.id} className="grid gap-1.5 text-sm">
 						<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
 							<span className="inline-flex items-center gap-1.5">
-								<span
-									className={cn(
-										"inline-flex h-[18px] items-center rounded px-1.5 text-xs font-semibold",
-										item.actionable ? "bg-warn-fg/10 text-warn-fg" : "bg-foreground/5 text-muted-foreground",
-									)}
-								>
-									{item.stateLabel}
+								{/* 进这条 strip 的都是轮到我且还没结的 —— 状态只有一个值,不做成字段 */}
+								<span className="inline-flex h-[18px] items-center rounded bg-warn-fg/10 px-1.5 text-xs font-semibold text-warn-fg">
+									待答复
 								</span>
 								<span className="text-foreground">{item.title}</span>
 							</span>
-							{item.actionable && !item.consult ? (
+							{!item.consult ? (
 								<span className="inline-flex items-center gap-2">
 									{/* 通过 / 驳回都走弹窗:理由与常用原因在弹窗里填,不在这儿直接落到不可逆动作 */}
 									<Button
@@ -246,7 +226,7 @@ export function TaskTodoStrip({
 									</ActionButton>
 								</span>
 							) : null}
-							{item.actionable && item.consult ? (
+							{item.consult ? (
 								<Button
 									size="sm"
 									variant="outline"
@@ -262,48 +242,26 @@ export function TaskTodoStrip({
 							) : null}
 						</div>
 						{/* 征询的回复就一行:意见 + 附件 → 提交后意见落成一条评论,动作即结 */}
-						{item.actionable && item.consult && replyFor === item.id ? (
+						{item.consult && replyFor === item.id ? (
 							<div className="rounded-lg border border-border bg-card focus-within:ring-2 focus-within:ring-ring/40">
-								<textarea
-									ref={textRef}
-									rows={2}
+								<MentionTextarea
 									value={text}
-									onChange={(event) => {
-										setText(event.target.value);
-										mention.track(event.target.value, event.target.selectionStart);
-									}}
+									onChange={setText}
+									mention={mention}
+									textRef={textRef}
+									rows={2}
 									placeholder="把意见写在这里,发表后进评论区…(可用 @ 提及成员)"
-									aria-label="回复意见"
+									ariaLabel="回复意见"
 									className="block w-full resize-none bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground"
-									onKeyDown={(event) => {
-										if (mention.onKeyDown(event)) return;
-									}}
-									onBlur={() => mention.close()}
 								/>
-								{mention.state ? (
-									<MentionList
-										options={mention.options}
-										highlight={mention.highlight}
-										onPick={(person) => mention.insert(person, text)}
-									/>
-								) : null}
 								{files.length > 0 ? (
 									<div className="flex flex-wrap gap-1.5 px-3 pt-2">
 										{files.map((file) => (
-											<span
+											<AttachmentChip
 												key={file.id}
-												className="inline-flex max-w-64 items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-xs"
-											>
-												<span className="truncate">{file.name}</span>
-												<button
-													type="button"
-													aria-label={`移除 ${file.name}`}
-													className="text-muted-foreground hover:text-foreground"
-													onClick={() => setFiles((prev) => prev.filter((row) => row.id !== file.id))}
-												>
-													<X className="size-3" />
-												</button>
-											</span>
+												file={file}
+												onRemove={(id) => setFiles((prev) => prev.filter((row) => row.id !== id))}
+											/>
 										))}
 									</div>
 								) : null}

@@ -60,16 +60,15 @@ const TABLE_COMMENTS: Record<string, string> = {
 	sys_data_plugin:
 		"数据权限值域插件登记(v2 起:只能登记指定清单(由用户编辑 output_values);函数体走内置,见 src/lib/data-scope-plugins.ts)",
 	todos: "模板示例表(demo 用;删 demo 时一并删)",
-	// 任务闭环(tc_close):见 doc/task-close.md
+	// 任务闭环(tc_close)
 	tc_report_template: "填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)",
-	tc_task_report: "任务填报(每个任务独立保存草稿和版本)",
-	tc_report_submission: "子任务表单填报的保存快照(父任务只读;没保存就看不见)",
+	tc_task_report: "任务填报(draft = 工作稿;synced = 提交给父任务的那一版;一任务一行)",
 	tc_workflow:
 		"状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义;建任务时会快照一份到 tc_task.workflow 列)",
 	tc_task: "任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;软删走 deleted_at)",
 	tc_task_reminder: "任务定时提醒记录(事件键去重;工作进程按计划时间投递)",
-	tc_action: "外挂动作,审批/征询/监督同一种模式(列结构+锁语义统一;用法见 doc/task-close.md)",
-	tc_member: "任务-成员关系(participant/executor 与 tc_task 的多对多;creator 是 tc_task.creator_id 固有属性不入此表)",
+	tc_action: "外挂动作,审批/征询/监督同一种模式(列结构+锁语义统一)",
+	tc_member: "任务-参与人关系(参与者集合,一人一行;creator 与 executor 都不入此表)",
 	tc_comment: "任务评论(全员可评论;content 文字 + attachments JSON 存 sys_file.id 数组,字节走 sys_file/MinIO)",
 	tc_log:
 		"任务闭环活动日志(只增不改;from/to_status 是事件前后的任务状态,没动就是 NULL;由 resolver 在同一事务里写,业务回滚则日志一起没)",
@@ -93,18 +92,16 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "tc_report_template", column: "created_at", comment: "创建时间" },
 	{ table: "tc_report_template", column: "updated_at", comment: "更新时间" },
-	{ table: "tc_report_submission", column: "id", comment: "主键" },
-	{ table: "tc_report_submission", column: "report_id", comment: "→ tc_task_report.id(子任务那一行)" },
-	{ table: "tc_report_submission", column: "task_id", comment: "子任务 ID" },
-	{ table: "tc_report_submission", column: "submitter_id", comment: "点「保存」的人" },
-	{ table: "tc_report_submission", column: "revision", comment: "保存时的草稿版本" },
-	{ table: "tc_report_submission", column: "payload", comment: "不可变快照(父任务只读这份)" },
-	{ table: "tc_report_submission", column: "created_at", comment: "保存时间" },
 	{ table: "tc_task_report", column: "id", comment: "主键" },
 	{ table: "tc_task_report", column: "task_id", comment: "任务 ID" },
-	{ table: "tc_task_report", column: "draft", comment: "本任务的填报草稿" },
-	{ table: "tc_task_report", column: "revision", comment: "本任务草稿的乐观锁版本" },
-	{ table: "tc_task_report", column: "current_submission_id", comment: "手动「保存」后指向的快照(表单同步用)" },
+	{ table: "tc_task_report", column: "draft", comment: "工作稿(600ms 防抖自动保存)" },
+	{
+		table: "tc_task_report",
+		column: "synced",
+		comment: "提交给父任务的那一版(点「提交」时从 draft 复制;null=从未提交)",
+	},
+	{ table: "tc_task_report", column: "synced_at", comment: "提交时刻" },
+	{ table: "tc_task_report", column: "revision", comment: "工作稿的乐观锁版本" },
 	{ table: "tc_task_report", column: "created_at", comment: "创建时间" },
 	{ table: "tc_task_report", column: "updated_at", comment: "更新时间" },
 	{ table: "sys_notification", column: "id", comment: "主键" },
@@ -113,7 +110,9 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "sys_notification", column: "source_id", comment: "来源 ID" },
 	{ table: "sys_notification", column: "title", comment: "标题" },
 	{ table: "sys_notification", column: "content", comment: "正文" },
-	{ table: "sys_notification", column: "payload", comment: "附加数据 JSON 文本" },
+	{ table: "sys_notification", column: "path", comment: "站内跳转路径（白名单校验后落库）" },
+	{ table: "sys_notification", column: "level", comment: "展示级别" },
+	{ table: "sys_notification", column: "payload", comment: "各类通知特有的附加字段 JSON 文本" },
 	{ table: "sys_notification", column: "dedupe_key", comment: "通知幂等键" },
 	{ table: "sys_notification", column: "created_at", comment: "创建时间" },
 	{ table: "sys_notification_delivery", column: "id", comment: "主键" },
@@ -459,6 +458,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{ table: "tc_task", column: "description", comment: "任务说明" },
 	{ table: "tc_task", column: "status", comment: "当前状态,取值来自 tc_task.workflow.statuses" },
 	{ table: "tc_task", column: "creator_id", comment: "创建人;任务的固有属性,唯一恒定" },
+	{ table: "tc_task", column: "executor_id", comment: "唯一执行人;任务的固有属性,至多一个(由本列保证),null=未指派" },
 	{ table: "tc_task", column: "due_at", comment: "任务期限" },
 	{ table: "tc_task", column: "priority", comment: "任务优先级:0=P0 / 1=P1 / 2=P2;null=未设置" },
 	{ table: "tc_task", column: "payload", comment: "任务业务数据(用户自定义)" },
@@ -532,22 +532,15 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "tc_action", column: "viewed_at", comment: "处理人首次查看时间" },
 	{ table: "tc_action", column: "activated_at", comment: "动作激活时间" },
-	{ table: "tc_action", column: "last_urged_at", comment: "最近一次手动催办时间" },
 	{ table: "tc_action", column: "created_at", comment: "创建时间" },
 	{ table: "tc_action", column: "updated_at", comment: "更新时间" },
-	// tc_member(任务-成员关系,见 doc/task-close.md)
+	// tc_member(任务-参与人关系)
 	{ table: "tc_member", column: "id", comment: "主键(nanoid,由代码生成)" },
 	{ table: "tc_member", column: "task_id", comment: "→ tc_task.id(不建外键;审计保留已删任务)" },
 	{ table: "tc_member", column: "user_id", comment: "→ sys_user.id(不建外键;审计保留已删用户)" },
-	{
-		table: "tc_member",
-		column: "role",
-		comment: "角色:participant(参与者)/ executor(执行者);creator 是 tc_task.creator_id 固有属性不入此表",
-	},
-
 	{ table: "tc_member", column: "created_at", comment: "创建时间" },
 	{ table: "tc_member", column: "updated_at", comment: "更新时间" },
-	// tc_comment(任务评论,见 doc/task-close.md)
+	// tc_comment(任务评论)
 	{ table: "tc_comment", column: "id", comment: "主键(nanoid)" },
 	{ table: "tc_comment", column: "task_id", comment: "→ tc_task.id(不建外键)" },
 	{ table: "tc_comment", column: "author_id", comment: "→ sys_user.id(评论作者,不建外键)" },
@@ -564,7 +557,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	},
 	{ table: "tc_comment", column: "created_at", comment: "创建时间" },
 	{ table: "tc_comment", column: "updated_at", comment: "更新时间(评论允许编辑)" },
-	// tc_log(活动日志,见 doc/task-close.md)
+	// tc_log(活动日志)
 	{ table: "tc_log", column: "id", comment: "主键(nanoid;与 sys_log.id 同口径)" },
 	{ table: "tc_log", column: "task_id", comment: "→ tc_task.id(不建外键:审计要留住已删任务)" },
 	{

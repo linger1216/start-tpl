@@ -1,9 +1,9 @@
 import { ExternalLink, Link2 } from "lucide-react";
 import { useState } from "react";
 
-import { TaskLinkPreview } from "#/components/modules/task-close/task-link-preview";
 import { ActionButton } from "#/components/ui/action-button";
-import { isInternalUrl, type TaskLinkBlock } from "#/lib/task/payload";
+import { Button, buttonVariants } from "#/components/ui/button";
+import { isInternalUrl, linkTargetOf, type TaskLinkBlock } from "#/lib/task/payload";
 import { cn } from "#/lib/utils";
 
 /**
@@ -26,7 +26,33 @@ export function TaskLinkBlocks({ links }: { links: TaskLinkBlock[] }) {
 				return (
 					<div key={block.url} className={cn("grid content-start gap-2", open && "sm:col-span-2")}>
 						<LinkView url={block.url} open={open} onToggle={() => setOpenUrl(open ? null : block.url)} />
-						{open ? <TaskLinkPreview url={block.url} onClose={() => setOpenUrl(null)} /> : null}
+						{open ? (
+							<div className="grid gap-2 rounded-lg border border-border bg-card p-2">
+								<div className="flex flex-wrap items-center gap-2">
+									<span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{block.url}</span>
+									{!isInternalUrl(block.url) ? (
+										<span className="text-xs text-muted-foreground">站外页面若不允许嵌入会显示空白</span>
+									) : null}
+									<Button variant="ghost" size="sm" onClick={() => setOpenUrl(null)}>
+										收起
+									</Button>
+									<a
+										href={block.url}
+										target="_blank"
+										rel="noreferrer"
+										className={buttonVariants({ variant: "outline", size: "sm" })}
+									>
+										<ExternalLink className="size-3.5" />
+										新标签打开
+									</a>
+								</div>
+								<iframe
+									src={block.url}
+									title={block.url}
+									className="h-[60vh] min-h-80 w-full rounded-md border border-border"
+								/>
+							</div>
+						) : null}
 					</div>
 				);
 			})}
@@ -45,7 +71,7 @@ function LinkView({
 	open: boolean;
 	onToggle: () => void;
 }) {
-	const internal = isInternalUrl(url);
+	const { internal, label } = linkTargetOf(url);
 	const Icon = internal ? Link2 : ExternalLink;
 	return (
 		<div className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm">
@@ -58,7 +84,7 @@ function LinkView({
 				<Icon className="size-3.5 shrink-0 text-muted-foreground" />
 				<span className="min-w-0 flex-1 truncate font-mono text-xs">{url}</span>
 			</a>
-			<span className="shrink-0 text-xs text-muted-foreground">{internal ? "站内" : "站外"}</span>
+			<span className="shrink-0 text-xs text-muted-foreground">{label}</span>
 			<ActionButton onClick={onToggle}>{open ? "收起" : "预览"}</ActionButton>
 		</div>
 	);

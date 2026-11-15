@@ -2,15 +2,28 @@ import { and, eq, inArray, lte, or } from "drizzle-orm";
 import { db } from "#/db";
 import { sysNotification, sysNotificationDelivery } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
+import type { NoticeLevel } from "#/lib/notice-levels";
+import { safeNoticePath } from "#/lib/notice-path";
+import { type Channel, MISSING_NOTIFICATION_TARGET, NOTIFICATION_TITLE_MAX } from "#/lib/notification-status";
+
+/** 真源在 `notification-status.ts`(客户端安全);这里转出便于既有引用 */
+export { NOTIFICATION_TITLE_MAX };
+
 import { publish } from "#/lib/sse-bus";
 
-export type NotificationChannel = "in_app" | "sms" | "email";
-export type NotificationRecipient = { userId: string; channel: NotificationChannel; target?: string | null };
+/** 渠道真源在 `notification-status.ts`;这里只是模块内惯用名 */
+export type NotificationChannel = Channel;
+export type NotificationRecipient = { userId: string; channel: Channel; target?: string | null };
 export type NotificationInput = {
 	type: string;
 	source?: { type: string; id: string };
 	title: string;
 	content?: string | null;
+	/** 站内跳转路径 —— 落 `sys_notification.path` 列(白名单校验由 `createNotification` 做) */
+	path?: string | null;
+	/** 展示级别 —— 落 `sys_notification.level` 列,默认 `info` */
+	level?: NoticeLevel;
+	/** 各类通知**特有**的附加字段(`commentId` / `actionId` / `taskId` / `operatorId` …) */
 	payload?: Record<string, unknown>;
 	dedupeKey: string;
 	recipients: readonly NotificationRecipient[];
@@ -19,9 +32,6 @@ export type NotificationInput = {
 };
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/** 与 `sys_notification.title` 的 varchar(128) 对齐;调用点的任务名可长达 255。 */
-export const NOTIFICATION_TITLE_MAX = 128;
 
 /**
  * 业务终结时取消尚未发出的外部投递；已发送的投递保留实际结果。
@@ -89,6 +99,8 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 		source_id: input.source?.id ?? null,
 		title,
 		content: input.content ?? null,
+		path: safeNoticePath(input.path),
+		level: input.level ?? "info",
 		payload: input.payload ? JSON.stringify(input.payload) : null,
 		dedupe_key: input.dedupeKey,
 		created_at: now,
@@ -104,8 +116,8 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 			last_error:
 				recipient.channel !== "in_app" && !recipient.target?.trim()
 					? recipient.channel === "sms"
-						? "未配置有效的联系电话"
-						: "未配置有效的邮箱"
+						? MISSING_NOTIFICATION_TARGET.sms
+						: MISSING_NOTIFICATION_TARGET.email
 					: null,
 			sent_at: recipient.channel === "in_app" ? now : null,
 			next_attempt_at:
@@ -117,6 +129,19 @@ export async function createNotification(tx: Tx, input: NotificationInput): Prom
 		})),
 	);
 	return id;
+}
+
+/**
+ * 往收件人的 SSE 频道推一条「有新通知」。
+ *
+ * 通知的频道名与事件名**只有这一处** —— 之前 `sendNotification` 与 `routers/task/common.ts`
+ * 的 `publishNotice` 各写了一遍 `channel: \`notice:${userId}\` / name: "notice.new"`,
+ * 改一边漏一边就是「铃铛不亮但列表里有」。
+ *
+ * 只在站内渠道有意义(短信 / 邮件没有浏览器订阅者)。
+ */
+export function publishNotice(receivers: readonly string[], data: Record<string, unknown> = {}): void {
+	for (const userId of receivers) publish({ channel: `notice:${userId}`, name: "notice.new", data });
 }
 
 /** 允许业务使用同一幂等键安全重试；只有整个事务成功才对外可见。 */
@@ -133,10 +158,8 @@ export async function sendNotification(input: NotificationInput): Promise<{ id: 
 		if (existing) return { id: existing.id, created: false };
 		throw error;
 	}
-	for (const userId of new Set(
-		input.recipients.filter((item) => item.channel === "in_app").map((item) => item.userId),
-	)) {
-		publish({ channel: `notice:${userId}`, name: "notice.new", data: { id } });
-	}
+	publishNotice([...new Set(input.recipients.filter((item) => item.channel === "in_app").map((item) => item.userId))], {
+		id,
+	});
 	return { id, created: true };
 }

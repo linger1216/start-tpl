@@ -1,30 +1,28 @@
 import * as XLSX from "xlsx";
 import { fromBuffer } from "yauzl";
 import { formatLocalDateTime, parseLocalDateText, parseLocalDateTime } from "../time";
-import { type TaskReportSchema, validateTaskReport } from "./report-spec";
+import { isRecord } from "./json";
+import { MAX_REPORT_FILE_BYTES, MAX_REPORT_ROWS, type TaskReportSchema, validateTaskReport } from "./report-spec";
 
-const MAX_FILE = 5 * 1024 * 1024;
 const MAX_UNPACKED = 20 * 1024 * 1024;
 const MAX_ENTRIES = 150;
-const MAX_ROWS = 10000;
+const MAX_ROWS = MAX_REPORT_ROWS;
 const MAX_COLUMNS = 100;
 
 /**
- * 工作表名。导出**父任务**时四张:`父任务填报(可读)` · `父任务填报` · `子任务填报(可读)` · `子任务填报`;
- * 普通任务(没有子任务)两张:`填报(可读)` · `填报`;「下载模版」只有一张 `填报`。
+ * 工作表名。导出**父任务**与普通任务一样,都是两张:`填报(可读)` · `填报`(首列「执行人」,
+ * 母版行 + 各子任务已提交的行,读时组合);「下载模版」只有一张 `填报`。
  *
- * ⚠️ **导入只认 `own` / `parent` 的 `data` 那张**(机器格式)。「子任务填报」天然不属于某一个任务,
- * 不参与导入 —— 别把它加进候选名单。
+ * ⚠️ **导入只认 `填报`(`data`)那张**(机器格式)。
  */
-export const REPORT_SHEETS = {
-	own: { data: "填报", readable: "填报(可读)" },
-	parent: { data: "父任务填报", readable: "父任务填报(可读)" },
-	child: { data: "子任务填报", readable: "子任务填报(可读)" },
+const REPORT_SHEETS = {
+	data: "填报",
+	readable: "填报(可读)",
 } as const;
 
 /** 先逐项解压并累计实际字节，再交给 XLSX 解析，防止伪造尺寸的压缩炸弹。 */
 async function inspectArchive(buffer: Buffer): Promise<void> {
-	if (buffer.length > MAX_FILE || buffer.length < 4) throw new Error("文件大小无效，最大 5 MB");
+	if (buffer.length > MAX_REPORT_FILE_BYTES || buffer.length < 4) throw new Error("文件大小无效，最大 5 MB");
 	await new Promise<void>((resolve, reject) => {
 		fromBuffer(buffer, { lazyEntries: true, validateEntrySizes: true }, (error, zip) => {
 			if (error || !zip) {
@@ -100,31 +98,76 @@ async function inspectArchive(buffer: Buffer): Promise<void> {
 	});
 }
 
-/** 安全输出为字符串单元格；Excel 不会把用户文本解析成公式。 */
-function cellValue(value: unknown): string | number | boolean {
-	if (typeof value === "number" && Number.isFinite(value)) return value;
-	if (typeof value === "boolean") return value;
-	// 数组字段(元素是对象)导出成 JSON,导入时按 JSON 解回来;多选仍是分号串
-	const text = Array.isArray(value)
-		? value.every((item) => typeof item === "string")
-			? value.join(";")
-			: JSON.stringify(value)
-		: String(value ?? "");
+/** 字段的可导出形状(顶层字段与数组元素字段共用) */
+type ReadableField = {
+	id: string;
+	label: string;
+	type: TaskReportSchema["fields"][number]["type"];
+	itemFields?: ReadonlyArray<ReadableField>;
+};
+
+/** 防公式注入:以 `= + - @` 开头的文本前面加个引号,Excel 才不会当公式解析。 */
+function escapeFormula(text: string): string {
 	let start = 0;
-	while (start < text.length && (text.charCodeAt(start) <= 32 || /\s/.test(text[start]))) start++;
+	while (start < text.length && /\s/.test(text[start] ?? "")) start++;
 	return "=+-@".includes(text[start] ?? "\uffff") ? `'${text}` : text;
 }
 
 /**
- * 生成一份填报工作簿。导出**父任务**时四张表,普通任务两张,「下载模版」一张:
+ * 一个值写进 Excel 单元格的**唯一**口径。
+ * - `human=false`(机器表):附件 / 数组保持 id / JSON,多选 `;`,数字 / 布尔原样 —— **导入只认这张**;
+ * - `human=true`(可读表):附件写文件名、数组写「1) 字段:值；…」、多选顿号、日期折本地。
+ */
+function renderCell(
+	field: ReadableField,
+	value: unknown,
+	opts: { human: boolean; fileNames: Readonly<Record<string, string>> },
+): string | number | boolean {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (!opts.human) {
+		if (typeof value === "boolean") return value;
+		const text = Array.isArray(value)
+			? value.every((item) => typeof item === "string")
+				? value.join(";")
+				: JSON.stringify(value)
+			: String(value ?? "");
+		return escapeFormula(text);
+	}
+	if (value === null || value === undefined || value === "") return "";
+	if (field.type === "attachment") {
+		const ids = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+		return ids.map((id) => opts.fileNames[id] ?? id).join("、");
+	}
+	if (field.type === "multiselect") {
+		const picked = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+		return picked.join("、");
+	}
+	if (field.type === "array") {
+		const items = Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => isRecord(item)) : [];
+		return escapeFormula(
+			items
+				.map((item, index) => {
+					const pairs = (field.itemFields ?? [])
+						.map((sub) => `${sub.label}:${renderCell(sub, item[sub.id], opts)}`)
+						.join("，");
+					return `${index + 1}) ${pairs}`;
+				})
+				.join("；"),
+		);
+	}
+	if (field.type === "datetime") {
+		return typeof value === "string" ? formatLocalDateTime(value) || String(value) : String(value);
+	}
+	if (typeof value === "boolean") return value ? "是" : "否";
+	return escapeFormula(String(value));
+}
+
+/**
+ * 生成一份填报工作簿:**一对表**(「填报(可读)」+「填报」),「下载模版」时只有「填报」。
  *
- * | 工作表 | 内容 | 用途 |
- * | --- | --- | --- |
- * | `父任务填报(可读)` / `填报(可读)` | 附件写**文件名**、数组写「1) 字段:值；2) …」、多选顿号分隔 | 给人看 |
- * | `父任务填报` / `填报` | 机器格式(附件是 `sys_file.id`、数组是 JSON) | **导入只认它**,`导出 → 改 → 导回` |
- * | `子任务填报(可读)` / `子任务填报` | 子任务保存过的那份,首列「执行人」(表格任务一个子任务可占多行) | 给人看 / 机器读 |
- *
- * `parentLayout` 决定表名用带「父任务 / 子任务」的那一套(仅当这任务真的有子任务)。
+ * - 可读表:附件写文件名、数组写「1) 字段:值；2) …」、多选顿号;
+ * - 机器表:附件是 `sys_file.id`、数组是 JSON —— **导入只认它**,`导出 → 改 → 导回`;
+ * - `owners` 给了就在最前面多一列「执行人」(父任务导出:母版 + 各子任务已提交的行)。
  */
 export function createReportWorkbook(
 	schema: TaskReportSchema,
@@ -134,118 +177,41 @@ export function createReportWorkbook(
 		readable?: boolean;
 		/** 可读表里附件要写文件名(id → 原始文件名);缺名字就退回 id */
 		fileNames?: Readonly<Record<string, string>>;
-		/** 子任务保存过的填报:表单一条是一个对象,表格一条是它那份行数组 */
-		children?: ReadonlyArray<{ owner: string; payload: unknown }>;
-		/** 这任务是**父任务**(有子任务)—— 决定表名用「父任务填报 / 子任务填报」那一套 */
-		parentLayout?: boolean;
+		/** 每行归属的执行人名;`null` = 母版行。给了就多一列「执行人」 */
+		owners?: ReadonlyArray<string | null>;
 	} = {},
 ): Buffer {
-	const { readable = false, fileNames = {}, children = [], parentLayout = false } = options;
-	const rows =
-		schema.kind === "TABLE"
-			? Array.isArray(data)
-				? data
-				: []
-			: data && typeof data === "object" && !Array.isArray(data)
-				? [data]
-				: [];
+	const { readable = false, fileNames = {}, owners } = options;
+	// 值一律按**行数组**处理(OBJECT 也只是一个对象的数组);父任务组合行同样是数组
+	const rows: Array<Record<string, unknown>> = Array.isArray(data)
+		? (data as Array<Record<string, unknown>>)
+		: data && typeof data === "object"
+			? [data as Record<string, unknown>]
+			: [];
 	if (rows.length > MAX_ROWS || schema.fields.length > MAX_COLUMNS) throw new Error("导出数据超过限制");
 	// 表头只写**中文名**:字段英文 id 是内部标识,不外泄也不要求填表人理解
 	const labels = schema.fields.map((field) => field.label);
 	/** 一条数据在一个单元格里的写法(可读表走人类口径,机器表是 id / JSON 原样) */
 	const rowOf = (row: Record<string, unknown>, human: boolean) =>
-		schema.fields.map((field) => cellValue(human ? readableCell(field, row[field.id], fileNames) : row[field.id]));
-	const names = parentLayout ? REPORT_SHEETS.parent : REPORT_SHEETS.own;
+		schema.fields.map((field) => renderCell(field, row[field.id], { human, fileNames }));
+	const header = owners ? ["执行人", ...labels] : labels;
 	const book = XLSX.utils.book_new();
-	const push = (title: string, header: string[], body: unknown[][], firstWidth: number) => {
+	const push = (title: string, human: boolean) => {
+		const body = rows.map((row, index) => {
+			const cells = rowOf(row as Record<string, unknown>, human);
+			return owners ? [owners[index] ?? "母版", ...cells] : cells;
+		});
 		const sheet = XLSX.utils.aoa_to_sheet([header, ...body]);
-		const widths: XLSX.ColInfo[] = [{ wch: firstWidth }, ...labels.map(() => ({ wch: 22 }))];
-		// 有「执行人」首列就整体用,否则去掉那一列的宽度
-		sheet["!cols"] = header.length > labels.length ? widths : widths.slice(1);
+		sheet["!cols"] = [{ wch: owners ? 16 : 22 }, ...labels.map(() => ({ wch: 22 }))];
 		XLSX.utils.book_append_sheet(book, sheet, title);
 	};
-	const own = rows.map((row) => row as Record<string, unknown>);
-	if (readable)
-		push(
-			names.readable,
-			labels,
-			own.map((row) => rowOf(row, true)),
-			22,
-		);
-	push(
-		names.data,
-		labels,
-		own.map((row) => rowOf(row, false)),
-		22,
-	);
-	if (children.length > 0) {
-		// 子任务那两张:先可读再机器;首列都是「执行人」(表格任务一个子任务可能占好几行)
-		const childRowsOf = (payload: unknown): Array<Record<string, unknown>> =>
-			schema.kind === "TABLE"
-				? Array.isArray(payload)
-					? (payload as Array<Record<string, unknown>>)
-					: []
-				: [(payload ?? {}) as Record<string, unknown>];
-		const body = (human: boolean) =>
-			children.flatMap((child) => childRowsOf(child.payload).map((row) => [child.owner, ...rowOf(row, human)]));
-		if (readable) push(REPORT_SHEETS.child.readable, ["执行人", ...labels], body(true), 16);
-		push(REPORT_SHEETS.child.data, ["执行人", ...labels], body(false), 16);
-	}
+	if (readable) push(REPORT_SHEETS.readable, true);
+	push(REPORT_SHEETS.data, false);
 	return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }) as Buffer;
 }
 
-/**
- * 一个值的**人类可读**写法 —— 只有两类字段"机器味"重,其余本来就直白:
- * 附件写文件名(逗号顿号分隔)、数组写成「1) 字段:值，字段:值；2) …」,多选顿号分隔。
- * 嵌套在数组里的附件同样写文件名。
- */
-type ReadableField = {
-	id: string;
-	label: string;
-	type: TaskReportSchema["fields"][number]["type"];
-	itemFields?: ReadonlyArray<ReadableField>;
-};
-
-function readableCell(
-	field: ReadableField,
-	value: unknown,
-	fileNames: Readonly<Record<string, string>>,
-): string | number {
-	if (typeof value === "number" && Number.isFinite(value)) return value;
-	if (value === null || value === undefined || value === "") return "";
-	if (field.type === "attachment") {
-		const ids = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-		return ids.map((id) => fileNames[id] ?? id).join("、");
-	}
-	if (field.type === "multiselect") {
-		const picked = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-		return picked.join("、");
-	}
-	if (field.type === "array") {
-		const items = Array.isArray(value)
-			? value.filter(
-					(item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item),
-				)
-			: [];
-		return items
-			.map((item, index) => {
-				const pairs = (field.itemFields ?? [])
-					.map((sub) => `${sub.label}:${readableCell(sub, item[sub.id], fileNames)}`)
-					.join("，");
-				return `${index + 1}) ${pairs}`;
-			})
-			.join("；");
-	}
-	if (field.type === "datetime") {
-		// 存的是 ISO(带时区),给人看的一律折算成本地 `YYYY-MM-DD HH:mm:ss` —— 别把 UTC 甩给人
-		return typeof value === "string" ? formatLocalDateTime(value) || String(value) : String(value);
-	}
-	if (typeof value === "boolean") return value ? "是" : "否";
-	return String(value);
-}
-
 export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64: string) {
-	if (fileBase64.length > Math.ceil(MAX_FILE / 3) * 4 + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64))
+	if (fileBase64.length > Math.ceil(MAX_REPORT_FILE_BYTES / 3) * 4 + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64))
 		throw new Error("文件编码或大小无效");
 	const buffer = Buffer.from(fileBase64, "base64");
 	await inspectArchive(buffer);
@@ -264,11 +230,11 @@ export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64
 	// 导出的工作簿带两张表(「填报(可读)」+「填报」),导入只认名为「填报」的那张;
 	// 单表文件(手搓的 / 「下载模版」导出的)照旧可用;多表又不含「填报」= 不是我们的文件
 	if (book.vbaraw) throw new Error("不支持带宏的工作簿");
-	const dataNames: readonly string[] = [REPORT_SHEETS.own.data, REPORT_SHEETS.parent.data];
+	const dataNames: readonly string[] = [REPORT_SHEETS.data];
 	const sheetName =
 		dataNames.find((name) => book.SheetNames.includes(name)) ??
 		(book.SheetNames.length === 1 ? book.SheetNames[0] : null);
-	if (!sheetName) throw new Error(`工作簿里找不到「${REPORT_SHEETS.own.data}」工作表`);
+	if (!sheetName) throw new Error(`工作簿里找不到「${REPORT_SHEETS.data}」工作表`);
 	const sheet = book.Sheets[sheetName];
 	const range = XLSX.utils.decode_range(sheet["!fullref"] ?? sheet["!ref"] ?? "A1:A1");
 	if (range.e.r > MAX_ROWS || range.e.c >= MAX_COLUMNS) throw new Error("工作表行列超过限制");

@@ -1,15 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
+import { PriorityTag } from "#/components/modules/task-close/priority-tag";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { priorityLabelOf, taskDeadlineState } from "#/lib/task/close-spec";
+import { taskDeadlineState } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /** 卡片要用的任务字段 —— `taskList` 的行与 `taskGet.children` 的行同形 */
-export type TaskCardItem = {
+type TaskCardItem = {
 	id: string;
 	name: string;
 	description: string | null;
@@ -25,6 +27,8 @@ export type TaskCardItem = {
 	/** 发给谁(执行人)—— fan-out 的子任务一人一条,没这个就看不出是谁的活 */
 	executorId?: string | null;
 	executorName?: string | null;
+	/** 当前状态是结束态(服务端按流程快照算好)—— 结束了就不再提示超期 / 临期 */
+	terminal?: boolean;
 };
 
 /**
@@ -46,7 +50,8 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 		const timer = window.setInterval(() => setNow(Date.now()), 60_000);
 		return () => window.clearInterval(timer);
 	}, [task.dueAt]);
-	const deadline = now === null ? null : taskDeadlineState(task.dueAt, now);
+	// 已进入结束状态:不再有期限压力,卡片上不显示「超期 / 临期」
+	const deadline = now === null || task.terminal ? null : taskDeadlineState(task.dueAt, now);
 	return (
 		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
 			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}
@@ -55,12 +60,7 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 				{task.executorName ? (
 					<span className="flex shrink-0 items-center gap-1.5" title={`执行人:${task.executorName}`}>
 						{/* 「人」的视觉身份 = 墨底正圆 + 反白首字 + 宋体(见 DESIGN.md §4.4);比标题小一号,不抢主 */}
-						<span
-							aria-hidden
-							className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/85 font-heading text-[11px] font-bold leading-none text-paper"
-						>
-							{task.executorName.slice(0, 1)}
-						</span>
+						<InitialsCircle name={task.executorName} className="size-6 text-[11px]" />
 						<span className="max-w-20 truncate text-xs text-muted-foreground">{task.executorName}</span>
 					</span>
 				) : (
@@ -74,9 +74,7 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 			{/* 第二行:状态成组 —— 状态(主扫读)+ 优先级(分流)+「待你处理」告警 */}
 			<div className="mt-3 flex flex-wrap items-center gap-2">
 				<Tag variant="outline">{statusLabel(task.status)}</Tag>
-				<Tag variant="random" hashKey={`p${task.priority ?? "x"}`}>
-					{priorityLabelOf(task.priority)}
-				</Tag>
+				<PriorityTag priority={task.priority} />
 				{deadline ? (
 					<Tag
 						variant="outline"

@@ -1,39 +1,49 @@
-import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, count, desc, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import {
 	sysNotification,
 	sysNotificationDelivery,
-	sysUser,
 	taskActionTable,
 	taskCommentTable,
 	taskMemberTable,
-	taskTable,
 } from "#/db/data-base-schema";
-import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
-import { cancelPendingNotifications, createNotification } from "#/lib/notification";
-import { alive } from "#/lib/soft-delete";
-import { publish } from "#/lib/sse-bus";
-import { TASK_URGE_COOLDOWN_MINUTES, taskPathOf } from "#/lib/task/close-spec";
-import { cancelActionReminders, rescheduleTaskReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
+import { cancelPendingNotifications } from "#/lib/notification";
+import {
+	APPROVE_NOTE_PREFIX,
+	isTerminalStatusOf,
+	MAX_MENTIONS,
+	MAX_TEXT_LENGTH,
+	REJECT_NOTE_PREFIX,
+	statusesOf,
+} from "#/lib/task/close-spec";
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
+import { cancelActionReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	activateNextAction,
+	applyStatusMove,
 	assertAttachments,
-	cancelLiveTaskActions,
+	assertEdgeWho,
+	assertTaskUnlocked,
+	assertUsersExist,
 	createMentionNotifications,
+	FILE_ID,
+	findEdge,
 	getTaskRow,
 	ID,
-	isLocked,
+	isActionCreatorOrAdmin,
+	isAdminOf,
+	isTaskParticipant,
 	LIVE_ACTION_STATUS,
 	lockAction,
 	lockTask,
-	memberRolesOf,
-	publishMentions,
-	whoAllows,
+	notifyActionAssigned,
+	publishNotice,
+	STATUS_VALUE,
+	USER_ID,
 	workflowOf,
 	writeTaskEvent,
 } from "./common";
@@ -70,7 +80,7 @@ export const taskActionRouter = createTRPCRouter({
 	/**
 	 * 发起动作 —— 审批(`toStatus` 有值)和征询(`toStatus` 为空)是同一张表的同一种模式。
 	 *
-	 * 派生规则(文档「状态机推进」):
+	 * 派生规则:
 	 *  · 首节点:`from_status = 当前任务状态`,`root_action_id = 自己 id`,`sequence = 0`;
 	 *    `toStatus` 有值 → `is_locking = 1` 并锁定状态转移;`toStatus` 为空 → `is_locking = 0`(不锁、不动状态);
 	 *  · 后续节点继承根 ID,按串行或并行规则激活。
@@ -81,9 +91,9 @@ export const taskActionRouter = createTRPCRouter({
 		.input(
 			z.strictObject({
 				taskId: ID,
-				toStatus: z.string().min(1).max(32).nullish(),
-				assigneeId: z.string().min(1).max(191),
-				nextAssigneeIds: z.array(z.string().min(1).max(36)).max(49).optional(),
+				toStatus: STATUS_VALUE.nullish(),
+				assigneeId: ID,
+				nextAssigneeIds: z.array(USER_ID).max(49).optional(),
 				flowMode: z.enum(["serial", "parallel"]).optional(),
 			}),
 		)
@@ -95,57 +105,47 @@ export const taskActionRouter = createTRPCRouter({
 				throw new TRPCError({ code: "BAD_REQUEST", message: "处理人不能重复" });
 			const id = newId();
 			const now = new Date();
-			const isAdmin = await isAdminUser(me.id);
+			const isAdmin = await isAdminOf(me);
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.taskId);
 
 				const toStatus = input.toStatus ?? null;
-				if (!toStatus && workflowOf(task).statuses.some((status) => status.value === task.status && status.terminal))
+				if (!toStatus && isTerminalStatusOf(statusesOf(task.workflow), task.status))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "任务已结束，不能发起征询" });
-				if (toStatus && (await isLocked(task.id, tx))) {
-					throw new TRPCError({ code: "BAD_REQUEST", message: "有未完成的审批动作,任务被锁定" });
-				}
+				if (toStatus) await assertTaskUnlocked(task.id, tx);
 				if (toStatus) {
 					const workflow = workflowOf(task);
 					if (!workflow.statuses?.some((status) => status.value === toStatus)) {
 						throw new TRPCError({ code: "BAD_REQUEST", message: `状态图里没有状态:${toStatus}` });
 					}
-					const edge = (workflow.edges ?? []).find(
-						(item) => item.from === task.status && item.to === toStatus && item.via === "action",
-					);
+					const edge = findEdge(workflow, { from: task.status, to: toStatus, via: "action" });
 					if (!edge) {
 						throw new TRPCError({ code: "BAD_REQUEST", message: `没有 ${task.status} → ${toStatus} 的审批边` });
 					}
-					if (!isAdmin && !(await whoAllows(task, me.id, edge.who ?? [], undefined, tx))) {
-						throw new TRPCError({ code: "FORBIDDEN", message: "你没有权限发起这次状态变更" });
-					}
-				} else if (!isAdmin && (await memberRolesOf(task.id, me.id, tx)).length === 0 && task.creator_id !== me.id) {
+					await assertEdgeWho(task, me.id, edge, isAdmin, tx, "你没有权限发起这次状态变更");
+				} else if (!isAdmin && !(await isTaskParticipant(task, me.id, tx))) {
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有创建者 / 参与者 / 执行者能发起征询" });
 				}
 				const taskMembers = await tx
 					.select({ userId: taskMemberTable.user_id })
 					.from(taskMemberTable)
 					.where(eq(taskMemberTable.task_id, task.id));
-				const allowedAssignees = new Set([task.creator_id, ...taskMembers.map((member) => member.userId)]);
+				const allowedAssignees = new Set([
+					task.creator_id,
+					...(task.executor_id ? [task.executor_id] : []),
+					...taskMembers.map((member) => member.userId),
+				]);
 				if (assigneeIds.some((assigneeId) => !allowedAssignees.has(assigneeId)))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "处理人必须是任务创建人或成员" });
-				const users = await tx
-					.select({ id: sysUser.id })
-					.from(sysUser)
-					.where(and(inArray(sysUser.id, assigneeIds), alive(sysUser)))
-					.for("update");
-				if (users.length !== assigneeIds.length) throw new TRPCError({ code: "NOT_FOUND", message: "处理人不存在" });
+				await assertUsersExist(tx, assigneeIds, "处理人不存在");
 
 				const isLocking = toStatus !== null;
 				const notifyAssignee = (actionId: string, userId: string) =>
-					createNotification(tx, {
-						type: "action.assigned",
-						source: { type: "task_action", id: actionId },
-						title: `轮到你:${task.name}`,
+					notifyActionAssigned(tx, {
+						actionId,
+						assigneeId: userId,
+						task,
 						content: `${me.name || "有人"} ${isLocking ? "发起审批" : "征询了你"} —— 到「我的任务」查看`,
-						payload: { path: taskPathOf(task.id), level: "info", actionId },
-						dedupeKey: `action.assigned:${actionId}`,
-						recipients: [{ userId, channel: "in_app" }],
 					});
 				await tx.insert(taskActionTable).values({
 					id,
@@ -209,155 +209,17 @@ export const taskActionRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			publish({ channel: `notice:${input.assigneeId}`, name: "notice.new", data: { actionId: id } });
-			if (input.flowMode === "parallel") publishMentions(nextAssigneeIds);
+			publishNotice([input.assigneeId], { actionId: id });
+			if (input.flowMode === "parallel") publishNotice(nextAssigneeIds);
 			return { id };
 		}),
-
-	/** 创建一次催办；条件更新同时保证冷却和多请求竞争安全。 */
-	actionUrge: protectedProcedure
-		.input(
-			z.object({
-				id: ID,
-				requestId: z.string().min(1).max(32),
-				channels: z
-					.array(z.enum(["sms", "email"]))
-					.min(1)
-					.max(2),
-			}),
-		)
-		.mutation(async ({ ctx, input }) => {
-			const me = requireCurrentUser(ctx);
-			const [row] = await db
-				.select({ action: taskActionTable, task: taskTable, user: sysUser })
-				.from(taskActionTable)
-				.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
-				.innerJoin(sysUser, eq(sysUser.id, taskActionTable.assignee_id))
-				.where(and(eq(taskActionTable.id, input.id), alive(taskTable), alive(sysUser)))
-				.limit(1);
-			if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "动作或处理人不存在" });
-			if (
-				me.id !== row.action.creator_id &&
-				me.id !== row.task.creator_id &&
-				!(await isAdminUser(me.id, me.isSuper === true))
-			) {
-				throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人、动作发起人或管理员可以催办" });
-			}
-			const key = `action.urged:${createHash("sha256")
-				.update(JSON.stringify([input.id, input.requestId]))
-				.digest("hex")}`;
-			const existing = async () => {
-				const [hit] = await db
-					.select({ id: sysNotification.id, sourceId: sysNotification.source_id })
-					.from(sysNotification)
-					.where(eq(sysNotification.dedupe_key, key))
-					.limit(1);
-				return hit;
-			};
-			const previous = await existing();
-			if (previous) {
-				if (previous.sourceId !== input.id) throw new TRPCError({ code: "CONFLICT", message: "催办请求编号已使用" });
-				return { id: previous.id, reused: true };
-			}
-			const channels = [...new Set(input.channels)];
-			if (channels.includes("sms") && (!row.user.phone || !/^\+?[0-9][0-9 -]{5,30}$/.test(row.user.phone))) {
-				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "处理人未配置有效的联系电话" });
-			}
-			if (channels.includes("email") && !z.string().email().safeParse(row.user.email).success) {
-				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "处理人未配置有效的邮箱" });
-			}
-			const now = new Date();
-			const cutoff = new Date(now.getTime() - TASK_URGE_COOLDOWN_MINUTES * 60_000);
-			const id = await db.transaction(async (tx) => {
-				const updated = await tx
-					.update(taskActionTable)
-					.set({ last_urged_at: now })
-					.where(
-						and(
-							eq(taskActionTable.id, input.id),
-							eq(taskActionTable.status, "active"),
-							eq(taskActionTable.assignee_id, row.user.id),
-							or(isNull(taskActionTable.last_urged_at), lte(taskActionTable.last_urged_at, cutoff)),
-						),
-					);
-				if (updated[0].affectedRows !== 1) return null;
-				return createNotification(tx, {
-					type: "action.urged",
-					source: { type: "task_action", id: input.id },
-					title: `任务催办：${row.task.name}`,
-					content: "您有一项待处理的审批或征询，请及时查看。",
-					payload: { path: taskPathOf(row.task.id), actionId: input.id, operatorId: me.id },
-					dedupeKey: key,
-					recipients: channels.map((channel) => ({
-						userId: row.user.id,
-						channel,
-						target: channel === "sms" ? row.user.phone : row.user.email,
-					})),
-				});
-			});
-			if (!id) {
-				const raced = await existing();
-				if (raced && raced.sourceId === input.id) return { id: raced.id, reused: true };
-				throw new TRPCError({ code: "PRECONDITION_FAILED", message: "动作已结束或仍在 30 分钟催办冷却期" });
-			}
-			return { id, reused: false };
-		}),
-
-	/** 催办记录只向该动作发起人、任务创建人及管理员开放。 */
-	actionUrgeHistory: protectedProcedure.input(z.object({ id: ID })).query(async ({ ctx, input }) => {
-		const me = requireCurrentUser(ctx);
-		const [row] = await db
-			.select({ action: taskActionTable, task: taskTable })
-			.from(taskActionTable)
-			.innerJoin(taskTable, eq(taskTable.id, taskActionTable.task_id))
-			.where(and(eq(taskActionTable.id, input.id), alive(taskTable)))
-			.limit(1);
-		if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "动作不存在" });
-		if (
-			me.id !== row.action.creator_id &&
-			me.id !== row.task.creator_id &&
-			!(await isAdminUser(me.id, me.isSuper === true))
-		) {
-			throw new TRPCError({ code: "FORBIDDEN", message: "没有权限查看催办记录" });
-		}
-		const events = await db
-			.select()
-			.from(sysNotification)
-			.where(
-				and(
-					eq(sysNotification.source_type, "task_action"),
-					eq(sysNotification.source_id, input.id),
-					eq(sysNotification.type, "action.urged"),
-				),
-			)
-			.orderBy(desc(sysNotification.created_at))
-			.limit(100);
-		const ids = events.map((event) => event.id);
-		if (!ids.length) return [];
-		const deliveries = await db
-			.select()
-			.from(sysNotificationDelivery)
-			.where(inArray(sysNotificationDelivery.notification_id, ids))
-			.orderBy(desc(sysNotificationDelivery.created_at));
-		const admin = await isAdminUser(me.id, me.isSuper === true);
-		return deliveries.map((delivery) => ({
-			id: delivery.id,
-			channel: delivery.channel,
-			status: delivery.status,
-			attempts: delivery.attempts,
-			error: admin ? delivery.last_error : delivery.last_error ? "投递失败，请联系管理员" : null,
-			createdAt: delivery.created_at.toISOString(),
-			sentAt: delivery.sent_at?.toISOString() ?? null,
-		}));
-	}),
 
 	/** 发起人或管理员撤回动作，审批会取消整条流程的未处理动作。 */
 	actionWithdraw: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
-		const admin = await isAdminUser(me.id, me.isSuper === true);
 		await db.transaction(async (tx) => {
 			const { task, action } = await lockAction(tx, input.id);
-			if (!admin && action.creator_id !== me.id && task.creator_id !== me.id)
+			if (!(await isActionCreatorOrAdmin(action, task, me.id)))
 				throw new TRPCError({ code: "FORBIDDEN", message: "只有动作发起人、任务创建人或管理员可以撤回" });
 			if (!(LIVE_ACTION_STATUS as readonly string[]).includes(action.status))
 				throw new TRPCError({ code: "BAD_REQUEST", message: "该动作已结束" });
@@ -428,7 +290,7 @@ export const taskActionRouter = createTRPCRouter({
 	/**
 	 * 答复动作 —— 只有 `assignee_id` 本人能答。
 	 *
-	 * 结算:审批全部通过后任务转根节点的 `to_status`;驳回后保持原状态(文档「状态机推进」)。
+	 * 结算:审批全部通过后任务转根节点的 `to_status`;驳回后保持原状态。
 	 * 锁顺序与 `taskTransit` 一致(先 `tc_task` 再 `tc_action`),避免互相等锁。
 	 */
 	actionRespond: protectedProcedure
@@ -452,26 +314,28 @@ export const taskActionRouter = createTRPCRouter({
 				if (!input.approved && !reason) {
 					throw new TRPCError({ code: "BAD_REQUEST", message: "驳回要填写原因" });
 				}
-				if (input.approved && action.is_locking) {
-					const [root] = await tx
-						.select()
-						.from(taskActionTable)
-						.where(eq(taskActionTable.id, action.root_action_id))
-						.limit(1)
-						.for("update");
-					const edge = workflowOf(task).edges.find(
-						(item) => item.from === root?.from_status && item.to === root?.to_status && item.via === "action",
-					);
+				// 根节点:审批的落点(征询的 `to_status` 为空,但根行同样存在)。只查一次 ——
+				// 下面「通过」的流程条件与「通过 / 驳回」的状态推进都要用它。
+				const [root] = await tx
+					.select()
+					.from(taskActionTable)
+					.where(and(eq(taskActionTable.id, action.root_action_id), eq(taskActionTable.task_id, task.id)))
+					.limit(1)
+					.for("update");
+				// 通过前先确认「这条边还在、任务没被别人挪走」—— 驳回不需要:它只退回原状态
+				if (input.approved) {
+					const edge = findEdge(workflowOf(task), { from: root?.from_status, to: root?.to_status, via: "action" });
 					if (!root || !edge || task.status !== root.from_status)
 						throw new TRPCError({ code: "BAD_REQUEST", message: "任务未满足流程条件，无法通过审批" });
 				}
 
+				const now = new Date();
 				await tx
 					.update(taskActionTable)
-					.set({ status: input.approved ? "done" : "rejected", updated_at: new Date() })
+					.set({ status: input.approved ? "done" : "rejected", updated_at: now })
 					.where(eq(taskActionTable.id, action.id));
 				await cancelPendingNotifications(tx, "task_action", [action.id]);
-				await cancelActionReminders(tx, [action.id], new Date());
+				await cancelActionReminders(tx, [action.id], now);
 
 				// 通过 / 驳回的意见都落成评论(有就写一条;通过的意见是可选的)
 				if (reason) {
@@ -479,74 +343,56 @@ export const taskActionRouter = createTRPCRouter({
 						id: newId(),
 						task_id: task.id,
 						author_id: me.id,
-						content: `${input.approved ? "通过意见" : "驳回原因"}:${reason}`,
-						created_at: new Date(),
-						updated_at: new Date(),
+						content: `${input.approved ? APPROVE_NOTE_PREFIX : REJECT_NOTE_PREFIX}${reason}`,
+						created_at: now,
+						updated_at: now,
 					});
 				}
 
-				const now = new Date();
 				const nextAction = input.approved ? await activateNextAction(tx, task, action, now) : null;
 				nextAssigneeId = nextAction?.assignee_id ?? null;
-				// 审批默认全员通过；任一拒绝立即回退并取消剩余节点。
+				// 审批默认全员通过；任一拒绝立即回退并取消剩余节点。(走到这里 `action.is_locking` 恒为 true,见上面守卫)
+				if (!root?.is_locking) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "审批流程缺少根节点" });
 				let movedTo: string | null = null;
-				if (action.is_locking) {
-					const [root] = await tx
-						.select()
-						.from(taskActionTable)
-						.where(and(eq(taskActionTable.id, action.root_action_id), eq(taskActionTable.task_id, task.id)))
-						.limit(1)
-						.for("update");
-					if (!root || !root.is_locking)
-						throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "审批流程缺少根节点" });
-					if (!input.approved) {
-						const pending = await tx
-							.select({ id: taskActionTable.id })
-							.from(taskActionTable)
-							.where(
-								and(
-									eq(taskActionTable.task_id, task.id),
-									eq(taskActionTable.root_action_id, action.root_action_id),
-									inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
-								),
-							)
-							.for("update");
-						if (pending.length) {
-							const ids = pending.map((item) => item.id);
-							await tx
-								.update(taskActionTable)
-								.set({ status: "cancelled", updated_at: now })
-								.where(inArray(taskActionTable.id, ids));
-							await cancelPendingNotifications(tx, "task_action", ids);
-							await cancelActionReminders(tx, ids, now);
-						}
-					}
-					const [remaining] = await tx
+				if (!input.approved) {
+					const pending = await tx
 						.select({ id: taskActionTable.id })
 						.from(taskActionTable)
 						.where(
 							and(
 								eq(taskActionTable.task_id, task.id),
 								eq(taskActionTable.root_action_id, action.root_action_id),
-								eq(taskActionTable.is_locking, true),
 								inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
 							),
 						)
-						.limit(1)
 						.for("update");
-					const next = input.approved ? (remaining ? null : root.to_status) : root.from_status;
-					if (next && next !== task.status) {
-						if (workflowOf(task).statuses.some((status) => status.value === next && status.terminal))
-							await cancelLiveTaskActions(tx, task.id, now);
-						await tx.update(taskTable).set({ status: next, updated_at: now }).where(eq(taskTable.id, task.id));
-						if (
-							workflowOf(task).statuses.some(
-								(status) => (status.value === task.status || status.value === next) && status.terminal,
-							)
-						)
-							await rescheduleTaskReminders(tx, { ...task, status: next }, now);
-						movedTo = next;
+					if (pending.length) {
+						const ids = pending.map((item) => item.id);
+						await tx
+							.update(taskActionTable)
+							.set({ status: "cancelled", updated_at: now })
+							.where(inArray(taskActionTable.id, ids));
+						await cancelPendingNotifications(tx, "task_action", ids);
+						await cancelActionReminders(tx, ids, now);
 					}
+				}
+				const [remaining] = await tx
+					.select({ id: taskActionTable.id })
+					.from(taskActionTable)
+					.where(
+						and(
+							eq(taskActionTable.task_id, task.id),
+							eq(taskActionTable.root_action_id, action.root_action_id),
+							eq(taskActionTable.is_locking, true),
+							inArray(taskActionTable.status, [...LIVE_ACTION_STATUS]),
+						),
+					)
+					.limit(1)
+					.for("update");
+				const next = input.approved ? (remaining ? null : root.to_status) : root.from_status;
+				if (next && next !== task.status) {
+					await applyStatusMove(tx, task, next, now);
+					movedTo = next;
 				}
 				await writeTaskEvent(tx, {
 					taskId: task.id,
@@ -566,7 +412,7 @@ export const taskActionRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			if (nextAssigneeId) publishMentions([nextAssigneeId]);
+			if (nextAssigneeId) publishNotice([nextAssigneeId]);
 			return { ok: true };
 		}),
 
@@ -582,9 +428,9 @@ export const taskActionRouter = createTRPCRouter({
 		.input(
 			z.object({
 				id: ID,
-				content: z.string().min(1, "回复内容不能为空").max(5000),
-				attachments: z.array(z.string().min(1).max(32)).max(20).optional(),
-				mentionIds: z.array(z.string().min(1).max(36)).max(100).optional(),
+				content: z.string().min(1, "回复内容不能为空").max(MAX_TEXT_LENGTH),
+				attachments: z.array(FILE_ID).max(MAX_ATTACHMENTS).optional(),
+				mentionIds: z.array(USER_ID).max(MAX_MENTIONS).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -639,7 +485,7 @@ export const taskActionRouter = createTRPCRouter({
 					at: now,
 				});
 			});
-			publishMentions(receivers);
+			publishNotice(receivers);
 			return { ok: true };
 		}),
 });

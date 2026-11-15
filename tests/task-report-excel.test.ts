@@ -199,7 +199,7 @@ describe("填报 Excel", () => {
 	});
 });
 
-describe("父任务导出:父子所有填报数据", () => {
+describe("父任务导出:组合成一张表,首列执行人", () => {
 	const form = taskReportSchema.parse({
 		id: "report",
 		kind: "OBJECT",
@@ -209,42 +209,33 @@ describe("父任务导出:父子所有填报数据", () => {
 		],
 	});
 
-	it("表单填报:父任务那份进「填报」,每个已保存的子任务一行进「子任务填报」", () => {
+	it("表单填报:母版 + 各子任务已提交,合成一张表,首列执行人", () => {
 		const book = XLSX.read(
 			createReportWorkbook(
 				form,
-				{ town: "父镇", quantity: 1 },
-				{
-					readable: true,
-					parentLayout: true,
-					children: [
-						{ owner: "张三", payload: { town: "甲镇", quantity: 2 } },
-						{ owner: "李四", payload: { town: "乙镇", quantity: 3 } },
-					],
-				},
+				[
+					{ town: "父镇", quantity: 1 },
+					{ town: "甲镇", quantity: 2 },
+					{ town: "乙镇", quantity: 3 },
+				],
+				{ readable: true, owners: [null, "张三", "李四"] },
 			),
 			{ type: "buffer" },
 		);
-		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报", "子任务填报(可读)", "子任务填报"]);
-		const grids = book.SheetNames.map((name) =>
-			XLSX.utils.sheet_to_json<string[]>(book.Sheets[name] ?? {}, { header: 1 }),
-		);
-		const own = [
-			["街镇", "数量"],
-			["父镇", 1],
-		];
-		const children = [
+		assert.deepEqual(book.SheetNames, ["填报(可读)", "填报"]);
+		const grid = (index: number) =>
+			XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[index] ?? ""] ?? {}, { header: 1 });
+		const expected = [
 			["执行人", "街镇", "数量"],
+			["母版", "父镇", 1],
 			["张三", "甲镇", 2],
 			["李四", "乙镇", 3],
 		];
-		assert.deepEqual(grids[0], own, "父任务填报(可读)");
-		assert.deepEqual(grids[1], own, "父任务填报");
-		assert.deepEqual(grids[2], children, "子任务填报(可读)");
-		assert.deepEqual(grids[3], children, "子任务填报");
+		assert.deepEqual(grid(0), expected, "可读表");
+		assert.deepEqual(grid(1), expected, "机器表");
 	});
 
-	it("没有子任务(或表格填报)时不附加那张表 —— 第一张表仍可直接导回来", () => {
+	it("没有子任务时不加执行人列 —— 第一张表仍可直接导回来", () => {
 		const book = XLSX.read(createReportWorkbook(form, { town: "父镇", quantity: 1 }), { type: "buffer" });
 		assert.deepEqual(book.SheetNames, ["填报"]);
 	});
@@ -319,50 +310,35 @@ describe("可读导出:给人看的那张表", () => {
 	});
 });
 
-describe("父任务导出的四张表", () => {
+describe("父任务导出(表格):组合成一张表,首列执行人", () => {
 	const table = taskReportSchema.parse({
 		id: "report",
 		kind: "TABLE",
 		fields: [{ id: "town", label: "街镇", type: "text" }],
 	});
 
-	it("表格填报:子任务那两张按它自己那份行铺开,首列是执行人", () => {
+	it("子任务已提交的行按范围替换母版行,首列执行人", () => {
 		const book = XLSX.read(
-			createReportWorkbook(table, [{ town: "甲镇" }, { town: "乙镇" }], {
+			createReportWorkbook(table, [{ town: "甲镇" }, { town: "乙镇" }, { town: "丙镇" }], {
 				readable: true,
-				parentLayout: true,
-				children: [
-					{ owner: "张三", payload: [{ town: "甲镇" }] },
-					{ owner: "李四", payload: [{ town: "乙镇" }, { town: "丙镇" }] },
-				],
+				owners: [null, "张三", "李四"],
 			}),
 			{ type: "buffer" },
 		);
-		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报", "子任务填报(可读)", "子任务填报"]);
-		const child = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[3] ?? ""] ?? {}, { header: 1 });
-		assert.deepEqual(child, [
+		assert.deepEqual(book.SheetNames, ["填报(可读)", "填报"]);
+		const grid = XLSX.utils.sheet_to_json<string[]>(book.Sheets[book.SheetNames[1] ?? ""] ?? {}, { header: 1 });
+		assert.deepEqual(grid, [
 			["执行人", "街镇"],
-			["张三", "甲镇"],
-			["李四", "乙镇"],
+			["母版", "甲镇"],
+			["张三", "乙镇"],
 			["李四", "丙镇"],
 		]);
 	});
 
-	it("导入认「父任务填报」那张(父任务导出改完能导回父任务)", async () => {
-		const file = createReportWorkbook(table, [{ town: "甲镇" }], {
-			readable: true,
-			parentLayout: true,
-			children: [{ owner: "张三", payload: [{ town: "甲镇" }] }],
-		});
+	it("导出改完能导回来(导入只认「填报」那张)", async () => {
+		const file = createReportWorkbook(table, [{ town: "甲镇" }], { readable: true });
 		const parsed = await previewReportWorkbook(table, file.toString("base64"));
 		assert.deepEqual(parsed.value, [{ town: "甲镇" }]);
-	});
-
-	it("有子任务但一个都没保存:只有父任务那一对(没有子任务可列)", () => {
-		const book = XLSX.read(createReportWorkbook(table, [{ town: "甲镇" }], { readable: true, parentLayout: true }), {
-			type: "buffer",
-		});
-		assert.deepEqual(book.SheetNames, ["父任务填报(可读)", "父任务填报"]);
 	});
 });
 

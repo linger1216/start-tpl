@@ -2,14 +2,14 @@ import { useMutation } from "@tanstack/react-query";
 import { Download, FileDown, FileUp, Info, TriangleAlert, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { InfoTooltip } from "#/components/modules/task-close/info-tooltip";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { downloadReportWorkbook } from "#/lib/task/report-download";
-import type { TaskReportSchema } from "#/lib/task/report-spec";
+import { MAX_REPORT_FILE_BYTES, type TaskReportSchema } from "#/lib/task/report-spec";
 
 /** 一次导入的结果:成功 / 失败条数 + 失败原因(最多列前几条) */
 type ImportOutcome = { ok: number; failed: number; messages: string[] };
@@ -29,15 +29,17 @@ export function TaskReportExcel({
 	reportId,
 	schema,
 	canEdit,
-	disabled,
+	disabled = false,
 	onImport,
 }: {
 	taskId?: string;
 	reportId?: string;
 	schema: TaskReportSchema;
 	canEdit: boolean;
-	disabled: boolean;
-	onImport: (value: unknown) => void;
+	/** 填报正在保存 / 有别的动作在跑时挡下导出与导入 */
+	disabled?: boolean;
+	/** 导入成功后把解析结果交给调用方;只读视图(父任务汇总)不传 */
+	onImport?: (value: unknown) => void;
 }) {
 	const trpc = useTRPC();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -61,15 +63,15 @@ export function TaskReportExcel({
 		trpc.taskClose.reportExcelPreview.mutationOptions({
 			onSuccess: (result) => {
 				const rows = Array.isArray(result.value) ? result.value.length : result.value ? 1 : 0;
-				const failedRows = new Set(result.issues.map((issue) => issue.row).filter((row) => row !== null));
-				const failed = failedRows.size;
+				// 失败以「校验问题条数」为准:OBJECT 的 issue.row 恒为 null,不能据此反推
+				const failed = result.issues.length;
 				const messages = result.issues.slice(0, 5).map((issue) => {
 					const field = schema.fields.find((item) => item.id === issue.field)?.label ?? issue.field;
 					return `${issue.excelRow ? `第 ${issue.excelRow} 行 · ` : ""}${field}${field ? ":" : ""}${issue.message}`;
 				});
-				setOutcome({ ok: rows - failed, failed, messages });
+				setOutcome({ ok: Math.max(0, rows - failed), failed, messages });
 				// 有失败行就整批不落值,改好文件再选一次
-				if (failed === 0) onImport(result.value);
+				if (failed === 0) onImport?.(result.value);
 			},
 			onError: (error) => {
 				setOutcome(null);
@@ -80,7 +82,7 @@ export function TaskReportExcel({
 
 	const chooseFile = async (file: File | undefined) => {
 		if (!file) return;
-		if (file.size > 5 * 1024 * 1024) {
+		if (file.size > MAX_REPORT_FILE_BYTES) {
 			toast.error("文件不能超过 5 MB");
 			return;
 		}
@@ -146,24 +148,20 @@ export function TaskReportExcel({
 				/>
 				{/* 列顺序用 info 图标承载:常驻一行太占位置 */}
 				{schema.fields.length > 0 ? (
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger
-								aria-label="列顺序"
-								className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-							>
-								<Info className="size-3.5" />
-							</TooltipTrigger>
-							<TooltipContent side="top" align="start" className="block max-w-72">
-								<span className="text-xs">列顺序:{columnOrder}</span>
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
+					<InfoTooltip
+						icon={<Info className="size-3.5" />}
+						label="列顺序"
+						align="start"
+						triggerClassName="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+						contentClassName="max-w-72"
+					>
+						<span className="text-xs">列顺序:{columnOrder}</span>
+					</InfoTooltip>
 				) : null}
 			</div>
 			{outcome ? (
 				<div className="relative space-y-1 rounded-lg border border-border bg-secondary/40 p-2.5 pr-8 text-xs">
-					{/* 导入结果是一次性反馈:给个 ×,看完就能收掉(不然常驻在版本行里很吵) */}
+					{/* 导入结果是一次性反馈:给个 ×,看完就能收掉(不然常驻在界面上很吵) */}
 					<ActionIconButton label="关闭导入结果" onClick={() => setOutcome(null)} className="absolute top-1 right-1">
 						<X className="size-3" />
 					</ActionIconButton>

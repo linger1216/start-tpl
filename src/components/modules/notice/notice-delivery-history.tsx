@@ -12,15 +12,8 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { useTRPC } from "#/integrations/trpc/react";
+import { channelLabel, deliveryStatusLabel, UNKNOWN_USER_LABEL } from "#/lib/notification-status";
 import { formatLocalMinute } from "#/lib/time";
-
-const STATUS: Record<string, string> = {
-	pending: "等待投递",
-	processing: "投递中",
-	sent: "已发送",
-	failed: "失败",
-	cancelled: "已取消",
-};
 
 export function NoticeDeliveryHistory({
 	open,
@@ -67,9 +60,8 @@ export function NoticeDeliveryHistory({
 									</Button>
 								</div>
 								<p className="text-muted-foreground">
-									{row.recipientName ?? "已删除用户"} ·{" "}
-									{row.channel === "in_app" ? "站内" : row.channel === "sms" ? "短信" : "邮件"} ·{" "}
-									{row.status === "pending" && row.error ? "等待重试" : (STATUS[row.status] ?? row.status)} ·{" "}
+									{row.recipientName ?? UNKNOWN_USER_LABEL} · {channelLabel(row.channel)} ·{" "}
+									{row.status === "pending" && row.error ? "等待重试" : deliveryStatusLabel(row.status)} ·{" "}
 									{formatLocalMinute(row.createdAt)}
 								</p>
 								{row.error ? <p className="break-words text-destructive">{row.error}</p> : null}
@@ -84,7 +76,7 @@ export function NoticeDeliveryHistory({
 										<ul className="grid gap-1 pl-3">
 											{attempts.data.map((attempt) => (
 												<li key={attempt.id}>
-													第 {attempt.number} 次 · {STATUS[attempt.status] ?? attempt.status} ·{" "}
+													第 {attempt.number} 次 · {deliveryStatusLabel(attempt.status)} ·{" "}
 													{attempt.provider ?? "未选择服务商"} · {formatLocalMinute(attempt.startedAt)}
 													{attempt.error ? <p className="break-words text-destructive">{attempt.error}</p> : null}
 												</li>

@@ -3,7 +3,7 @@ import { ExternalLink, Link2, X } from "lucide-react";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Input } from "#/components/ui/input";
 import { useStableKeys } from "#/hooks/use-stable-keys";
-import { blankBlock, isInternalUrl, type TaskLinkBlock } from "#/lib/task/payload";
+import { blankBlock, linkTargetOf, MAX_LINKS, type TaskLinkBlock } from "#/lib/task/payload";
 
 /**
  * 链接区编辑器 —— 清单式交互(像待办):
@@ -46,7 +46,7 @@ export function TaskLinkEditor({
 			return;
 		}
 		commit(index);
-		if (index === value.length - 1 && value.length < 30) onChange([...value, blankBlock()]);
+		if (index === value.length - 1 && value.length < MAX_LINKS) onChange([...value, blankBlock()]);
 	}
 
 	/** 预览只显示填好的条目(还没写完的不出现在下面) */
@@ -83,7 +83,7 @@ export function TaskLinkEditor({
 			{previews.length > 0 ? (
 				<div className="grid gap-2 pt-1 sm:grid-cols-2">
 					{previews.map(({ index, url }) => {
-						const internal = isInternalUrl(url);
+						const { internal, label } = linkTargetOf(url);
 						const Icon = internal ? Link2 : ExternalLink;
 						return (
 							<div
@@ -93,7 +93,7 @@ export function TaskLinkEditor({
 							>
 								<Icon className="size-3.5 shrink-0 text-muted-foreground" />
 								<span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{url}</span>
-								<span className="shrink-0 text-xs text-muted-foreground">{internal ? "站内" : "站外"}</span>
+								<span className="shrink-0 text-xs text-muted-foreground">{label}</span>
 							</div>
 						);
 					})}

@@ -5,10 +5,10 @@ import { TaskWorkflowGraph } from "#/components/modules/task-close/task-workflow
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
-import { statusLabelOf, type WorkflowStatus } from "#/lib/task/close-spec";
+import { roleLabelOf, statusLabelOf, VIA_LABEL, type WorkflowStatus } from "#/lib/task/close-spec";
 
 /** 流程模板列表的详情投影。 */
-export type WorkflowDetail = {
+type WorkflowDetail = {
 	id: string;
 	name: string;
 	statuses: WorkflowStatus[];
@@ -18,14 +18,6 @@ export type WorkflowDetail = {
 	createdAt: string | null;
 	updatedAt: string | null;
 };
-
-const WHO_TEXT: Record<string, string> = {
-	creator: "创建者",
-	participant: "参与者",
-	executor: "执行者",
-};
-
-const VIA_TEXT: Record<string, string> = { direct: "直接改", action: "审批动作" };
 
 /**
  * 流程模板详情 —— 只读弹窗:状态集合 / 初始态 / 转移边一览。
@@ -83,9 +75,9 @@ export function TaskWorkflowDetail({
 										<span className="font-medium">{statusLabelOf(detail.statuses, edge.from)}</span>
 										<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
 										<span className="font-medium">{statusLabelOf(detail.statuses, edge.to)}</span>
-										<Tag variant="outline">{VIA_TEXT[edge.via] ?? edge.via}</Tag>
+										<Tag variant="outline">{VIA_LABEL[edge.via] ?? edge.via}</Tag>
 										<span className="text-xs text-muted-foreground">
-											{edge.who.map((who) => WHO_TEXT[who] ?? who).join(" / ")} 可发起
+											{edge.who.map((who) => roleLabelOf(who)).join(" / ")} 可发起
 										</span>
 									</li>
 								))}

@@ -5,9 +5,14 @@ import { db } from "#/db";
 import { taskWorkflowTable } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { DEFAULT_WORKFLOW_ID, type WorkflowStatus } from "#/lib/task/close-spec";
+import {
+	DEFAULT_WORKFLOW_ID,
+	MAX_WORKFLOW_EDGES,
+	MAX_WORKFLOW_STATUSES,
+	type WorkflowStatus,
+} from "#/lib/task/close-spec";
 import { createTRPCRouter, protectedProcedure } from "../../init";
-import { ID, type WorkflowPayload } from "./common";
+import { ID, STATUS_VALUE, type WorkflowPayload } from "./common";
 
 type WorkflowRow = typeof taskWorkflowTable.$inferSelect;
 
@@ -20,24 +25,24 @@ const workflowInput = z.object({
 	statuses: z
 		.array(
 			z.object({
-				value: z.string().min(1).max(32),
-				label: z.string().min(1).max(32),
+				value: STATUS_VALUE,
+				label: STATUS_VALUE,
 				terminal: z.boolean().optional(),
 			}),
 		)
 		.min(1, "至少要有 1 个状态")
-		.max(30),
-	initial: z.string().min(1).max(32),
+		.max(MAX_WORKFLOW_STATUSES),
+	initial: STATUS_VALUE,
 	edges: z
 		.array(
 			z.object({
-				from: z.string().min(1).max(32),
-				to: z.string().min(1).max(32),
+				from: STATUS_VALUE,
+				to: STATUS_VALUE,
 				who: z.array(WHO_ENUM).min(1, "每条边至少选 1 个可发起角色").max(3),
 				via: z.enum(["direct", "action"]),
 			}),
 		)
-		.max(200),
+		.max(MAX_WORKFLOW_EDGES),
 });
 
 /**
@@ -68,7 +73,7 @@ function normalizeWorkflow(input: z.infer<typeof workflowInput>): WorkflowPayloa
 		if (!values.has(from)) throw new TRPCError({ code: "BAD_REQUEST", message: `转移边引用了未知状态:${from}` });
 		if (!values.has(to)) throw new TRPCError({ code: "BAD_REQUEST", message: `转移边引用了未知状态:${to}` });
 		// 唯一键是**状态对**(不含 via):同一对 (from,to) 只能一条边 ——
-		// 否则 direct + action 并存时两条路都通,「必须经 action」就名存实亡(见 doc/task-close.md)。
+		// 否则 direct + action 并存时两条路都通,「必须经 action」就名存实亡。
 		const key = `${from}->${to}`;
 		const prev = seen.get(key);
 		if (prev) {

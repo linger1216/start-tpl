@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { isRecord } from "#/lib/task/json";
+
+export const MAX_ATTACHMENTS = 20;
+
+/** `sys_file.id` 的列宽 —— 附件 id 一律按它校验 */
+const FILE_ID_LENGTH = 32;
 
 /**
  * 任务**链接块** —— `tc_task.payload` 的内容区形状(**与后端 zod schema 同一份真源**)。
@@ -16,14 +22,17 @@ const linkBlockSchema = z.object({
 	url: z.string().max(2000),
 });
 
+/** 链接区上限 —— zod 校验、截断、界面计数共用 */
+export const MAX_LINKS = 30;
+
 /** `tc_task.payload` 的入参形状(任务创建 / 编辑都走它) */
 export const taskPayloadSchema = z.object({
 	/** 场景标签:内核不解释,由业务自己认 */
 	type: z.string().max(64).optional(),
 	/** 链接区(有序块)。空数组 = 没有链接 */
-	links: z.array(linkBlockSchema).max(30).optional(),
+	links: z.array(linkBlockSchema).max(MAX_LINKS).optional(),
 	/** 附件区:`sys_file.id` 列表(与 `tc_comment.attachments` 同形) */
-	attachments: z.array(z.string().min(1).max(32)).max(20).optional(),
+	attachments: z.array(z.string().min(1).max(FILE_ID_LENGTH)).max(MAX_ATTACHMENTS).optional(),
 });
 
 export type TaskLinkBlock = z.infer<typeof linkBlockSchema>;
@@ -35,6 +44,12 @@ export type TaskAttachment = { id: string; name: string; size: number; contentTy
  * 站内链接判定:**相对路径**,或绝对 URL 的 `host`(含端口)与当前页面一致。
  * 服务端渲染时拿不到 `window`,一律当站外(站内链接在 SSR 阶段也只是少个 target,不影响正确性)。
  */
+/** 链接的站内/站外口径(图标由调用方选,这里只给判据与文案)—— 编辑区与详情区共用 */
+export function linkTargetOf(url: string): { internal: boolean; label: "站内" | "站外" } {
+	const internal = isInternalUrl(url);
+	return { internal, label: internal ? "站内" : "站外" };
+}
+
 export function isInternalUrl(url: string): boolean {
 	if (url.startsWith("/")) return true;
 	try {
@@ -53,10 +68,6 @@ function isUsableUrl(url: string): boolean {
 /** 新加一块的初始值 */
 export function blankBlock(): TaskLinkBlock {
 	return { kind: "link", url: "" };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -88,9 +99,12 @@ export function normalizePayload(input: TaskPayload | null | undefined): TaskPay
 		// 同 URL 只留一条;空 / 形状不对的丢掉
 		if (!isUsableUrl(url) || links.some((item) => item.url === url)) continue;
 		links.push({ kind: "link", url });
-		if (links.length >= 30) break;
+		if (links.length >= MAX_LINKS) break;
 	}
-	const attachments = [...new Set((input.attachments ?? []).map((id) => id.trim()).filter(Boolean))].slice(0, 20);
+	const attachments = [...new Set((input.attachments ?? []).map((id) => id.trim()).filter(Boolean))].slice(
+		0,
+		MAX_ATTACHMENTS,
+	);
 	const type = input.type?.trim() || undefined;
 	if (links.length === 0 && attachments.length === 0 && !type) return null;
 	return {

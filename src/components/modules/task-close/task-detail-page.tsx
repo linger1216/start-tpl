@@ -3,43 +3,41 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { PageFrame } from "#/components/layout/page-frame";
-import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
-import { TaskAttachmentPreview } from "#/components/modules/task-close/task-attachment-preview";
+import { BlockHeader } from "#/components/modules/task-close/block-header";
+import { InspectorSection } from "#/components/modules/task-close/inspector-section";
+import { TaskActionList } from "#/components/modules/task-close/task-action-list";
 import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
 import { TaskComments } from "#/components/modules/task-close/task-comments";
-import { TaskAttachmentList, TaskAttachmentPicker } from "#/components/modules/task-close/task-content-attachments";
+import { TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { TaskDetailHeader } from "#/components/modules/task-close/task-detail-header";
-import { TaskFlowSpine, TaskTodoStrip, type TodoItem } from "#/components/modules/task-close/task-flow-spine";
-import { TaskForm, type TaskFormEditing, type TaskFormPayload } from "#/components/modules/task-close/task-form";
+import {
+	TaskAttachDialog,
+	TaskInitiateDialog,
+	TaskMemberDialog,
+	TaskRespondDialog,
+	TaskStatusDialog,
+	TaskTransferDialog,
+} from "#/components/modules/task-close/task-dialogs";
+import { TaskFlowSpine, TaskTodoStrip } from "#/components/modules/task-close/task-flow-spine";
+import { TaskForm, type TaskFormEditing } from "#/components/modules/task-close/task-form";
 import { TaskLinkBlocks } from "#/components/modules/task-close/task-link-blocks";
 import { TaskLogList } from "#/components/modules/task-close/task-log";
 import { TaskMembers } from "#/components/modules/task-close/task-members";
 import { TaskReminders } from "#/components/modules/task-close/task-reminders";
 import { TaskReport } from "#/components/modules/task-close/task-report";
-import { TaskUrge } from "#/components/modules/task-close/task-urge";
+import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
+import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
-import { DetailRow } from "#/components/ui/detail-row";
-import { SearchSelect } from "#/components/ui/search-select";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Textarea } from "#/components/ui/textarea";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import {
-	APPROVE_PRESETS,
-	REJECT_PRESETS,
-	ROLE_LABEL,
-	ROLE_WHY,
-	statusLabelOf,
-	type WorkflowStatus,
-} from "#/lib/task/close-spec";
+import { ROLE_LABEL, ROLE_WHY, statusesOf, statusLabelOf } from "#/lib/task/close-spec";
+import { isForbiddenError, isNotFoundError, orderHintOf, peopleOptionsOf, todoItemsOf } from "#/lib/task/close-view";
 import type { TaskAttachment, TaskPayload } from "#/lib/task/payload";
-import { TaskActionDialog } from "./task-action-dialog";
 
 /**
  * 任务详情 —— 闭环页(按 `assets/ui/任务详情.html` 原型重画)。
@@ -53,9 +51,9 @@ import { TaskActionDialog } from "./task-action-dialog";
  *   └─ main: 左 画布(内容 / 附件 / 评论) + 右 检查器(人员 / 动态)┘
  *
  * 状态类按钮(发起审批 / 改状态)按用户要求**留在右上角**,但成不成、有几个候选仍由
- * `permissions` 派生(见 doc/task-close.md 的「按钮去向」):
+ * `permissions` 派生:
  *   · 发起审批 —— `permissions.actionTargets`(模板里当前状态出发、我有权发起的 `via=action` 边);
- *     多个候选就在弹窗里选,再选「交给谁」,提交 `actionCreate`(带目标状态 → 任务锁定)。
+ *     取**第一条**,在弹窗里确认目标状态并选「交给谁」,提交 `actionCreate`(带目标状态 → 任务锁定)。
  *   · 改状态 —— 所有用户只列服务端返回的 `permissions.transitions`。
  *     提交 `taskTransit`。
  *   · 锁定期(`permissions.locked`,由审批动作决定)两个按钮都不出现 —— 与服务端锁守卫同形。
@@ -73,13 +71,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 
-	const [editOpen, setEditOpen] = useState(false);
+	/** 当前打开的表单弹窗(编辑 / 删任务 / 加成员 / 附件)—— 一个开关,不再一个弹窗一个 boolean */
+	const [dialog, setDialog] = useState<"edit" | "remove" | "member" | "attach" | null>(null);
 	const editPayloadBaseline = useRef<TaskPayload | null>(null);
-	const [removeOpen, setRemoveOpen] = useState(false);
-	const [memberOpen, setMemberOpen] = useState(false);
 	const [reminderRecipient, setReminderRecipient] = useState<{ id: string; name: string } | null>(null);
-	/** 附件弹窗:创建人给任务加 / 删附件(随 `task.payload.attachments` 走) */
-	const [attachOpen, setAttachOpen] = useState(false);
+	/** 附件弹窗里的待提交附件(随 `task.payload.attachments` 走) */
 	const [draftAttachments, setDraftAttachments] = useState<TaskAttachment[]>([]);
 	const attachmentBaseline = useRef<string[]>([]);
 	/**
@@ -87,35 +83,22 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	 * (fan-out 任务的父任务,执行人是创建人,见 `taskCreate`;这里不需要角色选择。)
 	 */
 	const [newMemberIds, setNewMemberIds] = useState<string[]>([]);
-	/**
-	 * 待确认移出的成员 —— 移出是破坏性操作,先弹 `ConfirmDialog`(非空即打开)。
-	 * 存下 userId / role / 姓名:关掉弹窗后这些数据就没有别的来源了。
-	 */
-	const [pendingRemoveMember, setPendingRemoveMember] = useState<{
-		userId: string;
-		role: "participant" | "executor";
-		name: string;
-	} | null>(null);
+	/** 待确认移出的成员 —— 存下 userId / 姓名,关掉弹窗后这些数据没有别的来源 */
+	const removeMember = useConfirm<{ userId: string; name: string }>();
 	/** 「发起审批 / 发起征询」共用弹窗:`mode` 非空即打开(目标状态由流程自动判定,不让人选) */
 	const [actionMode, setActionMode] = useState<"approve" | "consult" | null>(null);
 	/** 交给谁 —— 多选,**选择顺序就是处理顺序**(第一个人先办,后面依次) */
 	const [actionAssignees, setActionAssignees] = useState<string[]>([]);
 	const [consultMode, setConsultMode] = useState<"serial" | "parallel">("serial");
-	/** 转交弹窗:转给谁 */
-	const [transferOpen, setTransferOpen] = useState(false);
-	const [transferTo, setTransferTo] = useState("");
-	/** 「改状态」弹窗:选择允许的直接转移 */
-	const [statusOpen, setStatusOpen] = useState(false);
-	const [statusTo, setStatusTo] = useState("");
-	/** 驳回弹窗:动作 id + 原因(驳回必须写原因,服务端也会拒空的) */
-	const [rejectId, setRejectId] = useState<string | null>(null);
-	const [rejectReason, setRejectReason] = useState("");
-	/** 通过也走弹窗:意见可选,常用原因点一下填进输入框 */
-	const [approveId, setApproveId] = useState<string | null>(null);
-	const [approveReason, setApproveReason] = useState("");
+	/** 转交弹窗:转给谁(null = 未打开) */
+	const [transferTo, setTransferTo] = useState<string | null>(null);
+	/** 「改状态」弹窗:选择允许的直接转移(null = 未打开) */
+	const [statusTo, setStatusTo] = useState<string | null>(null);
+	/** 答复弹窗:通过 / 驳回共用一套(意见可选;驳回必须写原因,服务端也会拒空的) */
+	const [respond, setRespond] = useState<{ approved: boolean; id: string; reason: string } | null>(null);
 	/** 正在预览的附件(开弹窗看 / 下载) */
-	const [previewAttachment, setPreviewAttachment] = useState<TaskAttachment | null>(null);
-	/** 动态度:一次取多少条(「加载更多」每次 +20) */
+	const preview = useAttachmentPreview<TaskAttachment>(taskId);
+	/** 动态一次取多少条(分页由 PaginationControl 管) */
 	const [logPage, setLogPage] = useState(1);
 
 	const detailQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
@@ -141,7 +124,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	/** 转交执行人 */
 	const transferMutation = useMutation(
 		trpc.taskClose.taskTransfer.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setTransferOpen(false), message: () => "已转交" }),
+			onSuccess: writeSuccess(invalidate, { close: () => setTransferTo(null), message: () => "已转交" }),
 			onError: toastApiError,
 		}),
 	);
@@ -149,7 +132,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	/** 「改状态」—— 沿模板直接转移边执行 */
 	const transitMutation = useMutation(
 		trpc.taskClose.taskTransit.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setStatusOpen(false), message: () => "状态已更新" }),
+			onSuccess: writeSuccess(invalidate, { close: () => setStatusTo(null), message: () => "状态已更新" }),
 			onError: toastApiError,
 		}),
 	);
@@ -160,10 +143,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		trpc.taskClose.actionRespond.mutationOptions({
 			onSuccess: async (_data, variables) => {
 				await invalidate();
-				setApproveId(null);
-				setApproveReason("");
-				setRejectId(null);
-				setRejectReason("");
+				setRespond(null);
 				toast.success(variables.approved ? "已通过" : "已驳回");
 			},
 			onError: toastApiError,
@@ -180,7 +160,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
 	const updateMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setEditOpen(false), message: () => "已保存" }),
+			onSuccess: writeSuccess(invalidate, { close: () => setDialog(null), message: () => "已保存" }),
 			onError: toastApiError,
 		}),
 	);
@@ -188,7 +168,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	/** 附件弹窗专用保存 —— 只改 `payload.attachments`(任务相关方都能加;链接 / 说明服务端原样保留) */
 	const attachMutation = useMutation(
 		trpc.taskClose.taskAttach.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setAttachOpen(false), message: () => "附件已更新" }),
+			onSuccess: writeSuccess(invalidate, { close: () => setDialog(null), message: () => "附件已更新" }),
 			onError: toastApiError,
 		}),
 	);
@@ -196,7 +176,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const removeMutation = useMutation(
 		trpc.taskClose.taskRemove.mutationOptions({
 			onSuccess: () => {
-				setRemoveOpen(false);
+				setDialog(null);
 				toast.success("任务已删除");
 				void queryClient.invalidateQueries({ ...trpc.taskClose.pathFilter(), refetchType: "none" });
 				void navigate({ to: "/task-close", replace: true });
@@ -216,8 +196,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		const ids = [...newMemberIds];
 		if (ids.length === 0 || memberAddMutation.isPending) return;
 		try {
-			await memberAddMutation.mutateAsync({ taskId: task.id, userIds: ids, role: "participant" });
-			setMemberOpen(false);
+			await memberAddMutation.mutateAsync({ taskId: task.id, userIds: ids });
+			setDialog(null);
 			setNewMemberIds([]);
 			toast.success(`已加入 ${ids.length} 位成员`);
 		} catch {
@@ -238,9 +218,9 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	);
 
 	/** 这条 id 在库里已经不存在了(被删 / 别人删了 / 手输错了) */
-	const taskMissing = detailQuery.isError && isTaskMissing(detailQuery.error);
+	const taskMissing = detailQuery.isError && isNotFoundError(detailQuery.error);
 	/** 不是任务相关方(直接访问别人的任务 URL 也走这条) */
-	const taskForbidden = detailQuery.isError && isTaskForbidden(detailQuery.error);
+	const taskForbidden = detailQuery.isError && isForbiddenError(detailQuery.error);
 	const bouncedRef = useRef(false);
 
 	// 不存在 / 没权限都不留错误页:提示一声就回「我的任务」(replace —— 这条 URL 不该再进历史)
@@ -287,17 +267,21 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
 	const { task, links, attachments, own, children, members, permissions, meId } = detailQuery.data;
 	const myPendingActions = detailQuery.data.actions.filter((row) => row.status === "active" && row.assigneeId === meId);
-	const memberRole = members.find((member) => member.userId === meId)?.role;
-	const myRole = permissions.isAdmin ? "admin" : task.creatorId === meId ? "creator" : (memberRole ?? null);
-	/**
-	 * `payload.type` 是业务场景标签,编辑界面不编辑它 —— 但保存时**必须原样带回**,
-	 * 否则 `taskUpdate` 整块替换 payload 会把它抹掉(设置页的类型筛选随之失效)。
-	 */
+	const myRole = permissions.isAdmin
+		? "admin"
+		: task.creatorId === meId
+			? "creator"
+			: task.executorId === meId
+				? "executor"
+				: members.some((member) => member.userId === meId)
+					? "participant"
+					: null;
+	/** `payload.type` 编辑界面不管它,但保存时**必须原样带回**(`taskUpdate` 整块替换 payload) */
 	const payloadType = (task.payload as { type?: string } | null)?.type;
 	// 状态图快照:状态清单(value+label)从这里取(展示一律用 label)
-	const workflow = task.workflow as { statuses?: WorkflowStatus[]; initial?: string } | null;
-	const statuses = workflow?.statuses ?? [];
-	const labelOf = (value: string) => statuses.find((status) => status.value === value)?.label ?? value;
+	const statuses = statusesOf(task.workflow);
+	/** 本页所有「状态 value → 展示名」都走它,不再各写一遍闭包 */
+	const statusLabel = (value: string) => statusLabelOf(statuses, value);
 
 	/** 被驳回过的审批边(`from->to`)—— 流程脊在箭头上挂小红章,"这一步被批回过"一眼可见 */
 	const rejectedEdges = new Set(
@@ -307,19 +291,16 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	);
 
 	/**
-	 * 「发起审批」的候选状态 —— **由服务端算好**(`permissions.actionTargets`,只含模板里当前状态出发、
-	 * 且我有权发起的 `via=action` 边)。前端不自己解释 `who` / `edges`(见 doc/task-close.md「按钮级授权」)。
+	 * 「发起审批」的目标状态 —— **由服务端算好**(`permissions.actionTargets`,只含模板里当前状态出发、
+	 * 且我有权发起的 `via=action` 边)。前端不自己解释 `who` / `edges`;取第一条。
 	 */
-	const actionTargetOptions = permissions.actionTargets.map((value) => ({
-		value,
-		label: statusLabelOf(statuses, value),
-	}));
+	const actionTargetOptions = permissions.actionTargets.map((value) => ({ value, label: statusLabel(value) }));
 
 	/**
-	 * 「改状态」弹窗的候选由 `permissions.transitions` 提供
-	 * (模板里他能直改的那几条 `direct` 边)。多个就让人在弹窗里选。
+	 * 「改状态」的候选由 `permissions.transitions` 提供(模板里他能直改的那几条 `direct` 边)。
+	 * 按钮先取第一条预填,弹窗里仍可改选。
 	 */
-	const statusOptions = permissions.transitions.map((value) => ({ value, label: statusLabelOf(statuses, value) }));
+	const statusOptions = permissions.transitions.map((value) => ({ value, label: statusLabel(value) }));
 
 	/**
 	 * 状态类按钮的候选 —— **全部由服务端 permissions 派生**,前端不自己解释 who / edges:
@@ -332,8 +313,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const canApprove = !permissions.locked && actionTargetOptions.length > 0;
 	const canSetStatus = !permissions.locked && statusOptions.length > 0;
 	/** 更多▾ 里有没有内容(转交 / 发起审批在场时降级的改状态 / 编辑 / 删除) */
-	const hasMoreActions =
-		permissions.canTransfer || (canSetStatus && canApprove) || permissions.canManage || permissions.canRemove;
+	const hasMoreActions = permissions.canTransfer || (canSetStatus && canApprove) || permissions.canManage;
 
 	/**
 	 * 走过的状态 + 首次到达时刻 —— 读活动日志里 `toStatus` 非空的行(与流程条同源)。
@@ -345,19 +325,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	}
 
 	/** 「轮到你了」的待办 —— 指给我的、还没结的动作;`toStatus` 为空 = 征询(不摊通过 / 驳回) */
-	const todoItems: TodoItem[] = myPendingActions.map((row) => {
-		const root = detailQuery.data.actions.find((item) => item.id === row.rootActionId);
-		return {
-			id: row.id,
-			title:
-				row.isLocking && root?.toStatus
-					? `${row.creatorName ?? PLACEHOLDER_EMPTY} 发起 ${statusLabelOf(statuses, root.fromStatus ?? "")} → ${statusLabelOf(statuses, root.toStatus)}`
-					: `${row.creatorName ?? PLACEHOLDER_EMPTY} 发起征询`,
-			stateLabel: row.status === "active" ? "待答复" : "已发起",
-			actionable: row.status === "active",
-			consult: !row.isLocking,
-		};
-	});
+	const todoItems = todoItemsOf(myPendingActions, detailQuery.data.actions, statuses);
 
 	/**
 	 * 头部那颗 ⓘ 的文案 —— 把「当前身份 + 事项流程给这个身份的边」摊开,让用户自己核对按钮为什么是这几个。
@@ -366,7 +334,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const roleLabel = ROLE_LABEL[myRole ?? ""] ?? "旁观";
 	const roleWhy = ROLE_WHY[myRole ?? ""] ?? ROLE_WHY.viewer;
 	const tipLines = [
-		`状态:${statusLabelOf(statuses, task.status)}`,
+		`状态:${statusLabel(task.status)}`,
 		`发起审批:${actionTargetOptions.length > 0 ? `→ ${actionTargetOptions.map((option) => option.label).join(" / ")}` : "无"}`,
 		`直接更改状态:${statusOptions.length > 0 ? `→ ${statusOptions.map((option) => option.label).join(" / ")}` : "无"}`,
 		...(permissions.locked ? ["任务被审批动作锁住,状态类按钮暂不可用"] : []),
@@ -376,29 +344,27 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	 * 答复人 / 转交候选人 = **任务内的人**:创建人 + 参与者 + 执行人(右侧标出角色)。
 	 * 不能选自己 —— 管理员除外(管理员本来就什么都能做)。父任务要找人,先自己加参与者。
 	 */
-	const peopleOptions = (() => {
-		const list = [
-			{ value: task.creatorId, label: task.creatorName ?? "创建人", hint: "创建人" },
-			...members.map((row) => ({ value: row.userId, label: row.name ?? row.userId, hint: roleText(row.role) })),
-		];
-		const seen = new Set<string>();
-		return list.filter((option) => {
-			if (option.value === meId && !permissions.isAdmin) return false;
-			if (seen.has(option.value)) return false;
-			seen.add(option.value);
-			return true;
-		});
-	})();
+	const peopleOptions = peopleOptionsOf({
+		creatorId: task.creatorId,
+		creatorName: task.creatorName,
+		executorId: task.executorId,
+		executorName: task.executorName,
+		members,
+		meId,
+		isAdmin: permissions.isAdmin,
+	});
 	/** 转交目标只能是**成员**(创建者不在 `tc_member` 里,服务端会拒) */
 	const transferOptions = peopleOptions.filter((option) => option.value !== task.creatorId);
 
+	/**
+	 * 编辑态回填 —— **只取这条任务自己的内容**,不把父子并集克隆进表单(存回去会写坏别人的数据)。
+	 */
 	const editing: TaskFormEditing = {
 		id: task.id,
 		name: task.name,
 		description: task.description,
 		dueAt: task.dueAt,
 		priority: task.priority,
-		// 编辑弹窗只带**本任务自己的**内容 —— 页面上的并集是展示用的,存回去会把别人的内容克隆一份
 		links: own.links,
 		attachments: own.attachments,
 		reminderConfig: task.reminderConfig,
@@ -408,33 +374,24 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	 * 审批 / 征询的先后顺序说明 —— 审批挂在「目标状态」下面(先看清路径),征询挂在「交给谁」下面。
 	 * 文案走人话:谁先谁后、最后落在哪。
 	 */
+	const order = orderHintOf(actionMode, actionAssignees, peopleOptions, actionTargetOptions[0]?.label);
 	const orderHint =
-		actionAssignees.length === 0 ? (
-			<p className="text-xs text-muted-foreground">
-				{actionMode === "approve" ? "选好审批人后,这里会显示他们审批的先后顺序。" : "选好后,这里会显示征询的先后顺序。"}
-			</p>
+		order.names.length === 0 ? (
+			<p className="text-xs text-muted-foreground">{order.text}</p>
 		) : (
 			<div className="grid gap-1">
 				<ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-					{actionAssignees.map((id, index) => (
-						<li key={id} className="inline-flex items-center gap-1">
+					{order.names.map((name, index) => (
+						<li key={actionAssignees[index]} className="inline-flex items-center gap-1">
 							<span className="inline-flex size-4 items-center justify-center rounded-full bg-muted font-medium text-foreground tabular-nums">
 								{index + 1}
 							</span>
-							<span className="text-foreground">
-								{peopleOptions.find((person) => person.value === id)?.label ?? id}
-							</span>
-							{index < actionAssignees.length - 1 ? <span aria-hidden>→</span> : null}
+							<span className="text-foreground">{name}</span>
+							{index < order.names.length - 1 ? <span aria-hidden>→</span> : null}
 						</li>
 					))}
 				</ol>
-				<p className="text-xs text-muted-foreground">
-					{actionMode === "approve"
-						? actionAssignees.length > 1
-							? `这 ${actionAssignees.length} 位会依次审批,全部通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;任一人驳回就退回当前状态。`
-							: `通过后进入「${actionTargetOptions[0]?.label ?? "目标状态"}」;驳回则退回当前状态。`
-						: `${actionAssignees.length} 位会依次收到征询,先选的人先收到。`}
-				</p>
+				<p className="text-xs text-muted-foreground">{order.text}</p>
 			</div>
 		);
 
@@ -453,7 +410,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				hasMoreActions={hasMoreActions}
 				canTransfer={permissions.canTransfer}
 				canManage={permissions.canManage}
-				canRemove={permissions.canRemove}
 				showRefresh={myRole !== null}
 				refreshing={detailQuery.isFetching}
 				onApprove={() => {
@@ -464,19 +420,13 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					setActionAssignees([]);
 					setActionMode("consult");
 				}}
-				onSetStatus={(value) => {
-					setStatusTo(value);
-					setStatusOpen(true);
-				}}
-				onTransfer={() => {
-					setTransferTo("");
-					setTransferOpen(true);
-				}}
+				onSetStatus={(value) => setStatusTo(value)}
+				onTransfer={() => setTransferTo("")}
 				onEdit={() => {
 					editPayloadBaseline.current = (task.payload as TaskPayload | null) ?? null;
-					setEditOpen(true);
+					setDialog("edit");
 				}}
-				onRemove={() => setRemoveOpen(true)}
+				onRemove={() => setDialog("remove")}
 				onRefresh={() => {
 					void detailQuery.refetch();
 				}}
@@ -511,14 +461,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 							await viewMutation.mutateAsync({ id });
 							await invalidate();
 						}}
-						onApprove={(id) => {
-							setApproveReason("");
-							setApproveId(id);
-						}}
-						onReject={(id) => {
-							setRejectReason("");
-							setRejectId(id);
-						}}
+						onApprove={(id) => setRespond({ approved: true, id, reason: "" })}
+						onReject={(id) => setRespond({ approved: false, id, reason: "" })}
 						onReply={(id, content, attachments, mentionIds) =>
 							replyMutation.mutate({ id, content, attachments, mentionIds })
 						}
@@ -533,16 +477,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					{/* 子任务(fan-out 出来的):点卡片进那条子任务自己的详情 */}
 					{children.length > 0 ? (
 						<section className="grid gap-3">
-							<header className="border-b border-border pb-2">
-								<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-									子任务
-									<span className="text-xs font-medium tabular-nums text-muted-foreground">{children.length}</span>
-								</h2>
-							</header>
+							<BlockHeader title="子任务" count={children.length} />
 							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 								{children.map((child) => (
 									<TaskCardLink key={child.id} task={child} className="block h-48">
-										<TaskCard task={child} statusLabel={labelOf} />
+										<TaskCard task={child} statusLabel={statusLabel} />
 									</TaskCardLink>
 								))}
 							</div>
@@ -551,51 +490,40 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
 					{/* 任务链接 */}
 					<section className="grid gap-3">
-						<header className="flex items-center justify-between border-b border-dashed border-border pb-2">
-							<h2 className="shrink-0 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-								任务链接
-							</h2>
-						</header>
+						<BlockHeader title="任务链接" dashed />
 						<TaskLinkBlocks links={links} />
 					</section>
 
-					{permissions.canAddMember && (
-						<TaskReport taskId={task.id} canManage={permissions.canManage && !task.parentId && children.length === 0} />
-					)}
+					{permissions.isParticipant && <TaskReport taskId={task.id} />}
 
 					{/* 附件 block */}
 					<section className="grid gap-3 pt-6">
-						<header className="flex items-center justify-between border-b border-border pb-2">
-							<h2 className="inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap text-base font-semibold tracking-tight text-foreground">
-								附件{" "}
-								<span className="text-xs font-medium tabular-nums text-muted-foreground">{attachments.length}</span>
-							</h2>
-							{/* 新增附件:任务相关方都能加(执行人 / 参与者 / 创建人),旁观者不显示 */}
-							{myRole !== null ? (
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => {
-										attachmentBaseline.current = own.attachmentIds;
-										setDraftAttachments(own.attachments);
-										setAttachOpen(true);
-									}}
-								>
-									<Paperclip className="size-3.5" aria-hidden />
-									新增附件
-								</Button>
-							) : null}
-						</header>
-						<TaskAttachmentList attachments={attachments} onOpen={setPreviewAttachment} />
+						<BlockHeader
+							title="附件"
+							count={attachments.length}
+							actions={
+								myRole !== null ? (
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											attachmentBaseline.current = own.attachmentIds;
+											setDraftAttachments(own.attachments);
+											setDialog("attach");
+										}}
+									>
+										<Paperclip className="size-3.5" aria-hidden />
+										新增附件
+									</Button>
+								) : null
+							}
+						/>
+						<TaskAttachmentList attachments={attachments} onOpen={preview.preview} />
 					</section>
 
 					{/* 评论与回复 block —— TaskComments 自带输入 + 嵌套 thread */}
 					<section className="grid gap-3 pt-6">
-						<header className="flex items-center justify-between border-b border-border pb-2">
-							<h2 id="tc-comments-title" className="text-base font-semibold tracking-tight text-foreground">
-								评论与回复
-							</h2>
-						</header>
+						<BlockHeader title="评论与回复" id="tc-comments-title" />
 						{/* 删评论:只有作者本人;`canRemoveAny` 只给管理员(创建者也不能删别人的) */}
 						<TaskComments
 							taskId={task.id}
@@ -617,14 +545,15 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						<TaskMembers
 							creatorId={task.creatorId}
 							creatorName={task.creatorName ?? null}
+							executorId={task.executorId}
+							executorName={task.executorName ?? null}
 							members={members}
-							canAddMember={permissions.canAddMember}
+							canAddMember={permissions.isParticipant}
 							canManage={permissions.canManage}
 							removing={memberRemoveMutation.isPending}
-							onAdd={() => setMemberOpen(true)}
-							onRemove={setPendingRemoveMember}
+							onAdd={() => setDialog("member")}
+							onRemove={removeMember.ask}
 							onRemind={myRole !== null ? setReminderRecipient : undefined}
-							roleText={roleText}
 						/>
 
 						{myRole !== null && (
@@ -635,21 +564,19 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 							/>
 						)}
 
-						<TaskUrge
+						{/* 动作记录:只列还活着、且我能撤回的 —— 判据与服务端 `isActionCreatorOrAdmin` 同口径 */}
+						<TaskActionList
 							actions={detailQuery.data.actions.filter(
-								(action) =>
-									(action.status === "active" || action.lastUrgedAt !== null) &&
-									(meId === task.creatorId || meId === action.creatorId || permissions.isAdmin),
+								(action) => action.status === "active" && (permissions.canManage || meId === action.creatorId),
 							)}
 						/>
 
 						{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
-						<section className="grid gap-2 border-t border-border p-3.5">
-							<h2 className="text-base font-semibold tracking-tight text-foreground">动态</h2>
+						<InspectorSection>
+							<BlockHeader title="动态" />
 							<TaskLogList
 								items={logQuery.data?.items ?? []}
 								statuses={statuses}
-								roleLabel={roleText}
 								loading={logQuery.isPending}
 								error={logQuery.isError ? logQuery.error : undefined}
 								onRetry={() => logQuery.refetch()}
@@ -660,19 +587,20 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 								total={logQuery.data?.total ?? 0}
 								onPageChange={setLogPage}
 							/>
-						</section>
+						</InspectorSection>
 					</div>
 				</aside>
 			</main>
 
 			<TaskForm
-				open={editOpen}
-				onOpenChange={setEditOpen}
+				open={dialog === "edit"}
+				onOpenChange={(next) => {
+					if (!next) setDialog(null);
+				}}
 				pending={updateMutation.isPending}
 				editing={editing}
-				workflowOptions={[]}
 				userOptions={userOptions}
-				onSubmit={(payload: TaskFormPayload) =>
+				onEdit={(payload) =>
 					updateMutation.mutate({
 						id: task.id,
 						name: payload.name,
@@ -687,8 +615,10 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 			/>
 
 			<ConfirmDialog
-				open={removeOpen}
-				onOpenChange={setRemoveOpen}
+				open={dialog === "remove"}
+				onOpenChange={(next) => {
+					if (!next) setDialog(null);
+				}}
 				title="删除任务"
 				description={`「${task.name}」会被软删,动作与评论一并不可见。`}
 				isPending={removeMutation.isPending}
@@ -696,206 +626,93 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 			/>
 
 			{/* 移出成员 —— 破坏性操作,先确认 */}
-			<ConfirmDialog
-				open={pendingRemoveMember !== null}
-				onOpenChange={(next) => {
-					if (!next) setPendingRemoveMember(null);
-				}}
+			<removeMember.Dialog
 				title="移出成员"
-				description={`把「${pendingRemoveMember?.name ?? PLACEHOLDER_EMPTY}」从这条任务移出?TA 将失去推进 / 答复的权限(已发的评论与历史保留)。`}
+				description={(t) =>
+					`把「${t.name || PLACEHOLDER_EMPTY}」从这条任务移出?TA 将失去推进 / 答复的权限(已发的评论与历史保留)。`
+				}
 				isPending={memberRemoveMutation.isPending}
 				confirmText="移出"
 				pendingText="移出中…"
+				onConfirm={(t) =>
+					memberRemoveMutation.mutate({ taskId: task.id, userId: t.userId }, { onSuccess: removeMember.dismiss })
+				}
+			/>
+
+			<TaskStatusDialog
+				open={statusTo !== null}
+				onOpenChange={(next) => {
+					if (!next) setStatusTo(null);
+				}}
+				pending={transitMutation.isPending}
+				value={statusTo ?? ""}
+				onValueChange={setStatusTo}
+				options={statusOptions}
 				onConfirm={() => {
-					if (!pendingRemoveMember) return;
-					memberRemoveMutation.mutate(
-						{ taskId: task.id, userId: pendingRemoveMember.userId, role: pendingRemoveMember.role },
-						{ onSuccess: () => setPendingRemoveMember(null) },
-					);
+					if (statusTo) transitMutation.mutate({ id: task.id, to: statusTo });
 				}}
 			/>
 
-			{/* 改状态 —— 按模板允许的转移执行 */}
-			<TaskActionDialog
-				open={statusOpen}
-				onOpenChange={setStatusOpen}
-				title="更改状态"
-				description="按流程模板允许的直接转移边修改状态。"
-				pending={transitMutation.isPending}
-				confirmDisabled={!statusTo}
-				confirmText="保存"
-				pendingText="保存中…"
-				onConfirm={() => transitMutation.mutate({ id: task.id, to: statusTo })}
-			>
-				<DetailRow label="目标状态" align="center">
-					<Select
-						items={statusOptions}
-						value={statusTo}
-						onValueChange={(next) => setStatusTo(next ? String(next) : "")}
-					>
-						<SelectTrigger className="w-full" aria-label="目标状态">
-							<SelectValue placeholder="选一个状态" />
-						</SelectTrigger>
-						<SelectContent>
-							{statusOptions.map((item) => (
-								<SelectItem key={item.value} value={item.value}>
-									{item.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</DetailRow>
-			</TaskActionDialog>
-
 			{/* 转交执行人 —— 选一位成员,原执行人自动降为参与者 */}
-			<TaskActionDialog
-				open={transferOpen}
-				onOpenChange={setTransferOpen}
-				title="转交执行人"
-				description="把执行人身份交给同为成员的另一个人;原执行人会改为参与者。"
-				pending={transferMutation.isPending}
-				confirmDisabled={!transferTo}
-				confirmText="转交"
-				pendingText="转交中…"
-				onConfirm={() => transferMutation.mutate({ taskId: task.id, userId: transferTo })}
-			>
-				<DetailRow label="交给谁" align="center">
-					<SearchSelect
-						aria-label="交给谁"
-						value={transferTo}
-						onValueChange={setTransferTo}
-						options={transferOptions}
-						placeholder="从成员里选一个"
-					/>
-				</DetailRow>
-			</TaskActionDialog>
-
-			{/* 发起审批 / 发起征询 —— 同一个弹窗:审批多一步选目标状态 */}
-			<TaskActionDialog
-				open={actionMode !== null}
+			<TaskTransferDialog
+				open={transferTo !== null}
 				onOpenChange={(next) => {
-					if (!next) setActionMode(null);
+					if (!next) setTransferTo(null);
 				}}
-				title={actionMode === "approve" ? "发起审批" : "发起征询"}
-				description={
-					actionMode === "approve"
-						? "发出后任务会锁定:期间不能改状态,也不能再发起别的动作。"
-						: "征询不改状态、也不锁任务,只是请对方给个意见。"
-				}
+				pending={transferMutation.isPending}
+				value={transferTo ?? ""}
+				onValueChange={setTransferTo}
+				options={transferOptions}
+				onConfirm={() => {
+					if (transferTo) transferMutation.mutate({ taskId: task.id, userId: transferTo });
+				}}
+			/>
+
+			<TaskInitiateDialog
+				mode={actionMode}
+				onClose={() => setActionMode(null)}
 				pending={actionMutation.isPending}
-				confirmDisabled={actionAssignees.length === 0}
-				confirmText="发起"
-				pendingText="发起中…"
+				assignees={actionAssignees}
+				onAssigneesChange={setActionAssignees}
+				consultMode={consultMode}
+				onConsultModeChange={setConsultMode}
+				targetOptions={actionTargetOptions}
+				peopleOptions={peopleOptions}
+				orderHint={orderHint}
 				onConfirm={() =>
 					actionMutation.mutate({
 						taskId: task.id,
-						// 审批的目标状态由流程自动判定(当前状态出发的审批边,取模板顺序第一条),不让人选
 						toStatus: actionMode === "approve" ? (actionTargetOptions[0]?.value ?? null) : null,
 						assigneeId: actionAssignees[0] ?? "",
 						nextAssigneeIds: actionAssignees.slice(1),
 						flowMode: actionMode === "consult" ? consultMode : "serial",
 					})
 				}
-			>
-				{actionMode === "approve" ? (
-					<DetailRow label="目标状态" align="center">
-						<div className="grid gap-1.5">
-							<span className="text-sm text-foreground">
-								{actionTargetOptions[0]
-									? `全部通过后,任务会进入「${actionTargetOptions[0].label}」`
-									: "当前状态没有可发起的审批"}
-							</span>
-							{/* 审批顺序放在目标状态下面:先看清"这一趟要经过谁、最后到哪儿" */}
-							{orderHint}
-						</div>
-					</DetailRow>
-				) : null}
-				<DetailRow label="交给谁" align="center">
-					<div className="grid gap-1.5">
-						<MultiSelect
-							options={peopleOptions}
-							value={actionAssignees}
-							onChange={setActionAssignees}
-							placeholder="搜索成员…"
-							emptyText="没有可选的人 —— 先到「参与人」里加成员"
-							minHeight={132}
-							maxHeight={160}
-						/>
-						<p className="text-xs text-muted-foreground">
-							{actionMode === "approve"
-								? "点选的人会按先后排成一串;选谁、谁先谁后都由你定。"
-								: "点选的人会按先后排成一串,先选的人先收到征询。"}
-						</p>
-						{actionMode === "consult" ? orderHint : null}
-					</div>
-				</DetailRow>
-				{actionMode === "consult" && actionAssignees.length > 1 ? (
-					<DetailRow label="处理方式" align="center">
-						<div className="grid gap-1">
-							<Select
-								items={[
-									{ value: "serial", label: "逐级" },
-									{ value: "parallel", label: "并行" },
-								]}
-								value={consultMode}
-								onValueChange={(next) => setConsultMode(next === "parallel" ? "parallel" : "serial")}
-							>
-								<SelectTrigger className="w-full" aria-label="处理方式">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="serial">逐级</SelectItem>
-									<SelectItem value="parallel">并行</SelectItem>
-								</SelectContent>
-							</Select>
-							<p className="text-xs text-muted-foreground">
-								逐级:按顺序逐位处理,前一位回复后才轮到下一位;并行:同时送出,一位回复即结束。
-							</p>
-						</div>
-					</DetailRow>
-				) : null}
-			</TaskActionDialog>
+			/>
 
-			<TaskActionDialog
-				open={memberOpen}
+			<TaskMemberDialog
+				open={dialog === "member"}
 				onOpenChange={(next) => {
-					setMemberOpen(next);
+					setDialog(next ? "member" : null);
 					if (!next) setNewMemberIds([]);
 				}}
-				title="加入成员"
-				description="多选,按参与者加入;换执行人请用「转交执行人」。"
 				pending={memberAddMutation.isPending}
-				confirmDisabled={newMemberIds.length === 0}
-				confirmText={newMemberIds.length > 1 ? `加入 ${newMemberIds.length} 人` : "加入"}
-				pendingText="加入中…"
+				value={newMemberIds}
+				onChange={setNewMemberIds}
+				options={userOptions.filter(
+					(person) => person.value !== task.creatorId && !members.some((member) => member.userId === person.value),
+				)}
 				onConfirm={() => void addMembers()}
-			>
-				<DetailRow label="人员" align="center">
-					<MultiSelect
-						options={userOptions.filter(
-							// 只排除任务创建人(他不在成员表里);**自己可以被加进来** —— 管理员常要把自己也拉进去
-							(person) => person.value !== task.creatorId && !members.some((member) => member.userId === person.value),
-						)}
-						value={newMemberIds}
-						onChange={setNewMemberIds}
-						placeholder="搜索姓名…"
-						emptyText="没有可加入的人"
-						minHeight={160}
-						maxHeight={200}
-					/>
-				</DetailRow>
-			</TaskActionDialog>
+			/>
 
-			<TaskActionDialog
-				open={attachOpen}
-				onOpenChange={setAttachOpen}
-				title="附件"
-				description="选完即传;保存后随整棵树可见(父子任务都能看到)。"
+			<TaskAttachDialog
+				open={dialog === "attach"}
+				onOpenChange={(next) => {
+					if (!next) setDialog(null);
+				}}
 				pending={attachMutation.isPending}
-				confirmDisabled={false}
-				confirmText="保存"
-				pendingText="保存中…"
-				bodyClassName=""
+				value={draftAttachments}
+				onChange={setDraftAttachments}
 				onConfirm={() =>
 					attachMutation.mutate({
 						id: task.id,
@@ -903,132 +720,24 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						expectedAttachments: attachmentBaseline.current,
 					})
 				}
-			>
-				<TaskAttachmentPicker
-					value={draftAttachments}
-					onChange={setDraftAttachments}
-					disabled={attachMutation.isPending}
-				/>
-			</TaskActionDialog>
+			/>
 
-			{/* 驳回 —— 必须写原因;原因会以一条评论留档(服务端同一口径) */}
-			<TaskActionDialog
-				open={approveId !== null}
-				onOpenChange={(next) => {
-					if (!next) setApproveId(null);
-				}}
-				title="通过"
-				description="通过后按流程推进;意见可写可不写,写了会作为一条评论留档。"
+			<TaskRespondDialog
+				approved={respond?.approved ?? true}
+				open={respond !== null}
+				onClose={() => setRespond(null)}
 				pending={respondMutation.isPending}
-				confirmDisabled={false}
-				confirmText="通过"
-				pendingText="通过中…"
-				onConfirm={() =>
-					approveId &&
+				reason={respond?.reason ?? ""}
+				onReasonChange={(reason) => setRespond((prev) => (prev ? { ...prev, reason } : prev))}
+				onConfirm={() => {
+					if (!respond) return;
 					respondMutation.mutate(
-						{ id: approveId, approved: true, reason: approveReason.trim() || null },
-						{ onSuccess: () => setApproveId(null) },
-					)
-				}
-			>
-				<DetailRow label="常见原因" align="center">
-					<div className="flex flex-wrap gap-1.5">
-						{APPROVE_PRESETS.map((reason) => (
-							<Button key={reason} type="button" variant="outline" size="sm" onClick={() => setApproveReason(reason)}>
-								{reason}
-							</Button>
-						))}
-					</div>
-				</DetailRow>
-				<DetailRow label="意见" align="center">
-					<Textarea
-						rows={3}
-						value={approveReason}
-						placeholder="可写一句通过意见,留空也行…"
-						onChange={(event) => setApproveReason(event.target.value)}
-					/>
-				</DetailRow>
-			</TaskActionDialog>
-
-			<TaskActionDialog
-				open={rejectId !== null}
-				onOpenChange={(next) => {
-					if (!next) setRejectId(null);
-				}}
-				title="驳回"
-				description="驳回要填写原因,会作为一条评论留档,和相关人一起看。"
-				pending={respondMutation.isPending}
-				confirmDisabled={rejectReason.trim().length === 0}
-				confirmText="驳回"
-				pendingText="驳回中…"
-				onConfirm={() =>
-					rejectId && respondMutation.mutate({ id: rejectId, approved: false, reason: rejectReason.trim() })
-				}
-			>
-				<DetailRow label="常见原因" align="center">
-					<div className="flex flex-wrap gap-1.5">
-						{REJECT_PRESETS.map((reason) => (
-							<Button
-								key={reason}
-								type="button"
-								variant="outline"
-								size="sm"
-								// 点一下就**替换**输入框内容(单选式的快捷填写),不拼接
-								onClick={() => setRejectReason(reason)}
-							>
-								{reason}
-							</Button>
-						))}
-					</div>
-				</DetailRow>
-				<DetailRow label="原因" align="center">
-					<Textarea
-						rows={3}
-						value={rejectReason}
-						placeholder="说明为什么驳回…"
-						onChange={(event) => setRejectReason(event.target.value)}
-					/>
-				</DetailRow>
-			</TaskActionDialog>
-
-			<TaskAttachmentPreview
-				taskId={task.id}
-				attachment={previewAttachment}
-				open={previewAttachment !== null}
-				onOpenChange={(next) => {
-					if (!next) setPreviewAttachment(null);
+						{ id: respond.id, approved: respond.approved, reason: respond.reason.trim() || null },
+						{ onSuccess: () => setRespond(null) },
+					);
 				}}
 			/>
+			{preview.dialog}
 		</div>
 	);
-}
-
-function roleText(role: string): string {
-	return ({ creator: "创建者", participant: "参与者", executor: "执行者" } as Record<string, string>)[role] ?? role;
-}
-
-/**
- * 「这条任务不存在」的识别 —— 服务端 `taskGet` 查不到活着的记录时抛 tRPC `NOT_FOUND`(`task/common.ts` 的 `getTaskRow`)。
- *
- * 客户端拿到的是 `TRPCClientError`(实测 `@trpc/client` 的构造:`data = shape.data`,两者都挂在错误上),
- * 三种判据都认一遍:`data.code` 是字符串键 `"NOT_FOUND"`、`shape.code` 是数字码 `-32004`、`data.httpStatus` 是 404。
- * 都认不出来就当普通报错走错误页 —— 网络抖动之类不该把人踢回列表。
- */
-/** 权限不足 —— 服务端 FORBIDDEN(不是相关方);同样提示一声回列表,不留错误页 */
-function isTaskForbidden(error: unknown): boolean {
-	const err = error as {
-		data?: { code?: unknown; httpStatus?: unknown };
-		shape?: { code?: unknown; data?: { code?: unknown; httpStatus?: unknown } };
-	} | null;
-	const code = err?.data?.code ?? err?.shape?.data?.code;
-	return code === "FORBIDDEN" || err?.data?.httpStatus === 403;
-}
-
-function isTaskMissing(error: unknown): boolean {
-	const err = error as {
-		data?: { code?: unknown; httpStatus?: unknown };
-		shape?: { code?: unknown; data?: { code?: unknown; httpStatus?: unknown } };
-	} | null;
-	const code = err?.data?.code ?? err?.shape?.data?.code;
-	return code === "NOT_FOUND" || err?.shape?.code === -32004 || err?.data?.httpStatus === 404;
 }

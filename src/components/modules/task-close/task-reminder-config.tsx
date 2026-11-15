@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock } from "lucide-react";
+import { InfoTooltip } from "#/components/modules/task-close/info-tooltip";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
 import { useTRPC } from "#/integrations/trpc/react";
+import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import {
 	CADENCE_LABELS,
 	CHANNEL_LABELS,
@@ -65,7 +66,7 @@ function ChannelPicker({
 /**
  * 提醒日期预览:频率那一行右侧一颗图标,**悬停 / 键盘 focus** 出前 5 次提醒的具体日期。
  *
- * 计算走服务端(`reminderPreview`)—— 节假日数据(2011–2026)不进客户端包,也保证与真正排期同一份代码。
+ * 计算走服务端(`reminderRulePreview`)—— 节假日数据(2011–2026)不进客户端包,也保证与真正排期同一份代码。
  * 提醒关闭 / 没填截止时间时,图标置灰但**照样能悬停**(用 `aria-disabled` 而不是 `disabled`,
  * 否则鼠标事件不触发,用户就看不到"为什么不能预览")。
  */
@@ -73,46 +74,42 @@ function ReminderPreview({ rule, dueAt }: { rule: ExecutorReminderRule; dueAt: s
 	const trpc = useTRPC();
 	const reason = rule.cadence === "off" ? "截止提醒已关闭,先选一个频率。" : dueAt ? null : "先填上截止时间。";
 	const query = useQuery(
-		trpc.taskClose.reminderPreview.queryOptions({ executor: rule, dueAt: dueAt ?? "" }, { enabled: !reason }),
+		trpc.taskClose.reminderRulePreview.queryOptions({ executor: rule, dueAt: dueAt ?? "" }, { enabled: !reason }),
 	);
 	const preview = query.data;
 	return (
-		<TooltipProvider delay={120}>
-			<Tooltip>
-				<TooltipTrigger
-					aria-label="查看提醒日期"
-					aria-disabled={reason ? true : undefined}
-					className="text-muted-foreground transition-colors hover:text-foreground aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground/40 aria-disabled:hover:text-muted-foreground/40"
-				>
-					<CalendarClock className="size-4" />
-				</TooltipTrigger>
-				<TooltipContent side="top" align="end" className="block max-w-[19rem]">
-					{reason ? (
-						<span>{reason}</span>
-					) : (
-						<div className="grid gap-0.5 text-left">
-							{query.isPending ? <span>正在算…</span> : null}
-							{preview && preview.total === 0 ? <span>这个窗口里没有可提醒的工作日。</span> : null}
-							{preview?.times.map((time) => (
-								<span key={time} className="tabular-nums">
-									{formatLocalMinute(time)}
-									<span className="ml-1 text-background/70">{WEEKDAYS[new Date(time).getDay()]}</span>
-								</span>
-							))}
-							{preview && preview.total > preview.times.length ? (
-								<span className="text-background/70">
-									…共 {preview.total} 次,最后一次 {preview.last ? formatLocalMinute(preview.last) : "—"}
-								</span>
-							) : null}
-							{preview?.known === false ? (
-								<span className="text-background/70">该日期已超出内置节假日数据,只按周末判断。</span>
-							) : null}
-							<span className="text-background/70">周末与法定节假日不提醒(调休上班日照常)。</span>
-						</div>
-					)}
-				</TooltipContent>
-			</Tooltip>
-		</TooltipProvider>
+		<InfoTooltip
+			icon={<CalendarClock className="size-4" />}
+			label="查看提醒日期"
+			delay={120}
+			triggerClassName="text-muted-foreground transition-colors hover:text-foreground aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground/40 aria-disabled:hover:text-muted-foreground/40"
+			triggerProps={{ "aria-disabled": reason ? true : undefined }}
+			contentClassName="max-w-[19rem]"
+		>
+			{reason ? (
+				<span>{reason}</span>
+			) : (
+				<div className="grid gap-0.5 text-left">
+					{query.isPending ? <span>正在算…</span> : null}
+					{preview && preview.total === 0 ? <span>这个窗口里没有可提醒的工作日。</span> : null}
+					{preview?.times.map((time) => (
+						<span key={time} className="tabular-nums">
+							{formatLocalMinute(time)}
+							<span className="ml-1 text-background/70">{WEEKDAYS[new Date(time).getDay()]}</span>
+						</span>
+					))}
+					{preview && preview.total > preview.times.length ? (
+						<span className="text-background/70">
+							…共 {preview.total} 次,最后一次 {preview.last ? formatLocalMinute(preview.last) : PLACEHOLDER_EMPTY}
+						</span>
+					) : null}
+					{preview?.known === false ? (
+						<span className="text-background/70">该日期已超出内置节假日数据,只按周末判断。</span>
+					) : null}
+					<span className="text-background/70">周末与法定节假日不提醒(调休上班日照常)。</span>
+				</div>
+			)}
+		</InfoTooltip>
 	);
 }
 

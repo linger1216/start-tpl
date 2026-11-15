@@ -1,59 +1,35 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { GripVertical, X } from "lucide-react";
+import { GripVertical } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import { useEffect, useState } from "react";
-import { ActionIconButton } from "#/components/ui/action-button";
+import { type DraftFieldLike, ReportFieldRow } from "#/components/modules/task-close/report-field-row";
+import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { Button } from "#/components/ui/button";
-import { Checkbox } from "#/components/ui/checkbox";
 import { DetailRow } from "#/components/ui/detail-row";
-import {
-	DIALOG_FIT,
-	Dialog,
-	DialogBody,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Radio, RadioGroup } from "#/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
-import { TagInput } from "#/components/ui/tag-input";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { type TaskReportSchema, taskReportSchema } from "#/lib/task/report-spec";
+import {
+	REPORT_FIELD_TYPES,
+	REPORT_TOP_FIELD_TYPES,
+	type ReportFieldType,
+	type ReportTopFieldType,
+	type TaskReportSchema,
+	taskReportSchema,
+} from "#/lib/task/report-spec";
 import { cn } from "#/lib/utils";
 
-const FIELD_TYPES = [
-	{ value: "text", label: "文本" },
-	{ value: "phone", label: "手机号码" },
-	{ value: "email", label: "邮箱" },
-	{ value: "integer", label: "整数" },
-	{ value: "decimal", label: "小数" },
-	{ value: "date", label: "日期" },
-	{ value: "datetime", label: "日期时间" },
-	{ value: "select", label: "单选" },
-	{ value: "multiselect", label: "多选" },
-	{ value: "attachment", label: "文件附件" },
-	{ value: "array", label: "数组" },
-] as const;
-type FieldType = (typeof FIELD_TYPES)[number]["value"];
+/** 字段类型清单 —— 真源在 `lib/task/report-spec.ts`(值与文案只有一份) */
+const FIELD_TYPES = REPORT_TOP_FIELD_TYPES;
 /** 数组元素里能选的类型:去掉「数组」本身(只允许一层) */
-const ITEM_TYPES = FIELD_TYPES.filter((type) => type.value !== "array");
-type ItemFieldType = Exclude<FieldType, "array">;
-/** 数组元素里的一条字段 */
-type ItemField = {
-	key: string;
-	id: string;
-	idEdited: boolean;
-	label: string;
-	type: ItemFieldType;
-	required: boolean;
-	options: string[];
-};
+const ITEM_TYPES = REPORT_FIELD_TYPES;
+type FieldType = ReportTopFieldType;
+type ItemFieldType = ReportFieldType;
+/** 数组元素里的一条字段 —— 公共形状在 `report-field-row` 的 `DraftFieldLike` */
+type ItemField = DraftFieldLike & { key: string; type: ItemFieldType };
 const newItemField = (): ItemField => ({
 	key: crypto.randomUUID(),
 	id: "",
@@ -63,20 +39,18 @@ const newItemField = (): ItemField => ({
 	required: false,
 	options: [],
 });
-type Field = {
+/**
+ * 顶层字段的编辑态 —— 公共形状(`id` / `idEdited` / `label` / `type` / `required` / `options`)
+ * 在 `DraftFieldLike`;顶层比元素层多三样:允许为空、数组元素字段、发布时的原值。
+ */
+type Field = DraftFieldLike & {
 	key: string;
-	id: string;
-	/** 用户是否手动改过标识 —— 改过就不再随名称自动生成 */
-	idEdited: boolean;
-	label: string;
 	type: FieldType;
-	required: boolean;
 	/** 单选:是否允许填「空」(下拉里多一个「（空）」项) */
 	allowEmpty: boolean;
-	/** 单选 / 多选的候选值(直接喂给 `ui/tag-input` 的 TagInput) */
-	options: string[];
 	/** 数组类型:元素对象的字段(至少 1 个) */
 	itemFields: ItemField[];
+	/** 发布时的原值 —— 提交时原样带回,没改动的字段不丢 */
 	original?: TaskReportSchema["fields"][number];
 };
 const newField = (): Field => ({
@@ -146,7 +120,7 @@ export function TaskReportTemplateForm({
 		}),
 	);
 	const publish = useMutation(
-		trpc.taskClose.reportTemplatePublish.mutationOptions({
+		trpc.taskClose.reportTemplateUpdate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => onOpenChange(false), message: () => "模板已保存" }),
 			onError: toastApiError,
 		}),
@@ -296,281 +270,137 @@ export function TaskReportTemplateForm({
 
 	const pending = create.isPending || publish.isPending;
 	return (
-		<Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
-			<DialogContent className={`${DIALOG_FIT} sm:max-w-2xl`}>
-				<DialogHeader className="shrink-0">
-					<DialogTitle>{templateId ? `编辑填报模板 · ${name || "(未命名)"}` : "新增填报模板"}</DialogTitle>
-					<DialogDescription>
-						{templateId
-							? "保存会更新模板;已绑定的任务保留原有结构。"
-							: "定义任务的填报表单结构;发布后供任务绑定。字段标识随名称自动生成,可手动修改。"}
-					</DialogDescription>
-				</DialogHeader>
-
-				<DialogBody className="space-y-3 py-1">
-					<DetailRow label="模板名称" htmlFor="report-template-name">
-						<Input
-							id="report-template-name"
-							aria-label="模板名称"
-							value={name}
-							className="h-8"
-							onChange={(event) => setName(event.target.value)}
-						/>
-					</DetailRow>
-					<DetailRow label="可见性">
-						<span className="flex items-center gap-2 text-sm text-muted-foreground">
-							<Switch aria-label="所有人可见" checked={shared} onCheckedChange={(next) => setShared(next === true)} />
-							{shared ? "所有人可见" : "仅自己可见"}
-						</span>
-					</DetailRow>
-					<DetailRow label="填报形式">
-						<RadioGroup value={kind} onValueChange={(value) => setKind(value === "TABLE" ? "TABLE" : "OBJECT")}>
-							<Radio value="OBJECT">表单</Radio>
-							<Radio value="TABLE">表格</Radio>
-						</RadioGroup>
-					</DetailRow>
-					<div className="space-y-2">
-						<div className="flex items-center justify-between">
-							<span className="text-sm font-medium">
-								字段
-								<span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">
-									{fields.length} / 100
-								</span>
-							</span>
-							<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
-								添加字段
-							</Button>
+		<TaskActionDialog
+			open={open}
+			onOpenChange={(next) => {
+				if (!pending) onOpenChange(next);
+			}}
+			title={templateId ? `编辑填报模板 · ${name || "(未命名)"}` : "新增填报模板"}
+			description={
+				templateId
+					? "保存会更新模板;已绑定的任务保留原有结构。"
+					: "定义任务的填报表单结构;发布后供任务绑定。字段标识随名称自动生成,可手动修改。"
+			}
+			pending={pending}
+			confirmDisabled={!editableTemplate}
+			confirmText="发布模板"
+			pendingText="发布中…"
+			onConfirm={submit}
+			contentClassName="sm:max-w-2xl"
+			bodyClassName="space-y-3 py-1"
+		>
+			<DetailRow label="模板名称" htmlFor="report-template-name">
+				<Input
+					id="report-template-name"
+					aria-label="模板名称"
+					value={name}
+					className="h-8"
+					onChange={(event) => setName(event.target.value)}
+				/>
+			</DetailRow>
+			<DetailRow label="可见性">
+				<span className="flex items-center gap-2 text-sm text-muted-foreground">
+					<Switch aria-label="所有人可见" checked={shared} onCheckedChange={(next) => setShared(next === true)} />
+					{shared ? "所有人可见" : "仅自己可见"}
+				</span>
+			</DetailRow>
+			<DetailRow label="填报形式">
+				<RadioGroup value={kind} onValueChange={(value) => setKind(value === "TABLE" ? "TABLE" : "OBJECT")}>
+					<Radio value="OBJECT">表单</Radio>
+					<Radio value="TABLE">表格</Radio>
+				</RadioGroup>
+			</DetailRow>
+			<div className="space-y-2">
+				<div className="flex items-center justify-between">
+					<span className="text-sm font-medium">
+						字段
+						<span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">{fields.length} / 100</span>
+					</span>
+					<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
+						添加字段
+					</Button>
+				</div>
+				{fields.map((field, index) => (
+					// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
+					<div
+						key={field.key}
+						draggable
+						onDragStart={() => setDragIndex(index)}
+						onDragEnd={() => {
+							setDragIndex(null);
+							setOverIndex(null);
+						}}
+						onDragOver={(event) => {
+							event.preventDefault();
+							setOverIndex(index);
+						}}
+						onDrop={(event) => {
+							event.preventDefault();
+							if (dragIndex !== null) reorder(dragIndex, index);
+							setDragIndex(null);
+							setOverIndex(null);
+						}}
+						className={cn(
+							"space-y-2 rounded-md border p-2.5",
+							fieldErrors[field.key] ? "border-destructive" : "border-border",
+							dragIndex === index && "opacity-50",
+							overIndex === index && dragIndex !== null && dragIndex !== index
+								? "bg-brand-faint ring-1 ring-primary/40"
+								: "",
+						)}
+					>
+						<div className="flex flex-wrap items-center gap-2">
+							<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
+							<ReportFieldRow
+								prefix="字段"
+								index={index}
+								field={field}
+								typeOptions={FIELD_TYPES}
+								showAllowEmpty
+								deriveId={slugId}
+								onPatch={(patch) => update(field.key, patch as Partial<Field>)}
+								onRemove={() => setFields(fields.filter((item) => item.key !== field.key))}
+								removeDisabled={fields.length === 1}
+							/>
 						</div>
-						{fields.map((field, index) => (
-							// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
-							<div
-								key={field.key}
-								draggable
-								onDragStart={() => setDragIndex(index)}
-								onDragEnd={() => {
-									setDragIndex(null);
-									setOverIndex(null);
-								}}
-								onDragOver={(event) => {
-									event.preventDefault();
-									setOverIndex(index);
-								}}
-								onDrop={(event) => {
-									event.preventDefault();
-									if (dragIndex !== null) reorder(dragIndex, index);
-									setDragIndex(null);
-									setOverIndex(null);
-								}}
-								className={cn(
-									"space-y-2 rounded-md border p-2.5",
-									fieldErrors[field.key] ? "border-destructive" : "border-border",
-									dragIndex === index && "opacity-50",
-									overIndex === index && dragIndex !== null && dragIndex !== index
-										? "bg-brand-faint ring-1 ring-primary/40"
-										: "",
-								)}
-							>
-								<div className="flex flex-wrap items-center gap-2">
-									<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
-									<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-										{index + 1}
-									</span>
-									<Input
-										aria-label={`字段 ${index + 1} 名称`}
-										placeholder="字段名称"
-										value={field.label}
-										className="h-8 min-w-40 flex-1"
-										onChange={(event) => {
-											const label = event.target.value;
-											// 标识没被手动改过就随名称自动生成(pinyin 预填),改过则只更新名称
-											update(field.key, { label, ...(field.idEdited ? {} : { id: slugId(label) }) });
-										}}
-									/>
-									<Input
-										aria-label={`字段 ${index + 1} 标识`}
-										placeholder="自动生成,可修改"
-										value={field.id}
-										className="h-8 w-32 font-mono text-xs"
-										onChange={(event) => update(field.key, { id: event.target.value, idEdited: true })}
-									/>
-									<Select
-										items={FIELD_TYPES}
-										value={field.type}
-										onValueChange={(value) => {
-											const type = (value ?? "text") as FieldType;
-											// 切进「数组」时先给一条空白元素字段;切走就清掉
-											update(field.key, {
-												type,
-												...(type === "array" && field.itemFields.length === 0
-													? { itemFields: [newItemField()] }
-													: type === "array"
-														? {}
-														: { itemFields: [] }),
-											});
-										}}
+						{field.type === "array" && (
+							<div className="space-y-2 rounded-md border border-dashed border-border p-2.5">
+								<div className="flex items-center justify-between gap-2">
+									<span className="text-xs font-medium text-muted-foreground">数组内的字段(至少 1 个;不带数组)</span>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={field.itemFields.length >= 50}
+										onClick={() => addItem(field.key)}
 									>
-										<SelectTrigger aria-label={`字段 ${index + 1} 类型`} size="sm" className="w-28">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											{FIELD_TYPES.map((type) => (
-												<SelectItem key={type.value} value={type.value}>
-													{type.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-									<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-										<Checkbox
-											aria-label={`字段 ${index + 1} 必填`}
-											checked={field.required}
-											onCheckedChange={(required) => update(field.key, { required, allowEmpty: false })}
-										/>
-										必填
-									</span>
-									{field.type === "select" && (
-										<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												aria-label={`字段 ${index + 1} 允许为空`}
-												checked={field.allowEmpty}
-												onCheckedChange={(allowEmpty) => update(field.key, { allowEmpty, required: false })}
-											/>
-											允许为空
-										</span>
-									)}
-									<ActionIconButton
-										label={`删除字段 ${index + 1}`}
-										tone="danger"
-										disabled={fields.length === 1}
-										onClick={() => setFields(fields.filter((item) => item.key !== field.key))}
-									>
-										<X className="size-3.5" />
-									</ActionIconButton>
+										添加元素字段
+									</Button>
 								</div>
-								{(field.type === "select" || field.type === "multiselect") && (
-									<TagInput
-										value={field.options.map((value) => ({ value }))}
-										onChange={(next) => update(field.key, { options: next.map((entry) => entry.value) })}
-										max={100}
-										placeholder="选项,逗号分隔或逐条回车添加(至少 1 项,不能重复)"
-									/>
-								)}
-								{field.type === "array" && (
-									<div className="space-y-2 rounded-md border border-dashed border-border p-2.5">
-										<div className="flex items-center justify-between gap-2">
-											<span className="text-xs font-medium text-muted-foreground">
-												数组内的字段(至少 1 个;不带数组)
-											</span>
-											<Button
-												variant="outline"
-												size="sm"
-												disabled={field.itemFields.length >= 50}
-												onClick={() => addItem(field.key)}
-											>
-												添加元素字段
-											</Button>
-										</div>
-										{field.itemFields.map((item, itemIndex) => (
-											<div key={item.key} className="space-y-2">
-												<div className="flex flex-wrap items-center gap-2">
-													<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-														{itemIndex + 1}
-													</span>
-													<Input
-														aria-label={`元素字段 ${itemIndex + 1} 名称`}
-														placeholder="字段名称"
-														value={item.label}
-														className="h-8 min-w-32 flex-1"
-														onChange={(event) => {
-															const label = event.target.value;
-															updateItem(field.key, item.key, {
-																label,
-																...(item.idEdited ? {} : { id: slugId(label) }),
-															});
-														}}
-													/>
-													<Input
-														aria-label={`元素字段 ${itemIndex + 1} 标识`}
-														placeholder="自动生成"
-														value={item.id}
-														className="h-8 w-28 font-mono text-xs"
-														onChange={(event) =>
-															updateItem(field.key, item.key, { id: event.target.value, idEdited: true })
-														}
-													/>
-													<Select
-														items={ITEM_TYPES}
-														value={item.type}
-														onValueChange={(value) =>
-															updateItem(field.key, item.key, {
-																type: (value ?? "text") as ItemFieldType,
-															})
-														}
-													>
-														<SelectTrigger aria-label={`元素字段 ${itemIndex + 1} 类型`} size="sm" className="w-28">
-															<SelectValue />
-														</SelectTrigger>
-														<SelectContent>
-															{ITEM_TYPES.map((type) => (
-																<SelectItem key={type.value} value={type.value}>
-																	{type.label}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-													<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-														<Checkbox
-															aria-label={`元素字段 ${itemIndex + 1} 必填`}
-															checked={item.required}
-															onCheckedChange={(required) =>
-																updateItem(field.key, item.key, { required: required === true })
-															}
-														/>
-														必填
-													</span>
-													<ActionIconButton
-														label={`删除元素字段 ${itemIndex + 1}`}
-														tone="danger"
-														disabled={field.itemFields.length === 1}
-														onClick={() => removeItem(field.key, item.key)}
-													>
-														<X className="size-3.5" />
-													</ActionIconButton>
-												</div>
-												{(item.type === "select" || item.type === "multiselect") && (
-													<TagInput
-														value={item.options.map((value) => ({ value }))}
-														onChange={(next) =>
-															updateItem(field.key, item.key, { options: next.map((entry) => entry.value) })
-														}
-														max={100}
-														placeholder="选项,逗号分隔或逐条回车添加"
-													/>
-												)}
-											</div>
-										))}
+								{field.itemFields.map((item, itemIndex) => (
+									<div key={item.key} className="flex flex-wrap items-center gap-2">
+										<ReportFieldRow
+											prefix="元素字段"
+											index={itemIndex}
+											field={item}
+											typeOptions={ITEM_TYPES}
+											deriveId={slugId}
+											onPatch={(patch) => updateItem(field.key, item.key, patch as Partial<ItemField>)}
+											onRemove={() => removeItem(field.key, item.key)}
+											removeDisabled={field.itemFields.length === 1}
+										/>
 									</div>
-								)}
-								{fieldErrors[field.key] ? <p className="text-xs text-destructive">{fieldErrors[field.key]}</p> : null}
+								))}
 							</div>
-						))}
+						)}
+						{fieldErrors[field.key] ? <p className="text-xs text-destructive">{fieldErrors[field.key]}</p> : null}
 					</div>
-					{(!editableTemplate || error) && (
-						<p role="alert" className="text-sm text-destructive">
-							{!editableTemplate ? "模板不可用或无权编辑，请关闭后刷新。" : error}
-						</p>
-					)}
-				</DialogBody>
-
-				<DialogFooter>
-					<Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
-						取消
-					</Button>
-					<Button disabled={pending || !editableTemplate} onClick={submit}>
-						{pending ? "发布中…" : "发布模板"}
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+				))}
+			</div>
+			{(!editableTemplate || error) && (
+				<p role="alert" className="text-sm text-destructive">
+					{!editableTemplate ? "模板不可用或无权编辑，请关闭后刷新。" : error}
+				</p>
+			)}
+		</TaskActionDialog>
 	);
 }

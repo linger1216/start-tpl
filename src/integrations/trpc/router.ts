@@ -46,7 +46,7 @@ export const trpcRouter = createTRPCRouter({
 	dataScope: dataScopeRouter,
 	/** 系统设置 ▸ 数据权限 ▸ 值域插件 —— 读写 `sys_data_plugin`(写接口**只给超管**,见 doc/数据权限.md) */
 	dataPlugin: dataPluginRouter,
-	/** 任务闭环 —— 读写 `tc_*`(授权由 `who` 协议在 resolver 内判定,不走 RBAC 权限点,见 doc/task-close.md) */
+	/** 任务闭环 —— 读写 `tc_*`(授权由 `who` 协议在 resolver 内判定,不走 RBAC 权限点) */
 	taskClose: taskCloseRouter,
 });
 export type TRPCRouter = typeof trpcRouter;

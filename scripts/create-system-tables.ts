@@ -343,7 +343,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
 	{
 		name: "sys_notification",
 		ddl: `create table if not exists \`sys_notification\` (
-    \`id\` varchar(32) not null primary key, \`type\` varchar(64) not null, \`source_type\` varchar(64), \`source_id\` varchar(191), \`title\` varchar(128) not null, \`content\` text, \`payload\` text, \`dedupe_key\` varchar(191) not null, \`created_at\` datetime not null,
+    \`id\` varchar(32) not null primary key, \`type\` varchar(64) not null, \`source_type\` varchar(64), \`source_id\` varchar(191), \`title\` varchar(128) not null, \`content\` text, \`path\` varchar(255) default null, \`level\` varchar(16) not null default 'info', \`payload\` text, \`dedupe_key\` varchar(191) not null, \`created_at\` datetime not null,
     unique key \`uk_notification_dedupe\` (\`dedupe_key\`),
     key \`idx_notification_source\` (\`source_type\`, \`source_id\`, \`type\`, \`created_at\`)
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci`,
@@ -471,28 +471,14 @@ const TABLES: Array<{ name: string; ddl: string }> = [
   ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '填报模板(单版本:编辑即覆盖 payload;shared=1 全员可见)'`,
 	},
 	{
-		name: "tc_report_submission",
-		ddl: `create table if not exists \`tc_report_submission\` (
-    \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`report_id\` varchar(32) collate utf8mb4_unicode_ci not null,
-    \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
-    \`submitter_id\` varchar(36) collate utf8mb4_unicode_ci not null,
-    \`revision\` int not null,
-    \`payload\` json default null,
-    \`created_at\` datetime default current_timestamp,
-    primary key (\`id\`),
-    unique key \`uk_report_submission_revision\` (\`report_id\`, \`revision\`),
-    key \`idx_report_submission_task\` (\`task_id\`, \`created_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '子任务表单填报的保存快照(表单没有行可合并,父任务只读这些快照;没保存就看不见)'`,
-	},
-	{
 		name: "tc_task_report",
 		ddl: `create table if not exists \`tc_task_report\` (
     \`id\` varchar(32) not null,
     \`task_id\` varchar(191) not null,
     \`draft\` json default null,
+    \`synced\` json default null,
+    \`synced_at\` datetime default null,
     \`revision\` int not null default 0,
-    \`current_submission_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`created_at\` datetime default current_timestamp,
     \`updated_at\` datetime default current_timestamp,
     primary key (\`id\`),
@@ -518,6 +504,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`description\` text collate utf8mb4_unicode_ci default null,
     \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`creator_id\` varchar(191) collate utf8mb4_unicode_ci not null,
+    \`executor_id\` varchar(191) collate utf8mb4_unicode_ci default null,
     \`due_at\` datetime default null,
     \`priority\` tinyint default null,
     \`payload\` json default null,
@@ -573,7 +560,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`status\` varchar(16) collate utf8mb4_unicode_ci not null,
     \`viewed_at\` datetime default null,
     \`activated_at\` datetime default null,
-    \`last_urged_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
@@ -581,23 +567,22 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_action_assignee_status\` (\`assignee_id\`, \`status\`),
     key \`idx_action_parent\` (\`parent_action_id\`),
     key \`idx_action_unviewed\` (\`status\`, \`viewed_at\`, \`activated_at\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外挂动作(tc_close 模块:审批/征询/监督同一种模式;用法见 doc/task-close.md)'`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '外挂动作(tc_close 模块:审批/征询/监督同一种模式)'`,
 	},
-	// ── tc_close:任务-成员关系(who 协议扩展:participant / executor)
+	// ── tc_close:任务-参与人关系(参与者集合;creator/executor 是 tc_task 的列)
 	{
 		name: "tc_member",
 		ddl: `create table if not exists \`tc_member\` (
     \`id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`task_id\` varchar(191) collate utf8mb4_unicode_ci not null,
     \`user_id\` varchar(36) collate utf8mb4_unicode_ci not null,
-    \`role\` varchar(16) collate utf8mb4_unicode_ci not null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime not null default current_timestamp on update current_timestamp,
     primary key (\`id\`),
-    unique key \`uk_member_unique\` (\`task_id\`, \`user_id\`, \`role\`),
-    key \`idx_member_user_role\` (\`user_id\`, \`role\`),
-    key \`idx_member_task_role\` (\`task_id\`, \`role\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务-成员关系(tc_close 模块:participant/executor 与 tc_task 的多对多;creator 是 tc_task.creator_id 固有属性不入此表;用法见 doc/task-close.md)'`,
+    unique key \`uk_member_unique\` (\`task_id\`, \`user_id\`),
+    key \`idx_member_user\` (\`user_id\`),
+    key \`idx_member_task\` (\`task_id\`)
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务-参与人关系(tc_close 模块:参与者集合,一人一行;creator 是 tc_task.creator_id、executor 是 tc_task.executor_id,都不入此表)'`,
 	},
 	// ── tc_close:任务评论(文字 + 附件;附件复用 sys_file)
 	{
@@ -614,9 +599,9 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     primary key (\`id\`),
     key \`idx_comment_task_created\` (\`task_id\`, \`created_at\`),
     key \`idx_comment_author\` (\`author_id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务评论(tc_close 模块:content 文字 + attachments JSON 存 sys_file.id 数组;谁可发起谁可写在 doc/task-close.md)'`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务评论(tc_close 模块:content 文字 + attachments JSON 存 sys_file.id 数组)'`,
 	},
-	// ── tc_close:活动日志(只增不改;在**业务同一个事务**里写,见 doc/task-close.md)
+	// ── tc_close:活动日志(只增不改;在**业务同一个事务**里写)
 	{
 		name: "tc_log",
 		ddl: `create table if not exists \`tc_log\` (
@@ -696,7 +681,6 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{ table: "sys_scheduled_job", column: "cron_expression", ddl: "varchar(128) default null" },
 	{ table: "sys_scheduled_job", column: "timezone", ddl: "varchar(64) not null default 'UTC'" },
 	{ table: "sys_user", column: "phone", ddl: "varchar(32) default null" },
-	{ table: "tc_action", column: "last_urged_at", ddl: "datetime default null" },
 	{ table: "sys_scheduled_job", column: "timeout_seconds", ddl: "int not null default 60" },
 	{ table: "sys_scheduled_job", column: "max_attempts", ddl: "int not null default 3" },
 	{ table: "sys_scheduled_job", column: "retry_delay_seconds", ddl: "int not null default 30" },
@@ -704,6 +688,8 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{ table: "tc_action", column: "activated_at", ddl: "datetime default null" },
 	{ table: "tc_task", column: "priority", ddl: "tinyint default null" },
 	{ table: "tc_task", column: "reminder_config", ddl: "json default null" },
+	{ table: "sys_notification", column: "path", ddl: "varchar(255) default null" },
+	{ table: "sys_notification", column: "level", ddl: "varchar(16) not null default 'info'" },
 	{
 		table: "sys_menu",
 		column: "type",
@@ -748,6 +734,23 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		table: "tc_task",
 		column: "report",
 		ddl: "json default null",
+	},
+	// 执行人下沉到任务列(原 tc_member.role=executor);两个单例(creator/executor)都由列保证唯一
+	{
+		table: "tc_task",
+		column: "executor_id",
+		ddl: "varchar(191) collate utf8mb4_unicode_ci default null",
+	},
+	// 填报「一表两槽」:draft = 工作稿,synced = 提交给父任务的那一版
+	{
+		table: "tc_task_report",
+		column: "synced",
+		ddl: "json default null",
+	},
+	{
+		table: "tc_task_report",
+		column: "synced_at",
+		ddl: "datetime default null",
 	},
 	// 填报模板合并版本表:schema → payload(结构搬进模板行)+ shared 可见性标志
 	{
@@ -973,6 +976,10 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	{ table: "tc_task_report", column: "version_id" },
 	{ table: "tc_task_report", column: "status" },
 	{ table: "tc_member", column: "is_primary" },
+	// 执行人不再是成员表的一种角色 —— 下沉到 tc_task.executor_id,该列废弃(删列后 UK 自动收成 (task_id,user_id))
+	{ table: "tc_member", column: "role" },
+	// 填报快照表退役:提交的那一版改存 tc_task_report.synced,指针列废弃
+	{ table: "tc_task_report", column: "current_submission_id" },
 	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 	{ table: "sys_data_plugin", column: "produces" },
 	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃
@@ -986,6 +993,50 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	{ table: "sys_data_plugin", column: "fn" },
 	{ table: "sys_data_policy", column: "params" },
 ];
+
+// 执行人从 tc_member.role 迁到 tc_task.executor_id —— 必须在下面的删列之前跑(两列都在时才跑,幂等)
+{
+	const mbCols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = 'tc_member'`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	const tkCols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = 'tc_task'`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (mbCols.some((row) => row.name === "role") && tkCols.some((row) => row.name === "executor_id")) {
+		await db.execute(
+			sql`update tc_task t set t.executor_id = (select min(m.user_id) from tc_member m where m.task_id = t.id and m.role = 'executor') where t.executor_id is null`,
+		);
+		// 老库的唯一键是 (task_id, user_id, role) ⇒ 同一人可以在同一任务留两行(既执行人又参与者)。
+		// 删掉 role 列后 UK 收成 (task_id, user_id),重复行会让 ALTER 直接失败(1062 Duplicate entry)。
+		// 执行人已经上提到 tc_task.executor_id(不再入成员表),所以 executor 行可以安全删掉;参与者行留下。
+		await db.execute(sql`delete from tc_member where role = 'executor'`);
+		console.log("✓ tc_member.role=executor 回填到 tc_task.executor_id,并清理执行人行");
+	}
+}
+
+// 旧快照表 → tc_task_report.synced(必须在删 current_submission_id 之前跑;表/列都在时才跑,幂等)
+{
+	const trCols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = 'tc_task_report'`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	const subTables = (
+		await db.execute(
+			sql`select table_name as name from information_schema.tables where table_schema = database() and table_name = 'tc_report_submission'`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (trCols.some((row) => row.name === "current_submission_id") && subTables.length > 0) {
+		await db.execute(
+			sql`update tc_task_report r join tc_report_submission s on s.id = r.current_submission_id set r.synced = s.payload, r.synced_at = s.created_at where r.synced is null`,
+		);
+		console.log("✓ tc_report_submission 最新快照回填到 tc_task_report.synced");
+	}
+}
 
 for (const drop of COLUMN_DROPS) {
 	const cols = (
@@ -1020,12 +1071,15 @@ for (const drop of COLUMN_DROPS) {
  * 幂等:查 `information_schema.statistics`,已有同名索引就跳过。
  */
 const INDEX_UPGRADES: Array<{ table: string; index: string; columns: string }> = [
-	// Worker 每分钟扫「active 且未查看、已过提醒阈值」的动作(见 lib/task/close-reminders.ts)
+	// Worker 每分钟扫到点的定时提醒(见 lib/task/scheduled-reminders.ts)
 	{ table: "tc_action", index: "idx_action_unviewed", columns: "`status`, `viewed_at`, `activated_at`" },
 	// 任务列表:「状态筛选 + 按创建时间排序」要盖住一段 —— 原来是只索引 status 的单列索引
 	{ table: "tc_task", index: "idx_task_status_created", columns: "`status`, `created_at`" },
 	// 「我的任务」按流程模板筛
 	{ table: "tc_task", index: "idx_task_workflow", columns: "`workflow_id`" },
+	// 成员表去 role 后索引改名(老库原为 idx_member_user_role / idx_member_task_role)
+	{ table: "tc_member", index: "idx_member_user", columns: "`user_id`" },
+	{ table: "tc_member", index: "idx_member_task", columns: "`task_id`" },
 ];
 
 for (const upgrade of INDEX_UPGRADES) {
@@ -1065,6 +1119,9 @@ for (const upgrade of INDEX_UPGRADES) {
  */
 const INDEX_DROPS: Array<{ table: string; index: string }> = [
 	{ table: "tc_member", index: "idx_member_task_primary" },
+	// 成员表去 role 后废弃的旧索引名(见 INDEX_UPGRADES 里新名)
+	{ table: "tc_member", index: "idx_member_user_role" },
+	{ table: "tc_member", index: "idx_member_task_role" },
 	// demo_grid 去 group_id 时连带的(`sys_data_policy` 已经拿不到这列当判据)
 	{ table: "demo_grid", index: "idx_demo_grid_group" },
 ];

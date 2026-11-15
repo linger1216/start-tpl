@@ -1,14 +1,10 @@
 import { Paperclip, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
-import { toast } from "sonner";
-
+import { useRef } from "react";
+import { useAttachmentUpload } from "#/components/modules/task-close/use-attachment-upload";
 import { Button } from "#/components/ui/button";
-import { useFileUpload } from "#/hooks/use-file-upload";
 import { formatBytes } from "#/lib/format";
 import type { TaskAttachment } from "#/lib/task/payload";
-
-/** 与后端 `taskPayloadSchema.attachments` 的 `.max(20)` 对齐 */
-const MAX_FILES = 20;
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
 
 /**
  * 附件区(编辑态)—— 选完即传(复用 `useFileUpload` 的秒传 / 直传链路),提交时只带 `sys_file.id`。
@@ -16,40 +12,9 @@ const MAX_FILES = 20;
  * 与评论附件**完全同一套路**(`task-comments.tsx` 是模板):一并传完大文件,点保存只是轻量写。
  * 私桶(`"private"`)—— 任务附件不该公开直链。
  *
- * 拆成两块是为了建任务弹窗:那边要把「+」放进折叠区标题行右上角,
- * 所以 `TaskAttachmentAddButton` 与 `TaskAttachmentChips` 各自可单独摆。
+ * 「选文件的按钮」(`TaskAttachmentAddButton`)与「已选清单」(`AttachmentChips`)各自可单独摆 ——
+ * 建任务弹窗要把「+」放进折叠区标题行右上角。
  */
-export function TaskAttachmentPicker({
-	value,
-	onChange,
-	disabled,
-	onOpen,
-}: {
-	value: TaskAttachment[];
-	onChange: (next: TaskAttachment[]) => void;
-	disabled?: boolean;
-	/** 点了某个附件(调用方负责弹预览);不给就是不能点 */
-	onOpen?: (attachment: TaskAttachment) => void;
-}) {
-	return (
-		<div className="space-y-2">
-			<div className="flex items-center justify-between gap-2">
-				<p className="min-w-0 truncate text-xs text-muted-foreground">
-					{value.length === 0 ? "还没有附件。选完即传,保存只写一条轻量记录。" : `共 ${value.length} / ${MAX_FILES} 个`}
-				</p>
-				<TaskAttachmentAddButton value={value} onChange={onChange} disabled={disabled} />
-			</div>
-			{value.length > 0 ? (
-				<AttachmentChips
-					attachments={value}
-					onOpen={onOpen}
-					onRemove={(id) => onChange(value.filter((item) => item.id !== id))}
-					disabled={disabled}
-				/>
-			) : null}
-		</div>
-	);
-}
 
 /** 选文件 + 即传的图标按钮(带隐藏 input),上传态自己管 */
 export function TaskAttachmentAddButton({
@@ -61,32 +26,23 @@ export function TaskAttachmentAddButton({
 	onChange: (next: TaskAttachment[]) => void;
 	disabled?: boolean;
 }) {
-	const { upload } = useFileUpload();
 	const fileRef = useRef<HTMLInputElement | null>(null);
-	const [uploading, setUploading] = useState(false);
-
-	async function pick(files: FileList | null) {
-		if (!files || files.length === 0) return;
-		setUploading(true);
-		try {
+	const { uploading, pick } = useAttachmentUpload({
+		limit: MAX_ATTACHMENTS,
+		existing: () => value.length,
+		onRows: (rows) => {
 			// 多选要**攒齐再写一次**:逐个 onChange 会拿同一个旧 value,最后只剩最后传上的那个
 			const picked: TaskAttachment[] = [];
-			for (const file of Array.from(files).slice(0, MAX_FILES - value.length)) {
-				const result = await upload(file, "private");
-				if (!result.ok) {
-					toast.error(result.message);
-					continue;
-				}
-				if (value.some((item) => item.id === result.row.id) || picked.some((item) => item.id === result.row.id))
-					continue; // 秒传可能把同一个文件判成同一行,别重
-				picked.push({ id: result.row.id, name: result.row.originName, size: result.row.size });
+			for (const row of rows) {
+				if (value.some((item) => item.id === row.id) || picked.some((item) => item.id === row.id)) continue;
+				picked.push({ id: row.id, name: row.originName, size: row.size });
 			}
 			if (picked.length > 0) onChange([...value, ...picked]);
-		} finally {
-			setUploading(false);
+		},
+		resetInput: () => {
 			if (fileRef.current) fileRef.current.value = "";
-		}
-	}
+		},
+	});
 
 	return (
 		<>
@@ -96,7 +52,7 @@ export function TaskAttachmentAddButton({
 				variant="outline"
 				aria-label={uploading ? "上传中" : "添加附件"}
 				title={uploading ? "上传中…" : "添加附件"}
-				disabled={disabled || uploading || value.length >= MAX_FILES}
+				disabled={disabled || uploading || value.length >= MAX_ATTACHMENTS}
 				onClick={() => fileRef.current?.click()}
 			>
 				{uploading ? (
@@ -144,44 +100,62 @@ export function AttachmentChips({
 }) {
 	return (
 		<div className="flex flex-wrap gap-2">
-			{attachments.map((file) => {
-				const body = (
-					<>
-						<Paperclip className="size-3 shrink-0" />
-						<span className="min-w-0 max-w-64 truncate">{file.name}</span>
-						{Number.isFinite(file.size) ? <span className="shrink-0">{formatBytes(file.size)}</span> : null}
-					</>
-				);
-				return (
-					<span
-						key={file.id}
-						className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"
-					>
-						{onOpen ? (
-							<button
-								type="button"
-								className="inline-flex min-w-0 items-center gap-1.5 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/40"
-								onClick={() => onOpen(file)}
-							>
-								{body}
-							</button>
-						) : (
-							body
-						)}
-						{onRemove ? (
-							<button
-								type="button"
-								aria-label={`移除 ${file.name}`}
-								disabled={disabled}
-								className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
-								onClick={() => onRemove(file.id)}
-							>
-								<X className="size-3" />
-							</button>
-						) : null}
-					</span>
-				);
-			})}
+			{attachments.map((file) => (
+				<AttachmentChip key={file.id} file={file} onPreview={onOpen} onRemove={onRemove} disabled={disabled} showSize />
+			))}
 		</div>
+	);
+}
+
+/** 单个附件的预览与移除入口。 */
+export function AttachmentChip({
+	file,
+	onPreview,
+	onRemove,
+	disabled,
+	showSize = false,
+}: {
+	/** 最小形状:只带 id + 名字也能用(评论 / 征询的待传附件没有 size) */
+	file: Pick<TaskAttachment, "id" | "name"> & Partial<Pick<TaskAttachment, "size" | "contentType">>;
+	onPreview?: (file: TaskAttachment) => void;
+	onRemove?: (id: string) => void;
+	disabled?: boolean;
+	showSize?: boolean;
+}) {
+	const body = (
+		<>
+			<Paperclip className="size-3 shrink-0" />
+			<span className="min-w-0 max-w-64 truncate">{file.name}</span>
+			{showSize && typeof file.size === "number" && Number.isFinite(file.size) ? (
+				<span className="shrink-0">{formatBytes(file.size)}</span>
+			) : null}
+		</>
+	);
+	return (
+		<span className="inline-flex min-w-0 max-w-56 items-center gap-1.5 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+			{onPreview ? (
+				<button
+					type="button"
+					title={`预览 ${file.name}`}
+					className="inline-flex min-w-0 items-center gap-1.5 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/40"
+					onClick={() => onPreview?.(file as TaskAttachment)}
+				>
+					{body}
+				</button>
+			) : (
+				body
+			)}
+			{onRemove ? (
+				<button
+					type="button"
+					aria-label={`移除 ${file.name}`}
+					disabled={disabled}
+					className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+					onClick={() => onRemove(file.id)}
+				>
+					<X className="size-3" />
+				</button>
+			) : null}
+		</span>
 	);
 }

@@ -6,7 +6,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { useTRPC } from "#/integrations/trpc/react";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { noticeLevelStyle } from "#/lib/notice-levels";
+import { noticeLevelOf } from "#/lib/notice-levels";
 import { formatLocalMinute } from "#/lib/time";
 
 /**
@@ -97,7 +97,7 @@ export function BusinessHomeDemo() {
 						) : (
 							<ul className="divide-y divide-border">
 								{(noticeQuery.data?.items ?? []).map((item) => {
-									const levelStyle = noticeLevelStyle(item.level);
+									const levelStyle = noticeLevelOf(item.level);
 									const LevelIcon = levelStyle.Icon;
 									return (
 										<li key={item.id} className="flex items-start gap-2.5 py-2.5">

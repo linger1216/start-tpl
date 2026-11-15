@@ -18,6 +18,7 @@ import {
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { NOTICE_LEVELS, type NoticeLevel } from "#/lib/notice-levels";
+import { NOTICE_BODY_MAX, NOTIFICATION_TITLE_MAX } from "#/lib/notification-status";
 
 /** ⚠️ `items` 与 `<SelectItem>` **两边都要给**(Base UI 不从子元素收集 label,踩过) */
 export type NoticeFormPayload = {
@@ -97,7 +98,7 @@ export function NoticeForm({
 						<Input
 							id="notice-title"
 							className="h-8 text-sm"
-							maxLength={128}
+							maxLength={NOTIFICATION_TITLE_MAX}
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
 							placeholder="例如:有 3 个账号还没分配角色"
@@ -107,7 +108,7 @@ export function NoticeForm({
 						<Input
 							id="notice-body"
 							className="h-8 text-sm"
-							maxLength={255}
+							maxLength={NOTICE_BODY_MAX}
 							value={body}
 							onChange={(e) => setBody(e.target.value)}
 							placeholder="一句话说明,最长 255 字"
@@ -117,7 +118,7 @@ export function NoticeForm({
 						<Input
 							id="notice-path"
 							className="h-8 font-mono text-sm"
-							maxLength={255}
+							maxLength={NOTICE_BODY_MAX}
 							value={path}
 							onChange={(e) => setPath(e.target.value)}
 							placeholder="/settings/users"

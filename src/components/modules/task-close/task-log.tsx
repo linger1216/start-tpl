@@ -14,20 +14,25 @@ import {
 	UserMinus,
 	UserPlus,
 } from "lucide-react";
-
-import { Button } from "#/components/ui/button";
-import { toApiError } from "#/lib/api/error";
+import { AsyncState } from "#/components/modules/task-close/async-state";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { describeLog, logCategoryOf, type TaskLogCategory, type TaskLogItem } from "#/lib/task/close-log";
+import {
+	describeLog,
+	logCategoryOf,
+	type TaskLogCategory,
+	type TaskLogEvent,
+	type TaskLogItem,
+} from "#/lib/task/close-log";
 import { statusLabelOf, type WorkflowStatus } from "#/lib/task/close-spec";
+import { bagOf } from "#/lib/task/json";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 /**
- * 事件 → 图标。**与 `lib/task/close-log.ts` 的事件码一一对应** ——
- * 加事件要同时改:那边的事件联合 + `detail` 类型,这里一条,`doc/task-close.md` 那张表。
+ * 事件 → 图标。**与 `lib/task/close-log.ts` 的事件码一一对应** —— 这里用 `Record<TaskLogEvent, …>`,
+ * 那边加一个事件码而这边忘了补,`pnpm typecheck` 直接报错(之前写的是 `Record<string, …>`,漏了也不响)。
  */
-const TASK_LOG_ICON: Record<string, LucideIcon> = {
+const TASK_LOG_ICON: Record<TaskLogEvent, LucideIcon> = {
 	"task.create": FilePlus2,
 	"task.update": Pencil,
 	"task.remove": Trash2,
@@ -41,9 +46,7 @@ const TASK_LOG_ICON: Record<string, LucideIcon> = {
 	"member.add": UserPlus,
 	"member.remove": UserMinus,
 	"member.transfer": ArrowRightLeft,
-	"report.bind": FilePlus2,
-	"report.sync": Upload,
-	"report.reset": ArrowRightLeft,
+	"report.submit": Upload,
 };
 
 /**
@@ -55,18 +58,15 @@ const CATEGORY_TONE: Record<TaskLogCategory, string> = {
 	action: "bg-hue-violet-soft text-hue-violet-fg",
 	comment: "bg-secondary text-muted-foreground",
 	member: "bg-hue-teal-soft text-hue-teal-fg",
+	report: "bg-hue-amber-soft text-hue-amber-fg",
 };
 
 /** 负向事件(驳回 / 删除)单独压一层红 —— 语义色走 `destructive`,不拿点缀色顶替 */
 const NEGATIVE_TONE = "bg-destructive/10 text-destructive";
 
-function detailBag(detail: unknown): Record<string, unknown> {
-	return detail && typeof detail === "object" && !Array.isArray(detail) ? (detail as Record<string, unknown>) : {};
-}
-
 function toneOf(item: TaskLogItem): string {
 	if (item.event === "task.remove" || item.event === "comment.remove") return NEGATIVE_TONE;
-	if (item.event === "action.respond" && detailBag(item.detail).approved === false) return NEGATIVE_TONE;
+	if (item.event === "action.respond" && bagOf(item.detail).approved === false) return NEGATIVE_TONE;
 	const category = logCategoryOf(item.event);
 	return category ? CATEGORY_TONE[category] : "bg-secondary text-muted-foreground";
 }
@@ -85,14 +85,12 @@ function toneOf(item: TaskLogItem): string {
 export function TaskLogList({
 	items,
 	statuses,
-	roleLabel,
 	loading,
 	error,
 	onRetry,
 }: {
 	items: TaskLogItem[];
 	statuses: WorkflowStatus[];
-	roleLabel: (role: string) => string;
 	/** 首次取数中 —— 别把「还没到」说成「没有」:空态与加载态是两回事 */
 	loading?: boolean;
 	/** 取数失败 —— 同理,别把「取不到」说成「没有」 */
@@ -100,16 +98,7 @@ export function TaskLogList({
 	onRetry?: () => void;
 }) {
 	if (error) {
-		return (
-			<div className="flex flex-wrap items-center gap-2 py-2 text-sm text-muted-foreground">
-				<span>{toApiError(error).message || "动态加载失败。"}</span>
-				{onRetry ? (
-					<Button variant="outline" size="xs" onClick={onRetry}>
-						重试
-					</Button>
-				) : null}
-			</div>
-		);
+		return <AsyncState inline pending={false} error={error} onRetry={onRetry} />;
 	}
 	if (items.length === 0) {
 		return (
@@ -123,10 +112,10 @@ export function TaskLogList({
 			{/* 贯穿竖线:left 7px 从第一项顶部留出 12px 起到最后一项底部 12px 止 */}
 			<span aria-hidden className="pointer-events-none absolute start-[7px] top-3 bottom-3 w-px bg-border" />
 			{items.map((item) => {
-				const Icon = TASK_LOG_ICON[item.event] ?? FileQuestion;
+				// 库里可能有界面还不认识的事件码(旧数据 / 回滚过):统一走兜底图标,不白屏
+				const Icon = TASK_LOG_ICON[item.event as TaskLogEvent] ?? FileQuestion;
 				const { title, note } = describeLog(item, {
 					statusLabel: (value) => statusLabelOf(statuses, value),
-					roleLabel,
 				});
 				return (
 					<li key={item.id} className="relative flex items-start gap-2 py-1.5 ps-7">

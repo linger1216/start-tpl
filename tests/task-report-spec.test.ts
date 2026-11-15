@@ -150,3 +150,25 @@ describe("填报字段类型:手机 / 邮箱 / 附件 / 数组", () => {
 		);
 	});
 });
+
+it("数据范围按全部条件匹配，并保留无条件范围和空值语义", async () => {
+	const { rowMatchesFilter } = await import("../src/lib/task/report-spec.ts");
+	assert.equal(rowMatchesFilter(null, []), true);
+	assert.equal(rowMatchesFilter(null, [{ field: "region", value: "东" }]), false);
+	assert.equal(
+		rowMatchesFilter({ region: "东" }, [
+			{ field: "region", value: "东" },
+			{ field: "area", value: null },
+		]),
+		true,
+	);
+	assert.equal(rowMatchesFilter({ region: "西" }, [{ field: "region", value: "东" }]), false);
+});
+
+it("asTableValue / asFormValue:表格原样返回行数组,表单取第一行(空则空对象)", async () => {
+	const { asFormValue, asTableValue } = await import("../src/lib/task/report-spec.ts");
+	const rows = [{ town: "甲镇" }, { town: "乙镇" }];
+	assert.deepEqual(asTableValue(rows), rows);
+	assert.deepEqual(asFormValue(rows), { town: "甲镇" });
+	assert.deepEqual(asFormValue([]), {}, "空表单给空对象,前端才能无脑读字段");
+});
