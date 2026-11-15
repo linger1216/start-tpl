@@ -383,30 +383,33 @@ export function TaskListPage() {
 				</QuickFilter>
 			</div>
 
-			{/* 三态分开:加载 / 出错 / 真的没有 —— 把「取不到」说成「没有」会让人以为工作被清空了 */}
-			<Card>
-				<AsyncState
-					pending={listQuery.isPending}
-					error={listQuery.isError ? listQuery.error : undefined}
-					isFetching={listQuery.isFetching}
-					onRetry={() => listQuery.refetch()}
-					empty={
-						items.length === 0
-							? pendingOnly
-								? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
-								: "没有任务。点右上角「新增任务」起一个。"
-							: null
-					}
-				>
-					<div className="flex flex-wrap gap-3">
-						{items.map((item) => (
-							<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
-								<TaskCard task={item} statusLabel={labelOf} />
-							</TaskCardLink>
-						))}
-					</div>
-				</AsyncState>
-			</Card>
+			{/* 三态分开:加载 / 出错 / 真的没有 —— 把「取不到」说成「没有」会让人以为工作被清空了。
+			   有数据时卡片**直接铺在页面上**,不再套外层 Card(白底套白底会糊成一整块通栏宽面板)。 */}
+			{listQuery.isPending || listQuery.isError || items.length === 0 ? (
+				<Card>
+					<AsyncState
+						pending={listQuery.isPending}
+						error={listQuery.isError ? listQuery.error : undefined}
+						isFetching={listQuery.isFetching}
+						onRetry={() => listQuery.refetch()}
+						empty={
+							items.length === 0
+								? pendingOnly
+									? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
+									: "没有任务。点右上角「新增任务」起一个。"
+								: null
+						}
+					/>
+				</Card>
+			) : (
+				<div className="flex flex-wrap gap-3">
+					{items.map((item) => (
+						<TaskCardLink key={item.id} task={item} className="block w-full h-48 max-w-sm">
+							<TaskCard task={item} statusLabel={labelOf} />
+						</TaskCardLink>
+					))}
+				</div>
+			)}
 
 			<PaginationControl
 				page={page}

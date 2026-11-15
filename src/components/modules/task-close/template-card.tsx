@@ -60,26 +60,29 @@ export function TemplateCardPageShell({
 				}
 			/>
 			<StatCards items={stats} />
-			<Card>
-				<AsyncState
-					pending={isPending}
-					error={isError ? { message: `${title}加载失败。` } : undefined}
-					isFetching={isFetching}
-					onRetry={onRefresh}
-					empty={
-						isEmpty ? (
-							<EmptyState
-								icon={emptyIcon}
-								title={`还没有${title}`}
-								description={emptyDescription}
-								actions={createButton}
-							/>
-						) : null
-					}
-				>
-					<div className="flex flex-wrap gap-3">{cards}</div>
-				</AsyncState>
-			</Card>
+			{isPending || isError || isEmpty ? (
+				<Card>
+					<AsyncState
+						pending={isPending}
+						error={isError ? { message: `${title}加载失败。` } : undefined}
+						isFetching={isFetching}
+						onRetry={onRefresh}
+						empty={
+							isEmpty ? (
+								<EmptyState
+									icon={emptyIcon}
+									title={`还没有${title}`}
+									description={emptyDescription}
+									actions={createButton}
+								/>
+							) : null
+						}
+					/>
+				</Card>
+			) : (
+				/* 有数据时卡片直接铺在页面上 —— 不套外层 Card(白底套白底会糊成一整块通栏宽面板) */
+				<div className="flex flex-wrap gap-3">{cards}</div>
+			)}
 			{children}
 		</PageFrame>
 	);
