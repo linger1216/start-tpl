@@ -26,7 +26,7 @@ export function Cell({
 
 export function Group({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
 	return (
-		<Card>
+		<Card id={title} className="scroll-mt-6">
 			<CardHeader>
 				<CardTitle className="text-sm">{title}</CardTitle>
 				<CardDescription>{desc}</CardDescription>

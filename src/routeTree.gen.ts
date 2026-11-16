@@ -14,13 +14,6 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as ApiCaptchaRouteImport } from './routes/api.captcha'
-import { Route as mainDemoBetterAuthRouteImport } from './routes/(main)/demo/better-auth'
-import { Route as mainDemoBusinessHomeRouteImport } from './routes/(main)/demo/business-home'
-import { Route as mainDemoDrizzleRouteImport } from './routes/(main)/demo/drizzle'
-import { Route as mainDemoGridRouteImport } from './routes/(main)/demo/grid'
-import { Route as mainDemoStoreRouteImport } from './routes/(main)/demo/store'
-import { Route as mainDemoTableRouteImport } from './routes/(main)/demo/table'
-import { Route as mainDemoTanstackQueryRouteImport } from './routes/(main)/demo/tanstack-query'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
 import { Route as mainSettingsDataPluginsRouteImport } from './routes/(main)/settings/data-plugins'
 import { Route as mainSettingsDataScopeRouteImport } from './routes/(main)/settings/data-scope'
@@ -41,7 +34,6 @@ import { Route as mainTaskCloseWorkflowsRouteImport } from './routes/(main)/task
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
-import { Route as mainDemoFormSimpleRouteImport } from './routes/(main)/demo/form.simple'
 import { Route as mainTaskCloseTaskIdIndexRouteImport } from './routes/(main)/task-close/$taskId/index'
 
 const mainRouteRoute = mainRouteRouteImport.update({
@@ -67,41 +59,6 @@ const ApiCaptchaRoute = ApiCaptchaRouteImport.update({
   id: '/api/captcha',
   path: '/api/captcha',
   getParentRoute: () => rootRouteImport,
-} as any)
-const mainDemoBetterAuthRoute = mainDemoBetterAuthRouteImport.update({
-  id: '/demo/better-auth',
-  path: '/demo/better-auth',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoBusinessHomeRoute = mainDemoBusinessHomeRouteImport.update({
-  id: '/demo/business-home',
-  path: '/demo/business-home',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoDrizzleRoute = mainDemoDrizzleRouteImport.update({
-  id: '/demo/drizzle',
-  path: '/demo/drizzle',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoGridRoute = mainDemoGridRouteImport.update({
-  id: '/demo/grid',
-  path: '/demo/grid',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoStoreRoute = mainDemoStoreRouteImport.update({
-  id: '/demo/store',
-  path: '/demo/store',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoTableRoute = mainDemoTableRouteImport.update({
-  id: '/demo/table',
-  path: '/demo/table',
-  getParentRoute: () => mainRouteRoute,
-} as any)
-const mainDemoTanstackQueryRoute = mainDemoTanstackQueryRouteImport.update({
-  id: '/demo/tanstack-query',
-  path: '/demo/tanstack-query',
-  getParentRoute: () => mainRouteRoute,
 } as any)
 const mainSettingsIndexRoute = mainSettingsIndexRouteImport.update({
   id: '/settings/',
@@ -204,11 +161,6 @@ const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   path: '/api/trpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const mainDemoFormSimpleRoute = mainDemoFormSimpleRouteImport.update({
-  id: '/demo/form/simple',
-  path: '/demo/form/simple',
-  getParentRoute: () => mainRouteRoute,
-} as any)
 const mainTaskCloseTaskIdIndexRoute =
   mainTaskCloseTaskIdIndexRouteImport.update({
     id: '/task-close/$taskId/',
@@ -221,13 +173,6 @@ export interface FileRoutesByFullPath {
   '/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
-  '/demo/better-auth': typeof mainDemoBetterAuthRoute
-  '/demo/business-home': typeof mainDemoBusinessHomeRoute
-  '/demo/drizzle': typeof mainDemoDrizzleRoute
-  '/demo/grid': typeof mainDemoGridRoute
-  '/demo/store': typeof mainDemoStoreRoute
-  '/demo/table': typeof mainDemoTableRoute
-  '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/settings/data-plugins': typeof mainSettingsDataPluginsRoute
   '/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
@@ -248,7 +193,6 @@ export interface FileRoutesByFullPath {
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
   '/task-close/': typeof mainTaskCloseIndexRoute
-  '/demo/form/simple': typeof mainDemoFormSimpleRoute
   '/task-close/$taskId/': typeof mainTaskCloseTaskIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -256,13 +200,6 @@ export interface FileRoutesByTo {
   '/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
-  '/demo/better-auth': typeof mainDemoBetterAuthRoute
-  '/demo/business-home': typeof mainDemoBusinessHomeRoute
-  '/demo/drizzle': typeof mainDemoDrizzleRoute
-  '/demo/grid': typeof mainDemoGridRoute
-  '/demo/store': typeof mainDemoStoreRoute
-  '/demo/table': typeof mainDemoTableRoute
-  '/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/settings/data-plugins': typeof mainSettingsDataPluginsRoute
   '/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/settings/departments': typeof mainSettingsDepartmentsRoute
@@ -283,7 +220,6 @@ export interface FileRoutesByTo {
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
   '/task-close': typeof mainTaskCloseIndexRoute
-  '/demo/form/simple': typeof mainDemoFormSimpleRoute
   '/task-close/$taskId': typeof mainTaskCloseTaskIdIndexRoute
 }
 export interface FileRoutesById {
@@ -293,13 +229,6 @@ export interface FileRoutesById {
   '/(main)/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/(main)/': typeof mainIndexRoute
-  '/(main)/demo/better-auth': typeof mainDemoBetterAuthRoute
-  '/(main)/demo/business-home': typeof mainDemoBusinessHomeRoute
-  '/(main)/demo/drizzle': typeof mainDemoDrizzleRoute
-  '/(main)/demo/grid': typeof mainDemoGridRoute
-  '/(main)/demo/store': typeof mainDemoStoreRoute
-  '/(main)/demo/table': typeof mainDemoTableRoute
-  '/(main)/demo/tanstack-query': typeof mainDemoTanstackQueryRoute
   '/(main)/settings/data-plugins': typeof mainSettingsDataPluginsRoute
   '/(main)/settings/data-scope': typeof mainSettingsDataScopeRoute
   '/(main)/settings/departments': typeof mainSettingsDepartmentsRoute
@@ -320,7 +249,6 @@ export interface FileRoutesById {
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
   '/(main)/task-close/': typeof mainTaskCloseIndexRoute
-  '/(main)/demo/form/simple': typeof mainDemoFormSimpleRoute
   '/(main)/task-close/$taskId/': typeof mainTaskCloseTaskIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -330,13 +258,6 @@ export interface FileRouteTypes {
     | '/notices'
     | '/api/captcha'
     | '/'
-    | '/demo/better-auth'
-    | '/demo/business-home'
-    | '/demo/drizzle'
-    | '/demo/grid'
-    | '/demo/store'
-    | '/demo/table'
-    | '/demo/tanstack-query'
     | '/settings/data-plugins'
     | '/settings/data-scope'
     | '/settings/departments'
@@ -357,7 +278,6 @@ export interface FileRouteTypes {
     | '/api/trpc/$'
     | '/settings/'
     | '/task-close/'
-    | '/demo/form/simple'
     | '/task-close/$taskId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -365,13 +285,6 @@ export interface FileRouteTypes {
     | '/notices'
     | '/api/captcha'
     | '/'
-    | '/demo/better-auth'
-    | '/demo/business-home'
-    | '/demo/drizzle'
-    | '/demo/grid'
-    | '/demo/store'
-    | '/demo/table'
-    | '/demo/tanstack-query'
     | '/settings/data-plugins'
     | '/settings/data-scope'
     | '/settings/departments'
@@ -392,7 +305,6 @@ export interface FileRouteTypes {
     | '/api/trpc/$'
     | '/settings'
     | '/task-close'
-    | '/demo/form/simple'
     | '/task-close/$taskId'
   id:
     | '__root__'
@@ -401,13 +313,6 @@ export interface FileRouteTypes {
     | '/(main)/notices'
     | '/api/captcha'
     | '/(main)/'
-    | '/(main)/demo/better-auth'
-    | '/(main)/demo/business-home'
-    | '/(main)/demo/drizzle'
-    | '/(main)/demo/grid'
-    | '/(main)/demo/store'
-    | '/(main)/demo/table'
-    | '/(main)/demo/tanstack-query'
     | '/(main)/settings/data-plugins'
     | '/(main)/settings/data-scope'
     | '/(main)/settings/departments'
@@ -428,7 +333,6 @@ export interface FileRouteTypes {
     | '/api/trpc/$'
     | '/(main)/settings/'
     | '/(main)/task-close/'
-    | '/(main)/demo/form/simple'
     | '/(main)/task-close/$taskId/'
   fileRoutesById: FileRoutesById
 }
@@ -477,55 +381,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/captcha'
       preLoaderRoute: typeof ApiCaptchaRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/(main)/demo/better-auth': {
-      id: '/(main)/demo/better-auth'
-      path: '/demo/better-auth'
-      fullPath: '/demo/better-auth'
-      preLoaderRoute: typeof mainDemoBetterAuthRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/business-home': {
-      id: '/(main)/demo/business-home'
-      path: '/demo/business-home'
-      fullPath: '/demo/business-home'
-      preLoaderRoute: typeof mainDemoBusinessHomeRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/drizzle': {
-      id: '/(main)/demo/drizzle'
-      path: '/demo/drizzle'
-      fullPath: '/demo/drizzle'
-      preLoaderRoute: typeof mainDemoDrizzleRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/grid': {
-      id: '/(main)/demo/grid'
-      path: '/demo/grid'
-      fullPath: '/demo/grid'
-      preLoaderRoute: typeof mainDemoGridRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/store': {
-      id: '/(main)/demo/store'
-      path: '/demo/store'
-      fullPath: '/demo/store'
-      preLoaderRoute: typeof mainDemoStoreRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/table': {
-      id: '/(main)/demo/table'
-      path: '/demo/table'
-      fullPath: '/demo/table'
-      preLoaderRoute: typeof mainDemoTableRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
-    '/(main)/demo/tanstack-query': {
-      id: '/(main)/demo/tanstack-query'
-      path: '/demo/tanstack-query'
-      fullPath: '/demo/tanstack-query'
-      preLoaderRoute: typeof mainDemoTanstackQueryRouteImport
-      parentRoute: typeof mainRouteRoute
     }
     '/(main)/settings/': {
       id: '/(main)/settings/'
@@ -667,13 +522,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(main)/demo/form/simple': {
-      id: '/(main)/demo/form/simple'
-      path: '/demo/form/simple'
-      fullPath: '/demo/form/simple'
-      preLoaderRoute: typeof mainDemoFormSimpleRouteImport
-      parentRoute: typeof mainRouteRoute
-    }
     '/(main)/task-close/$taskId/': {
       id: '/(main)/task-close/$taskId/'
       path: '/task-close/$taskId'
@@ -687,13 +535,6 @@ declare module '@tanstack/react-router' {
 interface mainRouteRouteChildren {
   mainNoticesRoute: typeof mainNoticesRoute
   mainIndexRoute: typeof mainIndexRoute
-  mainDemoBetterAuthRoute: typeof mainDemoBetterAuthRoute
-  mainDemoBusinessHomeRoute: typeof mainDemoBusinessHomeRoute
-  mainDemoDrizzleRoute: typeof mainDemoDrizzleRoute
-  mainDemoGridRoute: typeof mainDemoGridRoute
-  mainDemoStoreRoute: typeof mainDemoStoreRoute
-  mainDemoTableRoute: typeof mainDemoTableRoute
-  mainDemoTanstackQueryRoute: typeof mainDemoTanstackQueryRoute
   mainSettingsDataPluginsRoute: typeof mainSettingsDataPluginsRoute
   mainSettingsDataScopeRoute: typeof mainSettingsDataScopeRoute
   mainSettingsDepartmentsRoute: typeof mainSettingsDepartmentsRoute
@@ -711,20 +552,12 @@ interface mainRouteRouteChildren {
   mainTaskCloseWorkflowsRoute: typeof mainTaskCloseWorkflowsRoute
   mainSettingsIndexRoute: typeof mainSettingsIndexRoute
   mainTaskCloseIndexRoute: typeof mainTaskCloseIndexRoute
-  mainDemoFormSimpleRoute: typeof mainDemoFormSimpleRoute
   mainTaskCloseTaskIdIndexRoute: typeof mainTaskCloseTaskIdIndexRoute
 }
 
 const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainNoticesRoute: mainNoticesRoute,
   mainIndexRoute: mainIndexRoute,
-  mainDemoBetterAuthRoute: mainDemoBetterAuthRoute,
-  mainDemoBusinessHomeRoute: mainDemoBusinessHomeRoute,
-  mainDemoDrizzleRoute: mainDemoDrizzleRoute,
-  mainDemoGridRoute: mainDemoGridRoute,
-  mainDemoStoreRoute: mainDemoStoreRoute,
-  mainDemoTableRoute: mainDemoTableRoute,
-  mainDemoTanstackQueryRoute: mainDemoTanstackQueryRoute,
   mainSettingsDataPluginsRoute: mainSettingsDataPluginsRoute,
   mainSettingsDataScopeRoute: mainSettingsDataScopeRoute,
   mainSettingsDepartmentsRoute: mainSettingsDepartmentsRoute,
@@ -742,7 +575,6 @@ const mainRouteRouteChildren: mainRouteRouteChildren = {
   mainTaskCloseWorkflowsRoute: mainTaskCloseWorkflowsRoute,
   mainSettingsIndexRoute: mainSettingsIndexRoute,
   mainTaskCloseIndexRoute: mainTaskCloseIndexRoute,
-  mainDemoFormSimpleRoute: mainDemoFormSimpleRoute,
   mainTaskCloseTaskIdIndexRoute: mainTaskCloseTaskIdIndexRoute,
 }
 

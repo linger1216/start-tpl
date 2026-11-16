@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { type CheckboxTreeNode, CheckboxTreeSelect } from "#/components/modules/shared/checkbox-tree-select";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
-import { type PermissionNode, PermissionSelect } from "#/components/modules/shared/permission-select";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { Cell, Group } from "#/components/modules/workbench/ui-gallery-layout";
 import { Button } from "#/components/ui/button";
@@ -59,19 +59,17 @@ const DEMO_TREE: DemoTTreeNode[] = [
 	},
 ];
 
-/** 权限点树:菜单权限 + 操作权限(`kind: "操作"` 会带徽章区分) */
-const DEMO_PERMISSIONS: PermissionNode[] = [
+/** 示例树：分组、子项和节点标签 */
+const DEMO_OPTIONS: CheckboxTreeNode[] = [
 	{
-		id: "sys",
-		name: "系统设置",
+		id: "fruit",
+		name: "水果",
 		children: [
-			{ id: "sys:menu", name: "菜单管理" },
-			{ id: "sys:menu:write", name: "菜单编辑", kind: "操作" },
-			{ id: "sys:tag", name: "标签管理" },
-			{ id: "sys:tag:write", name: "标签编辑", kind: "操作" },
+			{ id: "apple", name: "苹果" },
+			{ id: "orange", name: "橙子", kind: "当季" },
 		],
 	},
-	{ id: "data", name: "数据", children: [{ id: "data:export", name: "导出", kind: "操作" }] },
+	{ id: "drink", name: "饮品", children: [{ id: "tea", name: "茶" }] },
 ];
 
 export function ModuleGallery() {
@@ -80,7 +78,7 @@ export function ModuleGallery() {
 	const [detailDemo, setDetailDemo] = useState(false);
 	const [tree, setTree] = useState(DEMO_TREE);
 	const [treeSelected, setTreeSelected] = useState<string | null>("tag-a1");
-	const [permSelected, setPermSelected] = useState<string[]>(["sys:menu"]);
+	const [checkedOptions, setCheckedOptions] = useState<string[]>(["apple"]);
 	const [multiValue, setMultiValue] = useState("紧急、待审;hot");
 	const [paraInput, setParaInput] = useState("0");
 	const [paraType, setParaType] = useState<ParaType>(PARA_TYPE.INT);
@@ -187,13 +185,13 @@ export function ModuleGallery() {
 					</p>
 				</Cell>
 
-				<Cell name="PermissionSelect" hint="权限点选择区:搜索 + 勾选(重建授权界面直接用,别另写一份)">
+				<Cell name="CheckboxTreeSelect" hint="树形多选：搜索、批量选择与半选状态">
 					<div className="rounded-lg border border-border bg-card p-2">
-						<PermissionSelect
-							nodes={DEMO_PERMISSIONS}
-							selected={permSelected}
+						<CheckboxTreeSelect
+							nodes={DEMO_OPTIONS}
+							selected={checkedOptions}
 							onToggle={(ids, on) =>
-								setPermSelected((prev) =>
+								setCheckedOptions((prev) =>
 									on ? Array.from(new Set([...prev, ...ids])) : prev.filter((id) => !ids.includes(id)),
 								)
 							}

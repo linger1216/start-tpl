@@ -8,11 +8,11 @@ import { SettingsRolesDetail } from "#/components/modules/settings/roles/detail"
 import { ROLE_EXCEL_COLUMNS, roleExcelRows } from "#/components/modules/settings/roles/excel";
 import { type RoleFormPayload, type RoleFormTab, SettingsRolesForm } from "#/components/modules/settings/roles/form";
 import { type RoleRow, roleColumns } from "#/components/modules/settings/roles/table";
+import type { CheckboxTreeNode } from "#/components/modules/shared/checkbox-tree-select";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
-import type { PermissionNode } from "#/components/modules/shared/permission-select";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
@@ -31,12 +31,12 @@ import { bySortThenName, groupByParent } from "#/lib/tree";
  * 菜单行 → 权限树:菜单是枝、**按钮**(`type = 3`)是叶,后者带「操作」徽章。
  * 给角色勾按钮 = 那个按钮的 `perm` 进入他的权限集合(前端 `useHasPerm` 认它)。
  */
-function buildPermTree(rows: readonly MenuRow[]): PermissionNode[] {
+function buildPermTree(rows: readonly MenuRow[]): CheckboxTreeNode[] {
 	// 分组 / 同级排序 / 父不存在时提升为一级 → 统一走 lib/tree.ts(节点形状不同,所以自己递归)
 	const { byParent, roots } = groupByParent(rows, { rootKey: "", compare: bySortThenName });
-	const build = (row: MenuRow): PermissionNode => {
+	const build = (row: MenuRow): CheckboxTreeNode => {
 		const children = (byParent.get(row.id) ?? []).map(build);
-		const node: PermissionNode = { id: row.id, name: row.name };
+		const node: CheckboxTreeNode = { id: row.id, name: row.name };
 		if (Number(row.type) === MENU_TYPE.BUTTON) node.kind = "操作";
 		if (children.length > 0) node.children = children;
 		return node;

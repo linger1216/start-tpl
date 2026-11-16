@@ -1,4 +1,3 @@
-import { KeyRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ActionButton } from "#/components/ui/action-button";
@@ -6,61 +5,54 @@ import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Tag } from "#/components/ui/tag";
 
-/**
- * 权限树(分组 + 复选框)—— 角色授权 / 用户授权 / 用户组授权三处共用。
- *
- * **树数据由调用方传入**:本组件不认任何具体权限来源。典型做法是从菜单配置
- * (`layout/nav-config` 的 `NAV_NODES`)派生出「菜单权限 + 操作权限」两棵树 ——
- * 那样勾选项天然等于侧边栏里真实存在的菜单,不会两边漂移。
- */
-
-export type PermissionNode = {
+/** 可搜索的树形多选项，数据与选择状态由调用方提供。 */
+export type CheckboxTreeNode = {
 	id: string;
 	name: string;
-	/** 「操作」类节点会带一个徽章区分(菜单权限不带) */
+	/** 可选的节点标签 */
 	kind?: string;
-	children?: PermissionNode[];
+	children?: CheckboxTreeNode[];
 };
 
-/** 单个节点子树里的全部权限点 id */
-function permissionIdsIn(node: PermissionNode, out: string[] = []): string[] {
+/** 单个节点子树里的全部节点 id */
+function nodeIdsIn(node: CheckboxTreeNode, out: string[] = []): string[] {
 	out.push(node.id);
-	for (const child of node.children ?? []) permissionIdsIn(child, out);
+	for (const child of node.children ?? []) nodeIdsIn(child, out);
 	return out;
 }
 
-/** 关键词过滤:返回该节点下可见的权限点 id(未命中返回空数组) */
-function visiblePermissionIds(node: PermissionNode, keyword: string): string[] {
+/** 关键词过滤:返回该节点下可见的节点 id(未命中返回空数组) */
+function visibleIdsInNode(node: CheckboxTreeNode, keyword: string): string[] {
 	const kw = keyword.trim();
-	if (!kw) return permissionIdsIn(node);
-	if (node.name.includes(kw)) return permissionIdsIn(node);
-	return (node.children ?? []).flatMap((child) => visiblePermissionIds(child, kw));
+	if (!kw) return nodeIdsIn(node);
+	if (node.name.includes(kw)) return nodeIdsIn(node);
+	return (node.children ?? []).flatMap((child) => visibleIdsInNode(child, kw));
 }
 
-/** 当前关键词下整棵树可见的权限点 id(供「全选当前 / 清空当前 / 共 N 项」用) */
-function visiblePermissionIdsInTree(nodes: readonly PermissionNode[], keyword: string): string[] {
-	return nodes.flatMap((node) => visiblePermissionIds(node, keyword));
+/** 当前关键词下整棵树可见的节点 id(供「全选当前 / 清空当前 / 共 N 项」用) */
+function visibleIdsInTree(nodes: readonly CheckboxTreeNode[], keyword: string): string[] {
+	return nodes.flatMap((node) => visibleIdsInNode(node, keyword));
 }
 
 /** 树节点:部分选中不点亮复选框(只有全选才 `checked`) */
-function PermissionTreeNode({
+function CheckboxTreeItem({
 	node,
 	keyword,
 	selected,
 	onToggle,
 	depth = 0,
 }: {
-	node: PermissionNode;
+	node: CheckboxTreeNode;
 	keyword: string;
 	selected: readonly string[];
 	onToggle: (ids: string[], on: boolean) => void;
 	depth?: number;
 }) {
-	const ids = visiblePermissionIds(node, keyword);
+	const ids = visibleIdsInNode(node, keyword);
 	if (ids.length === 0) return null;
 	const hit = ids.filter((id) => selected.includes(id)).length;
 	const on = hit > 0 && hit === ids.length;
-	const children = (node.children ?? []).filter((child) => visiblePermissionIds(child, keyword).length > 0);
+	const children = (node.children ?? []).filter((child) => visibleIdsInNode(child, keyword).length > 0);
 	return (
 		<div className={depth === 0 ? "space-y-1" : "space-y-1 border-l border-border pl-3"}>
 			<div className="flex items-center gap-2">
@@ -77,16 +69,16 @@ function PermissionTreeNode({
 				<span className="text-xs tabular-nums text-muted-foreground">
 					{hit}/{ids.length}
 				</span>
-				{node.kind === "操作" ? (
+				{node.kind ? (
 					<Tag variant="outline" className="text-xs">
-						操作
+						{node.kind}
 					</Tag>
 				) : null}
 			</div>
 			{children.length > 0 ? (
 				<div className="ml-2 space-y-1">
 					{children.map((child) => (
-						<PermissionTreeNode
+						<CheckboxTreeItem
 							key={child.id}
 							node={child}
 							keyword={keyword}
@@ -102,47 +94,42 @@ function PermissionTreeNode({
 }
 
 /**
- * 整棵权限树的内容(节点 + 空态提示)。
+ * 整棵选项树的内容(节点 + 空态提示)。
  * 滚动容器(max-h / border / p-3)由调用方提供,因为各处的容器尺寸由各自布局决定。
  */
-function PermissionTree({
+function CheckboxTree({
 	nodes,
 	keyword,
 	selected,
 	onToggle,
 }: {
-	nodes: readonly PermissionNode[];
+	nodes: readonly CheckboxTreeNode[];
 	keyword: string;
 	selected: readonly string[];
 	onToggle: (ids: string[], on: boolean) => void;
 }) {
-	const visible = visiblePermissionIdsInTree(nodes, keyword);
+	const visible = visibleIdsInTree(nodes, keyword);
 	return (
 		<>
 			{nodes.map((node) => (
-				<PermissionTreeNode key={node.id} node={node} keyword={keyword} selected={selected} onToggle={onToggle} />
+				<CheckboxTreeItem key={node.id} node={node} keyword={keyword} selected={selected} onToggle={onToggle} />
 			))}
-			{visible.length === 0 ? <p className="text-xs text-muted-foreground">没有匹配的权限点</p> : null}
+			{visible.length === 0 ? <p className="text-xs text-muted-foreground">没有匹配的选项</p> : null}
 		</>
 	);
 }
 
-/**
- * 权限点选择区(组合件)—— 「标题 + 计数 + 搜索 + 全选当前 / 清空当前 + 树」。
- *
- * 三处授权弹窗此前各抄了一遍这一整块(标题计数文案略有出入,行为一致),
- * 现在只有这一个实现;弹窗自己的头部信息(角色名 / 用户清单)由调用方在外部渲染。
- */
-export function PermissionSelect({
+/** 搜索、批量选择和树节点展示，不包含业务权限规则。 */
+export function CheckboxTreeSelect({
 	nodes,
 	selected,
 	onToggle,
-	title = "权限点",
-	placeholder = "搜索权限点,如 导出 / 查看…",
+	title = "选项",
+	placeholder = "搜索选项…",
 	maxHeight = 288,
 	className,
 }: {
-	nodes: readonly PermissionNode[];
+	nodes: readonly CheckboxTreeNode[];
 	selected: readonly string[];
 	onToggle: (ids: string[], on: boolean) => void;
 	title?: string;
@@ -152,13 +139,12 @@ export function PermissionSelect({
 	className?: string;
 }) {
 	const [keyword, setKeyword] = useState("");
-	const visibleIds = useMemo(() => visiblePermissionIdsInTree(nodes, keyword), [nodes, keyword]);
-	const total = useMemo(() => visiblePermissionIdsInTree(nodes, "").length, [nodes]);
+	const visibleIds = useMemo(() => visibleIdsInTree(nodes, keyword), [nodes, keyword]);
+	const total = useMemo(() => visibleIdsInTree(nodes, "").length, [nodes]);
 
 	return (
 		<div className={className}>
 			<div className="flex flex-wrap items-center gap-2">
-				<KeyRound className="size-3.5 text-primary" />
 				<span className="text-sm font-medium text-foreground">
 					{title}({selected.length} 项已选 / 共 {total} 项)
 				</span>
@@ -172,7 +158,7 @@ export function PermissionSelect({
 				<ActionButton onClick={() => onToggle(visibleIds, false)}>清空当前</ActionButton>
 			</div>
 			<div className="mt-2 space-y-3 overflow-y-auto rounded-xl border border-border p-3" style={{ maxHeight }}>
-				<PermissionTree nodes={nodes} keyword={keyword} selected={selected} onToggle={onToggle} />
+				<CheckboxTree nodes={nodes} keyword={keyword} selected={selected} onToggle={onToggle} />
 			</div>
 		</div>
 	);

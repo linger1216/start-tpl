@@ -28,7 +28,7 @@ type SessionGate = {
  *  1. **handler 里必须动态 import server-only 模块**。路由文件被 `routeTree.gen.ts` 静态引用,
  *     顶层 import 会被 Vite 拉进客户端包 —— `#/lib/auth` → `#/db` → mysql2/dmdb,浏览器里
  *     没有 `Buffer.prototype`,直接 "Cannot read properties of undefined (reading 'prototype')" 崩掉整个应用。
- *     (同一坑的详细记录见 `routes/(main)/demo/drizzle.tsx` 顶部。)
+ *     (详见服务端鉴权约定。)
  *  2. 会话判定必须在**服务端**做:客户端 `authClient.useSession()` 是异步的,首帧渲染不出结论,
  *     那样未登录用户会先看到后台外壳再被弹走 —— 既闪屏又等于把外壳白送出去。
  *

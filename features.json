@@ -162,20 +162,6 @@
           "prefixes": ["/** Demo:综合网格履职"],
           "min": 2
         },
-        {
-          "file": "src/components/layout/nav-config.ts",
-          "kind": "block",
-          "begin": "^\\t\\tname: \"Demo\",$",
-          "back": "^\\t\\{$",
-          "end": "^\\t\\},$"
-        },
-        {
-          "file": "src/components/layout/nav-config.ts",
-          "kind": "block",
-          "begin": "^\\t\\tname: \"框架能力\",$",
-          "back": "^\\t\\{(\\n\\t\\t//.*)?$",
-          "end": "^\\t\\},$"
-        },
         { "file": "src/lib/rbac.ts", "kind": "block", "begin": "^\\t\"demoGrid\\.list\": pagePermOf", "end": "^\\t\"demoGrid\\.assign\"" },
         { "file": "src/lib/rbac.ts", "kind": "lines", "matches": ["\"demoGrid.list\": { resource: \"demo_grid\" },"] },
         {

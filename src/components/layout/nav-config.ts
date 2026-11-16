@@ -14,13 +14,7 @@
  * ── 本模板的菜单结构 ────────────────────────────────────────────
  *  工作台     `/`                    系统入口页:上手自检清单 + 各展示页入口 + UI 原语示例
  *  我的通知   `/notices`             通知中心
- *  框架能力   纯分组                  6 个能力样例:tRPC / 表单 / 表格 / 数据库 / 登录认证 / 全局状态
- *  Demo       `/demo/grid`           演示业务页「网格履职」
- *  系统设置   `/settings`             ★ 唯一保留的真实业务模块(十个页面,完整 CRUD 骨架)
- *
- * 派生新项目时:把「框架能力」这一枝删掉(连带 `routes/(main)/demo/`),
- * 再把「系统设置」按新业务改名 / 扩展即可;UI 原语的示例在工作台
- * (`components/modules/workbench/ui-gallery.tsx`),不需要时整块删掉。
+ *  系统设置   `/settings`             系统管理页面
  *
  * 图标约定:值来自 `NAV_ICON_MAP`,键名是「小写 kebab-case」。
  * `NavIcon` 是 `keyof NAV_ICON_MAP`,写错图标名会在 `pnpm typecheck` 阶段失败;
@@ -129,7 +123,7 @@ export const NAV_NODES: NavNode[] = [
 		name: "工作台",
 		path: "/",
 		icon: "dashboard",
-		description: "模板入口页:上手自检清单、目录职责速查、各展示页入口。",
+		description: "按类别展示可交互的 UI 组件。",
 	},
 	{
 		name: "我的通知",
@@ -162,28 +156,6 @@ export const NAV_NODES: NavNode[] = [
 				description: "任务的填报表单结构:字段集合与类型,发布后作为不可变版本。",
 			},
 		],
-	},
-	{
-		name: "框架能力",
-		icon: "workflow",
-		description:
-			"每一项框架能力一个**可运行**的样例页:TanStack Query、表单、表格、Drizzle 数据库、登录认证、全局状态(tRPC 本身贯穿所有样例)。",
-		children: [
-			{ name: "数据请求", path: "/demo/tanstack-query", icon: "refresh-cw" },
-			{ name: "表单", path: "/demo/form/simple", icon: "clipboard-list" },
-			{ name: "表格", path: "/demo/table", icon: "table" },
-			{ name: "数据库", path: "/demo/drizzle", icon: "database" },
-			{ name: "登录认证", path: "/demo/better-auth", icon: "key-round" },
-			{ name: "全局状态", path: "/demo/store", icon: "boxes" },
-			{ name: "业务首页", path: "/demo/business-home", icon: "layout-dashboard" },
-		],
-	},
-
-	{
-		name: "Demo",
-		icon: "grid-3x3",
-		description: "演示性业务页(可随 demo 一起删):目前是「网格履职」。",
-		children: [{ name: "网格履职", path: "/demo/grid", icon: "grid-3x3" }],
 	},
 	{
 		// ★ 本模板保留的真实业务模块 —— 派生新项目时从这里开始改

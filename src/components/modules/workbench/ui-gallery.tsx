@@ -1,20 +1,4 @@
-/**
- * UI 组件示例 —— 工作台 `/` 的一块。
- *
- * 为什么存在:`components/ui/` 是 vendored 的通用原语,删了可惜、留着没入口等于死代码。
- * 原来靠 7 个 `/showcase/*` 路由"点名",本轮把 7 个路由收敛成这里的一块 —— 组件照常保留、
- * 有活的例子可抄,但不再是 7 条路由 + 7 个页面文件的体量。
- *
- * 约定(改这个文件前读):
- *  - **只放最小可用示例**,不放长篇文档 —— 详细注释在各自 `ui/*.tsx` 的文件头;
- *  - 每个示例都要能**直接抄进业务页**:受控组件给好 useState,不给"半截用法";
- *  - 新增/删除 `ui/` / `shared/` / `lib/` 下的封装时,**同步在这里加减一格**,否则又会退回"孤儿组件";
- *  - 表格那种"一格里塞不下"的例子不挤进网格 —— 给它自己的整宽卡片(见 `UiGalleryTable`)。
- *  - **分层展示**:能独立渲染的就真跑(拖拽 / 勾选 / 校验都点得动);满足不了下面任一条的只给
- *    「签名 + 指路」卡 —— ① 需要 TanStack Form 的 field context(见 `/demo/form.simple`);
- *    ② 会把重依赖拖进**工作台首屏包**(`shared/icon-picker` → 策展的图标解析;`shared/excel-*` → xlsx);
- *    ③ 服务端专用(`lib/auth` / `lib/sys-para` 引 drizzle,客户端 import 会把 mysql2 打进浏览器)。
- */
+/** 工作台组件示例：受控组件均可直接交互。 */
 
 import { Building2, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
@@ -24,6 +8,7 @@ import { Cell, Group } from "#/components/modules/workbench/ui-gallery-layout";
 import { ModuleGallery } from "#/components/modules/workbench/ui-gallery-modules";
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { ActionButton } from "#/components/ui/action-button";
+import { Alert } from "#/components/ui/alert";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar";
 import {
 	Breadcrumb,
@@ -40,6 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/com
 import { Checkbox } from "#/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "#/components/ui/collapsible";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { DatePicker } from "#/components/ui/date-picker";
 import { DateRangePicker } from "#/components/ui/date-range-picker";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -67,6 +53,7 @@ import { InputNumber } from "#/components/ui/input-number";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Label } from "#/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
+import { Radio, RadioGroup } from "#/components/ui/radio-group";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Reveal } from "#/components/ui/reveal";
 import { ScoreText } from "#/components/ui/score-text";
@@ -102,6 +89,7 @@ import { TagInput } from "#/components/ui/tag-input";
 import { TagList } from "#/components/ui/tag-list";
 import { Textarea } from "#/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "#/components/ui/tooltip";
+import { DocDot, KpiValue, MetaRow, PageTitle } from "#/components/ui/typography";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 
 /**
@@ -150,6 +138,8 @@ export function UiGallery() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [collapsedOpen, setCollapsedOpen] = useState(false);
+	const [date, setDate] = useState("");
+	const [radio, setRadio] = useState("a");
 	const [day, setDay] = useState<Date | undefined>(undefined);
 	const [range, setRange] = useState<{ from?: string; to?: string }>({
 		from: "2026-09-01",
@@ -158,6 +148,17 @@ export function UiGallery() {
 
 	return (
 		<div className="space-y-4">
+			<nav aria-label="组件分类" className="flex flex-wrap gap-2">
+				{["基础录入", "展示与反馈", "按钮与动作", "浮层与导航", "日期", "通用交互件(shared)"].map((category) => (
+					<a
+						key={category}
+						href={`#${category}`}
+						className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:border-border-strong hover:text-foreground"
+					>
+						{category}
+					</a>
+				))}
+			</nav>
 			{/* 台账表格:一格里塞不下,给它整宽卡片(见文件头最后一条约定) */}
 			<Card>
 				<CardHeader>
@@ -178,6 +179,12 @@ export function UiGallery() {
 			</Card>
 
 			<Group title="基础录入" desc="表单里最常用的受控原语 —— 每个都给好了 useState,可直接抄进业务页。">
+				<Cell name="RadioGroup" hint="单选">
+					<RadioGroup value={radio} onValueChange={setRadio}>
+						<Radio value="a">选项一</Radio>
+						<Radio value="b">选项二</Radio>
+					</RadioGroup>
+				</Cell>
 				<Cell name="Input" hint="单行输入">
 					<Input placeholder="请输入" className="w-40" />
 				</Cell>
@@ -257,6 +264,27 @@ export function UiGallery() {
 			</Group>
 
 			<Group title="展示与反馈" desc="只读的展示类原语 —— 徽章 / 数值 / 加载态 / 头像。">
+				<Cell name="Alert" hint="行内提示" wide>
+					<div className="grid gap-3 md:grid-cols-2">
+						{(["info", "success", "warn", "danger"] as const).map((variant) => (
+							<Alert key={variant} variant={variant} title={variant}>
+								这是一条提示信息。
+							</Alert>
+						))}
+					</div>
+				</Cell>
+				<Cell name="Typography" hint="标题与数值">
+					<PageTitle>页面标题</PageTitle>
+					<MetaRow>
+						说明 <DocDot /> 备注
+					</MetaRow>
+					<KpiValue>128</KpiValue>
+				</Cell>
+				<Cell name="Sonner" hint="操作反馈">
+					<Button variant="outline" onClick={() => toast.success("操作成功")}>
+						显示提示
+					</Button>
+				</Cell>
 				<Cell name="Tag" hint="徽章(default/secondary/outline/destructive/ghost/link,外加 random 随机取一色)">
 					<Tag>默认</Tag>
 					<Tag variant="secondary">次要</Tag>
@@ -539,6 +567,9 @@ export function UiGallery() {
 			</Group>
 
 			<Group title="日期" desc="单月日历与日期区间选择器长得一样 —— 同一份默认值(中文 + 年月下拉 + 四箭头导航)。">
+				<Cell name="DatePicker" hint="单日期">
+					<DatePicker value={date} onChange={setDate} />
+				</Cell>
 				<Cell name="Calendar" hint="单月日历(受控)">
 					<div className="w-full rounded-lg border border-border bg-card p-2 shadow-card">
 						<Calendar mode="single" selected={day} onSelect={setDay} />

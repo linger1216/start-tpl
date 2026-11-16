@@ -70,7 +70,21 @@ export function buildNavTree(rows: readonly MenuRow[]): NavNode[] {
 	};
 
 	// 一级菜单由 `groupByParent` 给出(含"父被删 → 子升为一级",免得整枝消失)
-	return roots.map(toNode);
+	// 旧数据库可能仍保留已移除的示例菜单；整枝过滤，避免失效链接。
+	const removed = new Set(["#group/框架能力", "#group/Demo"]);
+	const prune = (node: NavNode): NavNode | null => {
+		if (
+			(node.path && (removed.has(node.path) || node.path.startsWith("/demo/"))) ||
+			(!node.path && (node.name === "框架能力" || node.name === "Demo"))
+		)
+			return null;
+		if (node.children) node.children = node.children.map(prune).filter((child): child is NavNode => child !== null);
+		return node;
+	};
+	return roots
+		.map(toNode)
+		.map(prune)
+		.filter((node): node is NavNode => node !== null);
 }
 
 /**

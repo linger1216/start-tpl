@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { RoleRow } from "#/components/modules/settings/roles/table";
+import { type CheckboxTreeNode, CheckboxTreeSelect } from "#/components/modules/shared/checkbox-tree-select";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
-import { type PermissionNode, PermissionSelect } from "#/components/modules/shared/permission-select";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -85,7 +85,7 @@ export function SettingsRolesForm({
 	/** 打开时落在哪个 tab(默认基本信息);表格行的「菜单权限」会传 `menus` */
 	initialTab?: RoleFormTab;
 	/** 权限树(菜单 + 按钮) */
-	permTree: PermissionNode[];
+	permTree: CheckboxTreeNode[];
 	members: RoleUserRow[];
 	userOptions: Array<{ id: string; name: string; email: string }>;
 	membersLoading: boolean;
@@ -289,7 +289,7 @@ export function SettingsRolesForm({
 									勾中的菜单会出现在侧边栏;勾中的「按钮」决定页里那些操作按钮是否可见(前端 `useHasPerm` 认它)。
 									保存时服务端会自动补全上级菜单。
 								</p>
-								<PermissionSelect
+								<CheckboxTreeSelect
 									nodes={permTree}
 									selected={effectiveMenuIds}
 									title="菜单与按钮"
