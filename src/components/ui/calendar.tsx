@@ -10,8 +10,7 @@ import { cn } from "#/lib/utils";
  * 月份导航条 —— 全项目**唯一**一份(单月日历与日期区间选择器共用同一个,风格才不会各走各的)。
  *
  * 在「上一月 / 下一月」两侧各加一个「上一年 / 下一年」(双箭头):一次跳一年是台账类页面的高频诉求。
- * 按钮用 `size-5`(20px)而不是 `--cell-size`(28px):一行里要并排放 4 个导航按钮 + 2 个下拉标题,
- * 缩小按钮才腾得出中部空间,否则「月 / 年」下拉会被挤到换行。
+ * 日历列宽与导航按钮一起留足空间，避免箭头和年月下拉互相拥挤。
  */
 export function CalendarNav({ className }: { className?: string }) {
 	const { goToMonth, months, previousMonth, nextMonth, dayPickerProps } = useDayPicker();
@@ -22,16 +21,16 @@ export function CalendarNav({ className }: { className?: string }) {
 	const prevYearDisabled = startMonth ? prevYear < startMonth : false;
 	const nextYearDisabled = endMonth ? nextYear > endMonth : false;
 
-	const btn = "size-5 p-0 disabled:pointer-events-none disabled:opacity-50";
+	const btn = "pointer-events-auto size-7 p-0 disabled:pointer-events-none disabled:opacity-50";
 
 	return (
 		<div
 			className={cn(
-				"absolute inset-x-0 top-0 flex h-(--cell-size) w-full items-center justify-between gap-0.5",
+				"pointer-events-none absolute inset-x-0 top-0 flex h-(--cell-size) w-full items-center justify-between gap-1",
 				className,
 			)}
 		>
-			<div className="flex h-full items-center gap-0.5">
+			<div className="flex h-full items-center gap-1">
 				<button
 					type="button"
 					aria-label="上一年"
@@ -51,7 +50,7 @@ export function CalendarNav({ className }: { className?: string }) {
 					<ChevronLeftIcon className="size-4" />
 				</button>
 			</div>
-			<div className="flex h-full items-center gap-0.5">
+			<div className="flex h-full items-center gap-1">
 				<button
 					type="button"
 					aria-label="下一月"
@@ -111,7 +110,7 @@ function Calendar({
 		<DayPicker
 			showOutsideDays={showOutsideDays}
 			className={cn(
-				"bg-background p-2 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(7)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
+				"bg-background p-2 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(9)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
 				className,
 			)}
 			captionLayout={captionLayout}
@@ -138,12 +137,12 @@ function Calendar({
 					defaultClassNames.button_next,
 				),
 				month_caption: cn(
-					// 两侧各留 ≈1.6 个单元格:清出 4 个导航按钮的位置,中部留给「月 / 年」下拉
-					"flex h-(--cell-size) w-full items-center justify-center px-11",
+					// 两侧各留出两个导航按钮，中间保留年月下拉的空间。
+					"flex h-(--cell-size) w-full items-center justify-center px-15",
 					defaultClassNames.month_caption,
 				),
 				dropdowns: cn(
-					"flex h-(--cell-size) w-full flex-nowrap items-center justify-center gap-1 whitespace-nowrap text-sm font-medium [&>*]:shrink-0",
+					"flex h-(--cell-size) w-full flex-nowrap items-center justify-center gap-2 whitespace-nowrap text-sm font-medium [&>*]:shrink-0",
 					defaultClassNames.dropdowns,
 				),
 				dropdown_root: cn("relative min-w-0 rounded-(--cell-radius)", defaultClassNames.dropdown_root),
