@@ -2,6 +2,7 @@ import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Calendar } from "#/components/ui/calendar";
+import { DATE_TRIGGER_CLASS } from "#/components/ui/date-trigger";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
 import { formatLocalDate } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -41,14 +42,7 @@ export function DatePicker({
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger
-				id={id}
-				className={cn(
-					"flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-card px-3 hover:border-border-strong text-sm whitespace-nowrap transition-colors outline-none",
-					"hover:border-ring/60",
-					className,
-				)}
-			>
+			<PopoverTrigger id={id} className={cn(DATE_TRIGGER_CLASS, className)}>
 				<span className={cn("truncate", !value && "text-muted-foreground")}>{value || placeholder}</span>
 				<CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
 			</PopoverTrigger>

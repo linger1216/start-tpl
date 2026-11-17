@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { AsyncState } from "#/components/modules/task-close/async-state";
-import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
 import { AttachmentChip, TaskAttachmentList } from "#/components/modules/task-close/task-content-attachments";
 import { MentionTextarea, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
 import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
@@ -10,6 +9,7 @@ import { useAttachmentUpload } from "#/components/modules/task-close/use-attachm
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
+import { Avatar } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 
 import { writeSuccess } from "#/hooks/use-ledger-write";
@@ -112,7 +112,7 @@ export function TaskComments({
 		<div className="grid gap-5">
 			{/* ci —— 评论输入(原型的样:avatar + 边框 field + 工具条 + 发送) */}
 			<div className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3">
-				<InitialsCircle name="我" className="size-9 text-[13px]" />
+				<Avatar name="我" size="lg" aria-hidden />
 				{/* 输入框:静态描边 + 一条**焦点环**(不换边框色,只加环 —— 键盘用户要看得见落点) */}
 				<div className="rounded-lg border border-border bg-card">
 					<MentionTextarea
@@ -186,7 +186,7 @@ export function TaskComments({
 				<ul className="grid gap-4.5 rounded-lg bg-card p-4">
 					{items.map((item) => (
 						<li key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)] items-start gap-3 group">
-							<InitialsCircle name={item.authorName ?? "?"} className="size-9 text-[13px]" />
+							<Avatar name={item.authorName ?? "?"} size="lg" aria-hidden />
 							<div className="min-w-0 pt-0.5">
 								{/* 名字 + 时间 + 删除同一行:删除是**纯图标**(ActionIconButton 的行内规格),
 								    紧跟在日期右侧、与文字同一视觉水平;悬停/键盘聚焦才显形 */}

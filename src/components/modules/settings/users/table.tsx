@@ -1,5 +1,5 @@
 import { actionsColumn, timeColumn } from "#/components/modules/shared/table-kit";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Avatar } from "#/components/ui/avatar";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
 import { createAppColumnHelper } from "#/lib/table";
@@ -97,12 +97,7 @@ export function userColumns({
 				const url = ctx.getValue();
 				const who = ctx.row.original.name;
 				// 真头像;没有地址就退回首字(以前这里是把 URL 当文本显示 —— 那不算「看到头像」)
-				return (
-					<Avatar className="size-8">
-						{url ? <AvatarImage src={url} alt={who} /> : null}
-						<AvatarFallback className="text-xs">{(who || "?").slice(0, 1)}</AvatarFallback>
-					</Avatar>
-				);
+				return <Avatar name={who || "?"} src={url} />;
 			},
 		}),
 		timeColumn<UserRow>("createdAt", { header: "创建时间", size: 140 }),

@@ -5,7 +5,7 @@ import type { UserRow } from "#/components/modules/settings/users/table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
 import { MultiSelect, type MultiSelectOption } from "#/components/modules/shared/multi-select";
 import { ActionButton } from "#/components/ui/action-button";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Avatar } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -228,10 +228,7 @@ export function SettingsUsersForm({
 									<DetailRow label="头像">
 										<div className="flex items-start gap-3">
 											{/* 预览:有地址就出图,没有就是姓名首字 —— 与列表 / 详情用的是同一个 Avatar */}
-											<Avatar className="size-26 shrink-0">
-												{image ? <AvatarImage src={image} alt={name || "头像"} /> : null}
-												<AvatarFallback className="text-sm">{(name || "?").slice(0, 1)}</AvatarFallback>
-											</Avatar>
+											<Avatar name={name || "?"} src={image} size="2xl" />
 											<div className="flex min-w-0 flex-1 flex-col gap-2">
 												<FileDropzone
 													accept=".jpg,.jpeg,.png,.gif,.webp"

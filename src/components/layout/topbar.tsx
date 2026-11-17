@@ -3,6 +3,7 @@ import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Avatar } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -187,9 +188,7 @@ export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => 
 						aria-label="用户菜单"
 						className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors duration-150 hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring/40"
 					>
-						<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-foreground ring-1 ring-border">
-							{(user.name || user.email).slice(0, 1).toUpperCase()}
-						</span>
+						<Avatar name={user.name || user.email} size="md" aria-hidden />
 						<span className="hidden max-w-32 truncate text-sm sm:block">{user.name || user.email}</span>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-56">

@@ -1,8 +1,9 @@
 import { startOfMonth, startOfYear, subDays } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
+import { DATE_TRIGGER_CLASS } from "#/components/ui/date-trigger";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
 import { formatLocalDate } from "#/lib/time";
 import { cn } from "#/lib/utils";
@@ -90,23 +91,19 @@ export function DateRangePicker({
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger
-				className={cn(
-					buttonVariants({ variant: "outline" }),
-					"h-9 w-64 justify-start text-left font-normal",
-					className,
-				)}
-			>
-				<CalendarIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
-				{value.from ? (
-					<span className="truncate">
-						{value.from}
-						<span className="text-muted-foreground"> ~ </span>
-						{value.to ?? "…"}
-					</span>
-				) : (
-					<span className="text-muted-foreground">{placeholder}</span>
-				)}
+			<PopoverTrigger className={cn(DATE_TRIGGER_CLASS, "w-64", className)}>
+				<span className={cn("truncate", !value.from && "text-muted-foreground")}>
+					{value.from ? (
+						<>
+							{value.from}
+							<span className="text-muted-foreground"> ~ </span>
+							{value.to ?? "…"}
+						</>
+					) : (
+						placeholder
+					)}
+				</span>
+				<CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
 			</PopoverTrigger>
 
 			<PopoverContent align="start" className="flex w-max max-w-screen gap-2 overflow-x-auto border bg-card p-2">

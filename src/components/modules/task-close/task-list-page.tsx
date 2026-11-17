@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, CalendarClock, CalendarX, ClipboardList, Plus } from "lucide-react";
+import { BellRing, CalendarClock, CalendarX, ClipboardList, Flag, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageFrame } from "#/components/layout/page-frame";
@@ -9,43 +9,59 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { AsyncState } from "#/components/modules/task-close/async-state";
 import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
 import { type CreateTaskPayload, TaskForm } from "#/components/modules/task-close/task-form";
-import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
+import { DateRangePicker, type DateRangeValue } from "#/components/ui/date-range-picker";
+import { FilterChipBar, type FilterChipGroup } from "#/components/ui/filter-chips";
 import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { writeSuccess } from "#/hooks/use-ledger-write";
-import { PAGE_SIZE_KEY, parsePageSize, useParaRaw } from "#/hooks/use-para-prefs";
+import { PAGE_SIZE_KEY, parsePageSize, useFilterPrefs, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { priorityLabelOf, statusesOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
-import { formatLocalDate } from "#/lib/time";
-import { cn } from "#/lib/utils";
+import { priorityLabelOf, priorityToneOf, statusesOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
 
-/** 快捷区间 → 往回推的天数(含今天):今天 0 天 / 近 7 天 6 天 / 近 30 天 29 天 */
-const PRESET_DAYS: Record<string, number> = { today: 0, "7d": 6, "30d": 29 };
-
-/** 当前时刻按天平移(本地);日期筛选与快捷区间共用 */
-function shiftDays(days: number): Date {
-	const date = new Date();
-	date.setDate(date.getDate() + days);
-	return date;
-}
-
-/** 快捷筛选的文字按钮:静置是次级文字,选中时淡底 + 主色(同一排里一眼看出哪些生效) */
-function QuickFilter({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
-	return (
-		<ActionButton
-			aria-pressed={active}
-			onClick={onClick}
-			className={cn("rounded-full px-2 py-0.5", active && "bg-brand-soft font-medium text-primary hover:no-underline")}
-		>
-			{children}
-		</ActionButton>
-	);
-}
+/**
+ * 快速筛选的三组 —— 形态由 `ui/filter-chips` 统一,这里只给**语义**:
+ * 组内单选还是多选、每个选项叫什么、选中时什么颜色。
+ *
+ * - 优先级:多选(P0/P1/P2 可同时开),颜色与卡片上的 `PriorityTag` 同色(同一哈希口径)
+ * - 期限:单选(临期 / 超期 互斥),颜色走期限语义色
+ * - 范围:多选(两个独立开关,可同时开)
+ */
+const QUICK_GROUPS: readonly FilterChipGroup[] = [
+	{
+		key: "priority",
+		label: "优先级",
+		Icon: Flag,
+		multiple: true,
+		options: TASK_PRIORITIES.map((value) => ({
+			value: String(value),
+			label: priorityLabelOf(value),
+			activeClassName: priorityToneOf(value),
+		})),
+	},
+	{
+		key: "deadline",
+		label: "期限",
+		Icon: CalendarClock,
+		options: [
+			{ value: "soon", label: "临期", activeClassName: "bg-warn-soft text-warn-fg" },
+			{ value: "overdue", label: "超期", activeClassName: "bg-danger-soft text-danger-fg" },
+		],
+	},
+	{
+		key: "scope",
+		label: "范围",
+		Icon: Users,
+		multiple: true,
+		options: [
+			{ value: "pending", label: "待你处理" },
+			{ value: "mine", label: "只看与我相关" },
+		],
+	},
+];
 
 /**
  * 「我的任务」卡片页。
@@ -60,39 +76,30 @@ export function TaskListPage() {
 
 	const [keyword, setKeyword] = useState("");
 	const [workflowId, setWorkflowId] = useState("all");
-	/** 创建时间筛选:独立的开始 / 结束(本地日期,留空 = 不限);快捷按钮只是帮忙填这两个值 */
-	const [startDate, setStartDate] = useState("");
-	const [endDate, setEndDate] = useState("");
-	const [mineOnly, setMineOnly] = useState(true);
-	/** 只看「有动作正轮到我处理」的 —— 与卡面「待你处理」同一判据 */
-	const [pendingOnly, setPendingOnly] = useState(false);
-	/** 快捷筛选:优先级(可多选)与期限(临期 / 超期,互斥) */
-	const [priorities, setPriorities] = useState<number[]>([]);
-	const [deadline, setDeadline] = useState<"" | "soon" | "overdue">("");
+	/** 创建时间筛选:区间(本地日期,空 = 不限);形态全站统一走 `ui/date-range-picker` */
+	const [createdRange, setCreatedRange] = useState<DateRangeValue>({});
+	/**
+	 * 快速筛选 —— 三组,统一成「每组一个选中值数组」(单选组最多一个,多选组可多个):
+	 * `priority` 优先级(多选)· `deadline` 期限(临期 / 超期 互斥)· `scope` 范围(两个独立开关)。
+	 * 形态全站统一走 `ui/filter-chips`,不再各页手写一排小按钮。
+	 */
+	const [quick, setQuick] = useState<Record<string, string[]>>({ priority: [], deadline: [], scope: ["mine"] });
 	const [page, setPage] = useState(1);
 	// 读 `page.size` 参数 —— loader 已 prefetch,首帧就有;`parsePageSize` 兜底 20
 	const pageSize = parsePageSize(useParaRaw(PAGE_SIZE_KEY));
+	/** 快速筛选条的展开态 —— 按页键记进参数(`page.filters`),下次进同一页保持 */
+	const filterPrefs = useFilterPrefs("task-close");
 	const [createOpen, setCreateOpen] = useState(false);
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
-	const createdAfter = useMemo(() => (startDate ? new Date(`${startDate}T00:00:00`) : undefined), [startDate]);
-	const createdBefore = useMemo(() => (endDate ? new Date(`${endDate}T23:59:59.999`) : undefined), [endDate]);
-
-	/** 快捷区间:把对应天数填进开始 / 结束(days 含今天,0 = 今天) */
-	function applyPreset(days: number) {
-		setStartDate(formatLocalDate(shiftDays(-days)));
-		setEndDate(formatLocalDate(new Date()));
-		setPage(1);
-	}
-
-	/** 当前日期组合命中的快捷区间;手动改过日期 = 自定义,三段都不亮 */
-	const activePreset = useMemo(() => {
-		const today = formatLocalDate(new Date());
-		for (const [preset, days] of Object.entries(PRESET_DAYS)) {
-			if (startDate === formatLocalDate(shiftDays(-days)) && endDate === today) return preset;
-		}
-		return "";
-	}, [startDate, endDate]);
+	const createdAfter = useMemo(
+		() => (createdRange.from ? new Date(`${createdRange.from}T00:00:00`) : undefined),
+		[createdRange.from],
+	);
+	const createdBefore = useMemo(
+		() => (createdRange.to ? new Date(`${createdRange.to}T23:59:59.999`) : undefined),
+		[createdRange.to],
+	);
 
 	const listQuery = useQuery(
 		trpc.taskClose.taskList.queryOptions(
@@ -101,10 +108,10 @@ export function TaskListPage() {
 				workflowId: workflowId === "all" ? undefined : workflowId,
 				createdAfter,
 				createdBefore,
-				mine: mineOnly,
-				pending: pendingOnly || undefined,
-				priority: priorities.length ? [...priorities].sort() : undefined,
-				deadline: deadline || undefined,
+				mine: quick.scope.includes("mine"),
+				pending: quick.scope.includes("pending") || undefined,
+				priority: quick.priority.length ? quick.priority.map(Number).sort() : undefined,
+				deadline: (quick.deadline[0] as "soon" | "overdue" | undefined) ?? undefined,
 				page,
 				pageSize,
 			},
@@ -271,55 +278,15 @@ export function TaskListPage() {
 						))}
 					</SelectContent>
 				</Select>
-				<span className="flex items-center gap-1.5">
-					<Input
-						type="date"
-						aria-label="创建开始日期"
-						value={startDate}
-						className="h-8 w-64 text-sm"
-						onChange={(e) => {
-							const next = e.target.value;
-							setStartDate(next);
-							// 倒挂时把结束拨齐到开始,免得区间为空还看不出来
-							if (next && endDate && next > endDate) setEndDate(next);
-							setPage(1);
-						}}
-					/>
-					<span className="text-xs text-muted-foreground">至</span>
-					<Input
-						type="date"
-						aria-label="创建结束日期"
-						value={endDate}
-						className="h-8 w-64 text-sm"
-						onChange={(e) => {
-							const next = e.target.value;
-							setEndDate(next);
-							if (next && startDate && next < startDate) setStartDate(next);
-							setPage(1);
-						}}
-					/>
-					<ActionButton
-						onClick={() => {
-							setStartDate("");
-							setEndDate("");
-							setPage(1);
-						}}
-					>
-						清除
-					</ActionButton>
-				</span>
-				{/* 快捷区间(分段控件):只是帮上面两个日期填值 —— 手动改过日期后三段都不亮,即「自定义」 */}
-				<Tabs
-					variant="segmented"
-					value={activePreset}
-					onValueChange={(next) => applyPreset(PRESET_DAYS[String(next)] ?? 0)}
-				>
-					<TabsList>
-						<TabsTrigger value="today">今天</TabsTrigger>
-						<TabsTrigger value="7d">近 7 天</TabsTrigger>
-						<TabsTrigger value="30d">近 30 天</TabsTrigger>
-					</TabsList>
-				</Tabs>
+				{/* 创建时间区间:全站唯一形态 —— `ui/date-range-picker`(快捷范围在浮层里,不再另做一套) */}
+				<DateRangePicker
+					value={createdRange}
+					onChange={(next) => {
+						setCreatedRange(next);
+						setPage(1);
+					}}
+					placeholder="时间区间"
+				/>
 			</div>
 
 			{/*
@@ -327,61 +294,18 @@ export function TaskListPage() {
 			  — 优先级可多选(P0/P1/P2);临期 / 超期 互斥(都是"期限压力",同时成立没有意义);
 			  — 待我处理 / 只看与我相关 原来是开关,改成同一排文字按钮,保持一致。
 			*/}
-			<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-				<span className="text-xs text-muted-foreground">快捷筛选</span>
-				{TASK_PRIORITIES.map((value) => (
-					<QuickFilter
-						key={value}
-						active={priorities.includes(value)}
-						onClick={() => {
-							setPriorities((prev) =>
-								prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value],
-							);
-							setPage(1);
-						}}
-					>
-						{priorityLabelOf(value)}
-					</QuickFilter>
-				))}
-				<span className="h-3 w-px bg-border" />
-				<QuickFilter
-					active={deadline === "soon"}
-					onClick={() => {
-						setDeadline((prev) => (prev === "soon" ? "" : "soon"));
-						setPage(1);
-					}}
-				>
-					临期
-				</QuickFilter>
-				<QuickFilter
-					active={deadline === "overdue"}
-					onClick={() => {
-						setDeadline((prev) => (prev === "overdue" ? "" : "overdue"));
-						setPage(1);
-					}}
-				>
-					超期
-				</QuickFilter>
-				<span className="h-3 w-px bg-border" />
-				<QuickFilter
-					active={pendingOnly}
-					onClick={() => {
-						setPendingOnly((prev) => !prev);
-						setPage(1);
-					}}
-				>
-					待我处理
-				</QuickFilter>
-				<QuickFilter
-					active={mineOnly}
-					onClick={() => {
-						setMineOnly((prev) => !prev);
-						setPage(1);
-					}}
-				>
-					只看与我相关
-				</QuickFilter>
-			</div>
+			<FilterChipBar
+				title="快速筛选"
+				collapsible
+				initialExpanded={filterPrefs.initialExpanded}
+				onExpandedChange={filterPrefs.persist}
+				groups={QUICK_GROUPS}
+				active={quick}
+				onChange={(groupKey, next) => {
+					setQuick((prev) => ({ ...prev, [groupKey]: [...next] }));
+					setPage(1);
+				}}
+			/>
 
 			{/* 三态分开:加载 / 出错 / 真的没有 —— 把「取不到」说成「没有」会让人以为工作被清空了。
 			   有数据时卡片**直接铺在页面上**,不再套外层 Card(白底套白底会糊成一整块通栏宽面板)。 */}
@@ -394,7 +318,7 @@ export function TaskListPage() {
 						onRetry={() => listQuery.refetch()}
 						empty={
 							items.length === 0
-								? pendingOnly
+								? quick.scope.includes("pending")
 									? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
 									: "没有任务。点右上角「新增任务」起一个。"
 								: null

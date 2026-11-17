@@ -22,6 +22,8 @@ const PAGE_COLUMNS_KEY = "page.columns";
 const PAGE_TREE_KEY = "page.tree";
 /** 参数管理里的键(值是每页条数,见 `lib/sys-para.ts` 的 `PARA_DEFAULTS`) */
 export const PAGE_SIZE_KEY = "page.size";
+/** 参数管理里的键(值是一段 JSON:页面标识 → 筛选条是否展开) */
+const PAGE_FILTERS_KEY = "page.filters";
 /** 参数缺失 / 填坏时的落点 —— 与 `PARA_DEFAULTS` 里的默认值保持一致 */
 const PAGE_SIZE_FALLBACK = 20;
 
@@ -159,6 +161,22 @@ export function useTreePrefs(pageKey: string) {
 
 	/** 库里那套展开态;`undefined` = 还没读到(树别急着套用)。调用方直接传给 `initialExpandedIds` */
 	return { initialExpandedIds: raw === undefined ? undefined : (parsed[pageKey]?.expanded ?? []), persist };
+}
+
+/**
+ * 筛选条的展开态持久化 —— 存在 `sys_para` 的 `page.filters` 里(与列偏好 / 树展开一个套路)。
+ *
+ * 记的是**是否展开**:没设置过 = 用组件自己的默认值(通常是展开),用户折叠过一次后下次进来保持折叠。
+ *
+ * 返回的 `initialExpanded` 在库里那个值到位之前是 `undefined` —— 调用方要**等它第一次有值**再套用,
+ * 别把「还没读到」当成「折叠了」。
+ */
+export function useFilterPrefs(pageKey: string) {
+	const { raw, parsed, persist: persistRecord } = useParaRecord<boolean>(PAGE_FILTERS_KEY);
+
+	const persist = useCallback((expanded: boolean) => persistRecord(expanded, pageKey), [persistRecord, pageKey]);
+
+	return { initialExpanded: raw === undefined ? undefined : (parsed[pageKey] ?? false), persist };
 }
 
 /**

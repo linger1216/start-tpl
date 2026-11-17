@@ -1,6 +1,6 @@
 /** 工作台组件示例：受控组件均可直接交互。 */
 
-import { Building2, KeyRound, Users } from "lucide-react";
+import { Building2, CalendarClock, Flag, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
@@ -9,7 +9,7 @@ import { ModuleGallery } from "#/components/modules/workbench/ui-gallery-modules
 import { UiGalleryTable } from "#/components/modules/workbench/ui-gallery-table";
 import { ActionButton } from "#/components/ui/action-button";
 import { Alert } from "#/components/ui/alert";
-import { Avatar, AvatarFallback } from "#/components/ui/avatar";
+import { Avatar } from "#/components/ui/avatar";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -48,6 +48,7 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { FileDropzone } from "#/components/ui/file-dropzone";
+import { FilterChipBar, type FilterChipGroup } from "#/components/ui/filter-chips";
 import { Input } from "#/components/ui/input";
 import { InputNumber } from "#/components/ui/input-number";
 import { JsonBlock } from "#/components/ui/json-block";
@@ -125,6 +126,30 @@ const DEMO_STATS: StatItem[] = [
 	},
 ];
 
+/** 画廊用的两组胶囊:一组多选(优先级)、一组单选(期限) */
+const GALLERY_CHIP_GROUPS: readonly FilterChipGroup[] = [
+	{
+		key: "priority",
+		label: "优先级",
+		Icon: Flag,
+		multiple: true,
+		options: [
+			{ value: "0", label: "P0 · 最高" },
+			{ value: "1", label: "P1 · 高" },
+			{ value: "2", label: "P2 · 普通" },
+		],
+	},
+	{
+		key: "deadline",
+		label: "期限",
+		Icon: CalendarClock,
+		options: [
+			{ value: "soon", label: "临期", activeClassName: "bg-warn-soft text-warn-fg" },
+			{ value: "overdue", label: "超期", activeClassName: "bg-danger-soft text-danger-fg" },
+		],
+	},
+];
+
 export function UiGallery() {
 	// 受控组件的状态集中在这里 —— 每个示例都给成"能直接抄走"的形态
 	const [switchOn, setSwitchOn] = useState(true);
@@ -141,6 +166,11 @@ export function UiGallery() {
 	const [date, setDate] = useState("");
 	const [radio, setRadio] = useState("a");
 	const [day, setDay] = useState<Date | undefined>(undefined);
+	/** 画廊里的筛选胶囊组:自己带状态,给「单选 / 多选」两种组各一组 */
+	const [galleryChips, setGalleryChips] = useState<Record<string, string[]>>({
+		priority: ["0"],
+		deadline: [],
+	});
 	const [range, setRange] = useState<{ from?: string; to?: string }>({
 		from: "2026-09-01",
 		to: "2026-09-07",
@@ -295,6 +325,23 @@ export function UiGallery() {
 						随值
 					</Tag>
 				</Cell>
+				<Cell name="FilterChipBar" hint="快速筛选胶囊组(单选组互斥 · 多选组可同时开 · 横排)">
+					<FilterChipBar
+						title="快速筛选"
+						groups={GALLERY_CHIP_GROUPS}
+						active={galleryChips}
+						onChange={(groupKey, next) => setGalleryChips((prev) => ({ ...prev, [groupKey]: [...next] }))}
+					/>
+				</Cell>
+				<Cell name="FilterChipBar(竖排 · 可折叠)" hint="竖向每组一行;收起时只留标题与「已选 N 项」">
+					<FilterChipBar
+						orientation="vertical"
+						collapsible
+						groups={GALLERY_CHIP_GROUPS}
+						active={galleryChips}
+						onChange={(groupKey, next) => setGalleryChips((prev) => ({ ...prev, [groupKey]: [...next] }))}
+					/>
+				</Cell>
 				<Cell name="TagList" hint="徽章列表(可换配色主题)">
 					<TagList values={["紧急", "已核对", "跨区"]} />
 				</Cell>
@@ -314,13 +361,12 @@ export function UiGallery() {
 						<DetailRow label="创建时间">2026-09-21 09:12</DetailRow>
 					</div>
 				</Cell>
-				<Cell name="Avatar" hint="头像(无图退回首字)">
-					<Avatar>
-						<AvatarFallback>管</AvatarFallback>
-					</Avatar>
-					<Avatar>
-						<AvatarFallback>李</AvatarFallback>
-					</Avatar>
+				<Cell name="Avatar" hint="头像(无图退回首字 · 名字 hash 落桶取色 · 尺寸只走 size 档)">
+					<Avatar name="管" size="xs" />
+					<Avatar name="李" size="sm" />
+					<Avatar name="王" size="md" />
+					<Avatar name="张三" />
+					<Avatar name="赵" size="lg" />
 				</Cell>
 				<Cell name="Spinner" hint="加载中">
 					<Spinner />

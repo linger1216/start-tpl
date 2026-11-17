@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 import { ActionButton, ActionIconButton } from "#/components/ui/action-button";
+import { Avatar } from "#/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
-import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 import { isRecord } from "#/lib/task/json";
 import { cn } from "#/lib/utils";
 
@@ -88,7 +88,6 @@ export function TaskScopeEditor({
 							const values = rule?.field ? valuesOf(rule.field) : [];
 							const opened = openKey === target.key;
 							const hit = matchedOf(rule);
-							const avatarTone = RANDOM_PALETTE[stableIndex(target.key || "self", RANDOM_PALETTE.length)];
 							return (
 								<article
 									key={target.key || "self"}
@@ -98,15 +97,8 @@ export function TaskScopeEditor({
 									)}
 								>
 									<div className="flex items-center gap-2.5 px-3 py-2">
-										{/* 点色圆头像(同 Tag 的稳定哈希选色,同人同色) */}
-										<span
-											className={cn(
-												"flex size-6.5 shrink-0 items-center justify-center rounded-full text-xs font-bold leading-none",
-												avatarTone,
-											)}
-										>
-											{target.label.slice(0, 1)}
-										</span>
+										{/* 点色圆头像:形态与颜色都走 `ui/avatar`(名字 hash 落桶,同人同色) */}
+										<Avatar name={target.label} size="sm" aria-hidden />
 										<span
 											className="min-w-0 max-w-28 shrink-0 truncate text-sm font-medium text-foreground"
 											title={target.label}

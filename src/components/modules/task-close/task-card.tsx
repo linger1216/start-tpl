@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
 import { PriorityTag } from "#/components/modules/task-close/priority-tag";
+import { Avatar } from "#/components/ui/avatar";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
@@ -59,8 +59,8 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 				<h3 className="min-w-0 flex-1 line-clamp-2 text-lg leading-snug font-semibold text-foreground">{task.name}</h3>
 				{task.executorName ? (
 					<span className="flex shrink-0 items-center gap-1.5" title={`执行人:${task.executorName}`}>
-						{/* 「人」的视觉身份 = 墨底正圆 + 反白首字 + 宋体(见 DESIGN.md §4.4);比标题小一号,不抢主 */}
-						<InitialsCircle name={task.executorName} className="size-6 text-[11px]" />
+						{/* 「人」的视觉身份:首字圆牌 + 名字 hash 落桶的固定色(见 DESIGN.md §4.4);比标题小一号,不抢主 */}
+						<Avatar name={task.executorName} size="sm" aria-hidden />
 						<span className="max-w-20 truncate text-xs text-muted-foreground">{task.executorName}</span>
 					</span>
 				) : (

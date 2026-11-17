@@ -1,11 +1,13 @@
 /**
  * 任务闭环(tc_close)的常量真源 —— 放「router、种子脚本、测试都要用」的字面量,
- * 以及只依赖这些字面量的一行取用函数(`statusLabelOf` / `priorityLabelOf` / `taskPathOf`)。
+ * 以及只依赖这些字面量的一行取用函数(`statusLabelOf` / `priorityLabelOf` / `priorityToneOf` / `taskPathOf`)。
  *
  * 单独一个文件(而不是从 `routers/task/`(组合入口 `index.ts`) 导出):那个 router 会连带拉起
  * `../init`(`@tanstack/react-start/server` 等),而 `scripts/seed-task-close.ts`
  * 是个纯 tsx 脚本 —— 为了一个字符串常量把整套 tRPC 运行时装进脚本不值当。
  */
+
+import { RANDOM_PALETTE, stableIndex } from "#/lib/tag-color";
 
 /** 单个流程模板的状态数上限 —— zod 校验与编辑器「添加状态」共用 */
 export const MAX_WORKFLOW_STATUSES = 30;
@@ -92,6 +94,17 @@ export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
 	1: "P1 · 高",
 	2: "P2 · 普通",
 };
+
+/**
+ * 优先级档位 → 颜色(胶囊底 + 字)。
+ *
+ * 与 `PriorityTag`(卡片上的徽章)同一口径 —— 徽章与筛选胶囊同色,同一个 P0 在两处长得一样。
+ * 哈希键 `p{档位}` 是约定:改它就要同时改这两处,所以**都从这里取**。
+ */
+export function priorityToneOf(priority: number | string | null | undefined): string {
+	const n = typeof priority === "string" ? Number(priority) : priority;
+	return RANDOM_PALETTE[stableIndex(`p${n ?? "x"}`, RANDOM_PALETTE.length)];
+}
 
 /** 从 `tc_task.priority` 取展示名;null/未知/空 → "未设置" */
 export function priorityLabelOf(priority: number | string | null | undefined): string {

@@ -1149,6 +1149,42 @@ describe("任务闭环", () => {
 		assert.equal((await asA().taskClose.taskGet({ id: p0Soon.id })).task.terminal, false);
 	});
 
+	it("统计卡:结束态的任务不算「7 天内到期 / 已到期」(数字要与列表同一口径)", async () => {
+		const soon = new Date(Date.now() + 2 * 60 * 60_000); // 2 小时后 → 临期
+		const overdue = new Date(Date.now() - 2 * 60 * 60_000); // 2 小时前 → 超期
+		// 用带后缀的 keyword 圈住本用例的四条,统计跟着筛选走 → 数字可比
+		const keyword = `${TEST_PREFIX}闭环-统计口径-${suffix}`;
+		const create = (label: string, dueAt: Date) =>
+			asA().taskClose.taskCreate({
+				name: `${keyword}-${label}`,
+				workflowId,
+				dueAt: dueAt.toISOString(),
+			});
+		const soonOpen = await create("未结束临期", soon);
+		const soonClosed = await create("已结束临期", soon);
+		const overdueOpen = await create("未结束超期", overdue);
+		const overdueClosed = await create("已结束超期", overdue);
+		// 直接置成终态(投影只看状态值,不必走完整审批链)
+		await db
+			.update(taskTable)
+			.set({ status: "archived" })
+			.where(inArray(taskTable.id, [soonClosed.id, overdueClosed.id]));
+
+		const list = await asA().taskClose.taskList({ keyword });
+		assert.equal(list.items.length, 4, "四条都在列表里 —— 结束态只是不计入期限统计,不该从列表里消失");
+		assert.equal(list.stats.total, 4, "统计跟随筛选");
+		assert.equal(list.stats.dueSoon, 1, "结束态不算「7 天内到期」");
+		assert.equal(list.stats.overdue, 1, "结束态不算「已到期」");
+		assert.ok(
+			list.items.some((item) => item.id === soonOpen.id),
+			"未结束的临期任务照常在列表里",
+		);
+		assert.ok(
+			list.items.some((item) => item.id === overdueOpen.id),
+			"未结束的超期任务照常在列表里",
+		);
+	});
+
 	it("加人一律按参与者:管理员可以把自己加进来(只排除任务创建人)", async () => {
 		// B 临时是管理员 → 在 C 建的任务里能加**自己**;创建人仍然不进成员表
 		await addUserRole(B.id, (await getSystemAdminRoleRow()).id);

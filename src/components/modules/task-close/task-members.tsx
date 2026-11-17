@@ -1,7 +1,7 @@
 import { Trash2, UserPlus } from "lucide-react";
 import { BlockHeader } from "#/components/modules/task-close/block-header";
-import { InitialsCircle } from "#/components/modules/task-close/initials-circle";
 import { ActionButton } from "#/components/ui/action-button";
+import { Avatar } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { roleLabelOf } from "#/lib/task/close-spec";
@@ -88,8 +88,8 @@ export function TaskMembers({
 /**
  * 参与人块里的一行 —— 左侧角色标签 + 右侧人名;`onRemove` 非空时显式给「移出」按钮。
  *
- * 头像与「评论与回复」`TaskComments` 的 `Avatar` **同色**:`bg-primary` + `text-primary-foreground`
- * (品牌蓝底 + 浅字)—— 同一个人在两处长得一样,不额外给主执行人染色。
+ * 头像走 `ui/avatar` 的兜底(墨底 + 反白首字 + 宋体)—— 同一个人在卡片 / 评论 / 成员三处
+ * 长得一样,不额外给主执行人染色。
  * 「执行」这个身份靠**角色标签** + 名字加粗来区分,不靠颜色。
  *
  * `roleLabel` 不是 HTML `role` 属性 —— prop 名刻意避开 ARIA 关键字,免得 biome 把
@@ -114,8 +114,8 @@ function PeopleRow({
 		<li className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-hover">
 			<span className="w-14 shrink-0 text-xs text-muted-foreground">{roleLabel}</span>
 			<div className="flex min-w-0 flex-1 items-center gap-2">
-				{/* 圆牌:墨底反白首字(与卡面 / 评论头像共用 InitialsCircle) */}
-				<InitialsCircle name={name} className="size-5.5 text-xs" />
+				{/* 圆牌:首字 + 固定色(全站人像走 `ui/avatar`,大小走 size 档) */}
+				<Avatar name={name} size="xs" aria-hidden />
 				<span className={cn("truncate text-sm text-foreground", main && "font-semibold")}>{name}</span>
 			</div>
 			{onRemind && (

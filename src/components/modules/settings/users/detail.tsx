@@ -1,5 +1,5 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Avatar } from "#/components/ui/avatar";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
@@ -51,10 +51,7 @@ export function SettingsUsersDetail({
 					<DetailRow label="邮箱已验证">{row.emailVerified ? "是" : "否"}</DetailRow>
 					<DetailRow label="头像">
 						<div className="flex items-center gap-2">
-							<Avatar className="size-8">
-								{row.image ? <AvatarImage src={row.image} alt={row.name} /> : null}
-								<AvatarFallback className="text-xs">{(row.name || "?").slice(0, 1)}</AvatarFallback>
-							</Avatar>
+							<Avatar name={row.name || "?"} src={row.image} />
 						</div>
 					</DetailRow>
 					<DetailRow label="部门">

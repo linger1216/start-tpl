@@ -97,6 +97,36 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null, executorName: st
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
+/**
+ * 「未结束」任务的 SQL 条件 —— 结束态按**流程模板**取(任务行上的 `workflow` 是创建时快照,SQL 里读不到它的 JSON)。
+ *
+ * 判定:任务**自己那个模板**把当前状态标成了 `terminal` 就是结束。
+ * - 没有 `workflow_id`(老数据)→ 放行
+ * - 模板**没定义**终态 → 它下面的任务都算未结束
+ * - 模板有终态 → 当前状态不在终态清单里才算未结束
+ *
+ * 筛选条(临期 / 超期)与统计卡(7 天内到期 / 已到期)共用这一份 —— 口径必须一致。
+ * 只有"模板的终态在任务创建后被改过"这种极少情况才会偏一点。
+ */
+async function notClosedCond(): Promise<SQL> {
+	const workflows = await db
+		.select({ id: taskWorkflowTable.id, payload: taskWorkflowTable.payload })
+		.from(taskWorkflowTable);
+	const legacy = isNull(taskTable.workflow_id);
+	const conds: SQL[] = [legacy];
+	for (const row of workflows) {
+		const terminals = terminalStatusValues(row.payload);
+		// 模板没定义终态 → 它下面的任务都算未结束(旧写法漏了这一支,那些模板的任务会被整批筛掉)
+		if (!terminals.length) {
+			conds.push(eq(taskTable.workflow_id, row.id));
+			continue;
+		}
+		const open = and(eq(taskTable.workflow_id, row.id), notInArray(taskTable.status, terminals));
+		if (open) conds.push(open);
+	}
+	return or(...conds) ?? legacy;
+}
+
 /** 一批父任务各自的子任务数(卡片上的「N 个子任务」)—— 列表页与详情页共用同一段 group by */
 async function childCountOf(parentIds: readonly string[]): Promise<Map<string, number>> {
 	if (parentIds.length === 0) return new Map();
@@ -314,6 +344,13 @@ export const taskQueryRouter = createTRPCRouter({
 					.where(and(eq(taskActionTable.assignee_id, me.id), eq(taskActionTable.status, "active")));
 			if (input?.pending) conds.push(inArray(taskTable.id, myPendingTaskIds()));
 			if (input?.priority?.length) conds.push(inArray(taskTable.priority, input.priority));
+			/**
+			 * 「未结束」的任务 —— 结束态按**流程模板**取(任务行上的 `workflow` 是创建时快照,SQL 里读不到它的 JSON)。
+			 *
+			 * 筛选条(临期 / 超期)与统计卡(7 天内到期 / 已到期)共用这一份 —— **数字和列表必须同一个口径**:
+			 * 卡片上的「超期 / 临期」标在结束态任务上是**不显示**的,统计数字若把结束态算进去就与列表对不上。
+			 */
+			const notClosed = await notClosedCond();
 			if (input?.deadline) {
 				const nowAt = new Date();
 				if (input.deadline === "overdue") conds.push(isNotNull(taskTable.due_at), lt(taskTable.due_at, nowAt));
@@ -323,23 +360,7 @@ export const taskQueryRouter = createTRPCRouter({
 						gte(taskTable.due_at, nowAt),
 						lt(taskTable.due_at, new Date(nowAt.getTime() + DUE_SOON_MS)),
 					);
-				/**
-				 * 结束态的任务不进「临期 / 超期」。终态值按**流程模板**取(任务行上的 `workflow` 是创建时快照,
-				 * SQL 里读不到它的 JSON)—— 只有"模板的终态在任务创建后被改过"这种极少情况才会偏一点。
-				 * 老任务没有 `workflow_id` 就按非终态放行。
-				 */
-				const workflows = await db
-					.select({ id: taskWorkflowTable.id, payload: taskWorkflowTable.payload })
-					.from(taskWorkflowTable);
-				const stillOpen = workflows
-					.map((row) => {
-						const terminals = terminalStatusValues(row.payload);
-						return terminals.length
-							? and(eq(taskTable.workflow_id, row.id), notInArray(taskTable.status, terminals))
-							: undefined;
-					})
-					.filter((cond) => cond !== undefined);
-				conds.push(or(isNull(taskTable.workflow_id), ...stillOpen));
+				conds.push(notClosed);
 			}
 			// 子任务不单独占一行 —— 挂在父任务里(详情页的「子任务」区);
 			// 例外:**我在那条子任务里有角色(执行人 / 参与者)**就必须列出来,
@@ -370,11 +391,19 @@ export const taskQueryRouter = createTRPCRouter({
 				db
 					.select({ n: count() })
 					.from(taskTable)
-					.where(and(where, isNotNull(taskTable.due_at), gte(taskTable.due_at, now), lt(taskTable.due_at, weekLater))),
+					.where(
+						and(
+							where,
+							isNotNull(taskTable.due_at),
+							gte(taskTable.due_at, now),
+							lt(taskTable.due_at, weekLater),
+							notClosed,
+						),
+					),
 				db
 					.select({ n: count() })
 					.from(taskTable)
-					.where(and(where, isNotNull(taskTable.due_at), lt(taskTable.due_at, now))),
+					.where(and(where, isNotNull(taskTable.due_at), lt(taskTable.due_at, now), notClosed)),
 				db.select({ n: count() }).from(taskTable).where(pendingWhere),
 			]);
 
