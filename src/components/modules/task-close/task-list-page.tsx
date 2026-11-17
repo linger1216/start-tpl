@@ -1,7 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, CalendarClock, CalendarX, ClipboardList, Flag, Plus, Users } from "lucide-react";
+import { BellRing, CalendarClock, CalendarX, ClipboardList, Flag, Plus, RotateCcw, SearchX, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
@@ -188,6 +189,54 @@ export function TaskListPage() {
 	const items = listQuery.data?.items ?? [];
 	const total = listQuery.data?.total ?? 0;
 
+	/**
+	 * 空态 —**两种情况必须分开说**,否则用户不知道该干哪件事:
+	 * ① 真的没有任务 → 「还没有任务」+ 新增;
+	 * ② 有任务但被筛没了 → 「没有符合条件的任务」+ 一键清空筛选(不是让他去新增)。
+	 *
+	 * 判据就是「除分页外还有没有任何筛选条件」:任一命中即算「正在筛」。
+	 */
+	const filtering =
+		keyword.trim().length > 0 ||
+		workflowId !== "all" ||
+		Boolean(createdRange.from || createdRange.to) ||
+		QUICK_GROUPS.some((group) => (quick[group.key] ?? []).length > 0 && group.key !== "scope") ||
+		!quick.scope.includes("mine") ||
+		quick.scope.includes("pending");
+
+	const clearFilters = () => {
+		setKeyword("");
+		setWorkflowId("all");
+		setCreatedRange({});
+		setQuick({ priority: [], deadline: [], scope: ["mine"] });
+		setPage(1);
+	};
+
+	const emptyProps = filtering
+		? {
+				icon: <SearchX className="size-5" />,
+				title: "没有符合条件的任务",
+				description: "当前筛选条件下一条都没命中。换个关键词,或者清空筛选看全部任务。",
+				actions: (
+					<Button variant="ghost" onClick={clearFilters}>
+						<RotateCcw className="size-4" />
+						清空筛选
+					</Button>
+				),
+			}
+		: {
+				icon: <ClipboardList className="size-5" />,
+				tone: "brand" as const,
+				title: "还没有任务",
+				description: "这里会列出你发起、你参与的任务。起一个任务,把要做的事派给自己或执行人。",
+				actions: (
+					<Button onClick={() => setCreateOpen(true)}>
+						<Plus className="size-4" />
+						新增任务
+					</Button>
+				),
+			};
+
 	/** 取不到数就写「—」而不是 0 —— 0 会说「无事可做」,把故障伪装成清空 */
 	const statOf = (value: number | undefined) => (listQuery.isError || value === undefined ? "—" : value);
 
@@ -316,13 +365,7 @@ export function TaskListPage() {
 						error={listQuery.isError ? listQuery.error : undefined}
 						isFetching={listQuery.isFetching}
 						onRetry={() => listQuery.refetch()}
-						empty={
-							items.length === 0
-								? quick.scope.includes("pending")
-									? "没有轮到你处理的事。关掉「只看待我处理」看全部任务。"
-									: "没有任务。点右上角「新增任务」起一个。"
-								: null
-						}
+						empty={items.length === 0 ? <EmptyState {...emptyProps} /> : null}
 					/>
 				</Card>
 			) : (

@@ -176,7 +176,9 @@ export function useFilterPrefs(pageKey: string) {
 
 	const persist = useCallback((expanded: boolean) => persistRecord(expanded, pageKey), [persistRecord, pageKey]);
 
-	return { initialExpanded: raw === undefined ? undefined : (parsed[pageKey] ?? false), persist };
+	// 这一页**没记过**就交回 undefined —— 由组件用自己的默认值(展开);
+	// 记过才按记的来(用户折叠过一次,下次进来保持折叠)。
+	return { initialExpanded: raw === undefined ? undefined : parsed[pageKey], persist };
 }
 
 /**
