@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    设计系统 —— 视觉规范见 DESIGN.md「公文·印鉴」。
-   暖纸白画布、墨色文字与低饱和黛蓝强调色;印泥红只用于章与批注。
+   冷白灰画布、墨色文字与低饱和黛蓝强调色;印泥红只用于章与批注。
 
    品牌原色和功能色定义在下方 :root / .dark;组件使用语义 token,
    例如 bg-background、text-foreground、bg-primary 和 text-muted-foreground。
@@ -15,12 +15,12 @@
 
 :root {
   /* ── 品牌原色:纸、墨、印泥(DESIGN.md「公文·印鉴」§1,不要在这里之外新增品牌色字面量) ── */
-  --paper: #f7f5f0;             /* 画布:暖纸白(bolder:纸/卡对比拉满,"纸叠纸"一眼可读) */
+  --paper: #f8fafc;             /* 画布:中性冷白灰 */
   --paper-raised: #ffffff;      /* 卡面:比画布白一档(纸叠纸) */
-  --paper-panel: #f4f2ee;       /* 面板:侧栏 / 表头 / 次级区 */
+  --paper-panel: #f8fafc;       /* 面板:侧栏 / 表头 / 次级区 */
   --ink: #1a1a18;               /* 墨:正文 */
   --ink-soft: #4a463f;          /* 墨的次级(次要文字) */
-  --line: #d9d5cd;              /* 纸线:1px 分隔与控件边 */
+  --line: #e0e2e6;              /* 中性灰线:1px 分隔与控件边 */
   --seal: oklch(0.5 0.11 38);   /* 印泥红:仅 章 / 批注竖线 / 章形 logo */
   --seal-fg: oklch(0.42 0.11 38); /* 印泥红小字(压深保 4.5:1) */
 
@@ -83,11 +83,10 @@
   --hue-emerald-on: var(--paper-raised);
 
   /* ── 氛围层(环境渐晕 / 高光边)──────────────────────────────────
-     极低不透明度,只在**大面积**背景上铺一层极淡的色温差,让白底不"死白"。
-     不做可见的装饰渐变 —— 目标是"说不上哪里不一样,但更耐看"。 */
-  --ambient-top: color-mix(in oklab, var(--hue-amber) 3%, transparent);
-  --ambient-corner-a: color-mix(in oklab, var(--hue-rose) 3%, transparent);
-  --ambient-corner-b: color-mix(in oklab, var(--hue-teal) 3%, transparent);
+     亮色模式保持透明;深色模式保留极淡色温。 */
+  --ambient-top: transparent;
+  --ambient-corner-a: transparent;
+  --ambient-corner-b: transparent;
   /* 侧边栏顶部品牌区的一层色温(墨色) */
   --sidebar-veil: color-mix(in oklab, var(--ink) 3%, transparent);
   /* 细高光边:1px,用于卡片/控件顶部,模拟受光面 */
@@ -246,12 +245,13 @@
 }
 
 @theme inline {
-  /* 字体(DESIGN.md §3):宋体 Display / 黑体 UI(系统栈兜底,fallback 必须保留) */
+  /* 字体(DESIGN.md §3):原型的无衬线字族;未提供商用字体时使用系统回退 */
   --font-sans:
-    'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', -apple-system,
-    system-ui, 'Segoe UI', Roboto, sans-serif;
+    'Haas', -apple-system, system-ui, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Helvetica Neue', Arial, sans-serif;
   --font-heading:
-    'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, 'SimSun', Georgia, serif;
+    'Haas Groot Disp', 'Haas', -apple-system, system-ui, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
