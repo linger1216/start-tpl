@@ -45,7 +45,7 @@ function ChannelPicker({
 	onChange: (channels: TaskReminderConfig["node"]["channels"]) => void;
 }) {
 	return (
-		<div className="flex flex-wrap items-center gap-4 text-sm">
+		<div className="flex flex-wrap items-center gap-3 text-xs">
 			<span className="text-xs text-muted-foreground">提醒方式</span>
 			{REMINDER_CHANNELS.map((channel) => (
 				<label key={channel} htmlFor={`${idPrefix}-${channel}`} className="flex items-center gap-1.5">
@@ -79,10 +79,10 @@ function ReminderPreview({ rule, dueAt }: { rule: ExecutorReminderRule; dueAt: s
 	const preview = query.data;
 	return (
 		<InfoTooltip
-			icon={<CalendarClock className="size-4" />}
+			icon={<CalendarClock className="size-3.5" />}
 			label="查看提醒日期"
 			delay={120}
-			triggerClassName="text-muted-foreground transition-colors hover:text-foreground aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground/40 aria-disabled:hover:text-muted-foreground/40"
+			triggerClassName="text-muted-foreground/75 transition-colors hover:text-foreground aria-disabled:cursor-not-allowed aria-disabled:text-muted-foreground/40 aria-disabled:hover:text-muted-foreground/40"
 			triggerProps={{ "aria-disabled": reason ? true : undefined }}
 			contentClassName="max-w-[19rem]"
 		>
@@ -138,10 +138,10 @@ export function TaskReminderConfigEditor({
 	const executorOff = executor.cadence === "off";
 	const nodeOff = node.afterMinutes === null;
 	return (
-		<div className="grid gap-5">
-			<div className="grid gap-2">
+		<div className="grid gap-3">
+			<div className="grid gap-1.5">
 				<div className="flex items-center justify-between gap-2">
-					<Label className="text-sm">执行人截止提醒</Label>
+					<Label className="text-xs font-medium text-muted-foreground">执行人截止提醒</Label>
 					<ReminderPreview rule={executor} dueAt={dueAt} />
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
@@ -150,7 +150,7 @@ export function TaskReminderConfigEditor({
 						items={CADENCE_ITEMS}
 						onValueChange={(next) => setExecutor({ cadence: next as ReminderCadence })}
 					>
-						<SelectTrigger className="h-8 w-32" aria-label="提醒频率">
+						<SelectTrigger className="h-7 w-32" aria-label="提醒频率">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -166,7 +166,7 @@ export function TaskReminderConfigEditor({
 						id="reminder-executor-time"
 						type="time"
 						aria-label="提醒时间"
-						className="h-8 w-28"
+						className="h-7 w-28"
 						value={executor.time}
 						disabled={executorOff}
 						onChange={(event) => setExecutor({ time: event.target.value || "09:00" })}
@@ -178,7 +178,7 @@ export function TaskReminderConfigEditor({
 						min={1}
 						max={MAX_DAYS_BEFORE}
 						aria-label="提前天数"
-						className="h-8 w-20"
+						className="h-7 w-20"
 						value={executor.daysBefore}
 						disabled={executorOff}
 						onChange={(event) =>
@@ -200,15 +200,15 @@ export function TaskReminderConfigEditor({
 				)}
 			</div>
 
-			<div className="grid gap-2 border-t border-dashed border-border pt-4">
-				<Label className="text-sm">节点处理人未查看提醒</Label>
+			<div className="grid gap-1.5 border-t border-dashed border-border pt-3">
+				<Label className="text-xs font-medium text-muted-foreground">节点处理人未查看提醒</Label>
 				<div className="flex flex-wrap items-center gap-2">
 					<Select
 						value={node.afterMinutes === null ? "" : String(node.afterMinutes)}
 						items={NODE_REMINDER_OPTIONS}
 						onValueChange={(next) => setNode({ afterMinutes: next ? Number(next) : null })}
 					>
-						<SelectTrigger className="h-8 w-32" aria-label="未查看时长">
+						<SelectTrigger className="h-7 w-32" aria-label="未查看时长">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
