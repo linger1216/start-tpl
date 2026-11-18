@@ -20,9 +20,8 @@ export type ReportData = NonNullable<inferRouterOutputs<TRPCRouter>["taskClose"]
 export function fieldColWidth(field: ReportFieldLike): string {
 	switch (field.type) {
 		case "date":
-			return "min-w-36";
 		case "datetime":
-			return "min-w-44";
+			return "min-w-36";
 		case "attachment":
 			return "min-w-48";
 		case "multiselect":

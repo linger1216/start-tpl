@@ -197,10 +197,9 @@ export function TaskWorkflowsPage() {
 }
 
 /**
- * 一张模板卡片 —— 版式对齐「资源卡」:图标 + 状态/动作在同一行、标题 + 一行说明、
- * 一块浅底预览(状态集合)、底部 meta 胶囊。**整卡可点开详情**,行内动作 `stopPropagation`。
+ * 模板卡片与「我的任务」同尺寸,展示状态预览和底部信息。整卡可打开详情,行内动作独立。
  *
- * 白底(`bg-card`,与表格 / dialog 同一档纸白)+ flex 纵向;`max-w-sm` 限宽、预览区 `max-h-24` 限高,配合外层 `flex flex-wrap` 换行。
+ * 卡片尺寸与「我的任务」一致，预览内容超出时可打开详情查看。
  */
 function WorkflowCard({
 	item,

@@ -213,9 +213,9 @@ export function TaskWorkflowForm({
 				})
 			}
 			contentClassName="sm:max-w-2xl"
-			bodyClassName="space-y-4 py-1 pr-1"
+			bodyClassName="space-y-2 py-1 pr-1"
 		>
-			<DetailRow label="模板名称" htmlFor="tcw-name">
+			<DetailRow label="模板名称" htmlFor="tcw-name" align="center" className="py-1">
 				<Input
 					id="tcw-name"
 					className="h-8 text-sm"
@@ -225,8 +225,8 @@ export function TaskWorkflowForm({
 				/>
 			</DetailRow>
 
-			<div className="space-y-4">
-				<div className="space-y-2">
+			<div className="space-y-2">
+				<div className="space-y-1.5">
 					<div className="flex items-center justify-between">
 						<span className="text-sm font-medium">状态</span>
 						<ActionButton disabled={statuses.length >= MAX_WORKFLOW_STATUSES} onClick={addStatus}>
@@ -237,7 +237,7 @@ export function TaskWorkflowForm({
 						每行:标识(英文,落库与边引用用)+ 展示名(界面只显示它)。改标识会把边与初始态一起改名。
 					</p>
 					{statuses.map((status, index) => (
-						<div key={statusKeys[index]} className="flex flex-wrap items-center gap-3">
+						<div key={statusKeys[index]} className="flex flex-wrap items-center gap-2">
 							<Input
 								value={status.value}
 								aria-label={`第 ${index + 1} 个状态标识`}
@@ -266,7 +266,7 @@ export function TaskWorkflowForm({
 						</div>
 					))}
 				</div>
-				<DetailRow label="初始态">
+				<DetailRow label="初始态" align="center" className="py-1">
 					<Select
 						items={statusOptions}
 						value={initial || null}
@@ -286,7 +286,7 @@ export function TaskWorkflowForm({
 				</DetailRow>
 			</div>
 
-			<div className="space-y-2">
+			<div className="space-y-1.5">
 				<div className="flex items-center justify-between">
 					<span className="text-sm font-medium">状态转移边</span>
 					<Button variant="outline" size="sm" onClick={addEdge} disabled={edges.length >= MAX_WORKFLOW_EDGES}>
@@ -310,12 +310,12 @@ export function TaskWorkflowForm({
 						还没有转移边。点「新增转移边」加一条。
 					</p>
 				) : (
-					<div className="space-y-2">
+					<div className="space-y-1.5">
 						{edges.map((edge) => (
 							<div
 								key={edge.key}
 								className={cn(
-									"space-y-2 rounded-xl border p-2.5",
+									"space-y-1.5 rounded-xl border p-2",
 									duplicateKeys.has(edge.key) ? "border-destructive/50 bg-destructive/5" : "border-border",
 								)}
 							>

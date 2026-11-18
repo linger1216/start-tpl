@@ -1,5 +1,5 @@
 import { Check, ChevronDown, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "#/components/ui/popover";
 import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/utils";
@@ -42,6 +42,8 @@ export function SearchSelect<T extends string = string>({
 	align = "start",
 	disabled = false,
 	loading = false,
+	triggerIcon,
+	description,
 }: {
 	value: T | undefined;
 	onValueChange: (v: T) => void;
@@ -53,6 +55,10 @@ export function SearchSelect<T extends string = string>({
 	align?: "start" | "end";
 	disabled?: boolean;
 	loading?: boolean;
+	/** 可选图标触发器，供紧凑空间使用。 */
+	triggerIcon?: ReactNode;
+	/** 选项上方的用途说明。 */
+	description?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
@@ -99,30 +105,52 @@ export function SearchSelect<T extends string = string>({
 				aria-label={label}
 				disabled={disabled}
 				aria-disabled={disabled}
+				title={triggerIcon ? label : undefined}
 				className={cn(
 					// `w-full`:表单里它和 `Select` / `Input` 并排,三者都得占满字段列,否则宽度不一(实测踩过)
-					"flex h-8 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm hover:border-border-strong whitespace-nowrap transition-colors outline-none",
+					"flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-card text-sm hover:border-border-strong whitespace-nowrap transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
+					triggerIcon ? "w-8 shrink-0 justify-center" : "w-full px-3",
 					disabled ? "cursor-not-allowed opacity-50" : "hover:border-ring/60 hover:text-foreground",
 				)}
 			>
-				<span className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.label ?? placeholder}</span>
-				{loading ? (
-					<Spinner className="size-4 shrink-0 text-muted-foreground" />
+				{triggerIcon ? (
+					loading ? (
+						<Spinner className="size-4" />
+					) : (
+						triggerIcon
+					)
 				) : (
-					<ChevronDown
-						className={cn(
-							"size-4 shrink-0 text-muted-foreground transition-transform duration-150",
-							open && "rotate-180",
+					<>
+						<span className={cn("truncate", !selected && "text-muted-foreground")}>
+							{selected?.label ?? placeholder}
+						</span>
+						{loading ? (
+							<Spinner className="size-4 shrink-0 text-muted-foreground" />
+						) : (
+							<ChevronDown
+								className={cn(
+									"size-4 shrink-0 text-muted-foreground transition-transform duration-150",
+									open && "rotate-180",
+								)}
+							/>
 						)}
-					/>
+					</>
 				)}
 			</PopoverTrigger>
 
 			<PopoverContent
 				align={align}
-				className="flex w-(--anchor-width) flex-col overflow-hidden p-0"
+				className={cn(
+					"flex flex-col overflow-hidden p-0",
+					triggerIcon ? "w-72 max-w-[calc(100vw-2rem)]" : "w-(--anchor-width)",
+				)}
 				style={{ maxHeight: 288 }}
 			>
+				{description && (
+					<p className="border-b border-border px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+						{description}
+					</p>
+				)}
 				<div className="relative shrink-0 border-b border-border p-1.5">
 					<Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
 					<input

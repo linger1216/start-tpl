@@ -12,14 +12,14 @@ import { cn } from "#/lib/utils";
  *    调用点不要再用 `className` 改大小,否则大小与字号就脱钩了。
  * ② **颜色**:名字 hash 落桶到色板 —— **同一个人在任何地方都是同一个颜色**
  *    (卡片 / 评论 / 成员 / 责任范围 / 顶栏 / 用户台账),色板与 Tag 同一份(`lib/tag-color.ts`)。
- * ③ **字形**:首字 + 宋体加粗(DESIGN.md §4.4 的「人」的视觉身份)。
+ * ③ **字形**:首字 + 无衬线字族(DESIGN.md §4.4 的「人」的视觉身份)。
  *
  * 有头像地址就走真照片;没有(或照片挂了)就落到首字圆牌。
  */
 
 /** 尺寸档 —— 圆的大小 */
 const avatarVariants = cva(
-	"relative flex shrink-0 select-none items-center justify-center rounded-full after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten",
+	"relative flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:border after:border-foreground/10",
 	{
 		variants: {
 			size: {
@@ -37,7 +37,7 @@ const avatarVariants = cva(
 
 /** 首字字号 —— **跟着圆一起长**(与尺寸档一一对应,别再单独调) */
 const avatarTextVariants = cva(
-	"flex size-full items-center justify-center rounded-full font-heading font-bold leading-none",
+	"flex size-full items-center justify-center rounded-full font-sans font-semibold leading-none",
 	{
 		variants: {
 			size: {
@@ -77,9 +77,11 @@ export function Avatar({
 	}) {
 	return (
 		<AvatarPrimitive.Root data-size={size} className={cn(avatarVariants({ size }), className)} {...props}>
-			{src ? <AvatarPrimitive.Image src={src} alt={alt ?? name} /> : null}
+			{src ? (
+				<AvatarPrimitive.Image src={src} alt={alt ?? name} className="size-full rounded-full object-cover" />
+			) : null}
 			<AvatarPrimitive.Fallback className={cn(avatarTextVariants({ size }), toneOf(name))}>
-				{(name || "?").slice(0, 1).toUpperCase()}
+				{Array.from(name.trim())[0]?.toUpperCase() || "?"}
 			</AvatarPrimitive.Fallback>
 		</AvatarPrimitive.Root>
 	);

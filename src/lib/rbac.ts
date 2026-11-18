@@ -293,6 +293,7 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"department.members": pagePermOf("/settings/departments"),
 	// 字典(字典页;`dict.byCode` 是跨页面的取值器,见 UNMAPPED_QUERIES)
 	"dict.list": pagePermOf("/settings/dictionary"),
+	"dict.reportOptions": pagePermOf("/task-close/report-templates"),
 	// 菜单(菜单页 / 角色页的授权树)
 	"menu.list": [pagePermOf("/settings/menus"), pagePermOf("/settings/roles")],
 	"scheduler.list": pagePermOf("/settings/scheduler"),
@@ -405,6 +406,7 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"menu.list",
 	"role.list",
 	"dict.list",
+	"dict.reportOptions",
 	"dict.byCode",
 	"scheduler.list",
 	"scheduler.executions",

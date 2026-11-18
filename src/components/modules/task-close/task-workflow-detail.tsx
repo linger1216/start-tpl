@@ -57,31 +57,47 @@ export function TaskWorkflowDetail({
 						<TagList
 							values={detail.statuses.map((status) => (status.terminal ? `${status.label}（结束）` : status.label))}
 							layout="wrap"
-							color="stable"
+							color="random"
 						/>
 					</DetailRow>
-					<DetailRow label="初始态">{statusLabelOf(detail.statuses, detail.initial)}</DetailRow>
+					<DetailRow label="初始态">
+						<TagList
+							values={detail.statuses
+								.filter((status) => status.value === detail.initial)
+								.map((status) => (status.terminal ? `${status.label}（结束）` : status.label))}
+							layout="wrap"
+							color="random"
+						/>
+					</DetailRow>
 					<DetailRow label="转移边">
 						{detail.edges.length === 0 ? (
 							<span className="text-muted-foreground">没有转移边。</span>
 						) : (
-							<ul className="space-y-1.5">
-								{detail.edges.map((edge) => (
-									<li
-										// 边没有 id;`from->to->via` 在一份模板里唯一(服务端会拒重复边),足够当 key
-										key={`${edge.from}-${edge.to}-${edge.via}`}
-										className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm"
-									>
-										<span className="font-medium">{statusLabelOf(detail.statuses, edge.from)}</span>
-										<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-										<span className="font-medium">{statusLabelOf(detail.statuses, edge.to)}</span>
-										<Tag variant="outline">{VIA_LABEL[edge.via] ?? edge.via}</Tag>
-										<span className="text-xs text-muted-foreground">
-											{edge.who.map((who) => roleLabelOf(who)).join(" / ")} 可发起
-										</span>
-									</li>
-								))}
-							</ul>
+							<div className="max-w-full overflow-x-auto rounded-md border border-border">
+								<ul className="min-w-full w-max divide-y divide-border">
+									{detail.edges.map((edge) => (
+										<li
+											key={`${edge.from}-${edge.to}-${edge.via}`}
+											className="flex items-center gap-3 whitespace-nowrap px-3 py-2.5"
+										>
+											<div className="flex items-center gap-2">
+												<Tag variant="outline" className="bg-muted/50">
+													{statusLabelOf(detail.statuses, edge.from)}
+												</Tag>
+												<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+												<Tag variant="outline" className="bg-muted/50">
+													{statusLabelOf(detail.statuses, edge.to)}
+												</Tag>
+											</div>
+											<div className="flex items-center gap-2 text-xs text-muted-foreground">
+												<span className="font-medium text-foreground">{VIA_LABEL[edge.via] ?? edge.via}</span>
+												<span aria-hidden>·</span>
+												<span>{edge.who.map((who) => roleLabelOf(who)).join(" / ")} 可发起</span>
+											</div>
+										</li>
+									))}
+								</ul>
+							</div>
 						)}
 					</DetailRow>
 				</>

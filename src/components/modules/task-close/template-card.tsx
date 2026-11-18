@@ -1,10 +1,11 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { AsyncState } from "#/components/modules/task-close/async-state";
+import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { RefreshButton } from "#/components/ui/refresh-button";
@@ -81,7 +82,7 @@ export function TemplateCardPageShell({
 				</Card>
 			) : (
 				/* 有数据时卡片直接铺在页面上 —— 不套外层 Card(白底套白底会糊成一整块通栏宽面板) */
-				<div className="flex flex-wrap gap-3">{cards}</div>
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{cards}</div>
 			)}
 			{children}
 		</PageFrame>
@@ -117,35 +118,33 @@ export function TemplateCard({
 	onDelete: () => void;
 }) {
 	return (
-		<Card className="group relative flex h-full w-full max-w-sm cursor-pointer flex-col gap-0 bg-card p-5 transition-[border-color] hover:border-primary/50">
+		<Card className="group relative flex h-48 min-w-0 cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
 			<button
 				type="button"
 				aria-label={viewLabel}
 				onClick={onView}
 				className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
 			/>
-			<div className="relative mb-4 flex items-start justify-between gap-2">
-				<div className="flex size-9 items-center justify-center rounded-lg bg-brand-soft text-primary">{icon}</div>
-				<div className="flex items-center gap-1.5">
-					{badge}
-					<div className="relative z-10 flex items-center gap-1">
-						{canEdit ? (
-							<Button variant="ghost" size="icon-sm" aria-label="编辑" onClick={onEdit}>
-								<Pencil className="size-4" />
-							</Button>
-						) : null}
-						{canRemove ? (
-							<Button variant="ghost" size="icon-sm" className="text-destructive" aria-label="删除" onClick={onDelete}>
-								<Trash2 className="size-4" />
-							</Button>
-						) : null}
-					</div>
+			<div className="flex min-w-0 items-start justify-between gap-3">
+				<h3 className="min-w-0 flex-1 line-clamp-2 text-lg leading-snug font-semibold text-foreground">{name}</h3>
+				<span className="grid size-6 shrink-0 place-items-center rounded-md bg-brand-soft text-primary">{icon}</span>
+			</div>
+			<div className="mt-2 flex min-h-7 items-center justify-between gap-2">
+				{badge}
+				<div className="relative z-10 flex shrink-0 items-center gap-3">
+					{canEdit && <ActionButton onClick={onEdit}>编辑</ActionButton>}
+					{canRemove && (
+						<ActionButton tone="danger" onClick={onDelete}>
+							删除
+						</ActionButton>
+					)}
 				</div>
 			</div>
-			<h3 className="mb-1 line-clamp-1 text-base font-semibold text-foreground">{name}</h3>
-			<p className="mb-3 text-xs leading-relaxed text-muted-foreground">{description}</p>
-			<div className="mb-3 max-h-24 overflow-hidden rounded-md bg-muted/50 p-3">{preview}</div>
-			<div className="mt-auto flex flex-wrap items-center gap-1.5">{meta}</div>
+			<p className="mt-1 line-clamp-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+			<div className="mt-1 min-h-0 flex-1 overflow-hidden">{preview}</div>
+			<div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+				{meta}
+			</div>
 		</Card>
 	);
 }

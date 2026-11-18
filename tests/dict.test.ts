@@ -72,6 +72,18 @@ test("按 code 读:byCode 拿得到,list 里也在", async () => {
 	);
 });
 
+test("填报模板字典候选只包含启用字典的名称和选项", async () => {
+	const options = await caller.dict.reportOptions();
+	assert.deepEqual(
+		options.find((item) => item.code === CODE),
+		{
+			code: CODE,
+			name: "测试字典",
+			labels: ["甲", "乙"],
+		},
+	);
+});
+
 test("编码必须唯一:重复新建报 CONFLICT", async () => {
 	await assertRejects(
 		() => caller.dict.create({ code: CODE, name: "重名", remark: "", items: [{ label: "甲", value: "a" }] }),
@@ -118,6 +130,10 @@ test("更新:改名 / 换字典项 / 停用 —— code 不变,主键不变", as
 	assert.equal(after.name, "测试字典(改)");
 	assert.equal(after.status, 0, "停用后 status = 0");
 	assert.deepEqual(after.items, [{ label: "丙", value: "c" }]);
+	assert.equal(
+		(await caller.dict.reportOptions()).some((item) => item.code === CODE),
+		false,
+	);
 });
 
 test("更新不存在的编码 → NOT_FOUND", async () => {

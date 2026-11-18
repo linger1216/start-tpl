@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GripVertical } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import { useEffect, useState } from "react";
@@ -103,6 +103,7 @@ export function TaskReportTemplateForm({
 }) {
 	const trpc = useTRPC();
 	const client = useQueryClient();
+	const dictionaries = useQuery({ ...trpc.dict.reportOptions.queryOptions(), enabled: open });
 	const [templateId, setTemplateId] = useState("");
 	const [shared, setShared] = useState(false);
 	const [name, setName] = useState("");
@@ -287,9 +288,9 @@ export function TaskReportTemplateForm({
 			pendingText="发布中…"
 			onConfirm={submit}
 			contentClassName="sm:max-w-2xl"
-			bodyClassName="space-y-3 py-1"
+			bodyClassName="space-y-2 py-1"
 		>
-			<DetailRow label="模板名称" htmlFor="report-template-name">
+			<DetailRow label="模板名称" htmlFor="report-template-name" align="center" className="py-1">
 				<Input
 					id="report-template-name"
 					aria-label="模板名称"
@@ -298,19 +299,19 @@ export function TaskReportTemplateForm({
 					onChange={(event) => setName(event.target.value)}
 				/>
 			</DetailRow>
-			<DetailRow label="可见性">
+			<DetailRow label="可见性" align="center" className="py-1">
 				<span className="flex items-center gap-2 text-sm text-muted-foreground">
 					<Switch aria-label="所有人可见" checked={shared} onCheckedChange={(next) => setShared(next === true)} />
 					{shared ? "所有人可见" : "仅自己可见"}
 				</span>
 			</DetailRow>
-			<DetailRow label="填报形式">
+			<DetailRow label="填报形式" align="center" className="py-1">
 				<RadioGroup value={kind} onValueChange={(value) => setKind(value === "TABLE" ? "TABLE" : "OBJECT")}>
 					<Radio value="OBJECT">表单</Radio>
 					<Radio value="TABLE">表格</Radio>
 				</RadioGroup>
 			</DetailRow>
-			<div className="space-y-2">
+			<div className="space-y-1.5">
 				<div className="flex items-center justify-between">
 					<span className="text-sm font-medium">
 						字段
@@ -341,7 +342,7 @@ export function TaskReportTemplateForm({
 							setOverIndex(null);
 						}}
 						className={cn(
-							"space-y-2 rounded-md border p-2.5",
+							"space-y-1.5 rounded-md border p-2",
 							fieldErrors[field.key] ? "border-destructive" : "border-border",
 							dragIndex === index && "opacity-50",
 							overIndex === index && dragIndex !== null && dragIndex !== index
@@ -349,22 +350,25 @@ export function TaskReportTemplateForm({
 								: "",
 						)}
 					>
-						<div className="flex flex-wrap items-center gap-2">
-							<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
-							<ReportFieldRow
-								prefix="字段"
-								index={index}
-								field={field}
-								typeOptions={FIELD_TYPES}
-								showAllowEmpty
-								deriveId={slugId}
-								onPatch={(patch) => update(field.key, patch as Partial<Field>)}
-								onRemove={() => setFields(fields.filter((item) => item.key !== field.key))}
-								removeDisabled={fields.length === 1}
-							/>
-						</div>
+						<ReportFieldRow
+							prefix="字段"
+							handle={
+								<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
+							}
+							index={index}
+							field={field}
+							typeOptions={FIELD_TYPES}
+							dictionaries={dictionaries.data ?? []}
+							dictionariesLoading={dictionaries.isPending}
+							dictionariesError={dictionaries.isError}
+							showAllowEmpty
+							deriveId={slugId}
+							onPatch={(patch) => update(field.key, patch as Partial<Field>)}
+							onRemove={() => setFields(fields.filter((item) => item.key !== field.key))}
+							removeDisabled={fields.length === 1}
+						/>
 						{field.type === "array" && (
-							<div className="space-y-2 rounded-md border border-dashed border-border p-2.5">
+							<div className="space-y-1.5 rounded-md border border-dashed border-border p-2">
 								<div className="flex items-center justify-between gap-2">
 									<span className="text-xs font-medium text-muted-foreground">数组内的字段(至少 1 个;不带数组)</span>
 									<Button
@@ -383,6 +387,9 @@ export function TaskReportTemplateForm({
 											index={itemIndex}
 											field={item}
 											typeOptions={ITEM_TYPES}
+											dictionaries={dictionaries.data ?? []}
+											dictionariesLoading={dictionaries.isPending}
+											dictionariesError={dictionaries.isError}
 											deriveId={slugId}
 											onPatch={(patch) => updateItem(field.key, item.key, patch as Partial<ItemField>)}
 											onRemove={() => removeItem(field.key, item.key)}

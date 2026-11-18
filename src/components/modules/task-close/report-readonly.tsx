@@ -9,7 +9,7 @@ import { AttachmentChip } from "#/components/modules/task-close/task-content-att
 import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
 import { useStableKeys } from "#/hooks/use-stable-keys";
 import { isRecord } from "#/lib/task/json";
-import { formatLocalDateTime } from "#/lib/time";
+import { formatLocalDate } from "#/lib/time";
 
 export function ReportValueView({
 	taskId,
@@ -87,7 +87,7 @@ function plainTextOf(field: ReportFieldLike, value: Value | undefined): string {
 		return picked.length === 0 ? "—" : picked.join("、");
 	}
 	if (field.type === "select") return String(value);
-	if (field.type === "datetime") return formatLocalDateTime(value as string) || String(value);
+	if (field.type === "datetime") return formatLocalDate(value as string) || String(value);
 	if (typeof value === "boolean") return value ? "是" : "否";
 	if (Array.isArray(value)) return value.length === 0 ? "—" : `${value.length} 项`;
 	return textValueOf(value);

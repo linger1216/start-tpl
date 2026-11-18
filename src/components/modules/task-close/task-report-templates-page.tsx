@@ -169,8 +169,7 @@ export function TaskReportTemplatesPage() {
 }
 
 /**
- * 一张模板卡片 —— 版式对齐「流程模板」卡:图标 + 分享标识/动作在同一行、标题 + 一行说明、
- * 一块浅底预览(字段清单,必填带星标)、底部 meta 胶囊。**整卡可点开详情**,行内动作 `stopPropagation`。
+ * 模板卡片与「我的任务」同尺寸,展示字段预览和底部信息。整卡可打开详情,行内动作独立。
  */
 function ReportTemplateCard({
 	row,

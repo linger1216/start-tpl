@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CloudUpload, Plus, Save } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { ReportField } from "#/components/modules/task-close/report-fields";
@@ -114,14 +114,17 @@ function TaskReportComposed({
 				{owned.length === 0 ? (
 					<p className="text-sm text-muted-foreground">还没有子任务提交填报。</p>
 				) : (
-					<ComposedTable
-						taskId={taskId}
-						scalarFields={scalarFields}
-						arrayFields={arrayFields}
-						rows={owned}
-						files={data.files}
-						showOwner
-					/>
+					<>
+						<p className="text-xs text-muted-foreground">共 {owned.length} 条填报记录</p>
+						<ComposedTable
+							taskId={taskId}
+							scalarFields={scalarFields}
+							arrayFields={arrayFields}
+							rows={owned}
+							files={data.files}
+							showOwner
+						/>
+					</>
 				)}
 			</ReportSection>
 		);
@@ -172,62 +175,68 @@ function ComposedTable({
 	files: ReportData["files"];
 	showOwner: boolean;
 }) {
-	const columnCount = scalarFields.length + (showOwner ? 1 : 0);
+	const columnCount = Math.max(1, scalarFields.length + (showOwner ? 1 : 0));
 	return (
-		<div className="min-w-0 overflow-x-auto">
+		<div className="min-w-0 overflow-x-auto rounded-md border border-border">
 			<table className="w-full border-collapse text-left text-sm">
-				<thead>
-					<tr className="border-b border-border text-xs text-muted-foreground">
-						{showOwner ? (
-							<th scope="col" className="w-28 whitespace-nowrap px-2 py-1 font-normal">
-								执行人
-							</th>
-						) : null}
-						{scalarFields.map((field) => (
-							<th key={field.id} scope="col" className={cn(fieldColWidth(field), "px-2 py-1 font-normal")}>
-								{field.label}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody className="divide-y divide-border">
-					{rows.map((entry, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: 组合行是读时派生、没有稳定 id;只读展示,顺序即身份
-						<Fragment key={`${entry.owner ?? "own"}-${index}`}>
+				{(showOwner || scalarFields.length > 0) && (
+					<thead>
+						<tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+							{showOwner ? (
+								<th scope="col" className="w-32 whitespace-nowrap px-3 py-2.5 text-left font-medium">
+									执行人
+								</th>
+							) : null}
+							{scalarFields.map((field) => (
+								<th
+									key={field.id}
+									scope="col"
+									className={cn(fieldColWidth(field), "px-3 py-2.5 text-left font-medium")}
+								>
+									{field.label}
+								</th>
+							))}
+						</tr>
+					</thead>
+				)}
+				{rows.map((entry, index) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: 组合行是读时派生、没有稳定 id;只读展示,顺序即身份
+					<tbody key={`${entry.owner ?? "own"}-${index}`} className="border-b border-border last:border-b-0">
+						{(showOwner || scalarFields.length > 0) && (
 							<tr className="align-top">
 								{showOwner ? (
-									<td className="whitespace-nowrap px-2 py-1 text-xs text-muted-foreground">
-										{entry.owner ? `由 ${entry.ownerName ?? "执行人"} 填报` : "填报内容"}
+									<td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-foreground">
+										{entry.owner ? (entry.ownerName ?? "执行人") : "填报内容"}
 									</td>
 								) : null}
 								{scalarFields.map((field) => (
-									<td key={field.id} className="px-2 py-1 break-words">
+									<td key={field.id} className="px-3 py-3 break-words">
 										<ReportValueView taskId={taskId} field={field} value={entry.row[field.id] as Value} files={files} />
 									</td>
 								))}
 							</tr>
-							{arrayFields.length > 0 ? (
-								<tr>
-									<td colSpan={columnCount} className="px-2 pb-2">
-										<div className="grid gap-3 pl-6">
-											{arrayFields.map((field) => (
-												<div key={field.id} className="grid gap-1">
-													<span className="text-xs text-muted-foreground">{field.label}</span>
-													<ReportValueView
-														taskId={taskId}
-														field={field}
-														value={entry.row[field.id] as Value}
-														files={files}
-													/>
-												</div>
-											))}
-										</div>
-									</td>
-								</tr>
-							) : null}
-						</Fragment>
-					))}
-				</tbody>
+						)}
+						{arrayFields.length > 0 ? (
+							<tr>
+								<td colSpan={columnCount} className="px-3 pb-3">
+									<div className="grid gap-3 rounded-md bg-muted/30 p-3">
+										{arrayFields.map((field) => (
+											<div key={field.id} className="grid gap-1">
+												<span className="text-xs text-muted-foreground">{field.label}</span>
+												<ReportValueView
+													taskId={taskId}
+													field={field}
+													value={entry.row[field.id] as Value}
+													files={files}
+												/>
+											</div>
+										))}
+									</div>
+								</td>
+							</tr>
+						) : null}
+					</tbody>
+				))}
 			</table>
 		</div>
 	);

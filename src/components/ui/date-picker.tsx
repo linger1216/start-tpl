@@ -23,6 +23,9 @@ export function DatePicker({
 	placeholder = "选择日期",
 	id,
 	className,
+	disabled,
+	"aria-label": ariaLabel,
+	"aria-invalid": ariaInvalid,
 }: {
 	/** 本地 `YYYY-MM-DD`;空串 = 未选 */
 	value: string;
@@ -30,6 +33,9 @@ export function DatePicker({
 	placeholder?: string;
 	id?: string;
 	className?: string;
+	disabled?: boolean;
+	"aria-label"?: string;
+	"aria-invalid"?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	// `YYYY-MM-DDT00:00:00` 按**本地**时区解析(直接 new Date("YYYY-MM-DD") 会当 UTC,差一天)
@@ -42,7 +48,17 @@ export function DatePicker({
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger id={id} className={cn(DATE_TRIGGER_CLASS, className)}>
+			<PopoverTrigger
+				id={id}
+				disabled={disabled}
+				aria-label={ariaLabel}
+				aria-invalid={ariaInvalid}
+				className={cn(
+					DATE_TRIGGER_CLASS,
+					"disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+					className,
+				)}
+			>
 				<span className={cn("truncate", !value && "text-muted-foreground")}>{value || placeholder}</span>
 				<CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
 			</PopoverTrigger>

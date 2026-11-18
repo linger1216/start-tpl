@@ -83,6 +83,16 @@ export const dictRouter = createTRPCRouter({
 		return rows.map(toDict);
 	}),
 
+	/** 填报模板选项来源:只返回启用字典及其显示名称。 */
+	reportOptions: protectedProcedure.query(async () => {
+		const rows = await db
+			.select({ code: sysDict.code, name: sysDict.name, items: sysDict.items })
+			.from(sysDict)
+			.where(and(alive(sysDict), eq(sysDict.status, 1)))
+			.orderBy(asc(sysDict.code));
+		return rows.map((row) => ({ code: row.code, name: row.name, labels: (row.items ?? []).map((item) => item.label) }));
+	}),
+
 	/** 按**字典编码**读一个(不是按主键 —— 业务侧只认识编码) */
 	byCode: protectedProcedure.input(z.object({ code: dictCode })).query(async ({ input }) => {
 		const row = await getByCode(input.code);

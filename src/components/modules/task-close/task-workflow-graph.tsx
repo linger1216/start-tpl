@@ -15,7 +15,7 @@ export function TaskWorkflowGraph({
 }) {
 	const markerId = `workflow-arrow-${useId().replace(/:/g, "")}`;
 	const graph = new graphlib.Graph({ multigraph: true });
-	graph.setGraph({ rankdir: "LR", nodesep: 36, ranksep: 90, marginx: 24, marginy: 24 });
+	graph.setGraph({ rankdir: "TB", nodesep: 36, ranksep: 60, marginx: 24, marginy: 24 });
 	graph.setDefaultEdgeLabel(() => ({}));
 	for (const status of statuses) graph.setNode(status.value, { width: 142, height: 58 });
 	for (const [index, edge] of edges.entries()) {
@@ -24,14 +24,17 @@ export function TaskWorkflowGraph({
 	}
 	layout(graph);
 	const dimensions = graph.graph();
+	const width = Math.max(200, dimensions.width ?? 0);
+	const height = Math.max(106, dimensions.height ?? 0);
 	return (
-		<div className="max-h-80 overflow-auto rounded-lg border bg-muted/20">
+		<div className="flex min-w-0 justify-center rounded-lg border bg-muted/20">
 			<svg
 				role="img"
 				aria-label="流程状态图"
-				width={Math.max(200, dimensions.width ?? 0)}
-				height={Math.max(106, dimensions.height ?? 0)}
-				className="block text-foreground"
+				width={width}
+				height={height}
+				viewBox={`0 0 ${width} ${height}`}
+				className="block h-auto max-w-full text-foreground"
 			>
 				<defs>
 					<marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">

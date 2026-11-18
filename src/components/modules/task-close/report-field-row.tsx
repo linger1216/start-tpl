@@ -1,9 +1,13 @@
-import { X } from "lucide-react";
+import { Library, X } from "lucide-react";
+import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { ActionIconButton } from "#/components/ui/action-button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
+import { SearchSelect } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { TagInput } from "#/components/ui/tag-input";
+import { mergeReportOptions } from "#/lib/task/report-spec";
 
 /** 字段类型下拉的一项(真源在 `lib/task/report-spec.ts`) */
 type FieldTypeOption = { value: string; label: string };
@@ -36,9 +40,13 @@ export type DraftFieldLike = {
  */
 export function ReportFieldRow({
 	prefix,
+	handle,
 	index,
 	field,
 	typeOptions,
+	dictionaries,
+	dictionariesLoading,
+	dictionariesError,
 	showAllowEmpty,
 	deriveId,
 	onPatch,
@@ -46,9 +54,13 @@ export function ReportFieldRow({
 	removeDisabled,
 }: {
 	prefix: string;
+	handle?: ReactNode;
 	index: number;
 	field: DraftFieldLike;
 	typeOptions: readonly FieldTypeOption[];
+	dictionaries: readonly { code: string; name: string; labels: string[] }[];
+	dictionariesLoading: boolean;
+	dictionariesError: boolean;
 	showAllowEmpty?: boolean;
 	/** 名称 → 标识(拼音预填);标识被手改过就不会调它 */
 	deriveId: (label: string) => string;
@@ -59,7 +71,8 @@ export function ReportFieldRow({
 	const n = index + 1;
 	return (
 		<>
-			<div className="flex flex-wrap items-center gap-2">
+			<div className="flex min-w-0 flex-wrap items-center gap-2">
+				{handle}
 				<span className="w-6 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{n}</span>
 				<Input
 					aria-label={`${prefix} ${n} 名称`}
@@ -117,12 +130,42 @@ export function ReportFieldRow({
 				</ActionIconButton>
 			</div>
 			{field.type === "select" || field.type === "multiselect" ? (
-				<TagInput
-					value={field.options.map((value) => ({ value }))}
-					onChange={(next) => onPatch({ options: next.map((entry) => entry.value) })}
-					max={100}
-					placeholder="选项,逗号分隔或逐条回车添加"
-				/>
+				<div className="grid gap-2">
+					{dictionariesError && (
+						<p role="alert" className="text-xs text-destructive">
+							字典加载失败，请关闭后重试。
+						</p>
+					)}
+					<TagInput
+						value={field.options.map((value) => ({ value }))}
+						onChange={(next) => onPatch({ options: next.map((entry) => entry.value) })}
+						max={100}
+						placeholder="选项,逗号分隔或逐条回车添加"
+						trailingAction={
+							<SearchSelect
+								label={`${prefix} ${n} 从字典填入`}
+								placeholder="从字典填入"
+								triggerIcon={<Library className="size-4" aria-hidden />}
+								description="将字典选项复制到当前字段；之后修改字典不会同步。"
+								value={undefined}
+								options={dictionaries.map((item) => ({ value: item.code, label: `${item.name}（${item.code}）` }))}
+								loading={dictionariesLoading}
+								disabled={dictionariesLoading || dictionariesError}
+								emptyText="没有可用的字典"
+								onValueChange={(code) => {
+									const dictionary = dictionaries.find((item) => item.code === code);
+									if (!dictionary) return;
+									const options = mergeReportOptions(field.options, dictionary.labels);
+									if (!options) {
+										toast.error("填入后选项超过 100 项，请先减少选项");
+										return;
+									}
+									onPatch({ options });
+								}}
+							/>
+						}
+					/>
+				</div>
 			) : null}
 		</>
 	);

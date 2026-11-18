@@ -35,6 +35,12 @@ const topFieldTypeValues = REPORT_TOP_FIELD_TYPES.map((item) => item.value) as [
 	...ReportTopFieldType[],
 ];
 
+/** 合并字典显示名，超过字段上限时保留原选项并交由调用方提示。 */
+export function mergeReportOptions(current: readonly string[], labels: readonly string[]): string[] | null {
+	const merged = [...new Set([...current, ...labels.map((label) => label.trim()).filter(Boolean)])];
+	return merged.length <= 100 ? merged : null;
+}
+
 /** 填报结构是业务数据，不依赖具体表格组件。发布后作为不可变版本保存。 */
 const fieldId = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/);
 const scalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);

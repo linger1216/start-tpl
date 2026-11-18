@@ -16,7 +16,7 @@
  */
 
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { TagList } from "#/components/ui/tag-list";
@@ -67,12 +67,14 @@ export function TagInput({
 	max = 20,
 	placeholder = "输入后回车添加",
 	disabled,
+	trailingAction,
 }: {
 	value: TagEntry[];
 	onChange: (next: TagEntry[]) => void;
 	max?: number;
 	placeholder?: string;
 	disabled?: boolean;
+	trailingAction?: ReactNode;
 }) {
 	const [draft, setDraft] = useState("");
 
@@ -126,6 +128,7 @@ export function TagInput({
 				>
 					<Plus className="size-4" />
 				</Button>
+				{trailingAction}
 			</div>
 			<TagList
 				values={value.map((e) => e.value)}

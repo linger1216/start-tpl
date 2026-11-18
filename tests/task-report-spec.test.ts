@@ -1,6 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pasteReportGrid, taskReportSchema, validateTaskReport } from "../src/lib/task/report-spec.ts";
+import {
+	mergeReportOptions,
+	pasteReportGrid,
+	taskReportSchema,
+	validateTaskReport,
+} from "../src/lib/task/report-spec.ts";
+
+describe("字典选项填入", () => {
+	it("保留已有选项，按顺序追加并去重", () => {
+		assert.deepEqual(mergeReportOptions(["高", "中"], [" 中 ", "低", "", "低"]), ["高", "中", "低"]);
+	});
+	it("超过 100 项时拒绝合并，不截断原数据", () => {
+		const existing = Array.from({ length: 100 }, (_, i) => `选项${i}`);
+		assert.equal(mergeReportOptions(existing, ["新选项"]), null);
+		assert.equal(existing.length, 100);
+	});
+});
 
 describe("任务填报结构", () => {
 	for (const kind of ["OBJECT", "TABLE"] as const) {

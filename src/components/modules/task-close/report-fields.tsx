@@ -15,12 +15,13 @@ import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import { DatePicker } from "#/components/ui/date-picker";
 import { Input } from "#/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { isRecord } from "#/lib/task/json";
 import { MAX_ATTACHMENTS } from "#/lib/task/payload";
 import { MAX_ARRAY_ITEMS, updateKeyedItem } from "#/lib/task/report-spec";
-import { parseLocalDateTime, toLocalMinuteInput } from "#/lib/time";
+import { formatLocalDate, parseLocalDateTime } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
 function ClearButton({ label, onClear, className }: { label: string; onClear: () => void; className?: string }) {
@@ -198,26 +199,18 @@ export function ReportField({
 			</div>
 		);
 	}
-	/** 日期 / 日期时间:原生控件自带日历图标,「清空」放在控件外面,不跟它抢位置 */
-	const kind = field.type === "date" ? "date" : "datetime-local";
-	// `datetime-local` 的 value 是**本地**墙上时间:存的是 ISO(UTC),这里折算过来,别直接 slice
-	const display = field.type === "datetime" ? toLocalMinuteInput(value as string | null) : String(value ?? "");
+	// 日期时间字段仍以 ISO 保存；日历按本地日期显示，修改时使用当天零点。
+	const isDateTime = field.type === "datetime";
+	const date = isDateTime ? formatLocalDate(value as string | null) : String(value ?? "");
 	return (
-		<div className="flex items-center gap-1.5">
-			<Input
-				aria-label={field.label}
-				aria-invalid={invalid || undefined}
-				type={kind}
-				value={display}
-				disabled={disabled}
-				className="min-w-0 flex-1"
-				onChange={(event) => {
-					const raw = event.target.value;
-					onChange(!raw ? null : kind === "datetime-local" ? parseLocalDateTime(raw) : raw);
-				}}
-			/>
-			{display ? <ClearButton label={`清空${field.label}`} onClear={() => onChange(null)} /> : null}
-		</div>
+		<DatePicker
+			aria-label={field.label}
+			aria-invalid={invalid || undefined}
+			value={date}
+			disabled={disabled}
+			className="w-full min-w-36"
+			onChange={(next) => onChange(!next ? null : isDateTime ? parseLocalDateTime(`${next}T00:00`) : next)}
+		/>
 	);
 }
 
