@@ -286,9 +286,9 @@ export const taskQueryRouter = createTRPCRouter({
 					/** 按流程模板筛 —— 各模板的状态互不相同,界面用它替代了全局状态筛选 */
 					workflowId: ID.optional(),
 					/** 只看这一时刻之后创建的(页面的时间筛选,开始日按当天零点传入) */
-					createdAfter: z.coerce.date().optional(),
+					startTime: z.coerce.date().optional(),
 					/** 只看这一时刻之前创建的(页面的时间筛选,结束日按当天 23:59:59.999 传入) */
-					createdBefore: z.coerce.date().optional(),
+					endTime: z.coerce.date().optional(),
 					keyword: z.string().max(64).optional(),
 					mine: z.boolean().optional(),
 					/** 只看「有动作正轮到我处理」的(审批 / 征询的当前处理人是我) */
@@ -323,8 +323,8 @@ export const taskQueryRouter = createTRPCRouter({
 			}
 			if (input?.status) conds.push(eq(taskTable.status, input.status));
 			if (input?.workflowId) conds.push(eq(taskTable.workflow_id, input.workflowId));
-			if (input?.createdAfter) conds.push(gte(taskTable.created_at, input.createdAfter));
-			if (input?.createdBefore) conds.push(lte(taskTable.created_at, input.createdBefore));
+			if (input?.startTime) conds.push(gte(taskTable.created_at, input.startTime));
+			if (input?.endTime) conds.push(lte(taskTable.created_at, input.endTime));
 			if (input?.keyword) conds.push(like(taskTable.name, `%${input.keyword}%`));
 			if (input?.mine) {
 				conds.push(

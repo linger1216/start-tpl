@@ -2697,7 +2697,7 @@ describe("任务闭环 · 只读接口", () => {
 		assert.equal(byWorkflow.items.length, 0, "按流程模板筛要真的生效");
 		assert.equal(byWorkflow.stats.total, 0, "统计跟随筛选");
 
-		// createdAfter + 统计:把第二条拨到 8 天前、再设一个已过的截止时间
+		// startTime + 统计:把第二条拨到 8 天前、再设一个已过的截止时间
 		await db
 			.update(taskTable)
 			.set({
@@ -2712,15 +2712,15 @@ describe("任务闭环 · 只读接口", () => {
 		assert.equal(filtered.stats.dueSoon, 0, "没有设在未来截止的任务");
 		const byTime = await asA().taskClose.taskList({
 			keyword,
-			createdAfter: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+			startTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
 		});
 		assert.ok(!byTime.items.some((row) => row.id === second.id), "时间筛选要真的生效");
 		assert.equal(byTime.stats.total, 2, "统计跟随时间筛选");
 
-		// createdBefore 与组合区间:结束时间拨到 7 天前只剩第二条;开始+结束一起夹也只剩它
+		// endTime 与组合区间:结束时间拨到 7 天前只剩第二条;开始+结束一起夹也只剩它
 		const beforeOnly = await asA().taskClose.taskList({
 			keyword,
-			createdBefore: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+			endTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
 		});
 		assert.deepEqual(
 			beforeOnly.items.map((row) => row.id),
@@ -2730,8 +2730,8 @@ describe("任务闭环 · 只读接口", () => {
 		assert.equal(beforeOnly.stats.total, 1, "统计跟随结束时间筛选");
 		const windowed = await asA().taskClose.taskList({
 			keyword,
-			createdAfter: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
-			createdBefore: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+			startTime: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
+			endTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
 		});
 		assert.deepEqual(
 			windowed.items.map((row) => row.id),

@@ -40,7 +40,7 @@ WORKDIR /app
 # ── 依赖 ───────────────────────────────────────────────────────────
 FROM base AS deps
 # 只拷清单:改源码不会导致重装依赖
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ── 构建产物 ───────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ CMD ["node", "--import", "tsx", "scripts/worker.ts"]
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/.output ./.output
 EXPOSE 3000

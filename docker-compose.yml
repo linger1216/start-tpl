@@ -57,20 +57,22 @@ services:
       start_period: 20s
 
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:latest}
-    command: server /data --console-address ":9001"
+    # MinIO 已不再公开分发社区镜像;开发环境用兼容 S3 API 的 RustFS。
+    image: ${OBJECT_STORAGE_IMAGE:-rustfs/rustfs:1.0.3}
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
     healthcheck:
-      # 镜像自带 `mc`(没有 curl);`local` 是镜像内置的指向自身的别名。
-      # 万一某个 tag 没有这个别名,换成:["CMD", "mc", "ready", "http://127.0.0.1:9000"]
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9000/health/ready"]
       interval: 5s
       timeout: 5s
       retries: 30

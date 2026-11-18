@@ -93,11 +93,11 @@ export function TaskListPage() {
 	const [createOpen, setCreateOpen] = useState(false);
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
-	const createdAfter = useMemo(
+	const startTime = useMemo(
 		() => (createdRange.from ? new Date(`${createdRange.from}T00:00:00`) : undefined),
 		[createdRange.from],
 	);
-	const createdBefore = useMemo(
+	const endTime = useMemo(
 		() => (createdRange.to ? new Date(`${createdRange.to}T23:59:59.999`) : undefined),
 		[createdRange.to],
 	);
@@ -107,8 +107,8 @@ export function TaskListPage() {
 			{
 				keyword: keyword.trim() || undefined,
 				workflowId: workflowId === "all" ? undefined : workflowId,
-				createdAfter,
-				createdBefore,
+				startTime,
+				endTime,
 				mine: quick.scope.includes("mine"),
 				pending: quick.scope.includes("pending") || undefined,
 				priority: quick.priority.length ? quick.priority.map(Number).sort() : undefined,

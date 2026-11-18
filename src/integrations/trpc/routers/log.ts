@@ -47,8 +47,8 @@ export const logRouter = createTRPCRouter({
 					status: z.number().int().min(0).max(1).optional(),
 					/** 模糊匹配:动作名 / 路径 / 目标 / 操作人 —— 一个框搜全部 */
 					keyword: z.string().max(64).optional(),
-					from: z.string().max(32).optional(),
-					to: z.string().max(32).optional(),
+					startTime: z.string().max(32).optional(),
+					endTime: z.string().max(32).optional(),
 					limit: z.number().int().min(1).max(500).default(200),
 				})
 				.optional(),
@@ -58,15 +58,16 @@ export const logRouter = createTRPCRouter({
 			if (input?.path) conditions.push(eq(sysLog.path, input.path));
 			if (input?.operatorId) conditions.push(eq(sysLog.operator_id, input.operatorId));
 			if (input?.status !== undefined) conditions.push(eq(sysLog.status, input.status));
-			if (input?.from) {
-				const from = new Date(input.from);
-				if (Number.isNaN(from.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "起始时间格式不对" });
-				conditions.push(gte(sysLog.created_at, from));
+			if (input?.startTime) {
+				const startTime = new Date(input.startTime);
+				if (Number.isNaN(startTime.getTime()))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "起始时间格式不对" });
+				conditions.push(gte(sysLog.created_at, startTime));
 			}
-			if (input?.to) {
-				const to = new Date(input.to);
-				if (Number.isNaN(to.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "结束时间格式不对" });
-				conditions.push(lte(sysLog.created_at, to));
+			if (input?.endTime) {
+				const endTime = new Date(input.endTime);
+				if (Number.isNaN(endTime.getTime())) throw new TRPCError({ code: "BAD_REQUEST", message: "结束时间格式不对" });
+				conditions.push(lte(sysLog.created_at, endTime));
 			}
 			const keyword = input?.keyword?.trim();
 			if (keyword) {
