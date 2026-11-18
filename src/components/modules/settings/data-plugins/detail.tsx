@@ -1,5 +1,4 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
@@ -36,7 +35,9 @@ export function SettingsDataPluginsDetail({
 							内置
 						</Tag>
 					) : (
-						<EnabledTag status={row.status} />
+						<Tag variant={Number(row.status) === 1 ? "secondary" : "outline"} className="text-xs">
+							{Number(row.status) === 1 ? "启用" : "停用"}
+						</Tag>
 					)
 				) : null
 			}

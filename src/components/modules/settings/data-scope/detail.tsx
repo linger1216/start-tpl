@@ -1,8 +1,8 @@
-import { PolicyStatusTag } from "#/components/modules/settings/data-scope/policy-status-tag";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { policyStatusMeta } from "#/lib/data-scope-spec";
 import { type DataScopeRow, ruleShapeText } from "./table";
 
 /**
@@ -22,13 +22,20 @@ export function SettingsDataScopeDetail({
 	onOpenChange: (next: boolean) => void;
 	onEdit: (row: DataScopeRow) => void;
 }) {
+	const statusMeta = row ? policyStatusMeta(row.status) : null;
 	return (
 		<DetailDialog
 			open={open}
 			meta={row}
 			onOpenChange={onOpenChange}
 			title={`规则详情 · ${row?.subjectLabel ?? ""}`}
-			tag={row ? <PolicyStatusTag status={row.status} /> : null}
+			tag={
+				statusMeta ? (
+					<Tag className={`text-xs ${statusMeta.tone}`} title={statusMeta.hint}>
+						{statusMeta.label}
+					</Tag>
+				) : null
+			}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (

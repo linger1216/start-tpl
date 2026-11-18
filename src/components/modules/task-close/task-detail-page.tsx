@@ -409,7 +409,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
 	return (
 		<div className="mx-auto flex w-full flex-col bg-card">
-			{/* ─── 记录头(降级:不再是 24px 巨标题 + 彩色胶囊) ─────────────── */}
 			<TaskDetailHeader
 				task={task}
 				roleLabel={roleLabel}

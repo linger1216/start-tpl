@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ChevronDown, Info } from "lucide-react";
 import { InfoTooltip } from "#/components/modules/task-close/info-tooltip";
-import { PriorityTag } from "#/components/modules/task-close/priority-tag";
 import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	DropdownMenu,
@@ -11,8 +10,10 @@ import {
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { Tag } from "#/components/ui/tag";
 import { DocDot, MetaRow, PageTitle } from "#/components/ui/typography";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { priorityLabelOf, priorityToneOf } from "#/lib/task/close-spec";
 import { formatLocalDate, formatLocalMinute } from "#/lib/time";
 
 /**
@@ -48,6 +49,7 @@ export function TaskDetailHeader({
 		description?: string | null;
 		dueAt?: string | null;
 		createdAt?: string | null;
+		creatorName?: string | null;
 		priority?: number | null;
 	};
 	roleLabel: string;
@@ -96,10 +98,9 @@ export function TaskDetailHeader({
 						<div className="flex justify-between gap-3">
 							<PageTitle>{task.name}</PageTitle>
 						</div>
-						{/* 版记行(MetaRow,DESIGN.md §5.2):12px 黑体 0.05em,无图标 —— 元信息是版记,不是图标墙 */}
 						<MetaRow className="mt-2">
 							<span>
-								截止
+								截止于
 								<strong className="ml-1.5 font-medium tabular-nums text-foreground">
 									{/* 日期字段按**天**显示 —— 选择器本来就只取到天,`00:00` 是假精度 */}
 									{task.dueAt ? formatLocalDate(task.dueAt) : "未设置"}
@@ -112,7 +113,16 @@ export function TaskDetailHeader({
 									{task.createdAt ? formatLocalMinute(task.createdAt) : PLACEHOLDER_EMPTY}
 								</strong>
 							</span>
-							<PriorityTag priority={task.priority} />
+							<DocDot />
+							<span>
+								创建人
+								<Tag className="ml-1.5 font-medium">
+									{task.creatorName ?? PLACEHOLDER_EMPTY}
+								</Tag>
+							</span>
+							<Tag variant="outline" className={`border-transparent ${priorityToneOf(task.priority)}`}>
+								{priorityLabelOf(task.priority)}
+							</Tag>
 						</MetaRow>
 					</div>
 

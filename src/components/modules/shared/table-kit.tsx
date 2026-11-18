@@ -18,7 +18,6 @@ import { cn } from "#/lib/utils";
  *   · `selectColumn`       多选列(表头全选本页 + 行勾选),选中集合由编排壳持有;
  *   · `actionsColumn`      行操作列(详情 / 编辑 / 删除),回调由编排壳闭包注入;
  *   · `timeColumn`         时间列(表头 + 等宽时间单元格);
- *   · `EnabledTag`       启停两态徽章(1 = 启用);
  *   · `TextCell`  单元格渲染口径(长文本传 `truncate`);
  *   · `TimeCell`  时间单元格(统一 `formatLocalMinute` 口径 + 等宽数字);
  *   · `TableLoadingShell`  请求中的加载壳(不换内容、只叠指示器)。
@@ -258,21 +257,6 @@ export function timeColumn<TRow extends TableRowData>(
 		size,
 		cell: (ctx) => <TimeCell value={ctx.getValue()} />,
 	});
-}
-
-/**
- * 「启用 / 停用」两态徽章 —— 8 张系统设置表 + 详情面共用同一个口径(1 = 启用)。
- *
- * 只服务**启停开关**这种两态;文件状态(待确认 / 正常 / 已删除)、数据范围(停用 / 上线 / 启用)
- * 这些各自有专用 spec,不要往这里塞。
- */
-export function EnabledTag({ status }: { status: unknown }) {
-	const on = Number(status) === 1;
-	return (
-		<Tag variant={on ? "secondary" : "outline"} className="text-xs">
-			{on ? "启用" : "停用"}
-		</Tag>
-	);
 }
 
 export function TableLoadingShell({

@@ -98,7 +98,7 @@ export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
 /**
  * 优先级档位 → 颜色(胶囊底 + 字)。
  *
- * 与 `PriorityTag`(卡片上的徽章)同一口径 —— 徽章与筛选胶囊同色,同一个 P0 在两处长得一样。
+ * 与任务卡片和详情头的优先级徽章同一口径 —— 徽章与筛选胶囊同色,同一个 P0 在两处长得一样。
  * 哈希键 `p{档位}` 是约定:改它就要同时改这两处,所以**都从这里取**。
  */
 export function priorityToneOf(priority: number | string | null | undefined): string {

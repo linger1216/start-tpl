@@ -27,7 +27,7 @@ import { priorityLabelOf, priorityToneOf, statusesOf, TASK_PRIORITIES } from "#/
  * 快速筛选的三组 —— 形态由 `ui/filter-chips` 统一,这里只给**语义**:
  * 组内单选还是多选、每个选项叫什么、选中时什么颜色。
  *
- * - 优先级:多选(P0/P1/P2 可同时开),颜色与卡片上的 `PriorityTag` 同色(同一哈希口径)
+ * - 优先级:多选(P0/P1/P2 可同时开),颜色与任务卡片上的优先级徽章同色(同一哈希口径)
  * - 期限:单选(临期 / 超期 互斥),颜色走期限语义色
  * - 范围:多选(两个独立开关,可同时开)
  */

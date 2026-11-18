@@ -1,4 +1,5 @@
-import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
 
 /** 角色表的一行(tRPC `role.list` 出参)—— **与 `sys_role` 的列一一对应** + 一个派生计数 */
@@ -49,7 +50,11 @@ export function roleColumns({
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => <EnabledTag status={ctx.getValue()} />,
+			cell: (ctx) => (
+				<Tag variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
+					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
+				</Tag>
+			),
 		}),
 		columnHelper.accessor("sort", {
 			header: "排序",

@@ -1,12 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { BellRing, CalendarClock, ClipboardList, Network, User } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { PriorityTag } from "#/components/modules/task-close/priority-tag";
 import { Avatar } from "#/components/ui/avatar";
 import { Card } from "#/components/ui/card";
 import { Tag } from "#/components/ui/tag.tsx";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
-import { taskDeadlineState } from "#/lib/task/close-spec";
+import { priorityLabelOf, priorityToneOf, taskDeadlineState } from "#/lib/task/close-spec";
 import { formatLocalMinute } from "#/lib/time";
 import { cn } from "#/lib/utils";
 
@@ -74,7 +73,9 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 			{/* 第二行:状态成组 —— 状态(主扫读)+ 优先级(分流)+「待你处理」告警 */}
 			<div className="mt-3 flex flex-wrap items-center gap-2">
 				<Tag variant="outline">{statusLabel(task.status)}</Tag>
-				<PriorityTag priority={task.priority} />
+				<Tag variant="outline" className={`border-transparent ${priorityToneOf(task.priority)}`}>
+					{priorityLabelOf(task.priority)}
+				</Tag>
 				{deadline ? (
 					<Tag
 						variant="outline"

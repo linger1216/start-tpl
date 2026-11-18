@@ -1,5 +1,4 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Tag } from "#/components/ui/tag";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
@@ -29,7 +28,13 @@ export function SettingsDictionaryDetail({
 			onOpenChange={onOpenChange}
 			title={`字典详情 · ${row?.name ?? ""}`}
 			description={<span className="font-mono">{row?.code ?? ""}</span>}
-			tag={row ? <EnabledTag status={row.status} /> : null}
+			tag={
+				row ? (
+					<Tag variant={Number(row.status) === 1 ? "secondary" : "outline"} className="text-xs">
+						{Number(row.status) === 1 ? "启用" : "停用"}
+					</Tag>
+				) : null
+			}
 			onEdit={() => row && onEdit(row)}
 		>
 			{row ? (

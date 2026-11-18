@@ -1,4 +1,4 @@
-import { actionsColumn, EnabledTag, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
+import { actionsColumn, TextCell, timeColumn } from "#/components/modules/shared/table-kit";
 import { ActionButton } from "#/components/ui/action-button";
 import { Tag } from "#/components/ui/tag";
 import { createAppColumnHelper } from "#/lib/table";
@@ -88,7 +88,11 @@ export function dictionaryColumns({ callbacks, busyId }: { callbacks: SettingsDi
 		columnHelper.accessor("status", {
 			header: "状态",
 			size: 84,
-			cell: (ctx) => <EnabledTag status={ctx.getValue()} />,
+			cell: (ctx) => (
+				<Tag variant={Number(ctx.getValue()) === 1 ? "secondary" : "outline"} className="text-xs">
+					{Number(ctx.getValue()) === 1 ? "启用" : "停用"}
+				</Tag>
+			),
 		}),
 		columnHelper.accessor("remark", {
 			header: "说明",

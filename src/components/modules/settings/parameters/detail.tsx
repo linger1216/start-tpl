@@ -1,5 +1,4 @@
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { EnabledTag } from "#/components/modules/shared/table-kit";
 import { DetailRow } from "#/components/ui/detail-row";
 import { JsonBlock } from "#/components/ui/json-block";
 import { Tag } from "#/components/ui/tag";
@@ -38,7 +37,9 @@ export function SettingsParametersDetail({
 						<Tag variant="secondary" className="font-mono text-xs">
 							{PARA_TYPE_META[row.type].label}
 						</Tag>
-						<EnabledTag status={row.status} />
+						<Tag variant={Number(row.status) === 1 ? "secondary" : "outline"} className="text-xs">
+							{Number(row.status) === 1 ? "启用" : "停用"}
+						</Tag>
 					</>
 				) : null
 			}
