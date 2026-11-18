@@ -4,14 +4,13 @@ import { useState } from "react";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button, buttonVariants } from "#/components/ui/button";
 import { isInternalUrl, linkTargetOf, type TaskLinkBlock } from "#/lib/task/payload";
-import { cn } from "#/lib/utils";
 
 /**
  * 链接区只读渲染 —— 遍历 `payload.links`,站内 / 站外按 host 判定(见 `isInternalUrl`):
- * 站内走当前窗口,站外新开标签页并加 `noopener`。一行两条,卡片紧凑。
+ * 站内走当前窗口,站外新开标签页并加 `noopener`。按行紧凑展示。
  *
  * 每条链接尾部有「预览」:**就地展开在链接下方**(不弹窗)—— iframe 打开同一地址
- * (站内同源必能嵌;站外看对方策略)。展开的那条占满整行,免得 iframe 挤在半列里。
+ * (站内同源必能嵌;站外看对方策略)。预览占满链接区宽度。
  */
 export function TaskLinkBlocks({ links }: { links: TaskLinkBlock[] }) {
 	/** 展开预览的那条链接(同一时刻只展开一条,再点「收起」收回) */
@@ -20,11 +19,11 @@ export function TaskLinkBlocks({ links }: { links: TaskLinkBlock[] }) {
 		return <p className="text-sm text-muted-foreground">（没有链接）</p>;
 	}
 	return (
-		<div className="grid gap-2 sm:grid-cols-2">
+		<div className="grid min-w-0 gap-2">
 			{links.map((block) => {
 				const open = openUrl === block.url;
 				return (
-					<div key={block.url} className={cn("grid content-start gap-2", open && "sm:col-span-2")}>
+					<div key={block.url} className="grid min-w-0 content-start gap-2">
 						<LinkView url={block.url} open={open} onToggle={() => setOpenUrl(open ? null : block.url)} />
 						{open ? (
 							<div className="grid gap-2 rounded-lg border border-border bg-card p-2">

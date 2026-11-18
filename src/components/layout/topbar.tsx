@@ -17,12 +17,10 @@ import { Tag } from "#/components/ui/tag";
 import { authClient } from "#/lib/auth-client";
 import { THEME_STORAGE_KEY } from "#/lib/constants";
 import { CommandPalette, useCommandPaletteShortcut } from "./command-palette";
-import type { NavNode } from "./nav-config";
+import { buildCrumbs } from "./nav-config";
 import { useNavTrail } from "./nav-data";
 import { NotificationBell } from "./notification-bell";
 import { UserSwitcher } from "./user-switcher";
-
-type Crumb = { label: string; href?: string };
 
 /** 当前登录用户(由 `(main)/route.tsx` 的 beforeLoad 在服务端取回,经外壳传下来) */
 export type SessionUser = { id: string; name: string; email: string };
@@ -35,32 +33,6 @@ function readTheme(): ThemeMode {
 	const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
 	if (stored === "light" || stored === "dark") return stored;
 	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function buildCrumbs(trail: readonly NavNode[], pathname: string): Crumb[] {
-	// 命中菜单的路径:面包屑完全由菜单树派生 —— 与侧边栏同一份来源(useNavTrail),不会再漂移
-	if (trail.length > 0) {
-		if (trail.length === 1 && trail[0].path === "/") return [{ label: trail[0].name }];
-		return [
-			{ label: "首页", href: "/" },
-			...trail.map((node, i) => ({
-				label: node.name,
-				// 分组节点(无 path)与最后一级不可点
-				href: i === trail.length - 1 ? undefined : node.path,
-			})),
-		];
-	}
-
-	// 未登记在菜单里的路径兜底:按原始段落显示。
-	// 路径的中文名**只认菜单树**(见 nav-config.ts:不要在别处再维护第二份映射)
-	const parts = pathname.split("/").filter(Boolean);
-	if (parts.length === 0) return [{ label: "工作台" }];
-	const out: Crumb[] = [{ label: "首页", href: "/" }];
-	parts.forEach((p, i) => {
-		const href = i === parts.length - 1 ? undefined : `/${parts.slice(0, i + 1).join("/")}`;
-		out.push({ label: p, href });
-	});
-	return out;
 }
 
 export function Topbar({ user, onToggle }: { user: SessionUser; onToggle: () => void }) {

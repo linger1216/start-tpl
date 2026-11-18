@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Paperclip } from "lucide-react";
+import { ChevronDown, Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -30,7 +30,9 @@ import { TaskReport } from "#/components/modules/task-close/task-report";
 import { useAttachmentPreview } from "#/components/modules/task-close/use-attachment-preview";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { Button, buttonVariants } from "#/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "#/components/ui/collapsible";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { DetailRow } from "#/components/ui/detail-row";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
@@ -165,7 +167,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		}),
 	);
 
-	/** 附件弹窗专用保存 —— 只改 `payload.attachments`(任务相关方都能加;链接 / 说明服务端原样保留) */
+	/** 附件弹窗专用保存 —— 只改 `payload.attachments`(创建者或管理员可修改;链接 / 说明服务端原样保留) */
 	const attachMutation = useMutation(
 		trpc.taskClose.taskAttach.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setDialog(null), message: () => "附件已更新" }),
@@ -430,6 +432,41 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				}}
 			/>
 
+			<section aria-label="任务信息" className="min-w-0 px-8 pt-3">
+				<DetailRow label="任务说明" className="py-1.5">
+					{task.description ? (
+						<p className="whitespace-pre-wrap leading-relaxed">{task.description}</p>
+					) : (
+						<span className="text-muted-foreground">暂无说明</span>
+					)}
+				</DetailRow>
+				<DetailRow label="任务链接" className="py-1.5">
+					<div className="max-w-3xl">
+						<TaskLinkBlocks links={links} />
+					</div>
+				</DetailRow>
+				<DetailRow label="任务附件" className="py-1.5">
+					<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+						<TaskAttachmentList attachments={attachments} onOpen={preview.preview} />
+						{permissions.canManage && (
+							<Button
+								variant="ghost"
+								size="xs"
+								className="-my-1"
+								onClick={() => {
+									attachmentBaseline.current = own.attachmentIds;
+									setDraftAttachments(own.attachments);
+									setDialog("attach");
+								}}
+							>
+								<Paperclip className="size-3.5" aria-hidden />
+								新增附件
+							</Button>
+						)}
+					</div>
+				</DetailRow>
+			</section>
+
 			{/* ─── 流程脊 —— 只画状态(走到哪了);动作在右上角动作组 ─────────────── */}
 			<section className="grid gap-3 px-8 pt-5">
 				<h2 className="text-xs font-semibold tracking-wide text-muted-foreground">事项流程</h2>
@@ -472,52 +509,34 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
 				{/* 左 main */}
 				<section className="grid gap-6 min-w-0">
-					{/* 子任务(fan-out 出来的):点卡片进那条子任务自己的详情 */}
-					{children.length > 0 ? (
-						<section className="grid gap-3">
-							<BlockHeader title="子任务" count={children.length} />
-							<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-								{children.map((child) => (
-									<TaskCardLink key={child.id} task={child} className="block h-48">
-										<TaskCard task={child} statusLabel={statusLabel} />
-									</TaskCardLink>
-								))}
-							</div>
-						</section>
-					) : null}
-
-					{/* 任务链接 */}
-					<section className="grid gap-3">
-						<BlockHeader title="任务链接" dashed />
-						<TaskLinkBlocks links={links} />
-					</section>
+					{children.length > 0 && (
+						<Collapsible className="min-w-0" defaultOpen={false}>
+							<BlockHeader
+								title={
+									<CollapsibleTrigger className="group inline-flex items-center gap-1.5 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+										子任务
+										<span className="text-xs font-medium tabular-nums text-muted-foreground">{children.length}</span>
+										<ChevronDown
+											className="size-4 text-muted-foreground transition-transform group-data-[panel-open]:rotate-180"
+											aria-hidden
+										/>
+									</CollapsibleTrigger>
+								}
+							/>
+							<CollapsibleContent className="min-w-0 pt-3">
+								<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+									{children.map((child) => (
+										<TaskCardLink key={child.id} task={child} className="block h-48">
+											<TaskCard task={child} statusLabel={statusLabel} />
+										</TaskCardLink>
+									))}
+								</div>
+								{permissions.isParticipant && <TaskReport taskId={task.id} view="children" />}
+							</CollapsibleContent>
+						</Collapsible>
+					)}
 
 					{permissions.isParticipant && <TaskReport taskId={task.id} />}
-
-					{/* 附件 block */}
-					<section className="grid gap-3 pt-6">
-						<BlockHeader
-							title="附件"
-							count={attachments.length}
-							actions={
-								myRole !== null ? (
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											attachmentBaseline.current = own.attachmentIds;
-											setDraftAttachments(own.attachments);
-											setDialog("attach");
-										}}
-									>
-										<Paperclip className="size-3.5" aria-hidden />
-										新增附件
-									</Button>
-								) : null
-							}
-						/>
-						<TaskAttachmentList attachments={attachments} onOpen={preview.preview} />
-					</section>
 
 					{/* 评论与回复 block —— TaskComments 自带输入 + 嵌套 thread */}
 					<section className="grid gap-3 pt-6">

@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CloudUpload, Plus, Save } from "lucide-react";
-import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { ReportField } from "#/components/modules/task-close/report-fields";
@@ -29,7 +29,7 @@ import {
 import { cn } from "#/lib/utils";
 
 /** 填报与说明、自由回复独立，数据和授权都由服务端提供。 */
-export function TaskReport({ taskId }: { taskId: string }) {
+export function TaskReport({ taskId, view = "main" }: { taskId: string; view?: "main" | "children" }) {
 	const trpc = useTRPC();
 	const report = useQuery(trpc.taskClose.reportGet.queryOptions({ taskId }));
 	const [reloadKey, setReloadKey] = useState(0);
@@ -45,6 +45,7 @@ export function TaskReport({ taskId }: { taskId: string }) {
 				<p className="text-sm text-muted-foreground">无法加载填报。</p>
 			</ReportSection>
 		);
+	if (!report.data && view === "children") return null;
 	if (!report.data)
 		return (
 			<ReportSection>
@@ -61,8 +62,10 @@ export function TaskReport({ taskId }: { taskId: string }) {
 					setReloadKey((key) => key + 1);
 				}}
 				reloadKey={reloadKey}
+				view={view}
 			/>
 		);
+	if (view === "children") return null;
 	return (
 		<TaskReportEditor
 			key={`${report.data.report.id}:${report.data.template.id}:${reloadKey}`}
@@ -78,7 +81,7 @@ export function TaskReport({ taskId }: { taskId: string }) {
 }
 
 /**
- * 父任务填报 —— 两块**常显、没有开关**:**子任务结构化填报汇总**在上,**母版**在下(母版可直接编辑)。
+ * 父任务填报与子任务汇总分别显示。
  *
  * 组合行是**读时拼出来的**,不落表。数组字段**不占列**:换行 + 缩进挂在行下面单独渲染 ——
  * 放进列里会把整列撑得很宽,内容反而看不见。
@@ -88,20 +91,22 @@ function TaskReportComposed({
 	data,
 	onReload,
 	reloadKey,
+	view,
 }: {
 	taskId: string;
 	data: ReportData;
 	/** 母版编辑器冲突后的「重新载入」 */
 	onReload: () => Promise<void>;
 	reloadKey: number;
+	view: "main" | "children";
 }) {
 	const schema = data.template.schema;
 	const scalarFields = schema.fields.filter((field) => field.type !== "array");
 	const arrayFields = schema.fields.filter((field) => field.type === "array");
 	const owned = data.composed.filter((entry) => entry.owner);
 	const master = data.composed.filter((entry) => !entry.owner);
-	return (
-		<>
+	if (view === "children") {
+		return (
 			<ReportSection
 				title="子任务结构化填报汇总"
 				actions={<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} />}
@@ -119,20 +124,22 @@ function TaskReportComposed({
 					/>
 				)}
 			</ReportSection>
+		);
+	}
+	return (
+		<>
 			{data.canEdit ? (
 				<TaskReportEditor
 					key={`master:${data.report.id}:${data.template.id}:${reloadKey}`}
-					sectionTitle="母版"
-					note="这是母版,可直接改;保存会按各子任务的范围重新下发一份草稿(覆盖他们尚未提交的编辑)。"
 					taskId={taskId}
 					schema={schema}
 					data={data}
 					onReload={onReload}
 				/>
 			) : (
-				<ReportSection title="母版">
+				<ReportSection>
 					{master.length === 0 ? (
-						<p className="text-sm text-muted-foreground">母版行已全部由子任务认领。</p>
+						<p className="text-sm text-muted-foreground">暂无填报内容。</p>
 					) : (
 						<ComposedTable
 							taskId={taskId}
@@ -190,7 +197,7 @@ function ComposedTable({
 							<tr className="align-top">
 								{showOwner ? (
 									<td className="whitespace-nowrap px-2 py-1 text-xs text-muted-foreground">
-										{entry.owner ? `由 ${entry.ownerName ?? "执行人"} 填报` : "母版"}
+										{entry.owner ? `由 ${entry.ownerName ?? "执行人"} 填报` : "填报内容"}
 									</td>
 								) : null}
 								{scalarFields.map((field) => (
@@ -231,18 +238,12 @@ function TaskReportEditor({
 	schema,
 	data,
 	onReload,
-	sectionTitle,
-	note,
 }: {
 	taskId: string;
 	schema: TaskReportSchema;
 	data: ReportData;
 	/** 冲突后「重新载入」:重新拉服务端版本并重建编辑器(丢弃本地未保存内容) */
 	onReload: () => Promise<void>;
-	/** 区块标题(默认「结构化填报」;父任务详情里用它标「母版」) */
-	sectionTitle?: string;
-	/** 标题下的一句说明(母版:保存会重新下发) */
-	note?: ReactNode;
 }) {
 	const trpc = useTRPC();
 	const [draft, setDraft] = useState<Row | Row[]>(data.report.draft as Row | Row[]);
@@ -358,7 +359,6 @@ function TaskReportEditor({
 	const busy = sync.isPending;
 	return (
 		<ReportSection
-			title={sectionTitle}
 			actions={
 				<div className="flex items-center">
 					{data.canEdit ? (
@@ -402,7 +402,6 @@ function TaskReportEditor({
 				</div>
 			}
 		>
-			{note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
 			{conflicted && (
 				<div role="alert" className="flex items-center gap-2 text-sm text-destructive">
 					填报已被他人修改，本地内容尚未保存。

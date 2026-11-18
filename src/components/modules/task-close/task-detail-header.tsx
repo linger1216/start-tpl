@@ -79,7 +79,11 @@ export function TaskDetailHeader({
 				<div className="mb-1.5">
 					<Link
 						to="/task-close"
-						className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2 text-muted-foreground" })}
+						className={buttonVariants({
+							variant: "ghost",
+							size: "sm",
+							className: "-ml-[29px] px-2 text-muted-foreground",
+						})}
 					>
 						<ArrowLeft className="size-3.5" />
 						返回我的任务
@@ -181,12 +185,6 @@ export function TaskDetailHeader({
 						{showRefresh ? <RefreshButton busy={refreshing} onClick={onRefresh} /> : null}
 					</div>
 				</div>
-
-				{task.description ? (
-					<p className="mt-3 p-4 min-w-0 flex-1 text-base leading-relaxed text-muted-foreground wrap-break-word">
-						{task.description}
-					</p>
-				) : null}
 			</div>
 		</header>
 	);

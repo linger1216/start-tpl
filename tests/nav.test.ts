@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { findNavTrailIn, type NavNode, navNodeContains } from "../src/components/layout/nav-config.ts";
+import { buildCrumbs, findNavTrailIn, type NavNode, navNodeContains } from "../src/components/layout/nav-config.ts";
 
 const tree: NavNode[] = [
 	{
@@ -62,5 +62,28 @@ describe("navNodeContains", () => {
 		const group = tree[0] as NavNode;
 		assert.equal(navNodeContains(group, "/task-close/workflows"), true);
 		assert.equal(navNodeContains(group, "/nowhere"), false);
+	});
+});
+
+describe("任务详情面包屑", () => {
+	it("分组与列表都指向可访问的任务列表，详情本身保持当前项", () => {
+		const trail = findNavTrailIn(tree, "/task-close/abc123");
+		assert.deepEqual(buildCrumbs(trail, "/task-close/abc123"), [
+			{ label: "首页", href: "/" },
+			{ label: "任务闭环", href: "/task-close" },
+			{ label: "我的任务", href: "/task-close" },
+			{ label: "详情" },
+		]);
+	});
+
+	it("数据库的分组合成路径不会成为链接，普通页面本身仍是当前项", () => {
+		const group = tree[0];
+		assert.ok(group?.children?.[1]);
+		const trail = [{ ...group, path: "#group/任务闭环" }, group.children[1]];
+		assert.deepEqual(buildCrumbs(trail, "/task-close/workflows"), [
+			{ label: "首页", href: "/" },
+			{ label: "任务闭环", href: "/task-close/workflows" },
+			{ label: "流程模板" },
+		]);
 	});
 });

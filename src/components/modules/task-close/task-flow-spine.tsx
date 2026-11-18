@@ -1,4 +1,5 @@
 import { ArrowRight, Lock, Paperclip, ReplyIcon, TriangleAlert } from "lucide-react";
+import { motion, useInView, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 import { AttachmentChip } from "#/components/modules/task-close/task-content-attachments";
 import { MentionTextarea, type Participant, useMentionPicker } from "#/components/modules/task-close/task-mention";
@@ -12,7 +13,7 @@ import { cn } from "#/lib/utils";
 /**
  * 流程脊 —— 这一页的**状态骨架**:把模板里的状态链横着铺开,标出「走过的 / 当前 / 未到」,
  * 走过的节点带首次到达时刻(右下盖脊档小方章),被驳回过的边在箭头上方挂小红章,
- * 当前节点在锁定期画成带锁的 `warn` 节点。
+ * 当前节点始终为蓝色,锁定期额外显示锁图标。
  *
  * ⚠️ **这里不放动作**。状态类按钮(发起审批 / 改状态)按用户要求留在**记录头右上角**的动作组里
  * (见 `task-detail-page.tsx`)—— 脊只回答「走到哪了」。
@@ -34,11 +35,14 @@ export function TaskFlowSpine({
 	reachedAt: Map<string, string>;
 	/** 被驳回过的边(`from->to`)—— 箭头上方挂小红章,"这一步被批回过"一眼可见 */
 	rejectedEdges: Set<string>;
-	/** 任务被未完成的审批动作锁住 —— 当前节点画成带锁的警示节点 */
+	/** 任务被未完成的审批动作锁住 —— 当前节点额外显示锁图标 */
 	locked: boolean;
 }) {
+	const reducedMotion = useReducedMotion();
+	const spineRef = useRef<HTMLOListElement>(null);
+	const inView = useInView(spineRef);
 	return (
-		<ol className="flex flex-wrap items-start gap-x-2 gap-y-3">
+		<ol ref={spineRef} className="flex flex-wrap items-start gap-x-2 gap-y-3">
 			{statuses.map((status, index) => {
 				const isCurrent = status.value === current;
 				const isVisited = !isCurrent && visited.has(status.value);
@@ -49,31 +53,47 @@ export function TaskFlowSpine({
 					<li key={status.value} className="flex items-start gap-x-2">
 						<span
 							className={cn(
-								"inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-sm",
+								"relative inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1 text-sm",
 								isCurrent
-									? locked
-										? "border-warn/40 bg-warn-soft font-semibold text-warn-fg"
-										: "border-primary/40 bg-primary/5 font-semibold text-primary"
+									? "border-primary/40 bg-primary/5 font-semibold text-primary"
 									: isVisited
-										? "border-border text-muted-foreground"
+										? "border-success/30 bg-success-soft text-success-fg"
 										: "border-dashed border-border text-muted-foreground",
 							)}
+							aria-current={isCurrent ? "step" : undefined}
 						>
-							{isCurrent && locked ? (
-								<Lock className="size-3 shrink-0" aria-hidden />
+							{isCurrent ? (
+								<span className="relative inline-flex size-3 shrink-0 items-center justify-center" aria-hidden>
+									<motion.span
+										className="pointer-events-none absolute size-2 rounded-full bg-current motion-reduce:hidden"
+										initial={{ opacity: 0, scale: 1 }}
+										animate={
+											reducedMotion || !inView
+												? { opacity: 0, scale: 1 }
+												: { opacity: [0, 0.32, 0], scale: [1, 1.35, 2.4] }
+										}
+										transition={
+											reducedMotion || !inView
+												? { duration: 0 }
+												: { duration: 2.4, repeat: Infinity, ease: "easeOut", repeatDelay: 0.4 }
+										}
+									/>
+									{locked ? (
+										<Lock className="relative size-3" />
+									) : (
+										<span className="relative size-1.5 rounded-full bg-current" />
+									)}
+								</span>
 							) : isVisited ? (
 								/* 走过的节点 = 这一站已经"盖过章":一枚内部小圆点,不请 Seal 组件(它只有圆章两档) */
-								<span
-									aria-hidden
-									className="inline-block size-2.5 shrink-0 rounded-full border-[1.5px] border-success/55 bg-success-soft/60"
-								/>
+								<span aria-hidden className="inline-block size-1.5 shrink-0 rounded-full bg-success" />
 							) : (
-								<span
-									aria-hidden
-									className={cn("size-1.5 shrink-0 rounded-[2px]", isCurrent ? "bg-current" : "bg-border")}
-								/>
+								<span aria-hidden className="size-1.5 shrink-0 rounded-[2px] bg-border" />
 							)}
 							{status.label}
+							<span className="sr-only">
+								{isCurrent ? (locked ? "当前状态，已锁定" : "当前状态") : isVisited ? "已到达" : "未到达"}
+							</span>
 							{at ? <span className="text-xs tabular-nums text-muted-foreground">{formatLocalMinute(at)}</span> : null}
 							{edgeRejected ? <span className="sr-only">这一步的流转被驳回过</span> : null}
 						</span>

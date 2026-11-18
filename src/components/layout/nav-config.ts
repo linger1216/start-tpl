@@ -217,6 +217,33 @@ export function findNavTrailIn(nodes: readonly NavNode[], pathname: string): Nav
 	return walk(nodes, [])?.trail ?? [];
 }
 
+/** 根据菜单链生成面包屑，纯分组跳转到当前分支的实际页面。 */
+export function buildCrumbs(trail: readonly NavNode[], pathname: string): { label: string; href?: string }[] {
+	if (trail.length > 0) {
+		if (trail.length === 1 && trail[0].path === "/") return [{ label: trail[0].name }];
+		const leaf = trail.at(-1);
+		const isTaskDetail = leaf?.path === "/task-close" && pathname.startsWith("/task-close/");
+		return [
+			{ label: "首页", href: "/" },
+			...trail.map((node, i) => {
+				const path = node.path?.startsWith("/") ? node.path : undefined;
+				const branchPath = trail.slice(i + 1).find((child) => child.path?.startsWith("/"))?.path;
+				const href = i === trail.length - 1 && !isTaskDetail ? undefined : (path ?? branchPath);
+				return href ? { label: node.name, href } : { label: node.name };
+			}),
+			...(isTaskDetail ? [{ label: "详情" }] : []),
+		];
+	}
+	const parts = pathname.split("/").filter(Boolean);
+	if (parts.length === 0) return [{ label: "工作台" }];
+	return [
+		{ label: "首页", href: "/" },
+		...parts.map((label, i) =>
+			i === parts.length - 1 ? { label } : { label, href: `/${parts.slice(0, i + 1).join("/")}` },
+		),
+	];
+}
+
 /** 按路径精确取节点(模块概览页用来渲染自己的子树)。 */
 export function findNavNodeIn(nodes: readonly NavNode[], path: string): NavNode | undefined {
 	const walk = (list: readonly NavNode[]): NavNode | undefined => {

@@ -196,7 +196,7 @@ async function isCreatorOrAdmin(creatorId: string, meId: string): Promise<boolea
 }
 
 /**
- * 只有**创建者或管理员**能做的写操作(`taskUpdate` / `taskRemove` / `memberRemove`)。
+ * 只有**创建者或管理员**能做的写操作(`taskUpdate` / `taskAttach` / `taskRemove` / `memberRemove`)。
  *
  * 管理员判据是 `isAdminUser`(「系统管理员」角色)——「管理员什么都可以」是本模块的既定口径
  * ,与 `permissionsOf` 下发的 `isAdmin` 同一判据,

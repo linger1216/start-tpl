@@ -917,6 +917,26 @@ describe("任务闭环", () => {
 		);
 		await assertRejects(() => asB().taskClose.reportGet({ taskId: childB.id }), "任务不存在");
 	});
+	it("任务附件仅创建者和管理员可修改，执行人和参与者仍可在评论上传附件", async () => {
+		const id = await newTask("附件权限");
+		await asA().taskClose.memberAdd({ taskId: id, userIds: [C.id] });
+		for (const makeCaller of [asB, asC]) {
+			await assert.rejects(
+				() => makeCaller().taskClose.taskAttach({ id, attachments: [ATTACH_FILE_ID], expectedAttachments: [] }),
+				(error: unknown) => (error as { code?: string }).code === "FORBIDDEN",
+			);
+			await makeCaller().taskClose.commentCreate({ taskId: id, content: "回复附件", attachments: [COMMENT_FILE_ID] });
+		}
+		assert.equal((await asA().taskClose.taskGet({ id })).own.attachments.length, 0);
+		await asA().taskClose.taskAttach({ id, attachments: [ATTACH_FILE_ID], expectedAttachments: [] });
+		await addUserRole(C.id, (await getSystemAdminRoleRow()).id);
+		try {
+			await asC().taskClose.taskAttach({ id, attachments: [], expectedAttachments: [ATTACH_FILE_ID] });
+		} finally {
+			await removeAllRolesOfUser(C.id);
+		}
+		assert.equal((await asA().taskClose.taskGet({ id })).own.attachments.length, 0);
+	});
 	it("内容区只合并可读任务:父任务可看子任务,执行人不能看父或兄弟内容", async () => {
 		const { id: parentId } = await asA().taskClose.taskCreate({
 			name: taskName("共享内容"),
@@ -942,10 +962,10 @@ describe("任务闭环", () => {
 			name: taskName("共享内容"),
 			payload: { links: [{ kind: "link", url: "https://example.com/sibling" }], attachments: [COMMENT_FILE_ID] },
 		});
-		// 执行人(不是创建人)自己给子任务加附件 —— 以前只有创建人能做
-		await asB().taskClose.taskAttach({ id: childId, attachments: [ATTACH_FILE_ID], expectedAttachments: [] });
+		// 创建人维护子任务附件，并验证并发冲突
+		await asA().taskClose.taskAttach({ id: childId, attachments: [ATTACH_FILE_ID], expectedAttachments: [] });
 		await assertRejects(
-			() => asB().taskClose.taskAttach({ id: childId, attachments: [COMMENT_FILE_ID], expectedAttachments: [] }),
+			() => asA().taskClose.taskAttach({ id: childId, attachments: [COMMENT_FILE_ID], expectedAttachments: [] }),
 			"附件已被修改",
 		);
 		await assertRejects(
@@ -958,12 +978,12 @@ describe("任务闭环", () => {
 			[ATTACH_FILE_ID],
 		);
 		const competing = await Promise.allSettled([
-			asB().taskClose.taskAttach({
+			asA().taskClose.taskAttach({
 				id: childId,
 				attachments: [ATTACH_FILE_ID, COMMENT_FILE_ID],
 				expectedAttachments: [ATTACH_FILE_ID],
 			}),
-			asB().taskClose.taskAttach({
+			asA().taskClose.taskAttach({
 				id: childId,
 				attachments: [ATTACH_FILE_ID, FOREIGN_FILE_ID],
 				expectedAttachments: [ATTACH_FILE_ID],
@@ -1022,7 +1042,7 @@ describe("任务闭环", () => {
 					attachments: [],
 					expectedAttachments: [],
 				}),
-			"无权给这条任务加附件",
+			"只有任务创建者或管理员",
 		);
 	});
 	it("多执行人建任务 = 父 + N 子;我的任务列表只列父,执行人自己能直接看到子任务", async () => {

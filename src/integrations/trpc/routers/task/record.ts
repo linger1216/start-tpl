@@ -24,7 +24,6 @@ import {
 	assertAttachments,
 	assertCanManage,
 	assertEdgeWho,
-	assertTaskParticipant,
 	assertTaskUnlocked,
 	assertUsersExist,
 	cancelLiveTaskActions,
@@ -501,7 +500,7 @@ export const taskRecordRouter = createTRPCRouter({
 		}),
 
 	/**
-	 * **给任务加附件**(执行人 / 参与者也能用,不必等创建人改整份 payload)。
+	 * **维护任务附件**(仅创建者或系统管理员)。
 	 *
 	 * 只动 `payload.attachments`,`links` / `type` / 名称 / 描述原样保留 —— 服务端从库里取旧值再合并,
 	 * 前端传什么都不会覆盖别的字段。内容区按整棵树展示(见 `familyTasks`),所以子任务加的附件
@@ -519,7 +518,7 @@ export const taskRecordRouter = createTRPCRouter({
 			const me = requireCurrentUser(ctx);
 			await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
-				await assertTaskParticipant(task, me.id, "无权给这条任务加附件");
+				await assertCanManage(task, me.id, "只有任务创建者或管理员可以修改任务附件");
 				const current = normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]);
 				if (stableJson(current?.attachments ?? []) !== stableJson(input.expectedAttachments))
 					throw new TRPCError({ code: "CONFLICT", message: "附件已被修改，请刷新后重试" });
