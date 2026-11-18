@@ -30,7 +30,23 @@ export function fieldColWidth(field: ReportFieldLike): string {
 		case "decimal":
 			return "min-w-28";
 		default:
-			return "min-w-32";
+			return "min-w-40";
+	}
+}
+
+/** 表格列默认宽度与最小宽度一致;输入框保持可读,列数增加时由表格横向滚动承接。 */
+export function fieldColMinWidth(field: ReportFieldLike): number {
+	switch (field.type) {
+		case "date":
+		case "datetime":
+			return 144;
+		case "attachment":
+			return 192;
+		case "integer":
+		case "decimal":
+			return 112;
+		default:
+			return 160;
 	}
 }
 

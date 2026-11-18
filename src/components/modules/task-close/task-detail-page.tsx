@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Paperclip } from "lucide-react";
+import { ChevronDown, PanelRightOpen, Paperclip } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -40,6 +40,7 @@ import { PLACEHOLDER_EMPTY } from "#/lib/constants";
 import { ROLE_LABEL, ROLE_WHY, statusesOf, statusLabelOf } from "#/lib/task/close-spec";
 import { isForbiddenError, isNotFoundError, orderHintOf, peopleOptionsOf, todoItemsOf } from "#/lib/task/close-view";
 import type { TaskAttachment, TaskPayload } from "#/lib/task/payload";
+import { cn } from "#/lib/utils";
 
 /**
  * 任务详情 —— 闭环页(按 `assets/ui/任务详情.html` 原型重画)。
@@ -102,6 +103,8 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	const preview = useAttachmentPreview<TaskAttachment>(taskId);
 	/** 动态一次取多少条(分页由 PaginationControl 管) */
 	const [logPage, setLogPage] = useState(1);
+	/** 右侧检查器默认展开;收起后主内容占满宽度。 */
+	const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
 
 	const detailQuery = useQuery(trpc.taskClose.taskGet.queryOptions({ id: taskId }));
 	const usersQuery = useQuery(trpc.user.list.queryOptions());
@@ -162,7 +165,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 
 	const updateMutation = useMutation(
 		trpc.taskClose.taskUpdate.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setDialog(null), message: () => "已保存" }),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setDialog(null),
+				message: ({ syncedChildren }) =>
+					syncedChildren > 0 ? `已保存，并同步更新 ${syncedChildren} 条下级任务` : "已保存",
+			}),
 			onError: toastApiError,
 		}),
 	);
@@ -170,7 +177,11 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 	/** 附件弹窗专用保存 —— 只改 `payload.attachments`(创建者或管理员可修改;链接 / 说明服务端原样保留) */
 	const attachMutation = useMutation(
 		trpc.taskClose.taskAttach.mutationOptions({
-			onSuccess: writeSuccess(invalidate, { close: () => setDialog(null), message: () => "附件已更新" }),
+			onSuccess: writeSuccess(invalidate, {
+				close: () => setDialog(null),
+				message: ({ syncedChildren }) =>
+					syncedChildren > 0 ? `附件已更新，并同步到 ${syncedChildren} 条下级任务` : "附件已更新",
+			}),
 			onError: toastApiError,
 		}),
 	);
@@ -368,6 +379,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 		links: own.links,
 		attachments: own.attachments,
 		reminderConfig: task.reminderConfig,
+		hasChildren: children.length > 0,
 	};
 
 	/**
@@ -506,9 +518,17 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 			) : null}
 
 			{/* ─── main:左 画布(链接 / 附件 / 评论)+ 右 检查器(人员 / 动态) ───────── */}
-			<main className="grid gap-6 px-8 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+			<main className={cn("grid gap-6 px-8 py-6", !inspectorCollapsed && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
 				{/* 左 main */}
 				<section className="grid gap-6 min-w-0">
+					{inspectorCollapsed ? (
+						<div className="-mb-4 flex justify-end">
+							<Button variant="ghost" size="xs" onClick={() => setInspectorCollapsed(false)}>
+								<PanelRightOpen className="size-3.5" />
+								展开侧栏
+							</Button>
+						</div>
+					) : null}
 					{children.length > 0 && (
 						<Collapsible className="min-w-0" defaultOpen={false}>
 							<BlockHeader
@@ -556,57 +576,60 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 				</section>
 
 				{/* 右 检查器 —— 两块合成**一张面板**:内部用 inset 细线分组,不再每块各画一条虚线 */}
-				<aside className="sticky top-18 self-start">
-					<div className="overflow-hidden rounded-[10px] border border-border bg-card">
-						{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
-						<TaskMembers
-							creatorId={task.creatorId}
-							creatorName={task.creatorName ?? null}
-							executorId={task.executorId}
-							executorName={task.executorName ?? null}
-							members={members}
-							canAddMember={permissions.isParticipant}
-							canManage={permissions.canManage}
-							removing={memberRemoveMutation.isPending}
-							onAdd={() => setDialog("member")}
-							onRemove={removeMember.ask}
-							onRemind={myRole !== null ? setReminderRecipient : undefined}
-						/>
-
-						{myRole !== null && (
-							<TaskReminders
-								taskId={task.id}
-								recipient={reminderRecipient}
-								onClose={() => setReminderRecipient(null)}
+				{!inspectorCollapsed ? (
+					<aside className="sticky top-18 self-start">
+						<div className="overflow-hidden rounded-[10px] border border-border bg-card">
+							{/* 参与人 —— 创建人 + 成员,所以不叫「成员」 */}
+							<TaskMembers
+								creatorId={task.creatorId}
+								creatorName={task.creatorName ?? null}
+								executorId={task.executorId}
+								executorName={task.executorName ?? null}
+								members={members}
+								canAddMember={permissions.isParticipant}
+								canManage={permissions.canManage}
+								removing={memberRemoveMutation.isPending}
+								onCollapse={() => setInspectorCollapsed(true)}
+								onAdd={() => setDialog("member")}
+								onRemove={removeMember.ask}
+								onRemind={myRole !== null ? setReminderRecipient : undefined}
 							/>
-						)}
 
-						{/* 动作记录:只列还活着、且我能撤回的 —— 判据与服务端 `isActionCreatorOrAdmin` 同口径 */}
-						<TaskActionList
-							actions={detailQuery.data.actions.filter(
-								(action) => action.status === "active" && (permissions.canManage || meId === action.creatorId),
+							{myRole !== null && (
+								<TaskReminders
+									taskId={task.id}
+									recipient={reminderRecipient}
+									onClose={() => setReminderRecipient(null)}
+								/>
 							)}
-						/>
 
-						{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
-						<InspectorSection>
-							<BlockHeader title="动态" />
-							<TaskLogList
-								items={logQuery.data?.items ?? []}
-								statuses={statuses}
-								loading={logQuery.isPending}
-								error={logQuery.isError ? logQuery.error : undefined}
-								onRetry={() => logQuery.refetch()}
+							{/* 动作记录:只列还活着、且我能撤回的 —— 判据与服务端 `isActionCreatorOrAdmin` 同口径 */}
+							<TaskActionList
+								actions={detailQuery.data.actions.filter(
+									(action) => action.status === "active" && (permissions.canManage || meId === action.creatorId),
+								)}
 							/>
-							<PaginationControl
-								page={logPage}
-								pageSize={20}
-								total={logQuery.data?.total ?? 0}
-								onPageChange={setLogPage}
-							/>
-						</InspectorSection>
-					</div>
-				</aside>
+
+							{/* 动态 —— 事件流(状态史由上方流程脊承担,这里不重复) */}
+							<InspectorSection>
+								<BlockHeader title="动态" />
+								<TaskLogList
+									items={logQuery.data?.items ?? []}
+									statuses={statuses}
+									loading={logQuery.isPending}
+									error={logQuery.isError ? logQuery.error : undefined}
+									onRetry={() => logQuery.refetch()}
+								/>
+								<PaginationControl
+									page={logPage}
+									pageSize={20}
+									total={logQuery.data?.total ?? 0}
+									onPageChange={setLogPage}
+								/>
+							</InspectorSection>
+						</div>
+					</aside>
+				) : null}
 			</main>
 
 			<TaskForm
@@ -728,6 +751,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 					if (!next) setDialog(null);
 				}}
 				pending={attachMutation.isPending}
+				hasChildren={children.length > 0}
 				value={draftAttachments}
 				onChange={setDraftAttachments}
 				onConfirm={() =>

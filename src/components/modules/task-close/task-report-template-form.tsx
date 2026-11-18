@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GripVertical } from "lucide-react";
+import { FileSpreadsheet, GripVertical } from "lucide-react";
 import { pinyin } from "pinyin-pro";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { type DraftFieldLike, ReportFieldRow } from "#/components/modules/task-close/report-field-row";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { Button } from "#/components/ui/button";
@@ -12,6 +13,7 @@ import { Switch } from "#/components/ui/switch";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
+import { reportFieldsFromHeaders } from "#/lib/task/report-header-import";
 import {
 	REPORT_FIELD_TYPES,
 	REPORT_TOP_FIELD_TYPES,
@@ -21,6 +23,12 @@ import {
 	taskReportSchema,
 } from "#/lib/task/report-spec";
 import { cn } from "#/lib/utils";
+
+const TaskReportHeaderImportDialog = lazy(() =>
+	import("#/components/modules/task-close/task-report-header-import-dialog").then((module) => ({
+		default: module.TaskReportHeaderImportDialog,
+	})),
+);
 
 /** 字段类型清单 —— 真源在 `lib/task/report-spec.ts`(值与文案只有一份) */
 const FIELD_TYPES = REPORT_TOP_FIELD_TYPES;
@@ -109,6 +117,7 @@ export function TaskReportTemplateForm({
 	const [name, setName] = useState("");
 	const [kind, setKind] = useState<"OBJECT" | "TABLE">("OBJECT");
 	const [fields, setFields] = useState<Field[]>([]);
+	const [headerImportOpen, setHeaderImportOpen] = useState(false);
 	/** 顶层错误(名称 / 结构性)与**贴到具体字段行**的错误分开 —— 改哪行清哪行的错 */
 	const [error, setError] = useState("");
 	const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -193,6 +202,28 @@ export function TaskReportTemplateForm({
 		setFields((items) => items.map((item) => (item.key === key ? { ...item, ...patch } : item)));
 	};
 	const addField = () => setFields([...fields, newField()]);
+	const importFieldsFromHeaders = (headers: string[]) => {
+		const available = Math.max(0, 100 - fields.length);
+		const imported = reportFieldsFromHeaders(
+			headers,
+			fields.map((field) => field.id),
+			slugId,
+		);
+		const added = imported.fields.slice(0, available).map((field) => ({
+			...newField(),
+			id: field.id,
+			idEdited: true,
+			label: field.label,
+		}));
+		if (added.length === 0) {
+			toast.error("没有可创建的字段；请检查表头是否为空或超过 100 字。");
+			return;
+		}
+		setFields((current) => [...current, ...added]);
+		const skipped = imported.skippedLong + Math.max(0, imported.fields.length - available);
+		if (skipped > 0) toast.warning(`已创建 ${added.length} 个字段，另有 ${skipped} 个表头未创建。`);
+		else toast.success(`已创建 ${added.length} 个字段`);
+	};
 	// 字段顺序拖拽(HTML5 DnD,与字典项 / 列设置面板同款):整行可拖,拖过谁谁高亮,松手落在那一行
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -274,7 +305,10 @@ export function TaskReportTemplateForm({
 		<TaskActionDialog
 			open={open}
 			onOpenChange={(next) => {
-				if (!pending) onOpenChange(next);
+				if (!pending) {
+					if (!next) setHeaderImportOpen(false);
+					onOpenChange(next);
+				}
 			}}
 			title={templateId ? `编辑填报模板 · ${name || "(未命名)"}` : "新增填报模板"}
 			description={
@@ -317,9 +351,21 @@ export function TaskReportTemplateForm({
 						字段
 						<span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">{fields.length} / 100</span>
 					</span>
-					<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
-						添加字段
-					</Button>
+					<div className="flex items-center gap-1.5">
+						{!templateId ? (
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={fields.length >= 100}
+								onClick={() => setHeaderImportOpen(true)}
+							>
+								<FileSpreadsheet className="size-3.5" />从 Excel 导入
+							</Button>
+						) : null}
+						<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
+							添加字段
+						</Button>
+					</div>
 				</div>
 				{fields.map((field, index) => (
 					// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
@@ -408,6 +454,16 @@ export function TaskReportTemplateForm({
 					{!editableTemplate ? "模板不可用或无权编辑，请关闭后刷新。" : error}
 				</p>
 			)}
+			{!templateId ? (
+				<Suspense fallback={null}>
+					<TaskReportHeaderImportDialog
+						open={headerImportOpen}
+						onOpenChange={setHeaderImportOpen}
+						remaining={Math.max(0, 100 - fields.length)}
+						onImport={importFieldsFromHeaders}
+					/>
+				</Suspense>
+			) : null}
 		</TaskActionDialog>
 	);
 }

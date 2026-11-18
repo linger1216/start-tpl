@@ -19,8 +19,11 @@ import type React from "react";
 export function TableResizeHandle({
 	columnId,
 	onChange,
+	minWidth = 20,
 }: {
 	columnId: string;
+	/** 列内容需要的最小宽度,默认列继续使用原有下限。 */
+	minWidth?: number;
 	/** 更新列宽(函数式 updater,与 useState setter 兼容) */
 	onChange: (updater: (prev: Record<string, number>) => Record<string, number>) => void;
 }) {
@@ -38,7 +41,7 @@ export function TableResizeHandle({
 			// 新右边缘 = 当前 clientX + 起始时鼠标到右边缘的偏移(保持按下相对位置)
 			const newRight = ev.clientX + (anchorRight - e.clientX);
 			const newLeft = rect.left;
-			const nextWidth = Math.max(20, Math.round(newRight - newLeft));
+			const nextWidth = Math.max(minWidth, Math.round(newRight - newLeft));
 			onChange((prev) => ({ ...prev, [columnId]: nextWidth }));
 		};
 		const stop = () => {

@@ -65,6 +65,7 @@ export type TaskFormEditing = {
 	links: TaskLinkBlock[];
 	attachments: TaskAttachment[];
 	reminderConfig: TaskReminderConfig;
+	hasChildren: boolean;
 };
 
 /** 两种模式共有的字段 */
@@ -338,8 +339,10 @@ export function TaskForm({
 			afterContent={preview.dialog}
 		>
 			{editing ? (
-				<Alert variant="danger" title="批注" className="mb-3">
-					本次修改只影响这条任务本身;流程模板与执行人是建任务时定的,到任务详情页调整。
+				<Alert variant="warn" title={editing.hasChildren ? "保存后将同步子任务" : "编辑范围"} className="mb-3">
+					{editing.hasChildren
+						? "名称会同步并覆盖下级任务当前名称；说明、截止时间、优先级和提醒只更新未在下级单独修改过的值。链接、附件会同步，且保留下级自行添加的内容。流程状态和执行人不随本次编辑同步。填报母版需单独保存；保存表格母版会覆盖下级尚未提交的填报草稿。"
+						: "本次修改仅影响这条任务；流程模板与执行人是建任务时确定的。"}
 				</Alert>
 			) : null}
 

@@ -6,7 +6,13 @@ import { PaginationControl } from "#/components/modules/shared/pagination-contro
 import { ReportField } from "#/components/modules/task-close/report-fields";
 import { ReportValueView } from "#/components/modules/task-close/report-readonly";
 import { ReportSection } from "#/components/modules/task-close/report-section";
-import { fieldColWidth, type ReportData, type Row, type Value } from "#/components/modules/task-close/report-types";
+import {
+	fieldColMinWidth,
+	fieldColWidth,
+	type ReportData,
+	type Row,
+	type Value,
+} from "#/components/modules/task-close/report-types";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionButton } from "#/components/ui/action-button";
@@ -177,21 +183,34 @@ function ComposedTable({
 }) {
 	const columnCount = Math.max(1, scalarFields.length + (showOwner ? 1 : 0));
 	return (
-		<div className="min-w-0 overflow-x-auto rounded-md border border-border">
-			<table className="w-full border-collapse text-left text-sm">
+		<div className="min-w-0 max-h-[65vh] overflow-auto rounded-md border border-border">
+			<table className="w-max min-w-full border-collapse text-left text-sm">
+				<colgroup>
+					{showOwner ? <col style={{ width: 128 }} /> : null}
+					{scalarFields.map((field) => (
+						<col key={field.id} style={{ width: fieldColMinWidth(field) }} />
+					))}
+				</colgroup>
 				{(showOwner || scalarFields.length > 0) && (
 					<thead>
 						<tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
 							{showOwner ? (
-								<th scope="col" className="w-32 whitespace-nowrap px-3 py-2.5 text-left font-medium">
+								<th
+									scope="col"
+									className="sticky top-0 left-0 z-30 w-32 whitespace-nowrap bg-muted/40 px-3 py-2.5 text-left font-medium"
+								>
 									执行人
 								</th>
 							) : null}
-							{scalarFields.map((field) => (
+							{scalarFields.map((field, index) => (
 								<th
 									key={field.id}
 									scope="col"
-									className={cn(fieldColWidth(field), "px-3 py-2.5 text-left font-medium")}
+									className={cn(
+										fieldColWidth(field),
+										"sticky top-0 z-20 bg-muted/40 px-3 py-2.5 text-left font-medium",
+										!showOwner && index === 0 && "left-0 z-30",
+									)}
 								>
 									{field.label}
 								</th>
@@ -205,12 +224,23 @@ function ComposedTable({
 						{(showOwner || scalarFields.length > 0) && (
 							<tr className="align-top">
 								{showOwner ? (
-									<td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-foreground">
+									<td
+										className={cn(
+											"whitespace-nowrap px-3 py-3 text-sm font-medium text-foreground",
+											showOwner && "sticky left-0 z-10 bg-background",
+										)}
+									>
 										{entry.owner ? (entry.ownerName ?? "执行人") : "填报内容"}
 									</td>
 								) : null}
 								{scalarFields.map((field) => (
-									<td key={field.id} className="px-3 py-3 break-words">
+									<td
+										key={field.id}
+										className={cn(
+											"px-3 py-3 break-words",
+											!showOwner && field === scalarFields[0] && "sticky left-0 z-10 bg-background",
+										)}
+									>
 										<ReportValueView taskId={taskId} field={field} value={entry.row[field.id] as Value} files={files} />
 									</td>
 								))}
@@ -436,31 +466,38 @@ function TaskReportEditor({
 			<div className="grid gap-2">
 				{schema.kind === "TABLE" ? <p className="text-sm text-muted-foreground">共 {rows.length} 条数据</p> : null}
 				{schema.kind === "TABLE" && rows.length === 0 && <p className="text-sm text-muted-foreground">暂无数据行。</p>}
-				<div className={schema.kind === "TABLE" ? "min-w-0 overflow-x-auto" : "grid gap-2"}>
-					{/* 字段宽度未知就**均分**:table-fixed + 每列一只 col(操作列固定宽、不参与均分) */}
+				<div className={schema.kind === "TABLE" ? "min-w-0 max-h-[65vh] overflow-auto" : "grid gap-2"}>
+					{/* 每列按字段类型给默认宽度;列数增加时表格展开并横向滚动。 */}
 					{schema.kind === "TABLE" ? (
-						<table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">
+						<table className="w-max min-w-full table-fixed border-collapse text-sm">
 							<colgroup>
 								{schema.fields.map((field) => (
-									<col key={field.id} />
+									<col key={field.id} style={{ width: columnSizing[field.id] ?? fieldColMinWidth(field) }} />
 								))}
 								{data.canEdit ? <col className="w-16" /> : null}
 							</colgroup>
 							<thead>
 								<tr>
-									{schema.fields.map((field) => (
+									{schema.fields.map((field, column) => (
 										<th
 											key={field.id}
-											className="relative border border-border px-2 py-1.5 text-left"
+											className={cn(
+												"relative sticky top-0 z-20 border border-border bg-muted/40 px-2 py-1.5 text-left",
+												column === 0 && "left-0 z-30",
+											)}
 											style={columnSizing[field.id] ? { width: columnSizing[field.id] } : undefined}
 										>
 											{field.label}
 											{field.required ? " *" : ""}
-											{/* 拖右边缘调列宽,双击重置回均分 */}
-											<TableResizeHandle columnId={field.id} onChange={setColumnSizing} />
+											{/* 拖右边缘调列宽,双击恢复字段默认宽度 */}
+											<TableResizeHandle
+												columnId={field.id}
+												onChange={setColumnSizing}
+												minWidth={fieldColMinWidth(field)}
+											/>
 										</th>
 									))}
-									{data.canEdit && <th className="border border-border px-2">操作</th>}
+									{data.canEdit && <th className="sticky top-0 z-20 border border-border bg-muted/40 px-2">操作</th>}
 								</tr>
 							</thead>
 							<tbody>
@@ -474,7 +511,10 @@ function TaskReportEditor({
 											{schema.fields.map((field, column) => (
 												<td
 													key={field.id}
-													className="border border-border p-1.5"
+													className={cn(
+														"border border-border p-1.5",
+														column === 0 && "sticky left-0 z-10 bg-background",
+													)}
 													onPaste={(event) => {
 														if (!data.canEdit || busy || field.readOnly) {
 															event.preventDefault();

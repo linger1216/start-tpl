@@ -36,6 +36,7 @@ import {
 	resolveReportTemplate,
 	type ScopeFilter,
 	STATUS_VALUE,
+	type TaskRow,
 	type Tx,
 	taskCoreFields,
 	USER_ID,
@@ -59,6 +60,107 @@ async function prepareTaskPayload(
 	const normalized = normalizePayload(payload);
 	await assertAttachments(tx, normalized?.attachments ?? []);
 	return normalized;
+}
+
+function mergeInheritedValues<T>(previous: readonly T[], next: readonly T[], child: readonly T[]): T[] {
+	const previousSet = new Set(previous);
+	return [...new Set([...next, ...child.filter((value) => !previousSet.has(value))])];
+}
+
+function mergeInheritedPayload(previous: unknown, next: unknown, child: unknown) {
+	const before = normalizePayload(previous as Parameters<typeof normalizePayload>[0]);
+	const after = normalizePayload(next as Parameters<typeof normalizePayload>[0]);
+	const current = normalizePayload(child as Parameters<typeof normalizePayload>[0]);
+	return normalizePayload({
+		links: mergeInheritedValues(
+			before?.links?.map((item) => item.url) ?? [],
+			after?.links?.map((item) => item.url) ?? [],
+			current?.links?.map((item) => item.url) ?? [],
+		).map((url) => ({ kind: "link" as const, url })),
+		attachments: mergeInheritedValues(before?.attachments ?? [], after?.attachments ?? [], current?.attachments ?? []),
+	});
+}
+
+/** 父任务编辑后更新子任务的共同字段；名称始终跟随父任务，其他字段与链接 / 附件保留子任务本地改动。 */
+async function syncChildrenFromParent(
+	tx: Tx,
+	parent: TaskRow,
+	next: Partial<TaskRow>,
+	actor: { id: string; name: string },
+	now: Date,
+	options: { payloadChanged?: boolean } = {},
+) {
+	const target = { ...parent, ...next };
+	const rows = await tx
+		.select({ id: taskTable.id })
+		.from(taskTable)
+		.where(and(eq(taskTable.parent_id, parent.id), alive(taskTable)));
+	let synced = 0;
+	for (const row of rows) {
+		const child = await lockTask(tx, row.id);
+		const setValue: Partial<typeof taskTable.$inferInsert> = { updated_at: now };
+		const changedFields: string[] = [];
+		if (parent.name !== target.name && child.name !== target.name) {
+			setValue.name = target.name;
+			changedFields.push("name");
+		}
+		if (parent.description !== target.description && child.description === parent.description) {
+			setValue.description = target.description;
+			changedFields.push("description");
+		}
+		if (parent.due_at?.getTime() !== target.due_at?.getTime() && child.due_at?.getTime() === parent.due_at?.getTime()) {
+			setValue.due_at = target.due_at;
+			changedFields.push("dueAt");
+		}
+		if (parent.priority !== target.priority && child.priority === parent.priority) {
+			setValue.priority = target.priority;
+			changedFields.push("priority");
+		}
+		const beforeReminder = readTaskReminderConfig(parent.reminder_config);
+		const afterReminder = readTaskReminderConfig(target.reminder_config);
+		const childReminder = readTaskReminderConfig(child.reminder_config);
+		if (
+			stableJson(beforeReminder) !== stableJson(afterReminder) &&
+			stableJson(childReminder) === stableJson(beforeReminder)
+		) {
+			setValue.reminder_config = afterReminder;
+			changedFields.push("reminderConfig");
+		}
+		let childPayload: ReturnType<typeof normalizePayload> | undefined;
+		if (options.payloadChanged) {
+			childPayload = mergeInheritedPayload(parent.payload, target.payload, child.payload);
+			if (
+				stableJson(childPayload ?? null) !==
+				stableJson(normalizePayload(child.payload as Parameters<typeof normalizePayload>[0]) ?? null)
+			) {
+				setValue.payload = await prepareTaskPayload(tx, childPayload);
+				changedFields.push("payload");
+			}
+		}
+		if (changedFields.length === 0) continue;
+		await tx.update(taskTable).set(setValue).where(eq(taskTable.id, child.id));
+		if (
+			setValue.due_at !== undefined ||
+			(setValue.reminder_config !== undefined &&
+				stableJson(beforeReminder.executor) !== stableJson(afterReminder.executor))
+		)
+			await rescheduleTaskReminders(tx, { ...child, ...setValue }, now, "executor");
+		if (setValue.reminder_config !== undefined && stableJson(beforeReminder.node) !== stableJson(afterReminder.node))
+			await rescheduleTaskReminders(tx, { ...child, ...setValue }, now, "node");
+		await writeTaskEvent(tx, {
+			taskId: child.id,
+			event: "task.update",
+			actor,
+			detail: { parentTaskId: parent.id, synchronizedFields: changedFields },
+			at: now,
+		});
+		synced +=
+			1 +
+			(await syncChildrenFromParent(tx, child, setValue, actor, now, {
+				payloadChanged: changedFields.includes("payload"),
+			}));
+	}
+	return synced;
 }
 
 /** 独立任务的共同创建路径；父任务 / 子任务(fan-out)与单任务共享快照、成员与日志语义。 */
@@ -211,7 +313,7 @@ function createDraftOf(template: CreateTaskContext["template"], masterRows: Crea
 
 /**
  * 建任务各分支共用的那 8 个字段 —— 父任务 / 子任务 / 单任务看到的都一样,只有归属与范围不同。
- * 子任务因此**继承父任务创建时的说明与链接 / 附件**(下发时复制一次的快照口径)。
+ * 子任务创建时复制父任务的说明与链接 / 附件;后续父任务编辑通过 `syncChildrenFromParent` 同步共同字段。
  */
 function taskBaseOf(input: TaskCreateInput, snapshot: WorkflowPayload) {
 	return {
@@ -411,7 +513,7 @@ export const taskRecordRouter = createTRPCRouter({
 		return { id };
 	}),
 
-	/** 编辑任务 —— 只改描述性字段;`status` / `workflow` 不在这里改(那要走 `taskTransit` / `actionCreate`) */
+	/** 编辑任务 —— 描述性字段会沿任务树同步;`status` / `workflow` 不在这里改(那要走 `taskTransit` / `actionCreate`) */
 	taskUpdate: protectedProcedure
 		.input(
 			z.object({
@@ -440,7 +542,7 @@ export const taskRecordRouter = createTRPCRouter({
 			const payloadTouched = input.payload !== undefined;
 
 			const now = new Date();
-			await db.transaction(async (tx) => {
+			const syncedChildren = await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
 				if (
 					payloadTouched &&
@@ -487,7 +589,7 @@ export const taskRecordRouter = createTRPCRouter({
 					stableJson(config.node) !== stableJson(previousConfig.node)
 				)
 					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "node");
-				// 说明 / 提醒都是「下发时复制一次」的快照口径:父任务改只改自己,不刷子任务(与流程模板 / 填报结构同源)
+				// 记录父任务本次修改;下方会在同一事务内同步共同字段到子任务。
 				await writeTaskEvent(tx, {
 					taskId: task.id,
 					event: "task.update",
@@ -495,8 +597,9 @@ export const taskRecordRouter = createTRPCRouter({
 					detail: { fields, payloadChanged },
 					at: now,
 				});
+				return syncChildrenFromParent(tx, task, setValue, me, now, { payloadChanged });
 			});
-			return { ok: true };
+			return { ok: true, syncedChildren };
 		}),
 
 	/**
@@ -516,7 +619,7 @@ export const taskRecordRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
-			await db.transaction(async (tx) => {
+			const syncedChildren = await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
 				await assertCanManage(task, me.id, "只有任务创建者或管理员可以修改任务附件");
 				const current = normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]);
@@ -527,10 +630,8 @@ export const taskRecordRouter = createTRPCRouter({
 					attachments: input.attachments,
 				});
 				const changed = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
-				await tx
-					.update(taskTable)
-					.set({ payload: nextPayload, updated_at: new Date() })
-					.where(eq(taskTable.id, task.id));
+				const now = new Date();
+				await tx.update(taskTable).set({ payload: nextPayload, updated_at: now }).where(eq(taskTable.id, task.id));
 				if (changed)
 					await writeTaskEvent(tx, {
 						taskId: task.id,
@@ -538,8 +639,11 @@ export const taskRecordRouter = createTRPCRouter({
 						actor: me,
 						detail: { payloadChanged: true, attachments: input.attachments.length },
 					});
+				return changed
+					? syncChildrenFromParent(tx, task, { payload: nextPayload }, me, now, { payloadChanged: true })
+					: 0;
 			});
-			return { ok: true };
+			return { ok: true, syncedChildren };
 		}),
 
 	/**

@@ -1,4 +1,4 @@
-import { Trash2, UserPlus } from "lucide-react";
+import { PanelRightClose, Trash2, UserPlus } from "lucide-react";
 import { BlockHeader } from "#/components/modules/task-close/block-header";
 import { ActionButton } from "#/components/ui/action-button";
 import { Avatar } from "#/components/ui/avatar";
@@ -19,6 +19,7 @@ export function TaskMembers({
 	onAdd,
 	onRemove,
 	onRemind,
+	onCollapse,
 }: {
 	creatorId: string;
 	creatorName: string | null;
@@ -33,6 +34,7 @@ export function TaskMembers({
 	onAdd: () => void;
 	onRemove: (member: { userId: string; name: string }) => void;
 	onRemind?: (person: { id: string; name: string }) => void;
+	onCollapse?: () => void;
 }) {
 	/** fan-out 父任务的执行人就是创建人 —— 这时只在创建人那行标「创建人 · 执行者」,不重复一行 */
 	const creatorIsExecutor = !!executorId && executorId === creatorId;
@@ -44,11 +46,25 @@ export function TaskMembers({
 				title="参与人"
 				count={total}
 				actions={
-					canAddMember ? (
-						<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={onAdd}>
-							<UserPlus className="size-3.5" />
-						</Button>
-					) : null
+					<div className="flex items-center gap-1">
+						{canAddMember ? (
+							<Button size="icon-sm" variant="outline" aria-label="加成员" onClick={onAdd}>
+								<UserPlus className="size-3.5" />
+							</Button>
+						) : null}
+						{onCollapse ? (
+							<Button
+								size="xs"
+								variant="ghost"
+								className="size-6 p-0 text-muted-foreground"
+								aria-label="收起右侧栏"
+								title="收起右侧栏"
+								onClick={onCollapse}
+							>
+								<PanelRightClose className="size-3.5" />
+							</Button>
+						) : null}
+					</div>
 				}
 			/>
 			<ul className="grid gap-0.5">

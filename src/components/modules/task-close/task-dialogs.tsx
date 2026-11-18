@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
+import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { SearchSelect, type SearchSelectOption } from "#/components/ui/search-select";
@@ -65,6 +66,7 @@ export function TaskAttachDialog({
 	value,
 	onChange,
 	onConfirm,
+	hasChildren,
 }: {
 	open: boolean;
 	onOpenChange: (next: boolean) => void;
@@ -72,6 +74,7 @@ export function TaskAttachDialog({
 	value: TaskAttachment[];
 	onChange: (next: TaskAttachment[]) => void;
 	onConfirm: () => void;
+	hasChildren: boolean;
 }) {
 	return (
 		<TaskActionDialog
@@ -87,6 +90,11 @@ export function TaskAttachDialog({
 			onConfirm={onConfirm}
 		>
 			<div className="space-y-2">
+				{hasChildren ? (
+					<Alert variant="info" title="保存后同步" className="mb-2">
+						父任务维护的附件会同步到下级任务；下级自行添加的附件会保留。
+					</Alert>
+				) : null}
 				<div className="flex items-center justify-between gap-2">
 					<p className="min-w-0 truncate text-xs text-muted-foreground">
 						{value.length === 0
