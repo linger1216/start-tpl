@@ -368,6 +368,7 @@ function TaskReportEditor({
 	const busy = sync.isPending;
 	return (
 		<ReportSection
+			compact
 			actions={
 				<div className="flex items-center">
 					{data.canEdit ? (
@@ -432,10 +433,10 @@ function TaskReportEditor({
 					del.dismiss();
 				}}
 			/>
-			<div className="grid gap-4">
+			<div className="grid gap-2">
 				{schema.kind === "TABLE" ? <p className="text-sm text-muted-foreground">共 {rows.length} 条数据</p> : null}
 				{schema.kind === "TABLE" && rows.length === 0 && <p className="text-sm text-muted-foreground">暂无数据行。</p>}
-				<div className={schema.kind === "TABLE" ? "min-w-0 overflow-x-auto" : "grid gap-3"}>
+				<div className={schema.kind === "TABLE" ? "min-w-0 overflow-x-auto" : "grid gap-2"}>
 					{/* 字段宽度未知就**均分**:table-fixed + 每列一只 col(操作列固定宽、不参与均分) */}
 					{schema.kind === "TABLE" ? (
 						<table className="w-full min-w-[36rem] table-fixed border-collapse text-sm">
@@ -450,7 +451,7 @@ function TaskReportEditor({
 									{schema.fields.map((field) => (
 										<th
 											key={field.id}
-											className="relative border border-border px-2 py-2 text-left"
+											className="relative border border-border px-2 py-1.5 text-left"
 											style={columnSizing[field.id] ? { width: columnSizing[field.id] } : undefined}
 										>
 											{field.label}
@@ -473,7 +474,7 @@ function TaskReportEditor({
 											{schema.fields.map((field, column) => (
 												<td
 													key={field.id}
-													className="border border-border p-2"
+													className="border border-border p-1.5"
 													onPaste={(event) => {
 														if (!data.canEdit || busy || field.readOnly) {
 															event.preventDefault();
@@ -515,7 +516,7 @@ function TaskReportEditor({
 												</td>
 											))}
 											{data.canEdit && (
-												<td className="border border-border p-2">
+												<td className="border border-border p-1.5">
 													<ActionButton
 														tone="danger"
 														aria-label={`删除第 ${index + 1} 行`}
@@ -538,7 +539,7 @@ function TaskReportEditor({
 								key={field.id}
 								label={field.label}
 								align={field.type === "array" ? "start" : "center"}
-								className={field.type === "array" ? "flex-col items-stretch gap-2" : undefined}
+								className={field.type === "array" ? "flex-col items-stretch gap-1 py-1" : "py-1"}
 							>
 								<ReportField
 									key={`${field.id}:${generationRef.current}`}

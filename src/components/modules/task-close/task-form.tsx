@@ -127,6 +127,7 @@ function FoldSection({
 	onToggle,
 	action,
 	children,
+	compact = false,
 }: {
 	title: string;
 	meta: string;
@@ -134,11 +135,12 @@ function FoldSection({
 	onToggle: () => void;
 	/** 区块级动作(本弹窗里就是各区的「+」),放在标题行最右端 —— 与折叠开关并排但不嵌套 */
 	action?: React.ReactNode;
+	compact?: boolean;
 	children: React.ReactNode;
 }) {
 	return (
 		<section className="border-t border-border">
-			<div className="flex h-9 items-center gap-2">
+			<div className={cn("flex items-center gap-2", compact ? "h-8" : "h-9")}>
 				<button
 					type="button"
 					aria-expanded={open}
@@ -158,7 +160,7 @@ function FoldSection({
 			</div>
 			<div inert={!open} className={cn("collapse-grid", open && "is-open")}>
 				<div>
-					<div className="pb-3">{children}</div>
+					<div className={compact ? "pb-2" : "pb-3"}>{children}</div>
 				</div>
 			</div>
 		</section>
@@ -288,7 +290,7 @@ export function TaskForm({
 			confirmText="保存"
 			pendingText="保存中…"
 			contentClassName="sm:max-w-2xl"
-			bodyClassName="space-y-2 py-1"
+			bodyClassName={editing ? "space-y-2 py-1" : "space-y-1 py-1"}
 			footerNote={
 				missingRequired.length ? (
 					<span className="text-xs leading-5 tracking-wide text-muted-foreground sm:mr-auto">
@@ -346,7 +348,7 @@ export function TaskForm({
 					基本信息
 					<span className="flex-1 self-center border-t border-border" />
 				</h3>
-				<DetailRow label="任务名称" htmlFor="tc-name" className="max-w-xl">
+				<DetailRow label="任务名称" htmlFor="tc-name" className={cn("max-w-xl", !editing && "py-1")}>
 					<Input
 						id="tc-name"
 						aria-required="true"
@@ -359,7 +361,7 @@ export function TaskForm({
 
 				{editing ? null : (
 					<>
-						<DetailRow label="流程模板" className="max-w-xl">
+						<DetailRow label="流程模板" className={cn("max-w-xl", !editing && "py-1")}>
 							<Select
 								items={workflowOptions}
 								value={workflowId || null}
@@ -377,7 +379,7 @@ export function TaskForm({
 								</SelectContent>
 							</Select>
 						</DetailRow>
-						<DetailRow label="执行人" className="max-w-xl">
+						<DetailRow label="执行人" className={cn("max-w-xl", !editing && "py-1")}>
 							<div className="space-y-1.5">
 								<MultiSelect
 									options={userOptions}
@@ -399,11 +401,11 @@ export function TaskForm({
 						</DetailRow>
 					</>
 				)}
-				<DetailRow label="截止时间" htmlFor="tc-due" className="max-w-xl">
+				<DetailRow label="截止时间" htmlFor="tc-due" className={cn("max-w-xl", !editing && "py-1")}>
 					<DatePicker id="tc-due" value={due} onChange={setDue} placeholder="选择日期" />
 				</DetailRow>
 
-				<DetailRow label="优先级" className="max-w-xl">
+				<DetailRow label="优先级" className={cn("max-w-xl", !editing && "py-1")}>
 					<Select
 						items={PRIORITY_OPTIONS}
 						value={priority === null ? "null" : String(priority)}
@@ -423,7 +425,7 @@ export function TaskForm({
 				</DetailRow>
 
 				{/* 描述移到最后:前面几个字段填完通常已经想清楚了;多数任务描述很短,rows=2 够 */}
-				<DetailRow label="描述" htmlFor="tc-desc" hint="可空" className="max-w-xl">
+				<DetailRow label="描述" htmlFor="tc-desc" hint="可空" className={cn("max-w-xl", !editing && "py-1")}>
 					<Textarea
 						id="tc-desc"
 						rows={2}
@@ -438,6 +440,7 @@ export function TaskForm({
 			{editing ? null : (
 				<FoldSection
 					title="填报区"
+					compact={!editing}
 					meta={
 						reportTemplateId
 							? [selectedTemplate?.name ?? "已选模板", importedRows.length ? `已导入 ${importedRows.length} 行` : null]
@@ -524,6 +527,7 @@ export function TaskForm({
 
 			<FoldSection
 				title="链接区"
+				compact={!editing}
 				meta={
 					links.length
 						? [
@@ -541,14 +545,15 @@ export function TaskForm({
 				onToggle={() => setFold((prev) => ({ ...prev, links: !prev.links }))}
 				action={
 					<Button
-						variant="outline"
-						size="icon-sm"
+						variant="ghost"
+						size="xs"
+						className="size-6 p-0 text-muted-foreground"
 						aria-label="添加链接"
 						title="添加链接"
 						disabled={pending || links.length >= MAX_LINKS}
 						onClick={() => setLinks((prev) => [...prev, blankBlock()])}
 					>
-						<Plus className="size-4" />
+						<Plus className="size-3.5" />
 					</Button>
 				}
 			>
@@ -557,6 +562,7 @@ export function TaskForm({
 
 			<FoldSection
 				title="附件区"
+				compact={!editing}
 				meta={
 					attachments.length
 						? [
@@ -570,7 +576,14 @@ export function TaskForm({
 				}
 				open={fold.attach}
 				onToggle={() => setFold((prev) => ({ ...prev, attach: !prev.attach }))}
-				action={<TaskAttachmentAddButton value={attachments} onChange={setAttachments} disabled={pending} />}
+				action={
+					<TaskAttachmentAddButton
+						value={attachments}
+						onChange={setAttachments}
+						disabled={pending}
+						compact={!editing}
+					/>
+				}
 			>
 				{/* 附件:选完即传,提交只带 id 列表(与评论附件同一链路);点条目就地预览 */}
 				<AttachmentChips
@@ -582,6 +595,7 @@ export function TaskForm({
 			</FoldSection>
 			<FoldSection
 				title="通知"
+				compact={!editing}
 				meta={reminderSummaryOf(reminderConfig)}
 				open={fold.reminder}
 				onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}

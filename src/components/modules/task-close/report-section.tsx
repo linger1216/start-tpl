@@ -5,14 +5,17 @@ import { BlockHeader } from "#/components/modules/task-close/block-header";
 export function ReportSection({
 	actions,
 	children,
+	compact = false,
 	title = "结构化填报",
 }: {
 	actions?: ReactNode;
 	children: ReactNode;
+	/** 紧凑版用于任务详情内的可编辑填报区。 */
+	compact?: boolean;
 	title?: string;
 }) {
 	return (
-		<section className="grid gap-3 pt-6">
+		<section className={compact ? "grid gap-2 pt-4" : "grid gap-3 pt-6"}>
 			<BlockHeader title={title} actions={actions} dashed />
 			{children}
 		</section>

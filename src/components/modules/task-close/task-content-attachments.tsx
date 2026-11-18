@@ -21,10 +21,13 @@ export function TaskAttachmentAddButton({
 	value,
 	onChange,
 	disabled,
+	compact = false,
 }: {
 	value: TaskAttachment[];
 	onChange: (next: TaskAttachment[]) => void;
 	disabled?: boolean;
+	/** 新建任务的折叠标题行使用小型图标按钮。 */
+	compact?: boolean;
 }) {
 	const fileRef = useRef<HTMLInputElement | null>(null);
 	const { uploading, pick } = useAttachmentUpload({
@@ -48,8 +51,9 @@ export function TaskAttachmentAddButton({
 		<>
 			<Button
 				type="button"
-				size="icon-sm"
-				variant="outline"
+				size={compact ? "xs" : "icon-sm"}
+				variant={compact ? "ghost" : "outline"}
+				className={compact ? "size-6 p-0 text-muted-foreground" : undefined}
 				aria-label={uploading ? "上传中" : "添加附件"}
 				title={uploading ? "上传中…" : "添加附件"}
 				disabled={disabled || uploading || value.length >= MAX_ATTACHMENTS}
@@ -58,7 +62,7 @@ export function TaskAttachmentAddButton({
 				{uploading ? (
 					<span className="size-3.5 animate-pulse rounded-full bg-primary/60" />
 				) : (
-					<Plus className="size-4" />
+					<Plus className={compact ? "size-3.5" : "size-4"} />
 				)}
 			</Button>
 			<input
