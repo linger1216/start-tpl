@@ -4,7 +4,7 @@ import { ChevronDown, Filter, ListChecks, PanelRightOpen, Paperclip, Plus, Searc
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageFrame } from "#/components/layout/page-frame";
-import { MultiSelect } from "#/components/modules/shared/multi-select";
+import { DepartmentUserSelect } from "#/components/modules/shared/department-user-select";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { BlockHeader } from "#/components/modules/task-close/block-header";
 import { InspectorSection } from "#/components/modules/task-close/inspector-section";
@@ -798,7 +798,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 						</DialogDescription>
 					</DialogHeader>
 					<DialogBody className="grid gap-3 py-1">
-						<MultiSelect
+						<DepartmentUserSelect
 							options={userOptions.filter((option) => option.value !== meId)}
 							value={dispatchIds}
 							onChange={(ids) => {
@@ -813,11 +813,6 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 									Object.fromEntries(Object.entries(current).filter(([id]) => ids.includes(id))),
 								);
 							}}
-							placeholder="搜索执行人"
-							maxRender={80}
-							maxRenderSearching={200}
-							minHeight={100}
-							maxHeight={220}
 						/>
 						{reportSchema?.kind === "TABLE" && dispatchIds.length > 0 && (
 							<section className="grid gap-2 border-t border-border pt-3">

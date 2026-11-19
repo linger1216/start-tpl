@@ -285,6 +285,7 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	"role.menuIds": pagePermOf("/settings/roles"),
 	// 部门(部门页 / 用户页的部门树 / 网格履职的组织筛选 / 数据范围规则选主体)
 	"department.tree": [
+		pagePermOf("/task-close"),
 		pagePermOf("/settings/departments"),
 		pagePermOf("/settings/users"),
 		pagePermOf("/demo/grid"),

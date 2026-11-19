@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DepartmentUserSelect } from "#/components/modules/shared/department-user-select";
 import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
 import { Alert } from "#/components/ui/alert";
@@ -350,21 +351,12 @@ export function TaskMemberDialog({
 			description="多选,按参与者加入;换执行人请用「转交执行人」。"
 			pending={pending}
 			confirmDisabled={value.length === 0}
-			confirmText={value.length > 1 ? `加入 ${value.length} 人` : "加入"}
+			confirmText={`确定（${value.length}）`}
 			pendingText="加入中…"
 			onConfirm={onConfirm}
+			contentClassName="sm:max-w-2xl"
 		>
-			<DetailRow label="人员" align="center">
-				<MultiSelect
-					options={options}
-					value={value}
-					onChange={onChange}
-					placeholder="搜索姓名…"
-					emptyText="没有可加入的人"
-					minHeight={160}
-					maxHeight={200}
-				/>
-			</DetailRow>
+			<DepartmentUserSelect options={options} value={value} onChange={onChange} disabled={pending} />
 		</TaskActionDialog>
 	);
 }

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { MultiSelect } from "#/components/modules/shared/multi-select";
+import { DepartmentUserSelect } from "#/components/modules/shared/department-user-select";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
 import { TaskLinkEditor } from "#/components/modules/task-close/task-link-editor";
@@ -382,16 +382,9 @@ export function TaskForm({
 								</SelectContent>
 							</Select>
 						</DetailRow>
-						<DetailRow label="执行人" className={cn("max-w-xl", !editing && "py-1")}>
-							<div className="space-y-1.5">
-								<MultiSelect
-									options={userOptions}
-									value={executorIds}
-									onChange={setExecutorIds}
-									placeholder="搜索姓名…"
-									emptyText="没有匹配的人"
-									maxHeight={132}
-								/>
+						<DetailRow label="执行人" className="max-w-xl flex-col gap-1 py-1 [&>div]:w-full">
+							<div className="min-w-0 space-y-1.5">
+								<DepartmentUserSelect options={userOptions} value={executorIds} onChange={setExecutorIds} compact />
 								{executorIds.length > 1 ? (
 									<Alert variant="warn" title="注意">
 										选了 <b className="tabular-nums">{executorIds.length}</b> 位执行人,会各自下发 1 条任务,共{" "}
