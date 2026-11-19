@@ -111,6 +111,11 @@ function parseMeta(text) {
 
 // `todos` 归 drizzle 迁移管(MySQL 建表脚本里没有它),不参与四处比对
 const IGNORED_TABLES = new Set(["todos"]);
+/**
+ * 达梦线**暂不跟随**的表 —— 口径:涉及达梦的改动先不改、不测,后续统一处理。
+ * 加表名时请顺手在 `doc/达梦支持.md` 记一笔,别让它变成"忘了同步"。
+ */
+const DM_SKIPPED_TABLES = new Set(["tc_task"]);
 const schema = parseDrizzleTables(`${stripComments(read("src/db/data-base-schema.ts"))}\n${read("src/db/schema.ts")}`);
 const mysql = parseMysqlDdl(read("scripts/create-system-tables.ts"));
 const dm = parseDmDdl(read("scripts/create-better-auth-tables-dm.ts"));
@@ -123,14 +128,14 @@ for (const [table, columns] of schema) {
 	const my = mysql.get(table);
 	const dmCols = dm.get(table);
 	if (!my) problems.push(`表 ${table}:MySQL 建表脚本里没有这张表`);
-	if (!dmCols) problems.push(`表 ${table}:达梦建表脚本里没有这张表`);
+	if (!dmCols && !DM_SKIPPED_TABLES.has(table)) problems.push(`表 ${table}:达梦建表脚本里没有这张表`);
 	if (my) {
 		const missing = [...columns].filter((c) => !my.has(c));
 		const extra = [...my].filter((c) => !columns.has(c));
 		if (missing.length) problems.push(`表 ${table}(MySQL):schema 有、DDL 没有 → ${missing.join(", ")}`);
 		if (extra.length) problems.push(`表 ${table}(MySQL):DDL 有、schema 没有 → ${extra.join(", ")}`);
 	}
-	if (dmCols) {
+	if (dmCols && !DM_SKIPPED_TABLES.has(table)) {
 		const missing = [...columns].filter((c) => !dmCols.has(c));
 		const extra = [...dmCols].filter((c) => !columns.has(c));
 		if (missing.length) problems.push(`表 ${table}(达梦):schema 有、DDL 没有 → ${missing.join(", ")}`);

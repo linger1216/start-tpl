@@ -41,6 +41,17 @@ export const DEFAULT_WORKFLOW_ID = "wf-default";
 export type WorkflowStatus = { value: string; label: string; terminal?: boolean };
 
 /**
+ * 状态图**快照**的形状 —— `tc_workflow.payload`(模板本体)与 `tc_task.payload.workflow`(任务快照)
+ * 是同一份 JSON。放这里是为了让 `lib/task/payload.ts`(客户端安全)能用它,而不去引服务端的 `routers/task/common.ts`。
+ */
+export type WorkflowPayload = {
+	name?: string;
+	statuses: WorkflowStatus[];
+	initial: string;
+	edges: { from: string; to: string; who: string[]; via: "direct" | "action" }[];
+};
+
+/**
  * 从流程快照(`tc_task.workflow` / `tc_workflow.payload` / `tc_log` 里摸出来的 any JSON)取状态清单。
  * 这个松散断言之前在 5 处各写一遍 —— 统一到这里。
  */

@@ -24,8 +24,9 @@ import {
 	MAX_TEXT_LENGTH,
 	statusesOf,
 	taskPathOf,
-	type WorkflowStatus,
+	type WorkflowPayload,
 } from "#/lib/task/close-spec";
+import { payloadOf } from "#/lib/task/payload";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { cancelActionReminders, rescheduleTaskReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 
@@ -44,14 +45,8 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** 只需要 `select` 的读口:`isLocked` 在事务内外都要能调 */
 type Reader = Pick<typeof db, "select">;
 
-/** 状态图快照形状(`tc_workflow.payload` / `tc_task.workflow` 同一份 JSON) */
-export type WorkflowPayload = {
-	name?: string;
-	/** 状态:`value` 落库 / 边引用,`label` 展示名 */
-	statuses: WorkflowStatus[];
-	initial: string;
-	edges: { from: string; to: string; who: string[]; via: "direct" | "action" }[];
-};
+/** 状态图快照形状 —— 定义在 `lib/task/close-spec.ts`(客户端安全);这里转出给各 router 用。 */
+export type { WorkflowPayload };
 
 /** 还活着、占着锁的 action 状态(`active` = 待答复,`queued` = 串行链中排队):有这些就说明任务被锁 */
 export const LIVE_ACTION_STATUS = ["active", "queued"] as const;
@@ -93,7 +88,12 @@ export const taskCoreFields = {
 
 // ────────────────────────────── 取行 / 判定 ──────────────────────────────
 
-export const workflowOf = (task: TaskRow): WorkflowPayload => task.workflow as WorkflowPayload;
+/** 状态图快照(存在 `payload.workflow`)。取不到 = 数据没迁移 / 坏了 —— 报清楚,不静默降级 */
+export const workflowOf = (task: TaskRow): WorkflowPayload => {
+	const payload = payloadOf(task.payload);
+	if (!payload) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "任务缺少状态图快照(数据未迁移)" });
+	return payload.workflow;
+};
 
 // ────────────────────────────── 授权 ──────────────────────────────
 
@@ -599,7 +599,7 @@ export async function hasChildTasks(reader: Reader, taskId: string): Promise<boo
  * `taskTransit`(直接改)与 `actionRespond`(审批通过)共用。
  */
 export async function applyStatusMove(tx: Tx, task: TaskRow, next: string, now: Date): Promise<void> {
-	const statuses = statusesOf(task.workflow);
+	const statuses = statusesOf(workflowOf(task));
 	if (isTerminalStatusOf(statuses, next)) await cancelLiveTaskActions(tx, task.id, now);
 	await tx.update(taskTable).set({ status: next, updated_at: now }).where(eq(taskTable.id, task.id));
 	if (isTerminalStatusOf(statuses, task.status) || isTerminalStatusOf(statuses, next))

@@ -16,6 +16,7 @@ import {
 	notInArray,
 	or,
 	type SQL,
+	sql,
 } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
@@ -40,7 +41,7 @@ import {
 	terminalStatusValues,
 } from "#/lib/task/close-spec";
 import { isRecord } from "#/lib/task/json";
-import { parseBlocks } from "#/lib/task/payload";
+import { parseBlocks, payloadOf } from "#/lib/task/payload";
 import { executorReminderEvents, executorReminderRuleSchema, readTaskReminderConfig } from "#/lib/task/reminder-spec";
 import { reportAttachmentIds, reportRowsOf } from "#/lib/task/report-spec";
 import { isWorkingDay, workdayKnown } from "#/lib/workday";
@@ -64,7 +65,6 @@ import {
 	STATUS_VALUE,
 	type TaskRow,
 	validDueAt,
-	type WorkflowPayload,
 	whoAllows,
 	workflowOf,
 } from "./common";
@@ -80,7 +80,7 @@ const toTaskBrief = (row: TaskRow, creatorName: string | null) => ({
 	/** 卡片页要显示两行摘要;详情与列表共用这一份投影,不另开接口 */
 	description: row.description,
 	status: row.status,
-	statusLabel: statusLabelOf(statusesOf(row.workflow), row.status),
+	statusLabel: statusLabelOf(statusesOf(payloadOf(row.payload)?.workflow), row.status),
 	creatorId: row.creator_id,
 	creatorName,
 	dueAt: row.due_at ? row.due_at.toISOString() : null,
@@ -88,7 +88,7 @@ const toTaskBrief = (row: TaskRow, creatorName: string | null) => ({
 	/** `0` = P0 / `1` = P1 / `2` = P2;老数据为 null,前端兜底 "未设置" */
 	priority: row.priority ?? null,
 	/** 当前状态是不是结束态 —— 卡片据此不再显示"超期 / 临期"(结束了就没有期限压力了) */
-	terminal: isTerminalStatusOf(statusesOf(row.workflow), row.status),
+	terminal: isTerminalStatusOf(statusesOf(payloadOf(row.payload)?.workflow), row.status),
 });
 
 /** 详情用的全量投影(含 `workflow` 快照,前端要靠它渲染状态图) */
@@ -101,41 +101,26 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null, executorName: st
 	parentId: row.parent_id ?? null,
 	description: row.description,
 	payload: row.payload,
-	workflow: row.workflow as WorkflowPayload,
+	workflow: workflowOf(row),
 	/** 任务创建时固定的填报结构快照,详情页分派范围编辑使用。 */
 	reportSchema: (row.report as { schema?: unknown } | null)?.schema ?? null,
-	reminderConfig: readTaskReminderConfig(row.reminder_config),
+	reminderConfig: readTaskReminderConfig(payloadOf(row.payload)?.reminders),
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
 
 /**
- * 「未结束」任务的 SQL 条件 —— 结束态按**流程模板**取(任务行上的 `workflow` 是创建时快照,SQL 里读不到它的 JSON)。
+ * 「未结束」任务的 SQL 条件 —— 取**全部模板**终态 value 的并集,`flow_status NOT IN (并集)`。
  *
- * 判定:任务**自己那个模板**把当前状态标成了 `terminal` 就是结束。
- * - 没有 `workflow_id`(老数据)→ 放行
- * - 模板**没定义**终态 → 它下面的任务都算未结束
- * - 模板有终态 → 当前状态不在终态清单里才算未结束
- *
+ * 为什么不逐模板:任务不再存 `workflow_id`,而任务行上的状态图是 JSON 快照(SQL 里读不到)。
+ * **约定:终态 value 全站唯一**(如 `closed` / `archived`)—— 否则同名但语义不同的状态会误判。
  * 筛选条(临期 / 超期)与统计卡(7 天内到期 / 已到期)共用这一份 —— 口径必须一致。
- * 只有"模板的终态在任务创建后被改过"这种极少情况才会偏一点。
  */
 async function notClosedCond(): Promise<SQL> {
-	const workflows = await db
-		.select({ id: taskWorkflowTable.id, payload: taskWorkflowTable.payload })
-		.from(taskWorkflowTable);
-	const legacy = isNull(taskTable.workflow_id);
-	const conds: SQL[] = [legacy];
-	for (const row of workflows) {
-		const terminals = terminalStatusValues(row.payload);
-		// 模板没定义终态 → 它下面的任务都算未结束(旧写法漏了这一支,那些模板的任务会被整批筛掉)
-		if (!terminals.length) {
-			conds.push(eq(taskTable.workflow_id, row.id));
-			continue;
-		}
-		const open = and(eq(taskTable.workflow_id, row.id), notInArray(taskTable.status, terminals));
-		if (open) conds.push(open);
-	}
-	return or(...conds) ?? legacy;
+	const workflows = await db.select({ payload: taskWorkflowTable.payload }).from(taskWorkflowTable);
+	const terminals = [...new Set(workflows.flatMap((row) => terminalStatusValues(row.payload)))];
+	// 没有模板定义终态 → 所有任务都算未结束
+	if (!terminals.length) return sql`1 = 1`;
+	return notInArray(taskTable.status, terminals);
 }
 
 /** 一批父任务各自的子任务数(卡片上的「N 个子任务」)—— 列表页与详情页共用同一段 group by */
@@ -259,8 +244,9 @@ async function permissionsOf(task: TaskRow, meId: string) {
 		 */
 		isParticipant,
 		/** 我能发起「不改状态」的 action(征询)—— 相关方且任务未结束 */
-		canInitiateConsult: isParticipant && !isTerminalStatusOf(statusesOf(task.workflow), task.status),
-		canDispatch: (isAdmin || task.executor_id === meId) && !isTerminalStatusOf(statusesOf(task.workflow), task.status),
+		canInitiateConsult: isParticipant && !isTerminalStatusOf(statusesOf(workflowOf(task)), task.status),
+		canDispatch:
+			(isAdmin || task.executor_id === meId) && !isTerminalStatusOf(statusesOf(workflowOf(task)), task.status),
 		canViewReport: true,
 		/** 创建者或管理员可以管理任务、成员,也可以删任务 —— 与服务端 `assertCanManage` 同一判据 */
 		canManage: isAdmin || isCreator,
@@ -280,10 +266,9 @@ export const taskQueryRouter = createTRPCRouter({
 	 */
 	taskList: protectedProcedure
 		.input(
-			z.object({
+			z
+				.object({
 					status: STATUS_VALUE.optional(),
-					/** 按流程模板筛 —— 各模板的状态互不相同,界面用它替代了全局状态筛选 */
-					workflowId: ID.optional(),
 					/** 只看这一时刻之后创建的(页面的时间筛选,开始日按当天零点传入) */
 					startTime: z.coerce.date().optional(),
 					/** 只看这一时刻之前创建的(页面的时间筛选,结束日按当天 23:59:59.999 传入) */
@@ -322,7 +307,6 @@ export const taskQueryRouter = createTRPCRouter({
 				);
 			}
 			if (input?.status) conds.push(eq(taskTable.status, input.status));
-			if (input?.workflowId) conds.push(eq(taskTable.workflow_id, input.workflowId));
 			if (input?.startTime) conds.push(gte(taskTable.created_at, input.startTime));
 			if (input?.endTime) conds.push(lte(taskTable.created_at, input.endTime));
 			if (input?.keyword) conds.push(like(taskTable.name, `%${input.keyword}%`));

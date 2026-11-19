@@ -41,10 +41,7 @@
         "tests/task-close-log.test.ts",
         "tests/task-close-view.test.ts",
         "tests/task-notification-redaction.test.ts",
-        "tests/task-link.test.ts",
-        "doc/task-close.md",
-        "doc/task-forms.md",
-        "doc/任务插件化设计.md"
+        "tests/task-link.test.ts"
       ],
       "tokens": [
         "taskCloseRouter",
@@ -145,8 +142,6 @@
       "default": false,
       "requires": [],
       "paths": [
-        "src/routes/(main)/demo",
-        "src/components/modules/demo",
         "src/hooks/demo.form.tsx",
         "src/hooks/demo.form-context.ts",
         "src/lib/demo-store.ts",
@@ -269,8 +264,7 @@
         "src/lib/sse-bus.ts",
         "tests/notice.test.ts",
         "tests/notification-delivery.test.ts",
-        "tests/sse-bus.test.ts",
-        "doc/通知中心.md"
+        "tests/sse-bus.test.ts"
       ],
       "tokens": [
         "noticeRouter",

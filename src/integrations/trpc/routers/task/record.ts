@@ -7,7 +7,7 @@ import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { isTerminalStatusOf, MAX_TEXT_LENGTH, statusesOf } from "#/lib/task/close-spec";
 import { isRecord, stableJson } from "#/lib/task/json";
-import { MAX_ATTACHMENTS, normalizePayload, taskPayloadSchema } from "#/lib/task/payload";
+import { MAX_ATTACHMENTS, normalizePayload, payloadOf, taskPayloadSchema, withContent } from "#/lib/task/payload";
 import { readTaskReminderConfig, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import {
 	MAX_REPORT_ROWS,
@@ -71,6 +71,16 @@ function mergeInheritedValues<T>(previous: readonly T[], next: readonly T[], chi
 	return [...new Set([...next, ...child.filter((value) => !previousSet.has(value))])];
 }
 
+/** 从行里读提醒配置(容错:缺省 / 旧结构都走默认) */
+const remindersOf = (row: { payload: unknown }) => readTaskReminderConfig(payloadOf(row.payload)?.reminders);
+
+/** 把一行读成完整 payload —— 缺状态图快照就是数据没迁移,报清楚 */
+function storedOf(row: { payload: unknown }) {
+	const stored = payloadOf(row.payload);
+	if (!stored) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "任务缺少状态图快照(数据未迁移)" });
+	return stored;
+}
+
 function mergeInheritedPayload(previous: unknown, next: unknown, child: unknown) {
 	const before = normalizePayload(previous as Parameters<typeof normalizePayload>[0]);
 	const after = normalizePayload(next as Parameters<typeof normalizePayload>[0]);
@@ -120,36 +130,38 @@ async function syncChildrenFromParent(
 			setValue.priority = target.priority;
 			changedFields.push("priority");
 		}
-		const beforeReminder = readTaskReminderConfig(parent.reminder_config);
-		const afterReminder = readTaskReminderConfig(target.reminder_config);
-		const childReminder = readTaskReminderConfig(child.reminder_config);
+		const beforeReminder = remindersOf(parent);
+		const afterReminder = remindersOf(target);
+		const childReminder = remindersOf(child);
+		let nextStored = storedOf(child);
+		let reminderChanged = false;
 		if (
 			stableJson(beforeReminder) !== stableJson(afterReminder) &&
 			stableJson(childReminder) === stableJson(beforeReminder)
 		) {
-			setValue.reminder_config = afterReminder;
+			nextStored = { ...nextStored, reminders: afterReminder };
+			reminderChanged = true;
 			changedFields.push("reminderConfig");
 		}
-		let childPayload: ReturnType<typeof normalizePayload> | undefined;
+		let payloadChanged = false;
 		if (options.payloadChanged) {
-			childPayload = mergeInheritedPayload(parent.payload, target.payload, child.payload);
-			if (
-				stableJson(childPayload ?? null) !==
-				stableJson(normalizePayload(child.payload as Parameters<typeof normalizePayload>[0]) ?? null)
-			) {
-				setValue.payload = await prepareTaskPayload(tx, childPayload);
+			const merged = mergeInheritedPayload(parent.payload, target.payload, child.payload);
+			const withNewContent = withContent(nextStored, merged);
+			if (stableJson(withNewContent) !== stableJson(storedOf(child))) {
+				nextStored = withNewContent;
+				payloadChanged = true;
 				changedFields.push("payload");
 			}
 		}
+		if (reminderChanged || payloadChanged) setValue.payload = nextStored;
 		if (changedFields.length === 0) continue;
 		await tx.update(taskTable).set(setValue).where(eq(taskTable.id, child.id));
 		if (
 			setValue.due_at !== undefined ||
-			(setValue.reminder_config !== undefined &&
-				stableJson(beforeReminder.executor) !== stableJson(afterReminder.executor))
+			(reminderChanged && stableJson(beforeReminder.executor) !== stableJson(afterReminder.executor))
 		)
 			await rescheduleTaskReminders(tx, { ...child, ...setValue }, now, "executor");
-		if (setValue.reminder_config !== undefined && stableJson(beforeReminder.node) !== stableJson(afterReminder.node))
+		if (reminderChanged && stableJson(beforeReminder.node) !== stableJson(afterReminder.node))
 			await rescheduleTaskReminders(tx, { ...child, ...setValue }, now, "node");
 		await writeTaskEvent(tx, {
 			taskId: child.id,
@@ -176,8 +188,8 @@ async function insertTask(
 		description?: string | null;
 		dueAt?: Date | null;
 		priority?: number | null;
-		workflowId: string | null;
-		reminderConfig: TaskReminderConfig;
+		workflowId?: string | null;
+		reminderConfig?: TaskReminderConfig;
 		workflow: WorkflowPayload;
 		payload?: Parameters<typeof normalizePayload>[0];
 		/** 唯一执行人(→ `tc_task.executor_id`);父任务传创建人,子任务传该执行人,单任务传选定执行人 */
@@ -198,7 +210,7 @@ async function insertTask(
 	actor: { id: string; name: string },
 ) {
 	const now = new Date();
-	const payload = await prepareTaskPayload(tx, input.payload);
+	const content = await prepareTaskPayload(tx, input.payload);
 	await tx.insert(taskTable).values({
 		id: input.id,
 		name: input.name.trim(),
@@ -208,13 +220,14 @@ async function insertTask(
 		executor_id: input.executorId ?? null,
 		due_at: input.dueAt ?? null,
 		priority: input.priority ?? null,
-		payload,
-		workflow: input.workflow,
-		// 模板来源,「我的任务」按流程筛选用;旧任务(v1 前)没有这一列的值
-		workflow_id: input.workflowId,
+		/** 一列装三样:状态图快照 + 提醒规则 + 内容区 */
+		payload: {
+			workflow: input.workflow,
+			...(input.reminderConfig !== undefined ? { reminders: input.reminderConfig } : {}),
+			...(content ?? {}),
+		},
 		parent_id: input.parentId ?? null,
 		report: input.report ?? null,
-		reminder_config: input.reminderConfig,
 		created_at: now,
 		updated_at: now,
 	});
@@ -476,7 +489,7 @@ export const taskRecordRouter = createTRPCRouter({
 				const parent = await lockTask(tx, input.taskId);
 				if (parent.executor_id !== me.id && !(await isAdminOf(me)))
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有当前执行人或管理员可以下发" });
-				if (isTerminalStatusOf(statusesOf(parent.workflow), parent.status))
+				if (isTerminalStatusOf(statusesOf(workflowOf(parent)), parent.status))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "已结束的任务不能继续下发" });
 				const ids = input.targets.map((target) => target.userId);
 				if (new Set(ids).size !== ids.length) throw new TRPCError({ code: "BAD_REQUEST", message: "下发对象不能重复" });
@@ -546,9 +559,10 @@ export const taskRecordRouter = createTRPCRouter({
 						}
 					}
 				}
-				const payload = parent.payload as Parameters<typeof normalizePayload>[0];
-				const workflow = parent.workflow as WorkflowPayload;
-				const reminderConfig = readTaskReminderConfig(parent.reminder_config);
+				const parentStored = storedOf(parent);
+				const payload = normalizePayload(parentStored) ?? undefined;
+				const workflow = parentStored.workflow;
+				const reminderConfig = parentStored.reminders;
 				const childIds: string[] = [];
 				for (const [index, target] of input.targets.entries()) {
 					const childId = newId();
@@ -568,7 +582,6 @@ export const taskRecordRouter = createTRPCRouter({
 							description: parent.description,
 							dueAt: parent.due_at,
 							priority: parent.priority,
-							workflowId: parent.workflow_id,
 							reminderConfig,
 							workflow,
 							payload,
@@ -727,14 +740,21 @@ export const taskRecordRouter = createTRPCRouter({
 					payloadTouched &&
 					input.expectedPayload !== undefined &&
 					stableJson(normalizePayload(input.expectedPayload) ?? null) !==
-						stableJson(normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]) ?? null)
+						stableJson(normalizePayload(storedOf(task)) ?? null)
 				)
 					throw new TRPCError({ code: "CONFLICT", message: "任务内容已被修改，请刷新后重试" });
 				const nextDescription = input.description === undefined ? task.description : input.description?.trim() || null;
 				const nextDueAt = input.dueAt === undefined ? task.due_at : input.dueAt ? new Date(input.dueAt) : null;
 				/** 优先级 `undefined` = 不动;`null` = 显式清空;数字 = 改值 */
 				const nextPriority = input.priority;
-				const nextPayload = payloadTouched ? await prepareTaskPayload(tx, input.payload) : task.payload;
+				const currentStored = storedOf(task);
+				const nextContent = payloadTouched ? await prepareTaskPayload(tx, input.payload) : undefined;
+				const nextReminders = input.reminderConfig !== undefined ? input.reminderConfig : currentStored.reminders;
+				const nextPayload = {
+					workflow: currentStored.workflow,
+					...(nextReminders !== undefined ? { reminders: nextReminders } : {}),
+					...((nextContent !== undefined ? nextContent : normalizePayload(currentStored)) ?? {}),
+				};
 				const prevDueAt = task.due_at ? task.due_at.toISOString() : null;
 				const nextDueText = nextDueAt ? nextDueAt.toISOString() : null;
 				const fields: Array<{ key: string; from: string | number | null; to: string | number | null }> = [];
@@ -746,7 +766,9 @@ export const taskRecordRouter = createTRPCRouter({
 				if (nextPriority !== undefined && nextPriority !== task.priority) {
 					fields.push({ key: "priority", from: task.priority, to: nextPriority });
 				}
-				const payloadChanged = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
+				const payloadChanged =
+					stableJson((nextContent !== undefined ? nextContent : normalizePayload(currentStored)) ?? null) !==
+					stableJson(normalizePayload(currentStored) ?? null);
 
 				const setValue: Partial<typeof taskTable.$inferInsert> = {
 					name: nextName,
@@ -756,15 +778,14 @@ export const taskRecordRouter = createTRPCRouter({
 					updated_at: now,
 				};
 				if (nextPriority !== undefined) setValue.priority = nextPriority;
-				if (input.reminderConfig !== undefined) setValue.reminder_config = input.reminderConfig;
 				await tx.update(taskTable).set(setValue).where(eq(taskTable.id, task.id));
 				// 读旧值要容错:老结构(offsets 数组)按「关」处理,别让一次编辑把接口整成 500
-				const previousConfig = readTaskReminderConfig(task.reminder_config);
+				const previousConfig = readTaskReminderConfig(currentStored.reminders);
 				const config = input.reminderConfig ?? previousConfig;
 				if (nextDueText !== prevDueAt || stableJson(config.executor) !== stableJson(previousConfig.executor))
 					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "executor");
 				if (
-					(input.reminderConfig !== undefined && !task.reminder_config) ||
+					(input.reminderConfig !== undefined && currentStored.reminders === undefined) ||
 					stableJson(config.node) !== stableJson(previousConfig.node)
 				)
 					await rescheduleTaskReminders(tx, { ...task, ...setValue }, now, "node");
@@ -801,14 +822,16 @@ export const taskRecordRouter = createTRPCRouter({
 			const syncedChildren = await db.transaction(async (tx) => {
 				const task = await lockTask(tx, input.id);
 				await assertCanManage(task, me.id, "只有任务创建者或管理员可以修改任务附件");
-				const current = normalizePayload(task.payload as Parameters<typeof normalizePayload>[0]);
+				const stored = storedOf(task);
+				const current = normalizePayload(stored);
 				if (stableJson(current?.attachments ?? []) !== stableJson(input.expectedAttachments))
 					throw new TRPCError({ code: "CONFLICT", message: "附件已被修改，请刷新后重试" });
-				const nextPayload = await prepareTaskPayload(tx, {
+				const nextContent = await prepareTaskPayload(tx, {
 					...current,
 					attachments: input.attachments,
 				});
-				const changed = stableJson(nextPayload ?? null) !== stableJson(task.payload ?? null);
+				const nextPayload = withContent(stored, nextContent);
+				const changed = stableJson(normalizePayload(nextPayload) ?? null) !== stableJson(current ?? null);
 				const now = new Date();
 				await tx.update(taskTable).set({ payload: nextPayload, updated_at: now }).where(eq(taskTable.id, task.id));
 				if (changed)

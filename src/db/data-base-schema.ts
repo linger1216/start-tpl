@@ -932,9 +932,8 @@ export const taskWorkflowTable = mysqlTable("tc_workflow", {
 });
 
 /**
- * 任务本体 —— `workflow` 列是创建时从 `tc_workflow.payload` 复制的状态图快照;
- * 之后 `tc_workflow` 表怎么改都不影响已建任务。
- * `payload` 是用户自定义业务数据(JSON,可空)。
+ * 任务本体 —— `payload` 是**一列装三样**:内容区(links / attachments)、状态图快照(`workflow`,
+ * 创建时从 `tc_workflow.payload` 复制)、提醒规则(`reminders`)。快照复制之后,`tc_workflow` 怎么改都不影响已建任务。
  * 软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
  *
  * `priority` —— `tinyint(1)` 存数字档位:`0` = P0(最高)、`1` = P1(高)、`2` = P2(普通);
@@ -946,20 +945,21 @@ export const taskTable = mysqlTable(
 		id: varchar("id", { length: 32 }).primaryKey(),
 		name: varchar("name", { length: 255 }).notNull(),
 		description: text("description"),
-		status: varchar("status", { length: 32 }).notNull(),
+		/**
+		 * 工作流当前状态值(取 `payload.workflow.statuses` 的 value)。
+		 * 列名是 `flow_status`,与 `sys_*.status`(启用 / 禁用)区分开;任务本身"停用"走 `deleted_at` 软删。
+		 */
+		status: varchar("flow_status", { length: 32 }).notNull(),
 		creator_id: varchar("creator_id", { length: 36 }).notNull(),
 		executor_id: varchar("executor_id", { length: 36 }),
 		due_at: datetime("due_at", { mode: "date" }),
 		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */
 		priority: tinyint("priority"),
-		payload: json("payload"),
-		workflow: json("workflow").notNull(),
 		/**
-		 * → `tc_workflow.id`(任务的流程模板来源)。
-		 * v1 起才记录:**旧任务为 null**(快照 JSON 里没有模板 id,无法回填)——
-		 * 「我的任务」按流程模板筛选靠它;模板后续怎么改都不影响已建任务(快照不变)。
+		 * 内容区(links / attachments)+ 状态图快照(`workflow`)+ 提醒规则(`reminders`)—— 一列装三样。
+		 * `workflow` 是创建时从 `tc_workflow.payload` 复制的快照;`reminders` 缺省走默认规则。
 		 */
-		workflow_id: varchar("workflow_id", { length: 32 }),
+		payload: json("payload").notNull(),
 		/** → `tc_task.id`(父任务)。null = 本身不是子任务;多执行人 + 填报模板建任务时 fan-out 产生 */
 		parent_id: varchar("parent_id", { length: 32 }),
 		/**
@@ -967,19 +967,15 @@ export const taskTable = mysqlTable(
 		 * 填报值不在这里 —— 每个任务(含子任务)的 draft / synced 存在自己的 `tc_task_report` 行。null 表示未绑定。
 		 */
 		report: json("report"),
-		/** 提醒配置；旧任务为空时使用默认节点提醒。 */
-		reminder_config: json("reminder_config"),
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
 	},
 	(table) => [
-		// 列表页的实际查询:`deleted_at IS NULL` + 可选 `status` / `workflow_id`,
+		// 列表页的实际查询:`deleted_at IS NULL` + 可选 `flow_status`(TS 属性名 `status`),
 		// 再 `ORDER BY created_at DESC` —— 索引要盖住「状态 + 排序」这一段
 		index("idx_task_status_created").on(table.status, table.created_at),
 		index("idx_task_creator_status").on(table.creator_id, table.status),
-		/** 按流程模板筛(「我的任务」按模板切换) */
-		index("idx_task_workflow").on(table.workflow_id),
 		index("idx_task_parent").on(table.parent_id),
 	],
 );

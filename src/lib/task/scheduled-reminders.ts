@@ -5,6 +5,7 @@ import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification, type NotificationChannel } from "#/lib/notification";
 import { isClosedSnapshot, taskPathOf } from "#/lib/task/close-spec";
 import { eventKeyOf, targetOf } from "#/lib/task/notification-target";
+import { payloadOf } from "#/lib/task/payload";
 import {
 	channelsOf,
 	executorReminderEvents,
@@ -17,7 +18,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Task = typeof taskTable.$inferSelect;
 
 /** 结束(终态或软删)的任务不再排提醒 —— 判据在 `close-spec.isClosedSnapshot`,与其它调用点同源 */
-const terminal = (task: Task) => isClosedSnapshot(task.workflow, task.status, task.deleted_at);
+const terminal = (task: Task) => isClosedSnapshot(payloadOf(task.payload)?.workflow, task.status, task.deleted_at);
 
 /**
  * 一条排期的**身份** —— 「同一条」的判据只有这一份。
@@ -129,7 +130,7 @@ export async function scheduleNodeReminders(
 	now: Date,
 ): Promise<void> {
 	if (!action.activated_at || terminal(task)) return;
-	const config = readTaskReminderConfig(task.reminder_config);
+	const config = readTaskReminderConfig(payloadOf(task.payload)?.reminders);
 	const values = nodeReminderEvents(config.node, action.activated_at, now, { isWorkday: isWorkingDay }).map((event) => {
 		const id = newId();
 		return {
@@ -161,7 +162,7 @@ export async function rescheduleTaskReminders(
 		await cancelTaskReminders(tx, task.id, now, kind);
 		return;
 	}
-	const config = readTaskReminderConfig(task.reminder_config);
+	const config = readTaskReminderConfig(payloadOf(task.payload)?.reminders);
 	// 截止提醒只发给**唯一执行人**(执行人现在是 `tc_task.executor_id`,不再是成员表里的一种角色)
 	const recipients = task.executor_id ? [task.executor_id] : [];
 	const actions = await tx

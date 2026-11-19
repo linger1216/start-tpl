@@ -28,7 +28,6 @@ import { Card } from "#/components/ui/card";
 import { DateRangePicker, type DateRangeValue } from "#/components/ui/date-range-picker";
 import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, parsePageSize, useFilterPrefs, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
@@ -88,7 +87,6 @@ export function TaskListPage() {
 	const queryClient = useQueryClient();
 
 	const [keyword, setKeyword] = useState("");
-	const [workflowId, setWorkflowId] = useState("all");
 	/** 创建时间筛选:区间(本地日期,空 = 不限);形态全站统一走 `ui/date-range-picker` */
 	const [timeRange, setTimeRange] = useState<DateRangeValue>({});
 	/**
@@ -110,16 +108,12 @@ export function TaskListPage() {
 		() => (timeRange.from ? new Date(`${timeRange.from}T00:00:00`) : undefined),
 		[timeRange.from],
 	);
-	const endTime = useMemo(
-		() => (timeRange.to ? new Date(`${timeRange.to}T23:59:59.999`) : undefined),
-		[timeRange.to],
-	);
+	const endTime = useMemo(() => (timeRange.to ? new Date(`${timeRange.to}T23:59:59.999`) : undefined), [timeRange.to]);
 
 	const listQuery = useQuery(
 		trpc.taskClose.taskList.queryOptions(
 			{
 				keyword: keyword.trim() || undefined,
-				workflowId: workflowId === "all" ? undefined : workflowId,
 				startTime,
 				endTime,
 				mine: quick.scope.includes("mine"),
@@ -142,11 +136,6 @@ export function TaskListPage() {
 	const userOptions = useMemo(
 		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
 		[usersQuery.data],
-	);
-
-	const workflowFilterOptions = useMemo(
-		() => [{ value: "all", label: "全部流程" }, ...workflowOptions],
-		[workflowOptions],
 	);
 
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
@@ -206,7 +195,6 @@ export function TaskListPage() {
 	 */
 	const filtering =
 		keyword.trim().length > 0 ||
-		workflowId !== "all" ||
 		Boolean(timeRange.from || timeRange.to) ||
 		QUICK_GROUPS.some((group) => (quick[group.key] ?? []).length > 0 && group.key !== "scope") ||
 		!quick.scope.includes("mine") ||
@@ -214,7 +202,6 @@ export function TaskListPage() {
 
 	const clearFilters = () => {
 		setKeyword("");
-		setWorkflowId("all");
 		setTimeRange({});
 		setQuick({ priority: [], deadline: [], scope: ["mine"] });
 		setPage(1);
@@ -316,25 +303,6 @@ export function TaskListPage() {
 						setPage(1);
 					}}
 				/>
-				<Select
-					items={workflowFilterOptions}
-					value={workflowId}
-					onValueChange={(next) => {
-						setWorkflowId(next ? String(next) : "all");
-						setPage(1);
-					}}
-				>
-					<SelectTrigger size="sm" className="w-64">
-						<SelectValue placeholder="全部流程" />
-					</SelectTrigger>
-					<SelectContent>
-						{workflowFilterOptions.map((item) => (
-							<SelectItem key={item.value} value={item.value}>
-								{item.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
 				{/* 创建时间区间:全站唯一形态 —— `ui/date-range-picker`(快捷范围在浮层里,不再另做一套) */}
 				<DateRangePicker
 					value={timeRange}

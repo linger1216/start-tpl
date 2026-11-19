@@ -110,7 +110,7 @@ export const taskActionRouter = createTRPCRouter({
 				const task = await lockTask(tx, input.taskId);
 
 				const toStatus = input.toStatus ?? null;
-				if (!toStatus && isTerminalStatusOf(statusesOf(task.workflow), task.status))
+				if (!toStatus && isTerminalStatusOf(statusesOf(workflowOf(task)), task.status))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "任务已结束，不能发起征询" });
 				if (toStatus) await assertTaskUnlocked(task.id, tx);
 				if (toStatus) {

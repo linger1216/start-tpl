@@ -501,26 +501,22 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`id\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`name\` varchar(255) collate utf8mb4_unicode_ci not null,
     \`description\` text collate utf8mb4_unicode_ci default null,
-    \`status\` varchar(32) collate utf8mb4_unicode_ci not null,
+    \`flow_status\` varchar(32) collate utf8mb4_unicode_ci not null,
     \`creator_id\` varchar(36) collate utf8mb4_unicode_ci not null,
     \`executor_id\` varchar(36) collate utf8mb4_unicode_ci default null,
     \`due_at\` datetime default null,
     \`priority\` tinyint default null,
-    \`payload\` json default null,
-    \`workflow\` json not null,
-    \`workflow_id\` varchar(32) collate utf8mb4_unicode_ci default null,
+    \`payload\` json not null,
     \`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
     \`report\` json default null,
-    \`reminder_config\` json default null,
     \`deleted_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
     primary key (\`id\`),
-    key \`idx_task_status_created\` (\`status\`, \`created_at\`),
-    key \`idx_task_workflow\` (\`workflow_id\`),
-    key \`idx_task_creator_status\` (\`creator_id\`, \`status\`),
+    key \`idx_task_status_created\` (\`flow_status\`, \`created_at\`),
+    key \`idx_task_creator_status\` (\`creator_id\`, \`flow_status\`),
     key \`idx_task_parent\` (\`parent_id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:workflow 列是创建时从 tc_workflow.payload 复制的状态图快照;parent_id/report 承载父子填报;软删走 deleted_at)'`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:payload 一列装三样 = 内容区 + 状态图快照 workflow + 提醒规则 reminders;parent_id/report 承载父子填报;软删走 deleted_at)'`,
 	},
 	{
 		name: "tc_task_reminder",
@@ -686,7 +682,6 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 	{ table: "tc_action", column: "viewed_at", ddl: "datetime default null" },
 	{ table: "tc_action", column: "activated_at", ddl: "datetime default null" },
 	{ table: "tc_task", column: "priority", ddl: "tinyint default null" },
-	{ table: "tc_task", column: "reminder_config", ddl: "json default null" },
 	{ table: "sys_notification", column: "path", ddl: "varchar(255) default null" },
 	{ table: "sys_notification", column: "level", ddl: "varchar(16) not null default 'info'" },
 	{ table: "sys_notification", column: "operator_id", ddl: "varchar(36) default null" },
@@ -717,12 +712,6 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		table: "sys_menu",
 		column: "deleted_at",
 		ddl: "datetime default null",
-	},
-	// 流程模板来源(「我的任务」按模板筛):v1 起写入;旧任务 null(快照里没有模板 id,无法回填)
-	{
-		table: "tc_task",
-		column: "workflow_id",
-		ddl: "varchar(32) collate utf8mb4_unicode_ci default null",
 	},
 	// 父子任务 + 填报规则(批次退役):parent_id 指向父任务;report 存 { reportId, filter }
 	{
@@ -898,7 +887,6 @@ const VARCHAR_NARROWINGS: Array<{ table: string; column: string; length: number 
 	// 内部主键 / 外键(nanoid 21 字符)
 	{ table: "tc_workflow", column: "id", length: 32 },
 	{ table: "tc_task", column: "id", length: 32 },
-	{ table: "tc_task", column: "workflow_id", length: 32 },
 	{ table: "tc_task", column: "parent_id", length: 32 },
 	{ table: "tc_action", column: "id", length: 32 },
 	{ table: "tc_action", column: "task_id", length: 32 },
@@ -960,6 +948,12 @@ const COLUMN_RENAMES: Array<{
 	to: string;
 	newType: string;
 }> = [
+	{
+		table: "tc_task",
+		from: "status",
+		to: "flow_status",
+		newType: "varchar(32) collate utf8mb4_unicode_ci not null",
+	},
 	{
 		table: "tc_action",
 		from: "created_id",
@@ -1042,6 +1036,9 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	{ table: "tc_member", column: "role" },
 	// 填报快照表退役:提交的那一版改存 tc_task_report.synced,指针列废弃
 	{ table: "tc_task_report", column: "current_submission_id" },
+	// 三列 JSON 合一:状态图快照 / 提醒规则搬进 tc_task.payload(先跑 scripts/migrate-task-payload.mjs 回填)
+	{ table: "tc_task", column: "workflow" },
+	{ table: "tc_task", column: "reminder_config" },
 	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 	{ table: "sys_data_plugin", column: "produces" },
 	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃
@@ -1136,9 +1133,7 @@ const INDEX_UPGRADES: Array<{ table: string; index: string; columns: string }> =
 	// Worker 每分钟扫到点的定时提醒(见 lib/task/scheduled-reminders.ts)
 	{ table: "tc_action", index: "idx_action_unviewed", columns: "`status`, `viewed_at`, `activated_at`" },
 	// 任务列表:「状态筛选 + 按创建时间排序」要盖住一段 —— 原来是只索引 status 的单列索引
-	{ table: "tc_task", index: "idx_task_status_created", columns: "`status`, `created_at`" },
-	// 「我的任务」按流程模板筛
-	{ table: "tc_task", index: "idx_task_workflow", columns: "`workflow_id`" },
+	{ table: "tc_task", index: "idx_task_status_created", columns: "`flow_status`, `created_at`" },
 	// 成员表去 role 后索引改名(老库原为 idx_member_user_role / idx_member_task_role)
 	{ table: "tc_member", index: "idx_member_user", columns: "`user_id`" },
 	{ table: "tc_member", index: "idx_member_task", columns: "`task_id`" },
@@ -1186,6 +1181,8 @@ const INDEX_DROPS: Array<{ table: string; index: string }> = [
 	{ table: "tc_member", index: "idx_member_task_role" },
 	// demo_grid 去 group_id 时连带的(`sys_data_policy` 已经拿不到这列当判据)
 	{ table: "demo_grid", index: "idx_demo_grid_group" },
+	// workflow_id 列已删(不再存模板来源),索引一并撤掉
+	{ table: "tc_task", index: "idx_task_workflow" },
 ];
 
 for (const drop of INDEX_DROPS) {

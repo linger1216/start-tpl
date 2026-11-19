@@ -241,7 +241,7 @@ describe("任务闭环", () => {
 			"Too big",
 		);
 		const [root] = await db.select().from(taskTable).where(eq(taskTable.id, rootId));
-		const terminal = terminalStatusValues(root?.workflow)[0];
+		const terminal = terminalStatusValues((root?.payload as { workflow?: unknown } | null)?.workflow)[0];
 		assert.ok(terminal);
 		await db.update(taskTable).set({ status: terminal }).where(eq(taskTable.id, rootId));
 		await assertRejects(() => asB().taskClose.taskDispatch({ taskId: rootId, targets: [{ userId: C.id }] }), "已结束");
@@ -2526,7 +2526,11 @@ describe("任务闭环", () => {
 		const children = await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId));
 		assert.equal(children.length, 2, "两个执行人 fan-out 成两条子任务");
 		assert.ok(
-			children.every((row) => JSON.stringify(readTaskReminderConfig(row.reminder_config)) === JSON.stringify(before)),
+			children.every(
+				(row) =>
+					JSON.stringify(readTaskReminderConfig((row.payload as { reminders?: unknown } | null)?.reminders)) ===
+					JSON.stringify(before),
+			),
 			"建任务时子任务就拿到同一份规则",
 		);
 
@@ -2542,9 +2546,17 @@ describe("任务闭环", () => {
 		};
 		await asA().taskClose.taskUpdate({ id: parentId, name: taskName("父改提醒"), reminderConfig: next });
 		const [parentRow] = await db.select().from(taskTable).where(eq(taskTable.id, parentId));
-		assert.deepEqual(readTaskReminderConfig(parentRow?.reminder_config), next, "父任务自己用新规则");
+		assert.deepEqual(
+			readTaskReminderConfig((parentRow?.payload as { reminders?: unknown } | null)?.reminders),
+			next,
+			"父任务自己用新规则",
+		);
 		for (const child of await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId))) {
-			assert.deepEqual(readTaskReminderConfig(child.reminder_config), next, "父任务改提醒同步到子任务");
+			assert.deepEqual(
+				readTaskReminderConfig((child.payload as { reminders?: unknown } | null)?.reminders),
+				next,
+				"父任务改提醒同步到子任务",
+			);
 		}
 	});
 
@@ -2590,8 +2602,9 @@ describe("任务闭环", () => {
 		const reschedule = (config: typeof oldConfig) =>
 			db.transaction(async (tx) => {
 				const [task] = await tx.select().from(taskTable).where(eq(taskTable.id, id)).for("update");
-				await tx.update(taskTable).set({ reminder_config: config }).where(eq(taskTable.id, id));
-				await rescheduleTaskReminders(tx, { ...task, reminder_config: config }, new Date(), "executor");
+				const merged = { ...(task?.payload as Record<string, unknown>), reminders: config };
+				await tx.update(taskTable).set({ payload: merged }).where(eq(taskTable.id, id));
+				await rescheduleTaskReminders(tx, { ...task, payload: merged }, new Date(), "executor");
 			});
 		await reschedule(nextConfig);
 		const after = await db.select().from(taskReminderTable).where(eq(taskReminderTable.task_id, id));
@@ -2642,12 +2655,16 @@ describe("任务闭环", () => {
 		assert.equal(cancelled.length, 1);
 	});
 
-	it("没有 reminder_config 的任务也会排节点未查看提醒(统一走排期表)", async () => {
+	it("没有 reminders 的任务也会排节点未查看提醒(统一走排期表)", async () => {
 		const taskId = await newTask("未查看提醒");
-		await db.update(taskTable).set({ reminder_config: null }).where(eq(taskTable.id, taskId));
+		const [beforeRow] = await db.select().from(taskTable).where(eq(taskTable.id, taskId));
+		await db
+			.update(taskTable)
+			.set({ payload: { ...(beforeRow?.payload as Record<string, unknown>), reminders: undefined } })
+			.where(eq(taskTable.id, taskId));
 		const { id: actionId } = await asA().taskClose.actionCreate({ taskId, assigneeId: B.id });
 		const entries = await db.select().from(taskReminderTable).where(eq(taskReminderTable.action_id, actionId));
-		assert.equal(entries.length, 1, "没有 reminder_config 也按默认规则排一次(未查看 1 小时)");
+		assert.equal(entries.length, 1, "没有 reminders 也按默认规则排一次(未查看 1 小时)");
 	});
 
 	it("读取站内通知不等于查看动作，仅处理人打开动作记录首次查看时间", async () => {
@@ -3077,11 +3094,6 @@ describe("任务闭环 · 只读接口", () => {
 			byStatus.items.every((row) => row.status === status),
 			"status 过滤要真的生效",
 		);
-
-		// workflowId:按一个不存在的模板 id 筛必为空(三条任务都是 workflows[0] 的)
-		const byWorkflow = await asA().taskClose.taskList({ keyword, workflowId: "wf-not-exist" });
-		assert.equal(byWorkflow.items.length, 0, "按流程模板筛要真的生效");
-		assert.equal(byWorkflow.stats.total, 0, "统计跟随筛选");
 
 		// startTime + 统计:把第二条拨到 8 天前、再设一个已过的截止时间
 		await db
