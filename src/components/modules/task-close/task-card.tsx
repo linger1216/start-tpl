@@ -38,9 +38,17 @@ type TaskCardItem = {
  *   ③ 描述(两行封顶)  ④ 底部一条细脚注:子任务数 / 创建人 / 截止或建于
  *
  * fan-out 的父任务是「分派容器」,没有唯一收件人 → 右上角退回类型图标块。
- * 点击去向由调用方(`TaskCardLink`)决定,本组件只管长相。
+ * 通常由调用方用 `TaskCardLink` 包裹;带卡内动作时,本组件把链接内容和动作行作为卡片内的兄弟节点渲染。
  */
-export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabel: (value: string) => string }) {
+export function TaskCard({
+	task,
+	statusLabel,
+	action,
+}: {
+	task: TaskCardItem;
+	statusLabel: (value: string) => string;
+	action?: ReactNode;
+}) {
 	// 首次渲染保持服务端和客户端一致，挂载后再按本机时钟计算并定期刷新。
 	const [now, setNow] = useState<number | null>(null);
 	useEffect(() => {
@@ -51,8 +59,8 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 	}, [task.dueAt]);
 	// 已进入结束状态:不再有期限压力,卡片上不显示「超期 / 临期」
 	const deadline = now === null || task.terminal ? null : taskDeadlineState(task.dueAt, now);
-	return (
-		<Card className="group flex h-full cursor-pointer flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
+	const content = (
+		<div className="flex min-h-0 flex-1 flex-col">
 			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}
 			<div className="flex items-start justify-between gap-3">
 				<h3 className="min-w-0 flex-1 line-clamp-2 text-lg leading-snug font-semibold text-foreground">{task.name}</h3>
@@ -100,24 +108,41 @@ export function TaskCard({ task, statusLabel }: { task: TaskCardItem; statusLabe
 			<p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
 				{task.description?.trim() || "（无描述）"}
 			</p>
-
-			{/* 底行:元信息压成一条细脚注 —— 子任务数 / 创建人 / 截止(或建于) */}
-			<div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
-				{task.childCount > 0 ? (
-					<span className="inline-flex items-center gap-1 text-primary">
-						<Network className="size-3" />
-						{task.childCount} 个子任务
-					</span>
-				) : null}
-				<span className="inline-flex min-w-0 items-center gap-1">
-					<User className="size-3 shrink-0" />
-					<span className="truncate">{task.creatorName ?? PLACEHOLDER_EMPTY}</span>
+		</div>
+	);
+	const footer = (
+		<div className="mt-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-xs text-muted-foreground">
+			{task.childCount > 0 ? (
+				<span className="inline-flex items-center gap-1 text-primary">
+					<Network className="size-3" />
+					{task.childCount} 个子任务
 				</span>
-				<span className="inline-flex items-center gap-1">
-					<CalendarClock className="size-3" />
-					{task.dueAt ? `截止 ${formatLocalMinute(task.dueAt)}` : `建于 ${formatLocalMinute(task.createdAt)}`}
-				</span>
-			</div>
+			) : null}
+			<span className="inline-flex min-w-0 items-center gap-1">
+				<User className="size-3 shrink-0" />
+				<span className="truncate">{task.creatorName ?? PLACEHOLDER_EMPTY}</span>
+			</span>
+			<span className="inline-flex items-center gap-1">
+				<CalendarClock className="size-3" />
+				{task.dueAt ? `截止 ${formatLocalMinute(task.dueAt)}` : `建于 ${formatLocalMinute(task.createdAt)}`}
+			</span>
+			{action ? <span className="ml-auto inline-flex shrink-0">{action}</span> : null}
+		</div>
+	);
+	return (
+		<Card className="group flex h-full flex-col gap-0 bg-card p-4 transition-[border-color] hover:border-primary/50">
+			{action ? (
+				<Link
+					to="/task-close/$taskId"
+					params={{ taskId: task.id }}
+					className="flex min-h-0 flex-1 flex-col rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+				>
+					{content}
+				</Link>
+			) : (
+				content
+			)}
+			{footer}
 		</Card>
 	);
 }

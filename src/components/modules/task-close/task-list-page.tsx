@@ -1,5 +1,16 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, CalendarClock, CalendarX, ClipboardList, Flag, Plus, RotateCcw, SearchX, Users } from "lucide-react";
+import {
+	BellRing,
+	CalendarClock,
+	CalendarX,
+	ClipboardList,
+	Flag,
+	Plus,
+	RotateCcw,
+	SearchX,
+	Trash2,
+	Users,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EmptyState } from "#/components/layout/empty-state";
@@ -10,6 +21,7 @@ import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards
 import { AsyncState } from "#/components/modules/task-close/async-state";
 import { TaskCard, TaskCardLink } from "#/components/modules/task-close/task-card";
 import { type CreateTaskPayload, TaskForm } from "#/components/modules/task-close/task-form";
+import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { DateRangePicker, type DateRangeValue } from "#/components/ui/date-range-picker";
@@ -91,6 +103,7 @@ export function TaskListPage() {
 	/** 快速筛选条的展开态 —— 按页键记进参数(`page.filters`),下次进同一页保持 */
 	const filterPrefs = useFilterPrefs("task-close");
 	const [createOpen, setCreateOpen] = useState(false);
+	const removeTask = useConfirm<{ id: string; name: string; childCount: number }>();
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
 	const startTime = useMemo(
@@ -156,6 +169,16 @@ export function TaskListPage() {
 	const createMutation = useMutation(
 		trpc.taskClose.taskCreate.mutationOptions({
 			onSuccess: writeSuccess(invalidate, { close: () => setCreateOpen(false), message: () => "任务已创建" }),
+			onError: toastApiError,
+		}),
+	);
+	const removeMutation = useMutation(
+		trpc.taskClose.taskRemove.mutationOptions({
+			onSuccess: writeSuccess(invalidate, {
+				close: removeTask.dismiss,
+				message: ({ deletedCount }) =>
+					deletedCount > 1 ? `任务及其 ${deletedCount - 1} 条下级任务已删除` : "任务已删除",
+			}),
 			onError: toastApiError,
 		}),
 	);
@@ -371,9 +394,30 @@ export function TaskListPage() {
 			) : (
 				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 					{items.map((item) => (
-						<TaskCardLink key={item.id} task={item} className="block h-48 min-w-0">
-							<TaskCard task={item} statusLabel={labelOf} />
-						</TaskCardLink>
+						<div key={item.id} className="h-48 min-w-0">
+							{item.canRemove ? (
+								<TaskCard
+									task={item}
+									statusLabel={labelOf}
+									action={
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											className="size-7 text-muted-foreground hover:text-destructive"
+											aria-label={`删除任务：${item.name}`}
+											title="删除任务"
+											onClick={() => removeTask.ask(item)}
+										>
+											<Trash2 className="size-3.5" aria-hidden />
+										</Button>
+									}
+								/>
+							) : (
+								<TaskCardLink task={item} className="block h-full">
+									<TaskCard task={item} statusLabel={labelOf} />
+								</TaskCardLink>
+							)}
+						</div>
 					))}
 				</div>
 			)}
@@ -395,6 +439,20 @@ export function TaskListPage() {
 				workflowOptions={workflowOptions}
 				userOptions={userOptions}
 				onCreate={submit}
+			/>
+
+			<removeTask.Dialog
+				title="删除任务"
+				description={(task) =>
+					task.childCount > 0
+						? `「${task.name}」及其 ${task.childCount} 条下级任务会被删除,相关动作与评论一并不可见。`
+						: `「${task.name}」会被软删,相关动作与评论一并不可见。`
+				}
+				isPending={removeMutation.isPending}
+				confirmText="删除任务"
+				pendingText="删除中…"
+				confirmVariant="destructive"
+				onConfirm={(task) => removeMutation.mutate({ id: task.id })}
 			/>
 		</PageFrame>
 	);

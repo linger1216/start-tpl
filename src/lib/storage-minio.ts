@@ -79,6 +79,23 @@ export function createMinioStorage(config: MinioConfig) {
 			}
 		},
 
+		async read(bucket: string, objectKey: string, maxBytes: number): Promise<Buffer> {
+			try {
+				const stream = await client.getObject(bucket, objectKey);
+				const chunks: Buffer[] = [];
+				let size = 0;
+				for await (const chunk of stream) {
+					const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+					size += bytes.length;
+					if (size > maxBytes) throw new Error("对象超过读取大小上限");
+					chunks.push(bytes);
+				}
+				return Buffer.concat(chunks, size);
+			} catch (error) {
+				logFailure("read", bucket, objectKey, error);
+			}
+		},
+
 		async presignGet(bucket: string, objectKey: string, expiresSeconds = DEFAULT_EXPIRES_GET, downloadName?: string) {
 			// `response-content-disposition` 让"另存为"用回原始文件名(否则是 objectKey 那串 nanoid)。
 			// 用 **RFC 5987/6266 的双保险**:`filename=` 给纯 ASCII 兜底、`filename*=` 给真名(百分号编码)——

@@ -220,6 +220,9 @@ importers:
       '@trpc/tanstack-react-query':
         specifier: ^11.11.0
         version: 11.18.0(@tanstack/react-query@5.102.8(react@19.2.8))(@trpc/client@11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3))(@trpc/server@11.18.0(typescript@6.0.3))(react@19.2.8)(typescript@6.0.3)
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
       better-auth:
         specifier: ^1.5.3
         version: 1.7.4(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.168.50(crossws@0.4.12(srvx@0.11.22))(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.7)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)))(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(mysql2@3.24.3(@types/node@22.20.1))(sql.js@1.15.2))(mysql2@3.24.3(@types/node@22.20.1))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(solid-js@1.9.15)
@@ -250,6 +253,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.2(@opentelemetry/api@1.9.1)(kysely@0.29.5)(mysql2@3.24.3(@types/node@22.20.1))(sql.js@1.15.2)
+      jszip:
+        specifier: ^3.10.2
+        version: 3.10.2
       lucide-react:
         specifier: ^0.577.0
         version: 0.577.0(react@19.2.8)

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import { taskReportTable, taskReportTemplateTable, taskTable } from "#/db/data-base-schema";
@@ -7,16 +7,16 @@ import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { MAX_NAME_LENGTH } from "#/lib/task/close-spec";
 import { isRecord, stableJson } from "#/lib/task/json";
-import { createReportWorkbook, previewReportWorkbook } from "#/lib/task/report-excel";
+import { createReportWorkbook, mergeTaskExcelWorkbooks, previewReportWorkbook } from "#/lib/task/report-excel";
 import {
 	asFormValue,
 	asTableValue,
-	composeRows,
 	MAX_REPORT_BYTES,
 	MAX_REPORT_ROWS,
-	type ReportRow,
+	REPORT_ROW_ID,
 	reportAttachmentIds,
 	reportRowsOf,
+	reportRowsWithIds,
 	rowMatchesFilter,
 	type TaskReportSchema,
 	taskReportSchema,
@@ -25,7 +25,7 @@ import {
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	assertAttachments,
-	assertTaskParticipant,
+	assertTaskReadable,
 	attachmentRows,
 	executorNamesOf,
 	getTaskReportTemplate,
@@ -34,6 +34,7 @@ import {
 	ID,
 	isAdminOf,
 	lockTask,
+	readTaskExcelFile,
 	reportRowOf,
 	resolveReportTemplate,
 	type ScopeFilter,
@@ -53,9 +54,21 @@ async function withExcelError<T>(work: () => Promise<T>): Promise<T> {
 }
 
 const REPORT_CONFLICT_MESSAGE = "填报已被修改，请刷新后重试";
+function excelConfigOf(schema: TaskReportSchema) {
+	if (schema.kind !== "EXCEL" || !schema.excel)
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Excel 填报配置无效" });
+	return schema.excel;
+}
+
 function assertEitherTaskOrReport(input: { taskId?: string; reportId?: string }) {
 	if (!!input.taskId === !!input.reportId)
 		throw new TRPCError({ code: "BAD_REQUEST", message: "必须且只能指定任务或填报模板" });
+}
+
+async function validateExcelTemplate(reader: Pick<typeof db, "select">, schema: TaskReportSchema) {
+	if (schema.kind !== "EXCEL" || !schema.excel) return;
+	const buffer = await readTaskExcelFile(reader, schema.excel.templateFileId);
+	await mergeTaskExcelWorkbooks(buffer, [], schema.excel.sheetName, schema.excel.dataStartRow);
 }
 
 /**
@@ -95,37 +108,44 @@ function filterOf(report: unknown): ScopeFilter {
  * 顺带回答「这条任务有没有子任务」—— 父任务是**只读组合视图**时靠它挡下写入(见 `reportGet`)。
  */
 async function submittedChildrenOf(reader: Pick<typeof db, "select">, taskId: string) {
-	const childTasks = await reader
-		.select({ id: taskTable.id, name: taskTable.name, executorId: taskTable.executor_id, report: taskTable.report })
+	const children = await reader
+		.select({ id: taskTable.id, name: taskTable.name, report: taskTable.report })
 		.from(taskTable)
 		.where(and(eq(taskTable.parent_id, taskId), alive(taskTable)))
 		.orderBy(asc(taskTable.created_at), asc(taskTable.id));
-	if (childTasks.length === 0) return { hasChildren: false, children: [] };
-	const childIds = childTasks.map((row) => row.id);
-	const submissions = await reader
-		.select({ taskId: taskReportTable.task_id, payload: taskReportTable.synced })
+	if (!children.length) return { hasChildren: false, children: [] };
+	const ids = children.map((child) => child.id);
+	const reports = await reader
+		.select({ taskId: taskReportTable.task_id, synced: taskReportTable.synced })
 		.from(taskReportTable)
-		.where(and(inArray(taskReportTable.task_id, childIds), isNotNull(taskReportTable.synced)));
-	const executorNameOf = await executorNamesOf(childTasks.map((row) => row.id));
-	const nameOf = new Map(childTasks.map((row) => [row.id, row.name]));
-	const filterByTask = new Map(childTasks.map((row) => [row.id, filterOf(row.report)]));
+		.where(inArray(taskReportTable.task_id, ids));
+	const names = await executorNamesOf(ids);
+	const reportMap = new Map(reports.map((row) => [row.taskId, row.synced]));
 	return {
 		hasChildren: true,
-		children: submissions.map((row) => ({
-			taskId: row.taskId,
-			name: nameOf.get(row.taskId) ?? row.taskId,
-			executorName: executorNameOf.get(row.taskId) ?? null,
-			payload: row.payload,
-			filter: filterByTask.get(row.taskId) ?? [],
-		})),
+		children: children.map((child) => {
+			const payload = reportMap.get(child.id) ?? null;
+			return {
+				taskId: child.id,
+				name: child.name,
+				executorName: names.get(child.id) ?? null,
+				payload,
+				submitted: payload !== null,
+				filter: filterOf(child.report),
+				allocatedRowIds:
+					isRecord(child.report) && Array.isArray(child.report.allocatedRowIds)
+						? child.report.allocatedRowIds.filter((id): id is string => typeof id === "string")
+						: null,
+			};
+		}),
 	};
 }
 
 /**
- * 父任务视图 = 母版行 + 各子任务已提交的行(读时组合,父任务行永不被改写)。
- *
- * 只有**表格**填报的子任务认领母版行(表单没有行可切,它的内容追加在母版之后);
- * 提交了空表 = 撤销提交 ⇒ 既不认领也不追加,母版原样保留。
+ * 父任务最终视图按模板形状组合:
+ * - 表格和表单均按来源合并,父级参与时追加本级记录;
+ * - 表单:父级参与时追加父级表单,各子任务表单始终按独立记录合并;
+ * - 子任务只有提交后才进入汇总。
  */
 function composedRowsOf(
 	schema: TaskReportSchema,
@@ -135,49 +155,69 @@ function composedRowsOf(
 		name: string;
 		executorName: string | null;
 		payload: unknown;
+		submitted: boolean;
 		filter: ScopeFilter;
 	}[],
+	parentParticipates: boolean,
+	hasChildren: boolean,
 ) {
-	const contributions = children.map((child) => {
-		const rows = reportRowsOf(schema, child.payload);
-		return {
-			taskId: child.taskId,
-			ownerName: child.executorName ?? child.name,
-			filter: child.filter,
-			rows,
-			claims: schema.kind === "TABLE" && rows.length > 0,
-		};
+	const parentRows = reportRowsOf(schema, ownDraft).map((row) => ({
+		row,
+		owner: null,
+		ownerName: "本任务",
+		status: "parent" as const,
+	}));
+	if (!hasChildren) return parentRows;
+	const childRows = children.flatMap((child) => {
+		const sources = isRecord(child.payload) && Array.isArray(child.payload.__sources) ? child.payload.__sources : [];
+		return reportRowsOf(schema, child.payload).map((row, index) => {
+			const source = isRecord(sources[index]) ? sources[index] : null;
+			return {
+				row,
+				owner: typeof source?.owner === "string" ? source.owner : child.taskId,
+				ownerName: typeof source?.ownerName === "string" ? source.ownerName : (child.executorName ?? child.name),
+				status: child.submitted ? ("submitted" as const) : ("pending" as const),
+			};
+		});
 	});
-	return composeRows(reportRowsOf(schema, ownDraft), contributions);
+	const composed = parentParticipates ? [...parentRows, ...childRows] : childRows;
+	if (composed.length > MAX_REPORT_ROWS || JSON.stringify(composed.map((entry) => entry.row)).length > MAX_REPORT_BYTES)
+		throw new TRPCError({ code: "BAD_REQUEST", message: "层级汇总数据超过上限，请分批下发或减少填报记录" });
+	return composed;
 }
 
-/**
- * 母版改动之后，按各子任务的 `filter` 重新切一份 draft 下发。
- *
- * **这是「覆盖式」下发**：子任务尚未提交的编辑会被冲掉（`synced` 不受影响 —— 已提交出去的
- * 那一版还在父任务视图里）。调用方必须在 UI 上给足提示，这是设计上的取舍不是 bug。
- *
- * 只处理**表格**填报：表单没有「行」可切，父任务下的表单子任务本来就各自独立。
- */
-async function redistributeToChildren(
-	tx: Tx,
-	parentId: string,
-	masterRows: readonly ReportRow[],
-	now: Date,
-): Promise<void> {
-	const children = await tx
-		.select({ id: taskTable.id, report: taskTable.report })
-		.from(taskTable)
-		.where(and(eq(taskTable.parent_id, parentId), alive(taskTable)));
-	if (!children.length) return;
-	for (const child of children) {
-		const filter = filterOf(child.report);
-		const sliced = masterRows.filter((row) => rowMatchesFilter(row, filter));
-		await tx
-			.update(taskReportTable)
-			.set({ draft: asTableValue(sliced), updated_at: now })
-			.where(eq(taskReportTable.task_id, child.id));
-	}
+/** 旧任务没有此字段时按「父级不参与」处理,草稿仍保留,可由父级重新开启。 */
+function effectiveValueOf(entries: ReturnType<typeof composedRowsOf>, taskId: string, ownerName: string) {
+	return {
+		__records: entries.map((entry) => entry.row),
+		__sources: entries.map((entry) => ({
+			owner: entry.owner ?? taskId,
+			ownerName: entry.owner ? entry.ownerName : ownerName,
+		})),
+	};
+}
+
+function parentParticipationOf(report: unknown): boolean {
+	return isRecord(report) && report.parentParticipates === true;
+}
+
+function excelFileIdsOf(value: unknown): string[] {
+	if (!isRecord(value)) return [];
+	if (Array.isArray(value.fileIds)) return value.fileIds.filter((id): id is string => typeof id === "string");
+	return typeof value.fileId === "string" ? [value.fileId] : [];
+}
+
+function excelSnapshotOf(
+	ownDraft: unknown,
+	children: readonly { payload: unknown }[],
+	parentParticipates: boolean,
+	hasChildren: boolean,
+) {
+	const childIds = children.flatMap((child) => excelFileIdsOf(child.payload));
+	const fileIds = hasChildren
+		? [...(parentParticipates ? excelFileIdsOf(ownDraft) : []), ...childIds]
+		: excelFileIdsOf(ownDraft);
+	return { kind: "EXCEL_SNAPSHOT", fileIds: [...new Set(fileIds)] };
 }
 
 /**
@@ -216,21 +256,58 @@ export const taskReportRouter = createTRPCRouter({
 			return withExcelError(async () => {
 				if (input.reportId) {
 					const template = await resolveReportTemplate(db, { me, templateId: input.reportId });
+					if (template.schema.kind === "EXCEL") {
+						const config = excelConfigOf(template.schema);
+						return {
+							fileBase64: (await readTaskExcelFile(db, config.templateFileId)).toString("base64"),
+						};
+					}
 					return { fileBase64: createReportWorkbook(template.schema).toString("base64") };
 				}
 				const task = await getTaskRow(input.taskId ?? "");
-				await assertTaskParticipant(task, me.id, "无权导出填报");
+				await assertTaskReadable(task, me.id, "无权导出填报");
 				const own = await reportRowOf(db, task.id);
 				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 				const template = await getTaskReportTemplate(task);
 				if (input.templateOnly) {
+					if (template.schema.kind === "EXCEL") {
+						const config = excelConfigOf(template.schema);
+						return {
+							fileBase64: (await readTaskExcelFile(db, config.templateFileId)).toString("base64"),
+						};
+					}
 					return { fileBase64: createReportWorkbook(template.schema).toString("base64") };
 				}
-				// 导出 = 组合视图(母版 + 各子任务已提交),一条表、首列「执行人」;不再另起子任务表
+				// 导出与父任务最终汇总同口径,只包含已提交的子任务
 				const submitted = await submittedChildrenOf(db, task.id);
-				const composed = composedRowsOf(template.schema, own.draft, submitted.children);
+				if (template.schema.kind === "EXCEL") {
+					const config = excelConfigOf(template.schema);
+					const effective = excelSnapshotOf(
+						own.draft,
+						submitted.children,
+						submitted.hasChildren && parentParticipationOf(task.report),
+						submitted.hasChildren,
+					);
+					const templateBuffer = await readTaskExcelFile(db, config.templateFileId);
+					const sources: Buffer[] = [];
+					for (const fileId of effective.fileIds) sources.push(await readTaskExcelFile(db, fileId));
+					return {
+						fileBase64: (
+							await mergeTaskExcelWorkbooks(templateBuffer, sources, config.sheetName, config.dataStartRow)
+						).toString("base64"),
+					};
+				}
+				const composed = composedRowsOf(
+					template.schema,
+					own.draft,
+					submitted.children,
+					submitted.hasChildren && parentParticipationOf(task.report),
+					submitted.hasChildren,
+				);
 				const data = composed.map((entry) => entry.row);
-				const owners = composed.map((entry) => (entry.owner ? (entry.ownerName ?? "执行人") : null));
+				const owners = composed.map((entry) =>
+					entry.owner ? (entry.ownerName ?? "执行人") : submitted.hasChildren ? entry.ownerName : null,
+				);
 				// 「填报(可读)」那张表要把附件写成**文件名**(给附件已删的也留着名字,人看得懂更重要)
 				const attachmentIds = familyAttachmentIdsOf(template.schema, own.draft, submitted.children);
 				const fileRows = await attachmentRows(db, attachmentIds, true);
@@ -288,6 +365,7 @@ export const taskReportRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
+			await validateExcelTemplate(db, input.payload);
 			const id = newId();
 			await db.insert(taskReportTemplateTable).values({
 				id,
@@ -312,6 +390,7 @@ export const taskReportRouter = createTRPCRouter({
 			const me = requireCurrentUser(ctx);
 			return db.transaction(async (tx) => {
 				const template = await lockTemplateForManage(tx, input.id, me, "发布");
+				await validateExcelTemplate(tx, input.payload);
 				await tx
 					.update(taskReportTemplateTable)
 					.set({
@@ -360,43 +439,80 @@ export const taskReportRouter = createTRPCRouter({
 	reportGet: protectedProcedure.input(z.object({ taskId: ID })).query(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.taskId);
-		await assertTaskParticipant(task, me.id, "无权查看填报");
+		await assertTaskReadable(task, me.id, "无权查看填报");
 		const own = await reportRowOf(db, task.id);
 		if (!own) return null;
 		// 模板引用在任务的 report 规则里(单版本:模板 payload 即当前结构)
 		const template = await getTaskReportTemplate(task);
-		// 子任务的填报内容:只认**点过「提交」**的;没提交的什么都不显示,不做实时兜底
+		// 父级汇总只读取子任务已提交的版本。
 		const submitted = await submittedChildrenOf(db, task.id);
-		const syncedChildren = submitted.children;
-		// 附件文件名:自己那份 + 子任务提交的里引用的都要解出来
-		const files = await attachmentRows(db, familyAttachmentIdsOf(template.schema, own.draft, syncedChildren));
-		// 父任务(有子任务)→ 只读组合视图(每行带归属);没有子任务时前端走编辑器
+		const childReports = submitted.children;
+		const syncedChildren = childReports.filter((child) => child.submitted);
+		// 附件文件名:自己那份 + 子任务当前汇总版本里引用的都要解出来
 		const hasChildren = submitted.hasChildren;
-		const composed = composedRowsOf(template.schema, own.draft, syncedChildren);
+		const parentParticipates = hasChildren && parentParticipationOf(task.report);
+		const composed = composedRowsOf(template.schema, own.draft, childReports, parentParticipates, hasChildren);
+		const ownExcelFileId = isRecord(own.draft) && typeof own.draft.fileId === "string" ? own.draft.fileId : null;
+		const excelSources =
+			template.schema.kind === "EXCEL"
+				? hasChildren
+					? [
+							...(parentParticipates && ownExcelFileId
+								? [{ taskId: task.id, ownerName: "本任务", fileId: ownExcelFileId, submitted: true }]
+								: []),
+							...childReports.flatMap((child) =>
+								excelFileIdsOf(child.payload).map((fileId) => ({
+									taskId: child.taskId,
+									ownerName: child.executorName ?? child.name,
+									fileId,
+									submitted: child.submitted,
+								})),
+							),
+						]
+					: ownExcelFileId
+						? [{ taskId: task.id, ownerName: "本任务", fileId: ownExcelFileId, submitted: true }]
+						: []
+				: [];
+		const files = await attachmentRows(db, [
+			...familyAttachmentIdsOf(template.schema, own.draft, childReports),
+			...(template.schema.kind === "EXCEL" ? [template.schema.excel?.templateFileId ?? ""] : []),
+			...(template.schema.kind === "EXCEL" && ownExcelFileId ? [ownExcelFileId] : []),
+			...excelSources.map((source) => source.fileId),
+		]);
+		const allocationRows =
+			template.schema.kind === "TABLE"
+				? reportRowsWithIds(reportRowsOf(template.schema, own.draft), task.id, own.revision).map((row) => ({
+						id: String(row[REPORT_ROW_ID]),
+						values: row,
+					}))
+				: [];
+		const allocatedRowIds = new Set(
+			childReports.flatMap(
+				(child) =>
+					child.allocatedRowIds ??
+					reportRowsWithIds(reportRowsOf(template.schema, own.draft), task.id, own.revision)
+						.filter((row) => rowMatchesFilter(row, child.filter))
+						.map((row) => String(row[REPORT_ROW_ID])),
+			),
+		);
 		return {
 			report: own,
 			template,
 			files,
-			/**
-			 * 能不能**改自己的行**:父任务有子任务时,填报由各执行人提交 —— 父任务只读组合视图,
-			 * 母版也不再整片替换(否则会盖掉执行人提交的内容)。
-			 */
-			/**
-			 * 能不能改这一行 —— 创建人 / 当前执行人。
-			 *
-			 * 父任务(有子任务)也允许改:保存母版会**按各子任务的 filter 重新下发**一份 draft,
-			 * 覆盖他们尚未提交的编辑(已提交的 `synced` 不受影响)。前端必须就此给提示。
-			 */
+			/** 创建人或当前执行人可以编辑本任务自己的填报草稿。 */
 			canEdit: canEditReport(task, me.id),
-			/** 这份填报下有没有子任务 —— 前端据此提示「保存会覆盖子任务未提交的编辑」 */
-			distributesToChildren: hasChildren,
 			/** 子任务(表格 / 表单都行)能把本任务的填报提交给父任务;父任务自己就是数据源 */
 			canSubmitToParent: task.parent_id !== null,
-			/** 子任务**提交过**的填报;没提交的不会出现在这里 */
+			/** 子任务已提交的填报 */
 			syncedChildren,
-			/** 父任务的只读组合行(带归属);没有子任务时前端用编辑器 */
+			/** 父级是否参与汇总;旧任务缺字段时为 false */
+			parentParticipates,
+			/** 按父级参与状态组成的最终结果行 */
 			composed,
 			hasChildren,
+			allocationRows,
+			allocatedRowIds: [...allocatedRowIds],
+			excelSources,
 		};
 	}),
 
@@ -410,10 +526,6 @@ export const taskReportRouter = createTRPCRouter({
 				const task = await lockTask(tx, input.taskId);
 				if (!canEditReport(task, me.id))
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以填写" });
-				// 父任务(有子任务)是「分派容器」→ 保存母版 = **重新下发**:
-				// 改完之后按各子任务的 `filter` 重新切一份 draft 给他们。
-				// ⚠️ 这会**覆盖子任务尚未提交的编辑**(`synced` 不受影响 —— 已提交出去的那一版还在)。
-				const distributing = await hasChildTasks(tx, task.id);
 				// 每个任务只写**自己那一行**:子任务是下发时复制出来的独立副本,父子互不加锁
 				const own = await reportRowOf(tx, task.id, true);
 				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
@@ -421,18 +533,25 @@ export const taskReportRouter = createTRPCRouter({
 					throw new TRPCError({ code: "CONFLICT", message: REPORT_CONFLICT_MESSAGE });
 				const template = await getTaskReportTemplate(task);
 				const schema = template.schema;
-				const rows = reportRowsOf(schema, input.draft);
+				let rows = reportRowsOf(schema, input.draft);
 				if (rows.length > MAX_REPORT_ROWS || rows.some((row) => !isRecord(row)))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "填报格式无效" });
 				const issues = schema.kind === "TABLE" && rows.length === 0 ? [] : validateTaskReport(schema, input.draft);
 				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
+				if (schema.kind === "TABLE") rows = reportRowsWithIds(rows, task.id, own.revision);
+				if (schema.kind === "EXCEL") {
+					if (!isRecord(input.draft) || (input.draft.fileId !== null && typeof input.draft.fileId !== "string"))
+						throw new TRPCError({ code: "BAD_REQUEST", message: "Excel 填报格式无效" });
+					if (typeof input.draft.fileId === "string") {
+						const config = excelConfigOf(schema);
+						const [templateBytes, uploadBytes] = await Promise.all([
+							readTaskExcelFile(tx, config.templateFileId),
+							readTaskExcelFile(tx, input.draft.fileId),
+						]);
+						await mergeTaskExcelWorkbooks(templateBytes, [uploadBytes], config.sheetName, config.dataStartRow);
+					}
+				}
 				await assertAttachments(tx, reportAttachmentIds(schema, rows));
-				if (
-					task.parent_id &&
-					schema.kind === "TABLE" &&
-					rows.some((row) => !rowMatchesFilter(row, filterOf(task.report)))
-				)
-					throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据不能超出分派范围" });
 				for (const row of rows)
 					for (const field of schema.fields.filter((f) => f.readOnly)) {
 						if (
@@ -441,22 +560,75 @@ export const taskReportRouter = createTRPCRouter({
 							throw new TRPCError({ code: "BAD_REQUEST", message: `只读字段不可修改:${field.label}` });
 					}
 				const now = new Date();
-				const nextDraft = schema.kind === "TABLE" ? asTableValue(rows) : asFormValue(rows);
+				const nextDraft =
+					schema.kind === "TABLE"
+						? asTableValue(rows)
+						: schema.kind === "EXCEL"
+							? { fileId: isRecord(input.draft) && typeof input.draft.fileId === "string" ? input.draft.fileId : null }
+							: asFormValue(rows);
 				await tx
 					.update(taskReportTable)
 					.set({ draft: nextDraft, revision: own.revision + 1, updated_at: now })
 					.where(eq(taskReportTable.id, own.id));
-				// 母版改了 → 按各子任务的 filter 重新切一份 draft 下发(覆盖他们未提交的编辑)
-				if (distributing && schema.kind === "TABLE") {
-					await redistributeToChildren(tx, task.id, rows, now);
-				}
-				return { revision: own.revision + 1, redistributed: distributing };
+				return { revision: own.revision + 1 };
+			});
+		}),
+
+	reportSetParentParticipation: protectedProcedure
+		.input(z.object({ taskId: ID, enabled: z.boolean() }))
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			return db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.taskId);
+				if (!(await hasChildTasks(tx, task.id)))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "只有包含子任务的父任务可以设置参与状态" });
+				if (!canEditReport(task, me.id))
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以修改" });
+				if (!task.report || !isRecord(task.report))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
+				const now = new Date();
+				await tx
+					.update(taskTable)
+					.set({ report: { ...task.report, parentParticipates: input.enabled }, updated_at: now })
+					.where(eq(taskTable.id, task.id));
+				return { parentParticipates: input.enabled };
+			});
+		}),
+
+	reportClearParentDraft: protectedProcedure
+		.input(z.object({ taskId: ID, revision: z.number().int().min(0) }))
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			return db.transaction(async (tx) => {
+				const task = await lockTask(tx, input.taskId);
+				if (!(await hasChildTasks(tx, task.id)))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "只有包含子任务的父任务可以清空本级填报" });
+				if (!canEditReport(task, me.id))
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以清空" });
+				const own = await reportRowOf(tx, task.id, true);
+				if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
+				if (own.revision !== input.revision)
+					throw new TRPCError({ code: "CONFLICT", message: REPORT_CONFLICT_MESSAGE });
+				const template = await getTaskReportTemplate(task, tx);
+				if (!task.report || !isRecord(task.report))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
+				const now = new Date();
+				const emptyDraft =
+					template.schema.kind === "TABLE" ? [] : template.schema.kind === "EXCEL" ? { fileId: null } : {};
+				await tx
+					.update(taskReportTable)
+					.set({ draft: emptyDraft, revision: own.revision + 1, updated_at: now })
+					.where(eq(taskReportTable.id, own.id));
+				await tx
+					.update(taskTable)
+					.set({ report: { ...task.report, parentParticipates: false }, updated_at: now })
+					.where(eq(taskTable.id, task.id));
+				return { revision: own.revision + 1, parentParticipates: false };
 			});
 		}),
 
 	/**
-	 * **提交给父任务** —— 把当前 `draft` 复制成 `synced`(父任务组合时读它)。不改 `revision`、不改父任务行。
-	 * 表格与表单同一套:父任务的值在读取时按子任务 `synced` 组合(`composeRows`),范围重叠也不会互相覆盖。
+	 * **提交给父任务** —— 保存本级及直属子任务已提交数据的汇总快照。
 	 */
 	reportSubmitToParent: protectedProcedure.input(z.object({ taskId: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
@@ -469,20 +641,47 @@ export const taskReportRouter = createTRPCRouter({
 			const own = await reportRowOf(tx, task.id, true);
 			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 			let pushed = 1;
-			if (template.schema.kind === "TABLE") {
-				const rows = reportRowsOf(template.schema, own.draft);
-				if (rows.some((row) => !rowMatchesFilter(row, filterOf(task.report))))
-					throw new TRPCError({ code: "BAD_REQUEST", message: "填报数据不能超出分派范围" });
+			const descendants = await submittedChildrenOf(tx, task.id);
+			const participates = descendants.hasChildren && parentParticipationOf(task.report);
+			const composed = composedRowsOf(
+				template.schema,
+				own.draft,
+				descendants.children,
+				participates,
+				descendants.hasChildren,
+			);
+			const executorNames = await executorNamesOf([task.id]);
+			const effective =
+				template.schema.kind === "EXCEL"
+					? excelSnapshotOf(own.draft, descendants.children, participates, descendants.hasChildren)
+					: descendants.hasChildren
+						? effectiveValueOf(composed, task.id, executorNames.get(task.id) ?? task.name)
+						: own.draft;
+			if (template.schema.kind === "EXCEL") {
+				const snapshot = effective as { kind: string; fileIds: string[] };
+				if (snapshot.fileIds.length === 0)
+					throw new TRPCError({ code: "BAD_REQUEST", message: "请先上传 Excel 填报文件" });
+				const config = excelConfigOf(template.schema);
+				const base = await readTaskExcelFile(tx, config.templateFileId);
+				const sources: Buffer[] = [];
+				for (const fileId of snapshot.fileIds) sources.push(await readTaskExcelFile(tx, fileId));
+				await mergeTaskExcelWorkbooks(base, sources, config.sheetName, config.dataStartRow);
+				pushed = snapshot.fileIds.length;
+			} else if (template.schema.kind === "TABLE") {
+				const rows = reportRowsOf(template.schema, effective);
 				pushed = rows.length;
 			} else {
-				const found = validateTaskReport(template.schema, own.draft);
+				const found =
+					template.schema.kind === "OBJECT"
+						? reportRowsOf(template.schema, effective).flatMap((row) => validateTaskReport(template.schema, row))
+						: validateTaskReport(template.schema, effective);
 				if (found.length > 0)
 					throw new TRPCError({ code: "BAD_REQUEST", message: found[0]?.message ?? "填报内容不完整" });
 			}
 			const now = new Date();
 			await tx
 				.update(taskReportTable)
-				.set({ synced: own.draft, updated_at: now })
+				.set({ synced: effective, updated_at: now })
 				.where(eq(taskReportTable.id, own.id));
 			await writeTaskEvent(tx, {
 				taskId: task.id,
@@ -491,7 +690,12 @@ export const taskReportRouter = createTRPCRouter({
 				detail: {
 					parentTaskId: task.parent_id,
 					pushed,
-					summary: template.schema.kind === "TABLE" ? `提交 ${pushed} 行给父任务` : "提交表单填报给父任务",
+					summary:
+						template.schema.kind === "TABLE"
+							? `提交 ${pushed} 行给父任务`
+							: template.schema.kind === "EXCEL"
+								? `提交 ${pushed} 个工作簿给父任务`
+								: "提交表单填报给父任务",
 				},
 			});
 			return { pushed, syncedAt: now.toISOString() };

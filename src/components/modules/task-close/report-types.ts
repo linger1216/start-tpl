@@ -63,7 +63,7 @@ export function textControlAttrs(field: ReportFieldLike) {
 				: field.type === "email"
 					? "name@example.com"
 					: numeric
-						? "0"
+						? "请输入数字"
 						: "文本",
 	} as const;
 }

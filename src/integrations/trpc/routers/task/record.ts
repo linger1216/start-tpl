@@ -1,18 +1,21 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "#/db";
 import { taskMemberTable, taskReportTable, taskTable, taskWorkflowTable } from "#/db/data-base-schema";
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
-import { MAX_TEXT_LENGTH } from "#/lib/task/close-spec";
-import { stableJson } from "#/lib/task/json";
+import { isTerminalStatusOf, MAX_TEXT_LENGTH, statusesOf } from "#/lib/task/close-spec";
+import { isRecord, stableJson } from "#/lib/task/json";
 import { MAX_ATTACHMENTS, normalizePayload, taskPayloadSchema } from "#/lib/task/payload";
 import { readTaskReminderConfig, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import {
 	MAX_REPORT_ROWS,
+	REPORT_ROW_ID,
 	reportAttachmentIds,
 	reportRowSchema,
+	reportRowsOf,
+	reportRowsWithIds,
 	rowMatchesFilter,
 	type taskReportSchema,
 	validateTaskReport,
@@ -29,6 +32,7 @@ import {
 	cancelLiveTaskActions,
 	FILE_ID,
 	findEdge,
+	getTaskReportTemplate,
 	getTaskRow,
 	ID,
 	isAdminOf,
@@ -172,7 +176,7 @@ async function insertTask(
 		description?: string | null;
 		dueAt?: Date | null;
 		priority?: number | null;
-		workflowId: string;
+		workflowId: string | null;
 		reminderConfig: TaskReminderConfig;
 		workflow: WorkflowPayload;
 		payload?: Parameters<typeof normalizePayload>[0];
@@ -180,11 +184,13 @@ async function insertTask(
 		executorId?: string | null;
 		/** 参与者 userId 列表(→ `tc_member`) */
 		participants?: string[];
-		/** 父子填报:父任务传 `{ reportId }`,子任务传 `{ reportId, filter }` */
+		/** 父子填报:父任务传模板快照与参与状态,子任务传 `{ reportId, filter }` */
 		report?: {
 			reportId: string;
 			schema: z.infer<typeof taskReportSchema>;
 			filter?: ScopeFilter;
+			allocatedRowIds?: string[];
+			parentParticipates?: boolean;
 		} | null;
 		/** 父任务 id(fan-out 时子任务指向父) */
 		parentId?: string | null;
@@ -301,6 +307,7 @@ function createDraftOf(template: CreateTaskContext["template"], masterRows: Crea
 	/** 填报草稿:表格取过滤后的行,表单取字段默认值 */
 	const draftOf = (filter: Array<{ field: string; value: unknown }>): unknown => {
 		if (!template) return null;
+		if (template.schema.kind === "EXCEL") return { fileId: null };
 		if (template.schema.kind === "TABLE") return rowsFor(filter);
 		return Object.fromEntries(
 			template.schema.fields
@@ -346,7 +353,7 @@ async function createFanoutTask({
 		{
 			...taskBaseOf(input, snapshot),
 			id,
-			...(template ? { report: { reportId: template.id, schema: template.schema } } : {}),
+			...(template ? { report: { reportId: template.id, schema: template.schema, parentParticipates: false } } : {}),
 			// 父任务的执行人 = 创建人:母版数据由他维护,父任务的截止提醒也发给他
 			// (子任务的执行人仍是各自那名;这里把"谁负责父任务那份"显式化)
 			executorId: me.id,
@@ -361,6 +368,8 @@ async function createFanoutTask({
 		const childId = newId();
 		// 子任务的过滤规则:成员自带优先,否则沿用任务级数据规则(表单里只配一条)
 		const filter = member.filter ?? input.report?.filter ?? [];
+		const childRows =
+			template?.schema.kind === "TABLE" ? masterRows.filter((row) => rowMatchesFilter(row, filter)) : [];
 		await insertTask(
 			tx,
 			{
@@ -373,6 +382,9 @@ async function createFanoutTask({
 								reportId: template.id,
 								schema: template.schema,
 								filter,
+								...(template.schema.kind === "TABLE"
+									? { allocatedRowIds: childRows.map((row) => String(row[REPORT_ROW_ID])) }
+									: {}),
 							},
 						}
 					: {}),
@@ -385,7 +397,7 @@ async function createFanoutTask({
 			await tx.insert(taskReportTable).values({
 				id: newId(),
 				task_id: childId,
-				draft: draftOf(filter),
+				draft: template.schema.kind === "TABLE" ? childRows : draftOf(filter),
 				revision: 0,
 			});
 		}
@@ -393,7 +405,7 @@ async function createFanoutTask({
 			taskId: childId,
 			event: "task.create",
 			actor: me,
-			detail: { parentId: id, filter },
+			detail: { parentId: id, filter, allocatedRows: childRows.length },
 		});
 	}
 }
@@ -440,6 +452,166 @@ async function createSingleTask({
 }
 
 export const taskRecordRouter = createTRPCRouter({
+	/** 当前执行人/管理员把任务继续下发给直属执行人；每人独立持有填报副本。 */
+	taskDispatch: protectedProcedure
+		.input(
+			z.object({
+				taskId: ID,
+				targets: z
+					.array(
+						z.object({
+							userId: USER_ID,
+							mode: z.enum(["filter", "manual"]).default("filter"),
+							filter: dataScopeFilterSchema.optional(),
+							rowIds: z.array(z.string().min(1).max(255)).max(MAX_REPORT_ROWS).optional(),
+						}),
+					)
+					.min(1)
+					.max(1000),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			return db.transaction(async (tx) => {
+				const parent = await lockTask(tx, input.taskId);
+				if (parent.executor_id !== me.id && !(await isAdminOf(me)))
+					throw new TRPCError({ code: "FORBIDDEN", message: "只有当前执行人或管理员可以下发" });
+				if (isTerminalStatusOf(statusesOf(parent.workflow), parent.status))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "已结束的任务不能继续下发" });
+				const ids = input.targets.map((target) => target.userId);
+				if (new Set(ids).size !== ids.length) throw new TRPCError({ code: "BAD_REQUEST", message: "下发对象不能重复" });
+				await assertUsersExist(tx, ids, "下发对象不存在");
+				const template = parent.report ? await getTaskReportTemplate(parent, tx) : null;
+				const filters = input.targets.map((target) => target.filter ?? []);
+				if (filters.some((filter) => filter.length) && (!template || template.schema.kind !== "TABLE"))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围只支持表格填报" });
+				if (input.targets.some((target) => target.mode === "manual" && template?.schema.kind !== "TABLE"))
+					throw new TRPCError({ code: "BAD_REQUEST", message: "手动分配只支持表格填报" });
+				if (
+					input.targets.some(
+						(target) =>
+							(target.mode === "manual" && (!target.rowIds?.length || target.filter?.length)) ||
+							(target.mode === "filter" && target.rowIds?.length),
+					)
+				)
+					throw new TRPCError({ code: "BAD_REQUEST", message: "筛选分配和手动分配不能同时设置" });
+				for (const filter of filters) {
+					const seen = new Set<string>();
+					for (const condition of filter) {
+						const field = template?.schema.fields.find((item) => item.id === condition.field);
+						if (!field || field.type === "multiselect" || field.type === "attachment" || seen.has(condition.field))
+							throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围字段无效或重复" });
+						seen.add(condition.field);
+					}
+				}
+				const ownReport = template
+					? await tx.select().from(taskReportTable).where(eq(taskReportTable.task_id, parent.id)).limit(1)
+					: [];
+				const own = ownReport[0];
+				const sourceRows =
+					template?.schema.kind === "TABLE"
+						? reportRowsWithIds(reportRowsOf(template.schema, own?.draft), parent.id, own?.revision ?? 0)
+						: [];
+				if (template?.schema.kind === "TABLE") {
+					const children = await tx
+						.select({ report: taskTable.report })
+						.from(taskTable)
+						.where(and(eq(taskTable.parent_id, parent.id), alive(taskTable)));
+					const unavailable = new Set<string>();
+					for (const child of children) {
+						if (!isRecord(child.report)) continue;
+						const allocated = child.report.allocatedRowIds;
+						if (Array.isArray(allocated)) {
+							for (const id of allocated) if (typeof id === "string") unavailable.add(id);
+							continue;
+						}
+						const filter = Array.isArray(child.report.filter) ? (child.report.filter as ScopeFilter) : [];
+						for (const row of sourceRows)
+							if (rowMatchesFilter(row, filter)) unavailable.add(String(row[REPORT_ROW_ID]));
+					}
+					const selected = new Set<string>();
+					for (const [index, target] of input.targets.entries()) {
+						const selectedIds =
+							target.mode === "manual"
+								? (target.rowIds ?? [])
+								: sourceRows
+										.filter((row) => rowMatchesFilter(row, filters[index] ?? []))
+										.map((row) => String(row[REPORT_ROW_ID]));
+						for (const rowId of selectedIds) {
+							if (!sourceRows.some((row) => row[REPORT_ROW_ID] === rowId))
+								throw new TRPCError({ code: "BAD_REQUEST", message: "选择的数据行已变化，请刷新后重试" });
+							if (unavailable.has(rowId) || selected.has(rowId))
+								throw new TRPCError({ code: "BAD_REQUEST", message: "一条填报记录不能重复分派" });
+							selected.add(rowId);
+						}
+					}
+				}
+				const payload = parent.payload as Parameters<typeof normalizePayload>[0];
+				const workflow = parent.workflow as WorkflowPayload;
+				const reminderConfig = readTaskReminderConfig(parent.reminder_config);
+				const childIds: string[] = [];
+				for (const [index, target] of input.targets.entries()) {
+					const childId = newId();
+					const filter = filters[index] ?? [];
+					const targetRows =
+						template?.schema.kind === "TABLE"
+							? target.mode === "manual"
+								? sourceRows.filter((row) => target.rowIds?.includes(String(row[REPORT_ROW_ID])))
+								: sourceRows.filter((row) => rowMatchesFilter(row, filter))
+							: [];
+					const allocatedRowIds = targetRows.map((row) => String(row[REPORT_ROW_ID]));
+					await insertTask(
+						tx,
+						{
+							id: childId,
+							name: parent.name,
+							description: parent.description,
+							dueAt: parent.due_at,
+							priority: parent.priority,
+							workflowId: parent.workflow_id,
+							reminderConfig,
+							workflow,
+							payload,
+							executorId: target.userId,
+							parentId: parent.id,
+							...(template
+								? {
+										report: {
+											reportId: template.id,
+											schema: template.schema,
+											filter: target.mode === "filter" ? filter : [],
+											...(template.schema.kind === "TABLE" ? { allocatedRowIds } : {}),
+											parentParticipates: false,
+										},
+									}
+								: {}),
+						},
+						me,
+					);
+					if (template) {
+						const draft =
+							template.schema.kind === "TABLE"
+								? targetRows
+								: template.schema.kind === "EXCEL"
+									? { fileId: null }
+									: Object.fromEntries(
+											template.schema.fields
+												.filter((field) => field.defaultValue !== undefined)
+												.map((field) => [field.id, field.defaultValue]),
+										);
+						await tx.insert(taskReportTable).values({ id: newId(), task_id: childId, draft, revision: 0 });
+					}
+					await writeTaskEvent(tx, {
+						taskId: childId,
+						event: "task.create",
+						actor: me,
+						detail: { parentId: parent.id, filter, allocationMode: target.mode, allocatedRows: targetRows.length },
+					});
+					childIds.push(childId);
+				}
+				return { taskIds: childIds };
+			});
+		}),
 	/**
 	 * 建任务。
 	 *
@@ -490,7 +662,7 @@ export const taskRecordRouter = createTRPCRouter({
 			}
 			// 多执行人 = fan-out:**1 父 + N 子**(父执行人 = 创建人;每个执行人各拿一条子任务)
 			const fanout = executors.length >= 2;
-			// 范围重叠不再拦:同步是「只追加快照」,父任务读时按范围合并,重叠也不会互相覆盖
+			// 多执行人各拿一条子任务;同一底表行只允许下发给一个执行人,避免子任务汇总重复
 
 			// 母版数据:建任务时文件导入带进来的初始行(仅表格模板)
 			const masterRows: Array<Record<string, unknown>> = (() => {
@@ -499,8 +671,15 @@ export const taskRecordRouter = createTRPCRouter({
 					throw new TRPCError({ code: "BAD_REQUEST", message: "数据规则只支持表格形式模板" });
 				const issues = validateTaskReport(template.schema, input.report.rows);
 				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
-				return input.report.rows;
+				return reportRowsWithIds(input.report.rows, id, 0);
 			})();
+			if (fanout && template?.schema.kind === "TABLE") {
+				const childFilters = executors.map((member) => member.filter ?? input.report?.filter ?? []);
+				for (const row of masterRows) {
+					const matches = childFilters.filter((filter) => rowMatchesFilter(row, filter)).length;
+					if (matches > 1) throw new TRPCError({ code: "BAD_REQUEST", message: "一条填报记录不能分派给多个子任务" });
+				}
+			}
 			if (template) await assertAttachments(tx, reportAttachmentIds(template.schema, masterRows));
 
 			const createContext = { tx, input, id, me, snapshot, requestedMembers, executors, template, masterRows };
@@ -647,46 +826,59 @@ export const taskRecordRouter = createTRPCRouter({
 		}),
 
 	/**
-	 * 软删任务，并在同一事务终止未完成动作和待发送通知。
-	 *
-	 * 删父任务连带删子任务,避免保留脱离分派上下文的子任务。
-	 * **只有任务创建者或管理员能删**(`assertCanManage`)—— 执行人 / 参与者一律拒绝。
+	 * 删除任务节点，并在同一事务软删整棵后代树、终止动作和待发送通知。
+	 * 当前任务创建者 / 管理员可删；直属父任务创建者或执行人也可删除这个下级节点。
 	 */
 	taskRemove: protectedProcedure.input(z.object({ id: ID })).mutation(async ({ ctx, input }) => {
 		const me = requireCurrentUser(ctx);
 		const task = await getTaskRow(input.id);
-		await assertCanManage(task, me.id, "只有任务创建者或管理员可以删除任务");
 		const now = new Date();
-		await db.transaction(async (tx) => {
-			await lockTask(tx, task.id);
-			const children = await tx
-				.select({ id: taskTable.id })
-				.from(taskTable)
-				.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
-				.for("update");
-			for (const row of children) {
+		const deletedCount = await db.transaction(async (tx) => {
+			// 固定从父级到当前节点的锁顺序，与删除整棵父树保持一致。
+			const parent = task.parent_id ? await lockTask(tx, task.parent_id) : null;
+			const locked = await lockTask(tx, task.id);
+			const admin = await isAdminOf(me);
+			const canRemove =
+				admin ||
+				locked.creator_id === me.id ||
+				(parent !== null && (parent.creator_id === me.id || parent.executor_id === me.id));
+			if (!canRemove)
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: parent
+						? "只有任务创建者、直属父任务创建者/执行人或管理员可以删除"
+						: "只有任务创建者或管理员可以删除任务",
+				});
+
+			const subtree = [locked];
+			let frontier = [locked.id];
+			while (frontier.length) {
+				const descendants = await tx
+					.select()
+					.from(taskTable)
+					.where(and(inArray(taskTable.parent_id, frontier), alive(taskTable)))
+					.orderBy(asc(taskTable.id))
+					.for("update");
+				if (!descendants.length) break;
+				subtree.push(...descendants);
+				frontier = descendants.map((row) => row.id);
+			}
+			for (const row of subtree) {
 				await cancelLiveTaskActions(tx, row.id, now);
 				await cancelTaskReminders(tx, row.id, now);
 			}
-			await cancelLiveTaskActions(tx, task.id, now);
-			await cancelTaskReminders(tx, task.id, now);
+			const ids = subtree.map((row) => row.id);
 			await tx
 				.update(taskTable)
 				.set({ ...softDeleted(), updated_at: now })
-				.where(eq(taskTable.id, task.id));
-			if (children.length) {
-				await tx
-					.update(taskTable)
-					.set({ ...softDeleted(), updated_at: now })
-					.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
-				await writeTaskEvents(
-					tx,
-					children.map((row) => ({ taskId: row.id, event: "task.remove" as const, actor: me, at: now })),
-				);
-			}
-			await writeTaskEvent(tx, { taskId: task.id, event: "task.remove", actor: me, at: now });
+				.where(inArray(taskTable.id, ids));
+			await writeTaskEvents(
+				tx,
+				subtree.map((row) => ({ taskId: row.id, event: "task.remove" as const, actor: me, at: now })),
+			);
+			return subtree.length;
 		});
-		return { ok: true };
+		return { ok: true, deletedCount };
 	}),
 
 	/**

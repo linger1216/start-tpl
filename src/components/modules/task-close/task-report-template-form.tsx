@@ -3,18 +3,23 @@ import { FileSpreadsheet, GripVertical } from "lucide-react";
 import { pinyin } from "pinyin-pro";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import { type DraftFieldLike, ReportFieldRow } from "#/components/modules/task-close/report-field-row";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
+import { TaskReportExcelTemplatePreview } from "#/components/modules/task-close/task-report-excel-template-preview";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
 import { Radio, RadioGroup } from "#/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Switch } from "#/components/ui/switch";
+import { useFileUpload } from "#/hooks/use-file-upload";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { reportFieldsFromHeaders } from "#/lib/task/report-header-import";
 import {
+	MAX_REPORT_FILE_BYTES,
 	REPORT_FIELD_TYPES,
 	REPORT_TOP_FIELD_TYPES,
 	type ReportFieldType,
@@ -115,8 +120,17 @@ export function TaskReportTemplateForm({
 	const [templateId, setTemplateId] = useState("");
 	const [shared, setShared] = useState(false);
 	const [name, setName] = useState("");
-	const [kind, setKind] = useState<"OBJECT" | "TABLE">("OBJECT");
+	const [kind, setKind] = useState<"OBJECT" | "TABLE" | "EXCEL">("OBJECT");
 	const [fields, setFields] = useState<Field[]>([]);
+	const [excelTemplateFileId, setExcelTemplateFileId] = useState("");
+	const [excelTemplateFileName, setExcelTemplateFileName] = useState("");
+	const [excelSheetNames, setExcelSheetNames] = useState<string[]>([]);
+	const [excelSheetName, setExcelSheetName] = useState("");
+	const [excelDataStartRow, setExcelDataStartRow] = useState("1");
+	const [uploadingExcelTemplate, setUploadingExcelTemplate] = useState(false);
+	const [excelPreviewOpen, setExcelPreviewOpen] = useState(false);
+	const { upload } = useFileUpload();
+	const excelTemplateInputId = "report-excel-template-file";
 	const [headerImportOpen, setHeaderImportOpen] = useState(false);
 	/** 顶层错误(名称 / 结构性)与**贴到具体字段行**的错误分开 —— 改哪行清哪行的错 */
 	const [error, setError] = useState("");
@@ -145,6 +159,11 @@ export function TaskReportTemplateForm({
 			setKind("OBJECT");
 			setShared(false);
 			setFields([newField()]);
+			setExcelTemplateFileId("");
+			setExcelTemplateFileName("");
+			setExcelSheetNames([]);
+			setExcelSheetName("");
+			setExcelDataStartRow("1");
 			return;
 		}
 		const template = templates.find((item) => item.id === id && item.canManage);
@@ -154,12 +173,20 @@ export function TaskReportTemplateForm({
 			setKind("OBJECT");
 			setShared(false);
 			setFields([]);
+			setExcelTemplateFileId("");
+			setExcelSheetNames([]);
+			setExcelSheetName("");
 			setError("模板结构无效，无法编辑");
 			return;
 		}
 		setName(template.name);
 		setShared(template.shared === 1);
 		setKind(parsed.data.kind);
+		setExcelTemplateFileId(parsed.data.excel?.templateFileId ?? "");
+		setExcelTemplateFileName(parsed.data.excel ? "已关联工作簿模板" : "");
+		setExcelSheetNames(parsed.data.excel ? [parsed.data.excel.sheetName] : []);
+		setExcelSheetName(parsed.data.excel?.sheetName ?? "");
+		setExcelDataStartRow(String(parsed.data.excel?.dataStartRow ?? 1));
 		setFields(
 			parsed.data.fields.map((field) => ({
 				key: crypto.randomUUID(),
@@ -184,6 +211,38 @@ export function TaskReportTemplateForm({
 				original: field,
 			})),
 		);
+	};
+	const uploadExcelTemplate = async (file?: File) => {
+		if (!file) return;
+		if (!file.name.toLowerCase().endsWith(".xlsx")) {
+			toast.error("请选择 .xlsx 工作簿");
+			return;
+		}
+		if (file.size > MAX_REPORT_FILE_BYTES) {
+			toast.error("工作簿不能超过 5 MB");
+			return;
+		}
+		let sheetNames: string[];
+		try {
+			const book = XLSX.read(await file.arrayBuffer(), { type: "array", bookVBA: true });
+			if (book.vbaraw || book.SheetNames.length === 0) throw new Error("工作簿无效");
+			sheetNames = book.SheetNames;
+		} catch {
+			toast.error("无法读取工作簿，请检查文件是否有效");
+			return;
+		}
+		setUploadingExcelTemplate(true);
+		const result = await upload(file, "private");
+		setUploadingExcelTemplate(false);
+		if (!result.ok) {
+			toast.error(result.message);
+			return;
+		}
+		setExcelTemplateFileId(result.row.id);
+		setExcelTemplateFileName(file.name);
+		setExcelSheetNames(sheetNames);
+		setExcelSheetName(sheetNames[0] ?? "");
+		toast.success("工作簿模板已上传");
 	};
 
 	// 打开时按调用方的意图选模板(行「编辑」进来的带 id,「新增」进来的为空);关闭不清,免得关闭动画闪空
@@ -253,29 +312,36 @@ export function TaskReportTemplateForm({
 				template.id === templateId && template.canManage && taskReportSchema.safeParse(template.payload).success,
 		);
 	const submit = () => {
-		if (!editableTemplate) return;
+		if (!editableTemplate || uploadingExcelTemplate) return;
 		const result = taskReportSchema.safeParse({
 			id: "report",
 			kind,
-			fields: fields.map((field) => ({
-				...field.original,
-				id: field.id.trim(),
-				label: field.label.trim(),
-				type: field.type,
-				required: field.required,
-				allowEmpty: field.type === "select" && field.allowEmpty,
-				options: field.type === "select" || field.type === "multiselect" ? field.options : undefined,
-				itemFields:
-					field.type === "array"
-						? field.itemFields.map((item) => ({
-								id: item.id.trim(),
-								label: item.label.trim(),
-								type: item.type,
-								required: item.required,
-								options: item.type === "select" || item.type === "multiselect" ? item.options : undefined,
-							}))
-						: undefined,
-			})),
+			fields:
+				kind === "EXCEL"
+					? []
+					: fields.map((field) => ({
+							...field.original,
+							id: field.id.trim(),
+							label: field.label.trim(),
+							type: field.type,
+							required: field.required,
+							allowEmpty: field.type === "select" && field.allowEmpty,
+							options: field.type === "select" || field.type === "multiselect" ? field.options : undefined,
+							itemFields:
+								field.type === "array"
+									? field.itemFields.map((item) => ({
+											id: item.id.trim(),
+											label: item.label.trim(),
+											type: item.type,
+											required: item.required,
+											options: item.type === "select" || item.type === "multiselect" ? item.options : undefined,
+										}))
+									: undefined,
+						})),
+			excel:
+				kind === "EXCEL"
+					? { templateFileId: excelTemplateFileId, sheetName: excelSheetName, dataStartRow: Number(excelDataStartRow) }
+					: undefined,
 		});
 		if (!name.trim() || !result.success) {
 			// 错误贴到字段(zod 的 path 带 fields 下标就落到那一行);结构性 / 名称问题留在顶部
@@ -300,7 +366,7 @@ export function TaskReportTemplateForm({
 		else create.mutate({ name: name.trim(), payload: result.data, shared });
 	};
 
-	const pending = create.isPending || publish.isPending;
+	const pending = create.isPending || publish.isPending || uploadingExcelTemplate;
 	return (
 		<TaskActionDialog
 			open={open}
@@ -340,115 +406,197 @@ export function TaskReportTemplateForm({
 				</span>
 			</DetailRow>
 			<DetailRow label="填报形式" align="center" className="py-1">
-				<RadioGroup value={kind} onValueChange={(value) => setKind(value === "TABLE" ? "TABLE" : "OBJECT")}>
+				<RadioGroup
+					value={kind}
+					onValueChange={(value) => {
+						const next = value === "TABLE" || value === "EXCEL" ? value : "OBJECT";
+						setKind(next);
+						if (next === "EXCEL") setFields([]);
+						else if (fields.length === 0) setFields([newField()]);
+					}}
+				>
 					<Radio value="OBJECT">表单</Radio>
 					<Radio value="TABLE">表格</Radio>
+					<Radio value="EXCEL">Excel 文件</Radio>
 				</RadioGroup>
 			</DetailRow>
-			<div className="space-y-1.5">
-				<div className="flex items-center justify-between">
-					<span className="text-sm font-medium">
-						字段
-						<span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">{fields.length} / 100</span>
-					</span>
-					<div className="flex items-center gap-1.5">
-						{!templateId ? (
+			{kind === "EXCEL" ? (
+				<div className="grid gap-2 rounded-md border border-border p-3">
+					<DetailRow label="工作簿模板" align="center" className="py-0">
+						<div className="flex min-w-0 items-center gap-2">
+							<Input
+								id={excelTemplateInputId}
+								className="sr-only"
+								type="file"
+								accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+								disabled={uploadingExcelTemplate || pending}
+								onChange={(event) => {
+									void uploadExcelTemplate(event.target.files?.[0]);
+									event.currentTarget.value = "";
+								}}
+							/>
 							<Button
-								variant="ghost"
+								variant="outline"
 								size="sm"
-								disabled={fields.length >= 100}
-								onClick={() => setHeaderImportOpen(true)}
+								disabled={uploadingExcelTemplate || pending}
+								onClick={() => document.getElementById(excelTemplateInputId)?.click()}
 							>
-								<FileSpreadsheet className="size-3.5" />从 Excel 导入
+								<FileSpreadsheet className="size-3.5" />
+								{uploadingExcelTemplate ? "上传中…" : excelTemplateFileId ? "更换工作簿" : "选择工作簿"}
 							</Button>
-						) : null}
-						<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
-							添加字段
-						</Button>
-					</div>
-				</div>
-				{fields.map((field, index) => (
-					// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
-					<div
-						key={field.key}
-						draggable
-						onDragStart={() => setDragIndex(index)}
-						onDragEnd={() => {
-							setDragIndex(null);
-							setOverIndex(null);
-						}}
-						onDragOver={(event) => {
-							event.preventDefault();
-							setOverIndex(index);
-						}}
-						onDrop={(event) => {
-							event.preventDefault();
-							if (dragIndex !== null) reorder(dragIndex, index);
-							setDragIndex(null);
-							setOverIndex(null);
-						}}
-						className={cn(
-							"space-y-1.5 rounded-md border p-2",
-							fieldErrors[field.key] ? "border-destructive" : "border-border",
-							dragIndex === index && "opacity-50",
-							overIndex === index && dragIndex !== null && dragIndex !== index
-								? "bg-brand-faint ring-1 ring-primary/40"
-								: "",
-						)}
-					>
-						<ReportFieldRow
-							prefix="字段"
-							handle={
-								<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
-							}
-							index={index}
-							field={field}
-							typeOptions={FIELD_TYPES}
-							dictionaries={dictionaries.data ?? []}
-							dictionariesLoading={dictionaries.isPending}
-							dictionariesError={dictionaries.isError}
-							showAllowEmpty
-							deriveId={slugId}
-							onPatch={(patch) => update(field.key, patch as Partial<Field>)}
-							onRemove={() => setFields(fields.filter((item) => item.key !== field.key))}
-							removeDisabled={fields.length === 1}
-						/>
-						{field.type === "array" && (
-							<div className="space-y-1.5 rounded-md border border-dashed border-border p-2">
-								<div className="flex items-center justify-between gap-2">
-									<span className="text-xs font-medium text-muted-foreground">数组内的字段(至少 1 个;不带数组)</span>
-									<Button
-										variant="outline"
-										size="sm"
-										disabled={field.itemFields.length >= 50}
-										onClick={() => addItem(field.key)}
-									>
-										添加元素字段
-									</Button>
-								</div>
-								{field.itemFields.map((item, itemIndex) => (
-									<div key={item.key} className="flex flex-wrap items-center gap-2">
-										<ReportFieldRow
-											prefix="元素字段"
-											index={itemIndex}
-											field={item}
-											typeOptions={ITEM_TYPES}
-											dictionaries={dictionaries.data ?? []}
-											dictionariesLoading={dictionaries.isPending}
-											dictionariesError={dictionaries.isError}
-											deriveId={slugId}
-											onPatch={(patch) => updateItem(field.key, item.key, patch as Partial<ItemField>)}
-											onRemove={() => removeItem(field.key, item.key)}
-											removeDisabled={field.itemFields.length === 1}
-										/>
-									</div>
+							{excelTemplateFileId ? (
+								<button
+									type="button"
+									className="min-w-0 truncate text-left text-xs text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+									title="预览工作簿模板"
+									disabled={uploadingExcelTemplate || pending}
+									onClick={() => setExcelPreviewOpen(true)}
+								>
+									{excelTemplateFileName || "已关联工作簿模板"}
+								</button>
+							) : (
+								<span className="truncate text-xs text-muted-foreground">仅支持 .xlsx，最大 5 MB</span>
+							)}
+						</div>
+					</DetailRow>
+					<DetailRow label="汇总工作表" align="center" className="py-0">
+						<Select value={excelSheetName || null} onValueChange={(value) => setExcelSheetName(value ?? "")}>
+							<SelectTrigger className="h-8" aria-label="汇总工作表">
+								<SelectValue placeholder="选择工作表" />
+							</SelectTrigger>
+							<SelectContent>
+								{excelSheetNames.map((sheet) => (
+									<SelectItem key={sheet} value={sheet}>
+										{sheet}
+									</SelectItem>
 								))}
-							</div>
-						)}
-						{fieldErrors[field.key] ? <p className="text-xs text-destructive">{fieldErrors[field.key]}</p> : null}
+							</SelectContent>
+						</Select>
+					</DetailRow>
+					<DetailRow label="数据起始行" align="center" className="py-0">
+						<Input
+							aria-label="数据起始行"
+							className="h-8 max-w-32"
+							type="number"
+							min={1}
+							max={10000}
+							step={1}
+							value={excelDataStartRow}
+							onChange={(event) => setExcelDataStartRow(event.target.value)}
+						/>
+						<span className="ml-2 text-xs text-muted-foreground">从此行到最后一个非空行按数据汇总</span>
+					</DetailRow>
+					<p className="text-xs text-muted-foreground">子任务上传同结构工作簿；起始行之前的表头会保留。</p>
+				</div>
+			) : null}
+			{kind !== "EXCEL" && (
+				<div className="space-y-1.5">
+					<div className="flex items-center justify-between">
+						<span className="text-sm font-medium">
+							字段
+							<span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums">
+								{fields.length} / 100
+							</span>
+						</span>
+						<div className="flex items-center gap-1.5">
+							{!templateId ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									disabled={fields.length >= 100}
+									onClick={() => setHeaderImportOpen(true)}
+								>
+									<FileSpreadsheet className="size-3.5" />从 Excel 导入
+								</Button>
+							) : null}
+							<Button variant="outline" size="sm" disabled={fields.length >= 100} onClick={addField}>
+								添加字段
+							</Button>
+						</div>
 					</div>
-				))}
-			</div>
+					{fields.map((field, index) => (
+						// biome-ignore lint/a11y/noStaticElementInteractions: 行只承载拖放(HTML5 DnD);真正可操作的是把手与各输入框
+						<div
+							key={field.key}
+							draggable
+							onDragStart={() => setDragIndex(index)}
+							onDragEnd={() => {
+								setDragIndex(null);
+								setOverIndex(null);
+							}}
+							onDragOver={(event) => {
+								event.preventDefault();
+								setOverIndex(index);
+							}}
+							onDrop={(event) => {
+								event.preventDefault();
+								if (dragIndex !== null) reorder(dragIndex, index);
+								setDragIndex(null);
+								setOverIndex(null);
+							}}
+							className={cn(
+								"space-y-1.5 rounded-md border p-2",
+								fieldErrors[field.key] ? "border-destructive" : "border-border",
+								dragIndex === index && "opacity-50",
+								overIndex === index && dragIndex !== null && dragIndex !== index
+									? "bg-brand-faint ring-1 ring-primary/40"
+									: "",
+							)}
+						>
+							<ReportFieldRow
+								prefix="字段"
+								handle={
+									<GripVertical aria-hidden="true" className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50" />
+								}
+								index={index}
+								field={field}
+								typeOptions={FIELD_TYPES}
+								dictionaries={dictionaries.data ?? []}
+								dictionariesLoading={dictionaries.isPending}
+								dictionariesError={dictionaries.isError}
+								showAllowEmpty
+								deriveId={slugId}
+								onPatch={(patch) => update(field.key, patch as Partial<Field>)}
+								onRemove={() => setFields(fields.filter((item) => item.key !== field.key))}
+								removeDisabled={fields.length === 1}
+							/>
+							{field.type === "array" && (
+								<div className="space-y-1.5 rounded-md border border-dashed border-border p-2">
+									<div className="flex items-center justify-between gap-2">
+										<span className="text-xs font-medium text-muted-foreground">数组内的字段(至少 1 个;不带数组)</span>
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={field.itemFields.length >= 50}
+											onClick={() => addItem(field.key)}
+										>
+											添加元素字段
+										</Button>
+									</div>
+									{field.itemFields.map((item, itemIndex) => (
+										<div key={item.key} className="flex flex-wrap items-center gap-2">
+											<ReportFieldRow
+												prefix="元素字段"
+												index={itemIndex}
+												field={item}
+												typeOptions={ITEM_TYPES}
+												dictionaries={dictionaries.data ?? []}
+												dictionariesLoading={dictionaries.isPending}
+												dictionariesError={dictionaries.isError}
+												deriveId={slugId}
+												onPatch={(patch) => updateItem(field.key, item.key, patch as Partial<ItemField>)}
+												onRemove={() => removeItem(field.key, item.key)}
+												removeDisabled={field.itemFields.length === 1}
+											/>
+										</div>
+									))}
+								</div>
+							)}
+							{fieldErrors[field.key] ? <p className="text-xs text-destructive">{fieldErrors[field.key]}</p> : null}
+						</div>
+					))}
+				</div>
+			)}
 			{(!editableTemplate || error) && (
 				<p role="alert" className="text-sm text-destructive">
 					{!editableTemplate ? "模板不可用或无权编辑，请关闭后刷新。" : error}
@@ -464,6 +612,12 @@ export function TaskReportTemplateForm({
 					/>
 				</Suspense>
 			) : null}
+			<TaskReportExcelTemplatePreview
+				fileId={excelTemplateFileId}
+				fileName={excelTemplateFileName || "工作簿模板.xlsx"}
+				open={excelPreviewOpen}
+				onOpenChange={setExcelPreviewOpen}
+			/>
 		</TaskActionDialog>
 	);
 }

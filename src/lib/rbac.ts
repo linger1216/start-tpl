@@ -445,6 +445,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",
+	// 按父任务 id 分页读取直属下级,解析器先校验当前用户能读取该父任务。
+	"taskClose.taskChildrenList",
 	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
 	// 提醒对象直接取「参与人」列表(taskGet.members),不再单开候选接口
 	"taskClose.reminderHistory",
@@ -478,7 +480,10 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 	// (创建者 / 执行人在 `tc_task` 的列上,参与者 / 参与者在 `tc_member`,RBAC 的角色模型表达不了)。
 	// 等菜单建起来、权限点收窄到「谁能进任务页」时,再按页面码挪进 `PERM_BY_PATH`。
 	"taskClose.taskCreate",
+	"taskClose.taskDispatch",
 	"taskClose.reportSaveDraft",
+	"taskClose.reportSetParentParticipation",
+	"taskClose.reportClearParentDraft",
 	"taskClose.reportSubmitToParent",
 	"taskClose.reportExcelDownload",
 	"taskClose.reportExcelPreview",
@@ -551,6 +556,7 @@ export const UNMAPPED_QUERIES: readonly string[] = [
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",
+	"taskClose.taskChildrenList",
 	// 任务提醒候选人 / 记录 / 即将发生的排期,都由 resolver 限制为任务相关人员。
 	"taskClose.reminderHistory",
 	"taskClose.taskReminderSchedulePreview",

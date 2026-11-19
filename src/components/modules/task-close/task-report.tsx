@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CloudUpload, Plus, Save } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { ReportField } from "#/components/modules/task-close/report-fields";
@@ -14,10 +14,12 @@ import {
 	type Value,
 } from "#/components/modules/task-close/report-types";
 import { TaskReportExcel } from "#/components/modules/task-close/task-report-excel";
+import { TaskReportExcelFile, TaskReportExcelSummary } from "#/components/modules/task-close/task-report-excel-file";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
+import { Switch } from "#/components/ui/switch";
 import { TableResizeHandle } from "#/components/ui/table-resize-handle";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError, trpcErrorCode } from "#/lib/api/error";
@@ -26,7 +28,9 @@ import {
 	asFormValue,
 	asTableValue,
 	pasteReportGrid,
+	REPORT_ROW_ID,
 	reportRowsOf,
+	reportRowsWithIds,
 	type TaskReportSchema,
 	updateKeyedItem,
 	validateTaskReport,
@@ -35,7 +39,7 @@ import {
 import { cn } from "#/lib/utils";
 
 /** 填报与说明、自由回复独立，数据和授权都由服务端提供。 */
-export function TaskReport({ taskId, view = "main" }: { taskId: string; view?: "main" | "children" }) {
+export function TaskReport({ taskId }: { taskId: string }) {
 	const trpc = useTRPC();
 	const report = useQuery(trpc.taskClose.reportGet.queryOptions({ taskId }));
 	const [reloadKey, setReloadKey] = useState(0);
@@ -51,13 +55,39 @@ export function TaskReport({ taskId, view = "main" }: { taskId: string; view?: "
 				<p className="text-sm text-muted-foreground">无法加载填报。</p>
 			</ReportSection>
 		);
-	if (!report.data && view === "children") return null;
 	if (!report.data)
 		return (
 			<ReportSection>
 				<p className="text-sm text-muted-foreground">此任务没有配置填报。</p>
 			</ReportSection>
 		);
+	if (report.data.template.schema.kind === "EXCEL") {
+		const data = report.data;
+		const schema = data.template.schema as Omit<TaskReportSchema, "kind"> & { kind: "EXCEL" };
+		const parentControls = data.canEdit
+			? (disabled = false) => (
+					<ParentReportControls
+						taskId={taskId}
+						data={data}
+						onReload={async () => {
+							await report.refetch();
+							setReloadKey((key) => key + 1);
+						}}
+						disabled={disabled}
+					/>
+				)
+			: undefined;
+		return data.hasChildren ? (
+			<div className="grid gap-2">
+				{data.canEdit ? (
+					<TaskReportExcelFile taskId={taskId} schema={schema} data={data} parentControls={parentControls} />
+				) : null}
+				<TaskReportExcelSummary taskId={taskId} schema={schema} data={data} />
+			</div>
+		) : (
+			<TaskReportExcelFile taskId={taskId} schema={schema} data={data} />
+		);
+	}
 	if (report.data.hasChildren)
 		return (
 			<TaskReportComposed
@@ -68,10 +98,8 @@ export function TaskReport({ taskId, view = "main" }: { taskId: string; view?: "
 					setReloadKey((key) => key + 1);
 				}}
 				reloadKey={reloadKey}
-				view={view}
 			/>
 		);
-	if (view === "children") return null;
 	return (
 		<TaskReportEditor
 			key={`${report.data.report.id}:${report.data.template.id}:${reloadKey}`}
@@ -87,7 +115,7 @@ export function TaskReport({ taskId, view = "main" }: { taskId: string; view?: "
 }
 
 /**
- * 父任务填报与子任务汇总分别显示。
+ * 父级与子任务按来源合并显示;本级参与时同时保留本级记录。
  *
  * 组合行是**读时拼出来的**,不落表。数组字段**不占列**:换行 + 缩进挂在行下面单独渲染 ——
  * 放进列里会把整列撑得很宽,内容反而看不见。
@@ -97,70 +125,135 @@ function TaskReportComposed({
 	data,
 	onReload,
 	reloadKey,
-	view,
 }: {
 	taskId: string;
 	data: ReportData;
 	/** 母版编辑器冲突后的「重新载入」 */
 	onReload: () => Promise<void>;
 	reloadKey: number;
-	view: "main" | "children";
 }) {
 	const schema = data.template.schema;
+	const trpc = useTRPC();
+	const submitSummary = useMutation(
+		trpc.taskClose.reportSubmitToParent.mutationOptions({
+			onSuccess: () => toast.success("已提交给父任务"),
+			onError: toastApiError,
+		}),
+	);
 	const scalarFields = schema.fields.filter((field) => field.type !== "array");
 	const arrayFields = schema.fields.filter((field) => field.type === "array");
-	const owned = data.composed.filter((entry) => entry.owner);
-	const master = data.composed.filter((entry) => !entry.owner);
-	if (view === "children") {
-		return (
-			<ReportSection
-				title="子任务结构化填报汇总"
-				actions={<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} />}
-			>
-				{owned.length === 0 ? (
-					<p className="text-sm text-muted-foreground">还没有子任务提交填报。</p>
-				) : (
-					<>
-						<p className="text-xs text-muted-foreground">共 {owned.length} 条填报记录</p>
-						<ComposedTable
-							taskId={taskId}
-							scalarFields={scalarFields}
-							arrayFields={arrayFields}
-							rows={owned}
-							files={data.files}
-							showOwner
-						/>
-					</>
-				)}
-			</ReportSection>
-		);
-	}
+	const controls = data.canEdit
+		? (disabled = false) => <ParentReportControls taskId={taskId} data={data} onReload={onReload} disabled={disabled} />
+		: undefined;
+	const composedRows = data.composed;
 	return (
-		<>
-			{data.canEdit ? (
+		<div className="grid gap-2">
+			{data.canEdit && data.canSubmitToParent ? (
+				<p className="text-xs text-muted-foreground">本级变化需重新提交，父任务才能看到。</p>
+			) : null}
+			{data.canEdit && (data.template.schema.kind === "OBJECT" || data.parentParticipates) ? (
 				<TaskReportEditor
 					key={`master:${data.report.id}:${data.template.id}:${reloadKey}`}
 					taskId={taskId}
 					schema={schema}
 					data={data}
 					onReload={onReload}
+					parentControls={controls}
 				/>
-			) : (
-				<ReportSection>
-					{master.length === 0 ? (
+			) : null}
+			{
+				<ReportSection
+					compact
+					title="结构化填报汇总"
+					actions={
+						<div className="flex items-center gap-2">
+							{data.canEdit && data.template.schema.kind === "TABLE" && !data.parentParticipates ? controls?.() : null}
+							{data.canEdit && data.canSubmitToParent && schema.kind === "TABLE" && !data.parentParticipates ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									disabled={submitSummary.isPending}
+									onClick={() => submitSummary.mutate({ taskId })}
+								>
+									<CloudUpload className="size-3.5" />
+									{submitSummary.isPending ? "提交中…" : "提交给父任务"}
+								</Button>
+							) : null}
+							<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} />
+						</div>
+					}
+				>
+					{composedRows.length === 0 ? (
 						<p className="text-sm text-muted-foreground">暂无填报内容。</p>
 					) : (
-						<ComposedTable
-							taskId={taskId}
-							scalarFields={scalarFields}
-							arrayFields={arrayFields}
-							rows={master}
-							files={data.files}
-							showOwner={false}
-						/>
+						<>
+							<p className="text-xs text-muted-foreground">共 {composedRows.length} 条记录</p>
+							<ComposedTable
+								taskId={taskId}
+								scalarFields={scalarFields}
+								arrayFields={arrayFields}
+								rows={composedRows}
+								files={data.files}
+								showOwner
+							/>
+						</>
 					)}
 				</ReportSection>
-			)}
+			}
+		</div>
+	);
+}
+
+function ParentReportControls({
+	taskId,
+	data,
+	onReload,
+	disabled = false,
+}: {
+	taskId: string;
+	data: ReportData;
+	onReload: () => Promise<void>;
+	disabled?: boolean;
+}) {
+	const trpc = useTRPC();
+	const clear = useConfirm<Record<string, never>>();
+	const participation = useMutation(
+		trpc.taskClose.reportSetParentParticipation.mutationOptions({
+			onSuccess: async () => {
+				toast.success("汇总设置已更新");
+				await onReload();
+			},
+			onError: toastApiError,
+		}),
+	);
+	const clearDraft = useMutation(
+		trpc.taskClose.reportClearParentDraft.mutationOptions({
+			onSuccess: async () => {
+				clear.dismiss();
+				toast.success("本级填报已清空");
+				await onReload();
+			},
+			onError: toastApiError,
+		}),
+	);
+	return (
+		<>
+			<Switch
+				checked={data.parentParticipates}
+				disabled={disabled || participation.isPending || clearDraft.isPending}
+				onCheckedChange={(enabled) => participation.mutate({ taskId, enabled })}
+				label="本级参与汇总"
+			/>
+			<ActionButton disabled={disabled || clearDraft.isPending} onClick={() => clear.ask({})}>
+				清空本级填报
+			</ActionButton>
+			<clear.Dialog
+				title="清空本级填报"
+				description={() => "本级填报内容将被删除，并关闭本级参与汇总。子任务填报不受影响。"}
+				confirmText="清空"
+				pendingText="清空中…"
+				onConfirm={() => clearDraft.mutate({ taskId, revision: data.report.revision })}
+			/>
 		</>
 	);
 }
@@ -181,12 +274,17 @@ function ComposedTable({
 	files: ReportData["files"];
 	showOwner: boolean;
 }) {
-	const columnCount = Math.max(1, scalarFields.length + (showOwner ? 1 : 0));
+	const columnCount = Math.max(1, scalarFields.length + (showOwner ? 2 : 0));
 	return (
 		<div className="min-w-0 max-h-[65vh] overflow-auto rounded-md border border-border">
 			<table className="w-max min-w-full border-collapse text-left text-sm">
 				<colgroup>
-					{showOwner ? <col style={{ width: 128 }} /> : null}
+					{showOwner ? (
+						<>
+							<col style={{ width: 128 }} />
+							<col style={{ width: 112 }} />
+						</>
+					) : null}
 					{scalarFields.map((field) => (
 						<col key={field.id} style={{ width: fieldColMinWidth(field) }} />
 					))}
@@ -195,12 +293,20 @@ function ComposedTable({
 					<thead>
 						<tr className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
 							{showOwner ? (
-								<th
-									scope="col"
-									className="sticky top-0 left-0 z-30 w-32 whitespace-nowrap bg-muted/40 px-3 py-2.5 text-left font-medium"
-								>
-									执行人
-								</th>
+								<>
+									<th
+										scope="col"
+										className="sticky top-0 left-0 z-30 w-32 whitespace-nowrap bg-muted/40 px-3 py-2.5 text-left font-medium"
+									>
+										填报来源
+									</th>
+									<th
+										scope="col"
+										className="sticky top-0 z-20 whitespace-nowrap bg-muted/40 px-3 py-2.5 text-left font-medium"
+									>
+										状态
+									</th>
+								</>
 							) : null}
 							{scalarFields.map((field, index) => (
 								<th
@@ -230,7 +336,12 @@ function ComposedTable({
 											showOwner && "sticky left-0 z-10 bg-background",
 										)}
 									>
-										{entry.owner ? (entry.ownerName ?? "执行人") : "填报内容"}
+										{entry.owner ? (entry.ownerName ?? "执行人") : "本级填报"}
+									</td>
+								) : null}
+								{showOwner ? (
+									<td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
+										{entry.status === "pending" ? "待提交" : entry.status === "submitted" ? "已提交" : "本级"}
 									</td>
 								) : null}
 								{scalarFields.map((field) => (
@@ -277,15 +388,21 @@ function TaskReportEditor({
 	schema,
 	data,
 	onReload,
+	parentControls,
 }: {
 	taskId: string;
 	schema: TaskReportSchema;
 	data: ReportData;
 	/** 冲突后「重新载入」:重新拉服务端版本并重建编辑器(丢弃本地未保存内容) */
 	onReload: () => Promise<void>;
+	parentControls?: (disabled: boolean) => ReactNode;
 }) {
 	const trpc = useTRPC();
-	const [draft, setDraft] = useState<Row | Row[]>(data.report.draft as Row | Row[]);
+	const [draft, setDraft] = useState<Row | Row[]>(() =>
+		schema.kind === "TABLE"
+			? reportRowsWithIds(reportRowsOf(schema, data.report.draft), taskId, data.report.revision)
+			: (data.report.draft as Row | Row[]),
+	);
 	// 删除或异步上传需按行身份定位；按位置复用的 useStableKeys 无法保留删除后的身份。
 	const [rowKeys, setRowKeys] = useState<string[]>(() =>
 		Array.isArray(data.report.draft) ? data.report.draft.map(() => crypto.randomUUID()) : [],
@@ -400,7 +517,8 @@ function TaskReportEditor({
 		<ReportSection
 			compact
 			actions={
-				<div className="flex items-center">
+				<div className="flex flex-wrap items-center gap-1">
+					{parentControls?.(save.isPending || busy || dirty || conflicted || saveFailed)}
 					{data.canEdit ? (
 						data.canSubmitToParent ? (
 							<Button
@@ -442,6 +560,9 @@ function TaskReportEditor({
 				</div>
 			}
 		>
+			{data.canSubmitToParent && !data.hasChildren ? (
+				<p className="text-xs text-muted-foreground">本级变化需重新提交，父任务才能看到。</p>
+			) : null}
 			{conflicted && (
 				<div role="alert" className="flex items-center gap-2 text-sm text-destructive">
 					填报已被他人修改，本地内容尚未保存。
@@ -638,11 +759,14 @@ function TaskReportEditor({
 									setPage(Math.ceil((rows.length + 1) / pageSize));
 									setDraft([
 										...rows,
-										Object.fromEntries(
-											schema.fields
-												.filter((field) => field.defaultValue !== undefined)
-												.map((field) => [field.id, field.defaultValue]),
-										) as Row,
+										{
+											[REPORT_ROW_ID]: crypto.randomUUID(),
+											...Object.fromEntries(
+												schema.fields
+													.filter((field) => field.defaultValue !== undefined)
+													.map((field) => [field.id, field.defaultValue]),
+											),
+										} as Row,
 									]);
 									markDirty();
 								}}

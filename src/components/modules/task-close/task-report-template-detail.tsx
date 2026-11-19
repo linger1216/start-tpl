@@ -26,7 +26,13 @@ export function TaskReportTemplateDetail({
 			onOpenChange={onOpenChange}
 			title={`填报模板 · ${row?.name ?? ""}`}
 			description="编辑影响后续绑定；已绑定任务保留原有结构。"
-			tag={parsed?.success ? <Tag variant="outline">{parsed.data.kind === "TABLE" ? "表格" : "表单"}</Tag> : null}
+			tag={
+				parsed?.success ? (
+					<Tag variant="outline">
+						{parsed.data.kind === "TABLE" ? "表格" : parsed.data.kind === "EXCEL" ? "Excel 文件" : "表单"}
+					</Tag>
+				) : null
+			}
 			meta={row ? { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } : null}
 			onEdit={row && onEdit ? () => onEdit(row) : undefined}
 		>

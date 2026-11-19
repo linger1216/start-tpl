@@ -93,3 +93,8 @@ export async function getObjectUrl(bucket: string, objectKey: string, downloadNa
 	if (directUrl) return directUrl;
 	return (await getStorage()).presignGet(bucket, objectKey, undefined, downloadName);
 }
+
+/** 服务端业务读取私有对象字节(例如校验并合并任务 Excel);客户端仍只使用预签名 URL。 */
+export async function readObjectBytes(bucket: string, objectKey: string, maxBytes: number): Promise<Buffer> {
+	return (await getStorage()).read(bucket, objectKey, maxBytes);
+}

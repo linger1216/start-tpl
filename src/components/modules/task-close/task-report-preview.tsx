@@ -14,7 +14,14 @@ export function TaskReportPreview({ schema }: { schema: TaskReportSchema }) {
 	return (
 		<div className="space-y-3">
 			<p className="text-xs text-muted-foreground">预览只读 —— 填报时的控件与顺序即此。</p>
-			{schema.kind === "TABLE" ? (
+			{schema.kind === "EXCEL" ? (
+				<div className="grid gap-2 rounded-md border border-border p-3 text-sm">
+					<p>子任务上传 Excel 工作簿；系统保留模板表头并合并数据行。</p>
+					<p className="text-muted-foreground">
+						汇总工作表：{schema.excel?.sheetName} · 数据从第 {schema.excel?.dataStartRow} 行开始
+					</p>
+				</div>
+			) : schema.kind === "TABLE" ? (
 				<div className="overflow-x-auto rounded-md border">
 					<Table>
 						<TableHeader>

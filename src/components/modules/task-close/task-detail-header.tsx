@@ -34,12 +34,14 @@ export function TaskDetailHeader({
 	hasMoreActions,
 	canTransfer,
 	canManage,
+	canDispatch,
 	showRefresh,
 	refreshing,
 	onApprove,
 	onSetStatus,
 	onConsult,
 	onTransfer,
+	onDispatch,
 	onEdit,
 	onRemove,
 	onRefresh,
@@ -61,6 +63,7 @@ export function TaskDetailHeader({
 	statusOptions: readonly { value: string; label: string }[];
 	hasMoreActions: boolean;
 	canTransfer: boolean;
+	canDispatch: boolean;
 	/** 创建者或管理员:编辑 + 删除(判据与服务端 `assertCanManage` 同一口径) */
 	canManage: boolean;
 	showRefresh: boolean;
@@ -69,6 +72,7 @@ export function TaskDetailHeader({
 	onSetStatus: (value: string) => void;
 	onConsult: () => void;
 	onTransfer: () => void;
+	onDispatch: () => void;
 	onEdit: () => void;
 	onRemove: () => void;
 	onRefresh: () => void;
@@ -116,9 +120,7 @@ export function TaskDetailHeader({
 							<DocDot />
 							<span>
 								创建人
-								<Tag className="ml-1.5 font-medium">
-									{task.creatorName ?? PLACEHOLDER_EMPTY}
-								</Tag>
+								<Tag className="ml-1.5 font-medium">{task.creatorName ?? PLACEHOLDER_EMPTY}</Tag>
 							</span>
 							<Tag variant="outline" className={`border-transparent ${priorityToneOf(task.priority)}`}>
 								{priorityLabelOf(task.priority)}
@@ -128,6 +130,11 @@ export function TaskDetailHeader({
 
 					{/* 右上动作组(收敛到 4 组):ⓘ + 主动作(发起审批/改状态取一) + 发起征询 + 更多▾;刷新殿后 */}
 					<div className="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
+						{canDispatch ? (
+							<Button variant="outline" size="sm" onClick={onDispatch}>
+								下发子任务
+							</Button>
+						) : null}
 						{/* 「为什么有这些按钮」—— 悬停 / 聚焦展开:当前身份 + 事项流程给这个身份的边,方便复核 */}
 						<InfoTooltip
 							icon={<Info className="size-3.5" />}

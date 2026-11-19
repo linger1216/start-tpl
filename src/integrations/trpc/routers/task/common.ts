@@ -16,6 +16,7 @@ import { isAdminUser } from "#/lib/casbin";
 import { newId } from "#/lib/ids";
 import { cancelPendingNotifications, createNotification, publishNotice } from "#/lib/notification";
 import { alive } from "#/lib/soft-delete";
+import { bucketFor, readObjectBytes } from "#/lib/storage";
 import type { TaskLogEvent } from "#/lib/task/close-log";
 import {
 	isTerminalStatusOf,
@@ -159,6 +160,20 @@ export async function assertAttachments(tx: Tx, attachIds: readonly string[]): P
 	}
 }
 
+/** 读取已确认的私有 XLSX 文件,并在进入解压器前校验桶、后缀和大小。 */
+export async function readTaskExcelFile(reader: Pick<typeof db, "select">, fileId: string): Promise<Buffer> {
+	const [file] = await reader
+		.select()
+		.from(sysFile)
+		.where(and(eq(sysFile.id, fileId), eq(sysFile.status, 1)))
+		.limit(1);
+	if (!file || file.bucket !== bucketFor("private") || file.ext?.toLowerCase() !== "xlsx")
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Excel 文件不存在、未上传完成或格式不受支持" });
+	if (Number(file.size) > 5 * 1024 * 1024)
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Excel 文件不能超过 5 MB" });
+	return readObjectBytes(file.bucket, file.object_key, 5 * 1024 * 1024);
+}
+
 /** 文件元数据统一投影；历史 Excel 仍可显示已删除附件的原名。 */
 export async function attachmentRows(reader: Reader, ids: readonly string[], includeInactive = false) {
 	const uniq = [...new Set(ids.filter(Boolean))];
@@ -231,13 +246,20 @@ export async function assertTaskParticipant(task: TaskRow, meId: string, message
  */
 async function isTaskReadable(task: TaskRow, meId: string): Promise<boolean> {
 	if (await isTaskParticipant(task, meId)) return true;
-	if (!task.parent_id) return false;
-	const [parent] = await db.select().from(taskTable).where(eq(taskTable.id, task.parent_id)).limit(1);
-	return parent ? isTaskParticipant(parent, meId) : false;
+	let parentId = task.parent_id;
+	const visited = new Set<string>();
+	while (parentId && !visited.has(parentId)) {
+		visited.add(parentId);
+		const [parent] = await db.select().from(taskTable).where(eq(taskTable.id, parentId)).limit(1);
+		if (!parent) return false;
+		if (await isTaskParticipant(parent, meId)) return true;
+		parentId = parent.parent_id;
+	}
+	return false;
 }
 
-export async function assertTaskReadable(task: TaskRow, meId: string): Promise<void> {
-	if (!(await isTaskReadable(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message: "无权查看这条任务" });
+export async function assertTaskReadable(task: TaskRow, meId: string, message = "无权查看这条任务"): Promise<void> {
+	if (!(await isTaskReadable(task, meId))) throw new TRPCError({ code: "FORBIDDEN", message });
 }
 
 /** 这个人在这条任务上是不是**参与者**(`tc_member` 里有一行)—— 执行人是 `tc_task.executor_id`,不在本判据里 */

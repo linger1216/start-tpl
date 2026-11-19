@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { fromBuffer } from "yauzl";
 import { formatLocalDateTime, parseLocalDateText, parseLocalDateTime } from "../time";
 import { isRecord } from "./json";
+import { writeStyledReportWorkbook } from "./report-excel-styles";
 import { MAX_REPORT_FILE_BYTES, MAX_REPORT_ROWS, type TaskReportSchema, validateTaskReport } from "./report-spec";
 
 const MAX_UNPACKED = 20 * 1024 * 1024;
@@ -19,6 +20,76 @@ const REPORT_SHEETS = {
 	data: "填报",
 	readable: "填报(可读)",
 } as const;
+
+/** Excel 类型填报:以模板指定工作表与数据起始行为界,追加所有子任务的非空数据行。 */
+export async function mergeTaskExcelWorkbooks(
+	templateBuffer: Buffer,
+	childBuffers: readonly Buffer[],
+	sheetName: string,
+	dataStartRow: number,
+): Promise<Buffer> {
+	if (!Number.isInteger(dataStartRow) || dataStartRow < 1 || dataStartRow > MAX_ROWS)
+		throw new Error(`数据起始行必须是 1 到 ${MAX_ROWS} 之间的整数`);
+	if (childBuffers.length > 1000) throw new Error("参与汇总的文件过多");
+	await inspectArchive(templateBuffer);
+	const readWorkbook = async (buffer: Buffer) => {
+		await inspectArchive(buffer);
+		let workbook: XLSX.WorkBook;
+		try {
+			workbook = XLSX.read(buffer, {
+				type: "buffer",
+				cellFormula: true,
+				cellDates: false,
+				bookVBA: true,
+				sheetRows: MAX_ROWS + 1,
+			});
+		} catch {
+			throw new Error("无法解析 XLSX 文件");
+		}
+		if (workbook.vbaraw) throw new Error("不支持带宏的工作簿");
+		const sheet = workbook.Sheets[sheetName];
+		if (!sheet) throw new Error(`工作簿里找不到「${sheetName}」工作表`);
+		const range = XLSX.utils.decode_range(sheet["!fullref"] ?? sheet["!ref"] ?? "A1:A1");
+		if (range.e.r >= MAX_ROWS || range.e.c >= MAX_COLUMNS) throw new Error("工作表行列超过限制");
+		for (const [address, cell] of Object.entries(sheet))
+			if (!address.startsWith("!") && (cell.f || cell.F || cell.l)) throw new Error("不支持公式或链接单元格");
+		return { workbook, sheet, range };
+	};
+	const base = await readWorkbook(templateBuffer);
+	const headerRows =
+		dataStartRow === 1
+			? []
+			: XLSX.utils.sheet_to_json<unknown[]>(base.sheet, {
+					header: 1,
+					defval: null,
+					raw: true,
+					range: { s: { r: 0, c: 0 }, e: { r: dataStartRow - 2, c: base.range.e.c } },
+				});
+	const normalizedHeaders = JSON.stringify(headerRows);
+	const rows: unknown[][] = [];
+	for (const childBuffer of childBuffers) {
+		const child = await readWorkbook(childBuffer);
+		const childHeaders =
+			dataStartRow === 1
+				? []
+				: XLSX.utils.sheet_to_json<unknown[]>(child.sheet, {
+						header: 1,
+						defval: null,
+						raw: true,
+						range: { s: { r: 0, c: 0 }, e: { r: dataStartRow - 2, c: child.range.e.c } },
+					});
+		if (child.range.e.c !== base.range.e.c || JSON.stringify(childHeaders) !== normalizedHeaders)
+			throw new Error("上传文件的工作表结构与模板不一致");
+		const matrix = XLSX.utils.sheet_to_json<unknown[]>(child.sheet, { header: 1, defval: null, raw: true });
+		for (const row of matrix.slice(dataStartRow - 1)) {
+			if (row.some((value) => value !== null && value !== undefined && value !== "")) rows.push(row);
+		}
+	}
+	if (rows.length > MAX_ROWS - dataStartRow + 1) throw new Error("汇总数据超过行数上限");
+	const result = await writeStyledReportWorkbook(templateBuffer, sheetName, dataStartRow, rows, base.range.e.c);
+	if (result.length > MAX_REPORT_FILE_BYTES) throw new Error("汇总工作簿超过 5 MB");
+	return result;
+}
 
 /** 先逐项解压并累计实际字节，再交给 XLSX 解析，防止伪造尺寸的压缩炸弹。 */
 async function inspectArchive(buffer: Buffer): Promise<void> {
@@ -181,6 +252,7 @@ export function createReportWorkbook(
 		owners?: ReadonlyArray<string | null>;
 	} = {},
 ): Buffer {
+	if (schema.kind === "EXCEL") throw new Error("Excel 类型请下载原始工作簿模板");
 	const { readable = false, fileNames = {}, owners } = options;
 	// 值一律按**行数组**处理(OBJECT 也只是一个对象的数组);父任务组合行同样是数组
 	const rows: Array<Record<string, unknown>> = Array.isArray(data)
@@ -211,6 +283,7 @@ export function createReportWorkbook(
 }
 
 export async function previewReportWorkbook(schema: TaskReportSchema, fileBase64: string) {
+	if (schema.kind === "EXCEL") throw new Error("Excel 类型请直接上传工作簿文件");
 	if (fileBase64.length > Math.ceil(MAX_REPORT_FILE_BYTES / 3) * 4 + 8 || !/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64))
 		throw new Error("文件编码或大小无效");
 	const buffer = Buffer.from(fileBase64, "base64");

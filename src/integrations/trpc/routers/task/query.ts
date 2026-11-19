@@ -21,6 +21,7 @@ import { z } from "zod";
 import { db } from "#/db";
 import {
 	sysFile,
+	sysUser,
 	taskActionTable,
 	taskCommentTable,
 	taskLogTable,
@@ -32,6 +33,7 @@ import {
 import { alive } from "#/lib/soft-delete";
 import { getObjectUrl } from "#/lib/storage";
 import { DUE_SOON_MS, isTerminalStatusOf, statusesOf, terminalStatusValues } from "#/lib/task/close-spec";
+import { isRecord } from "#/lib/task/json";
 import { parseBlocks } from "#/lib/task/payload";
 import { executorReminderEvents, executorReminderRuleSchema, readTaskReminderConfig } from "#/lib/task/reminder-spec";
 import { reportAttachmentIds, reportRowsOf } from "#/lib/task/report-spec";
@@ -93,6 +95,8 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null, executorName: st
 	description: row.description,
 	payload: row.payload,
 	workflow: row.workflow as WorkflowPayload,
+	/** 任务创建时固定的填报结构快照,详情页分派范围编辑使用。 */
+	reportSchema: (row.report as { schema?: unknown } | null)?.schema ?? null,
 	reminderConfig: readTaskReminderConfig(row.reminder_config),
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
@@ -159,38 +163,23 @@ const toAction = (row: ActionRow, nameOf: Map<string, string>) => ({
 /**
  * 任务树(根 + 它的全部子任务)。
  *
- * 内容区只合并当前用户可读的任务，避免子任务成员看到父任务或兄弟任务的私有内容。
+ * 当前任务通过权限检查后，祖先可读取当前节点的整棵后代树。
  */
-async function familyTasks(task: TaskRow, userId: string): Promise<TaskRow[]> {
-	const rootId = task.parent_id ?? task.id;
-	const rows = await db
-		.select()
-		.from(taskTable)
-		.where(and(or(eq(taskTable.id, rootId), eq(taskTable.parent_id, rootId)), alive(taskTable)))
-		.orderBy(asc(taskTable.created_at));
-	if (await isAdminOf({ id: userId })) return rows;
-	const memberships = await db
-		.select({ taskId: taskMemberTable.task_id })
-		.from(taskMemberTable)
-		.where(
-			and(
-				eq(taskMemberTable.user_id, userId),
-				inArray(
-					taskMemberTable.task_id,
-					rows.map((row) => row.id),
-				),
-			),
-		);
-	const memberIds = new Set(memberships.map((row) => row.taskId));
-	const root = rows.find((row) => row.id === rootId);
-	const canReadRoot = root && (root.creator_id === userId || memberIds.has(root.id));
-	return rows.filter(
-		(row) =>
-			row.creator_id === userId ||
-			row.executor_id === userId ||
-			memberIds.has(row.id) ||
-			(row.parent_id === rootId && canReadRoot),
-	);
+async function familyTasks(task: TaskRow): Promise<TaskRow[]> {
+	const rows: TaskRow[] = [task];
+	let frontier = [task.id];
+	while (frontier.length) {
+		const children = await db
+			.select()
+			.from(taskTable)
+			.where(and(inArray(taskTable.parent_id, frontier), alive(taskTable)))
+			.orderBy(asc(taskTable.created_at));
+		if (!children.length) break;
+		rows.push(...children);
+		frontier = children.map((row) => row.id);
+	}
+	// `task` 本身已通过 assertTaskReadable 鉴权；授权后整棵后代树对该祖先可见。
+	return rows;
 }
 
 /** 当前用户参与的任务 id 子查询。 */
@@ -264,8 +253,12 @@ async function permissionsOf(task: TaskRow, meId: string) {
 		isParticipant,
 		/** 我能发起「不改状态」的 action(征询)—— 相关方且任务未结束 */
 		canInitiateConsult: isParticipant && !isTerminalStatusOf(statusesOf(task.workflow), task.status),
+		canDispatch: (isAdmin || task.executor_id === meId) && !isTerminalStatusOf(statusesOf(task.workflow), task.status),
+		canViewReport: true,
 		/** 创建者或管理员可以管理任务、成员,也可以删任务 —— 与服务端 `assertCanManage` 同一判据 */
 		canManage: isAdmin || isCreator,
+		/** 父任务创建者、当前执行人或管理员可管理直属子任务。 */
+		canRemoveChildren: isAdmin || isCreator || isExecutor,
 		canTransfer: isAdmin || task.executor_id === meId,
 	};
 }
@@ -306,11 +299,12 @@ export const taskQueryRouter = createTRPCRouter({
 		)
 		.query(async ({ ctx, input }) => {
 			const me = requireCurrentUser(ctx);
+			const isAdmin = await isAdminOf(me);
 			const page = input?.page ?? 1;
 			const pageSize = input?.pageSize ?? 20;
 
 			const conds: (SQL | undefined)[] = [alive(taskTable)];
-			if (!(await isAdminOf(me))) {
+			if (!isAdmin) {
 				const memberTaskIds = myMemberTaskIds(db, me.id);
 				conds.push(
 					or(
@@ -414,6 +408,14 @@ export const taskQueryRouter = createTRPCRouter({
 				.orderBy(desc(taskTable.created_at), desc(taskTable.id))
 				.limit(pageSize)
 				.offset((page - 1) * pageSize);
+			const parentIds = [...new Set(rows.flatMap((row) => (row.parent_id ? [row.parent_id] : [])))];
+			const parentRows = parentIds.length
+				? await db
+						.select({ id: taskTable.id, creatorId: taskTable.creator_id, executorId: taskTable.executor_id })
+						.from(taskTable)
+						.where(inArray(taskTable.id, parentIds))
+				: [];
+			const parentById = new Map(parentRows.map((row) => [row.id, row]));
 			const nameOf = await nameMapOf(rows.map((row) => row.creator_id));
 			// 卡面「发给谁」:执行人(挂在 tc_member 上,不在任务行上)
 			const executorNameOf = await executorNamesOf(rows.map((row) => row.id));
@@ -442,6 +444,11 @@ export const taskQueryRouter = createTRPCRouter({
 					...toTaskBrief(row, nameOf.get(row.creator_id) ?? null),
 					childCount: childCounts.get(row.id) ?? 0,
 					hasMyAction: pendingSet.has(row.id),
+					canRemove:
+						isAdmin ||
+						row.creator_id === me.id ||
+						parentById.get(row.parent_id ?? "")?.creatorId === me.id ||
+						parentById.get(row.parent_id ?? "")?.executorId === me.id,
 					/** 这条派给谁 —— 卡面顶行显示;没有执行人(fan-out 的父任务是分派容器)时为 null */
 					executorName: executorNameOf.get(row.id) ?? null,
 				})),
@@ -515,7 +522,7 @@ export const taskQueryRouter = createTRPCRouter({
 
 		// 内容区(块)+ 附件区**按整棵树取并集**:子任务传的附件 / 加的链接,父任务看得到,反之亦然。
 		// `own` 那两个只给编辑弹窗用 —— 弹窗存回去的是「这条任务自己的」,不把别人的内容克隆一份。
-		const family = await familyTasks(task, me.id);
+		const family = await familyTasks(task);
 		const ownLinks = parseBlocks((task.payload as { links?: unknown } | null)?.links);
 		const ownAttachments = await resolveAttachments(attachmentIdsOf(task.payload));
 		const links = [
@@ -532,7 +539,8 @@ export const taskQueryRouter = createTRPCRouter({
 			.select()
 			.from(taskTable)
 			.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)))
-			.orderBy(asc(taskTable.created_at));
+			.orderBy(asc(taskTable.created_at))
+			.limit(20);
 		const childNameOf = await nameMapOf(childRows.map((row) => row.creator_id));
 		// 子任务「发给谁」:每条 fan-out 子任务各有一名执行人 —— 卡面要能一眼认出是谁的活
 		const childExecutorNameOf = await executorNamesOf(childRows.map((row) => row.id));
@@ -562,6 +570,7 @@ export const taskQueryRouter = createTRPCRouter({
 				/** 发给谁 —— 一眼看得出这条是给谁干的 */
 				executorName: childExecutorNameOf.get(row.id) ?? null,
 			})),
+			childrenCount: await childCountOf([task.id]).then((counts) => counts.get(task.id) ?? 0),
 			members: memberRows.map((row) => toMember(row, nameOf)),
 			actions: actionRows.map((row) => toAction(row, nameOf)),
 			reached: reached.map((row) => ({ status: row.status, at: row.at?.toISOString() ?? null })),
@@ -570,6 +579,56 @@ export const taskQueryRouter = createTRPCRouter({
 			meId: me.id,
 		};
 	}),
+
+	taskChildrenList: protectedProcedure
+		.input(z.object({ taskId: ID, ...pageInput, keyword: z.string().trim().max(100).optional() }))
+		.query(async ({ ctx, input }) => {
+			const me = requireCurrentUser(ctx);
+			const task = await getTaskRow(input.taskId);
+			await assertTaskReadable(task, me.id);
+			const page = input.page ?? 1;
+			const pageSize = Math.min(input.pageSize ?? 20, 50);
+			const conditions = [eq(taskTable.parent_id, task.id), alive(taskTable)];
+			if (input.keyword) {
+				const matchingUsers = await db
+					.select({ id: sysUser.id })
+					.from(sysUser)
+					.where(and(like(sysUser.name, `%${input.keyword}%`), alive(sysUser)));
+				const search = or(
+					like(taskTable.name, `%${input.keyword}%`),
+					inArray(
+						taskTable.executor_id,
+						matchingUsers.map((row) => row.id),
+					),
+				);
+				if (search) conditions.push(search);
+			}
+			const where = and(...conditions);
+			const [rows, totalRows] = await Promise.all([
+				db
+					.select()
+					.from(taskTable)
+					.where(where)
+					.orderBy(asc(taskTable.created_at))
+					.limit(pageSize)
+					.offset((page - 1) * pageSize),
+				db.select({ n: count() }).from(taskTable).where(where),
+			]);
+			const names = await nameMapOf(rows.map((row) => row.creator_id));
+			const executorNames = await executorNamesOf(rows.map((row) => row.id));
+			const childCounts = await childCountOf(rows.map((row) => row.id));
+			return {
+				items: rows.map((row) => ({
+					...toTaskBrief(row, names.get(row.creator_id) ?? null),
+					executorId: row.executor_id,
+					childCount: childCounts.get(row.id) ?? 0,
+					executorName: executorNames.get(row.id) ?? null,
+				})),
+				total: Number(totalRows[0]?.n ?? 0),
+				page,
+				pageSize,
+			};
+		}),
 
 	/**
 	 * 任务附件的取地址(预览 / 下载)—— **只放行挂在这条任务上的文件**。
@@ -586,7 +645,7 @@ export const taskQueryRouter = createTRPCRouter({
 			const task = await getTaskRow(input.taskId);
 			const me = requireCurrentUser(ctx);
 			await assertTaskReadable(task, me.id);
-			const family = await familyTasks(task, me.id);
+			const family = await familyTasks(task);
 			let owned = family.some((row) => attachmentIdsOf(row.payload).includes(input.fileId));
 			if (!owned) {
 				const comments = await db
@@ -602,16 +661,24 @@ export const taskQueryRouter = createTRPCRouter({
 				if (snapshot && typeof snapshot === "object" && "reportId" in snapshot) {
 					const { schema } = await getTaskReportTemplate(task);
 					const report = await reportRowOf(db, task.id);
-					owned = reportAttachmentIds(schema, reportRowsOf(schema, report?.draft)).includes(input.fileId);
-					// 父任务还要能预览**子任务已提交**的填报附件(与 reportGet 同口径:只看 `synced` 非空的)
+					const excelContains = (value: unknown) =>
+						isRecord(value) &&
+						(value.fileId === input.fileId || (Array.isArray(value.fileIds) && value.fileIds.includes(input.fileId)));
+					owned =
+						schema.kind === "EXCEL"
+							? excelContains(report?.draft)
+							: reportAttachmentIds(schema, reportRowsOf(schema, report?.draft)).includes(input.fileId);
+					// 父级仅能读取直属子任务提交快照中引用的填报文件。
 					if (!owned) {
-						const submitted = await db
-							.select({ payload: taskReportTable.synced })
+						const childReports = await db
+							.select({ draft: taskReportTable.draft, synced: taskReportTable.synced })
 							.from(taskReportTable)
 							.innerJoin(taskTable, eq(taskTable.id, taskReportTable.task_id))
-							.where(and(eq(taskTable.parent_id, task.id), alive(taskTable), isNotNull(taskReportTable.synced)));
-						owned = submitted.some((row) =>
-							reportAttachmentIds(schema, reportRowsOf(schema, row.payload)).includes(input.fileId),
+							.where(and(eq(taskTable.parent_id, task.id), alive(taskTable)));
+						owned = childReports.some((row) =>
+							schema.kind === "EXCEL"
+								? excelContains(row.synced)
+								: reportAttachmentIds(schema, reportRowsOf(schema, row.synced)).includes(input.fileId),
 						);
 					}
 				}

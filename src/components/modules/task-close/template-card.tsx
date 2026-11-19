@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
@@ -133,17 +133,24 @@ export function TemplateCard({
 				{badge}
 				<div className="relative z-10 flex shrink-0 items-center gap-3">
 					{canEdit && <ActionButton onClick={onEdit}>编辑</ActionButton>}
-					{canRemove && (
-						<ActionButton tone="danger" onClick={onDelete}>
-							删除
-						</ActionButton>
-					)}
 				</div>
 			</div>
 			<p className="mt-1 line-clamp-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
 			<div className="mt-1 min-h-0 flex-1 overflow-hidden">{preview}</div>
-			<div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+			<div className="relative z-10 mt-auto flex min-w-0 flex-wrap items-center gap-1.5 border-t border-border/60 pt-2 text-xs text-muted-foreground">
 				{meta}
+				{canRemove ? (
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						className="ml-auto size-7 shrink-0 text-muted-foreground hover:text-destructive"
+						aria-label={`删除模板：${name}`}
+						title="删除模板"
+						onClick={onDelete}
+					>
+						<Trash2 className="size-3.5" aria-hidden />
+					</Button>
+				) : null}
 			</div>
 		</Card>
 	);

@@ -85,8 +85,15 @@ const taskReportFieldSchema = z.object({
 export const taskReportSchema = z
 	.object({
 		id: fieldId,
-		kind: z.enum(["OBJECT", "TABLE"]),
-		fields: z.array(taskReportFieldSchema).min(1).max(100),
+		kind: z.enum(["OBJECT", "TABLE", "EXCEL"]),
+		fields: z.array(taskReportFieldSchema).max(100),
+		excel: z
+			.object({
+				templateFileId: z.string().trim().min(1).max(32),
+				sheetName: z.string().trim().min(1).max(31),
+				dataStartRow: z.number().int().min(1).max(10000),
+			})
+			.optional(),
 		rules: z
 			.array(
 				z.object({
@@ -100,6 +107,15 @@ export const taskReportSchema = z
 			.default([]),
 	})
 	.superRefine((schema, ctx) => {
+		if (schema.kind === "EXCEL") {
+			if (!schema.excel) ctx.addIssue({ code: "custom", path: ["excel"], message: "Excel 类型必须配置工作簿模板" });
+			if (schema.fields.length > 0 || schema.rules.length > 0)
+				ctx.addIssue({ code: "custom", path: ["fields"], message: "Excel 类型不配置结构化字段" });
+			return;
+		}
+		if (schema.fields.length === 0)
+			ctx.addIssue({ code: "custom", path: ["fields"], message: "表单或表格至少配置一个字段" });
+		if (schema.excel) ctx.addIssue({ code: "custom", path: ["excel"], message: "只有 Excel 类型可以配置工作簿模板" });
 		const ids = new Set(schema.fields.map((field) => field.id));
 		if (ids.size !== schema.fields.length) ctx.addIssue({ code: "custom", message: "字段标识不能重复" });
 		for (const [index, field] of schema.fields.entries()) {
@@ -156,6 +172,25 @@ type TaskReportIssue = { row: number | null; field: string; message: string };
 /** 填报值 / 行 —— **唯一真源**(界面与只读区都从这里 import) */
 export type ReportValue = string | number | boolean | string[] | Array<Record<string, ReportValue>> | null;
 export type ReportRow = Record<string, ReportValue>;
+export const REPORT_ROW_ID = "__rowId";
+
+/** 为历史表格行提供可重复的内部身份;保存和下发时会一并持久化。 */
+export function reportRowsWithIds<T extends Record<string, unknown>>(
+	rows: readonly T[],
+	taskId: string,
+	revision: number,
+): Array<T & { [REPORT_ROW_ID]: string }> {
+	const seen = new Set<string>();
+	return rows.map((row, index) => {
+		const existing = row[REPORT_ROW_ID];
+		const id =
+			typeof existing === "string" && existing.length > 0 && !seen.has(existing)
+				? existing
+				: `legacy:${taskId}:${revision}:${index}`;
+		seen.add(id);
+		return { ...row, [REPORT_ROW_ID]: id };
+	});
+}
 
 /**
  * 填报值 → **行数组**(统一形状):表格就是它本身,表单包成单行。
@@ -163,7 +198,16 @@ export type ReportRow = Record<string, ReportValue>;
  * 全模块只此一处做「值 ↔ 行」的形状归一 —— 校验、附件提取、父子组合、导出都按行数组走。
  */
 export function reportRowsOf(schema: TaskReportSchema, payload: unknown): ReportRow[] {
-	if (schema.kind === "TABLE") return (Array.isArray(payload) ? payload : []) as ReportRow[];
+	if (schema.kind === "EXCEL") return [];
+	if (schema.kind === "TABLE")
+		return (
+			Array.isArray(payload)
+				? payload
+				: isRecord(payload) && Array.isArray(payload.__records)
+					? payload.__records.filter(isRecord)
+					: []
+		) as ReportRow[];
+	if (isRecord(payload) && Array.isArray(payload.__records)) return payload.__records.filter(isRecord) as ReportRow[];
 	return isRecord(payload) ? [payload as ReportRow] : [];
 }
 
@@ -382,6 +426,7 @@ export const MAX_REPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 /** 实时保存即整份校验,只有空表豁免(空表 = 撤销提交);返回可定位的错误。 */
 export function validateTaskReport(schema: TaskReportSchema, value: unknown): TaskReportIssue[] {
+	if (schema.kind === "EXCEL") return [];
 	const rows = schema.kind === "TABLE" ? value : [value];
 	if (!Array.isArray(rows) || rows.length > MAX_REPORT_ROWS || (schema.kind === "TABLE" && rows.length === 0))
 		return [{ row: null, field: "", message: "填报行数无效" }];
@@ -410,7 +455,7 @@ export function validateTaskReport(schema: TaskReportSchema, value: unknown): Ta
 				comparable && (rule.op === "eq" ? left === right : rule.op === "lte" ? left <= right : left >= right);
 			if (!valid) add(index, rule.left, rule.message);
 		}
-		const allowed = new Set(schema.fields.map((field) => field.id));
+		const allowed = new Set([...schema.fields.map((field) => field.id), "__rowId"]);
 		for (const key of Object.keys(row)) if (!allowed.has(key)) add(index, key, "未知字段");
 	}
 	return issues;
@@ -429,46 +474,4 @@ export function rowMatchesFilter(row: unknown, filter: ReadonlyArray<{ field: st
 	if (!isRecord(row)) return false;
 	const record = row;
 	return filter.every((condition) => (record[condition.field] ?? null) === condition.value);
-}
-
-/** 组合行 + 归属:父任务展示用。`owner !== null` 的行由该子任务的执行人提交。 */
-type ComposedRow = {
-	row: Record<string, unknown>;
-	owner: string | null;
-	ownerName: string | null;
-};
-
-/** 一个子任务在父任务视图里的贡献(它已提交的那一版)。 */
-type ReportContribution = {
-	taskId: string;
-	ownerName: string | null;
-	/** 该子任务的数据范围;空 = 认领全部母版行(表格填报) */
-	filter: ReadonlyArray<{ field: string; value: unknown }>;
-	/** 该子任务已提交的行 */
-	rows: readonly unknown[];
-	/**
-	 * 是否**认领**母版行 —— 只有表格填报认领(表单没有行可切,它的内容追加在母版之后)。
-	 * 提交了空表 = 撤销提交 ⇒ 不认领、也不追加,母版原样保留。
-	 */
-	claims: boolean;
-};
-
-/**
- * 父任务展示视图 = 母版行(不属于任何子任务范围)+ 各子任务已提交的行,每行带归属。
- *
- * - 表格:子任务认领自己范围内的母版行(范围为空 = 认领全部),那些行被它提交的内容替换;
- * - 表单:不认领母版行,内容追加在母版之后;
- * - 没提交 / 提交了空表的子任务:什么都不做。
- *
- * 只追加、不覆盖 —— 范围重叠时两个子任务的内容都在,父任务能看到同一行出现两次(不会互相盖掉)。
- */
-export function composeRows(master: readonly unknown[], children: readonly ReportContribution[]): ComposedRow[] {
-	const owned = (row: unknown) => children.some((child) => child.claims && rowMatchesFilter(row, child.filter));
-	const out: ComposedRow[] = master
-		.filter((row) => !owned(row))
-		.map((row) => ({ row: row as Record<string, unknown>, owner: null, ownerName: null }));
-	for (const child of children)
-		for (const row of child.rows)
-			out.push({ row: row as Record<string, unknown>, owner: child.taskId, ownerName: child.ownerName });
-	return out;
 }

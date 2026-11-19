@@ -204,7 +204,8 @@ function ReportTemplateCard({
 			}
 			description={
 				<>
-					{def.kind === "TABLE" ? "表格填报" : "表单填报"} · {def.fields.length} 个字段
+					{def.kind === "TABLE" ? "表格填报" : def.kind === "EXCEL" ? "Excel 文件填报" : "表单填报"}
+					{def.kind === "EXCEL" ? "" : ` · ${def.fields.length} 个字段`}
 				</>
 			}
 			preview={
