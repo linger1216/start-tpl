@@ -203,38 +203,20 @@ export function TaskForm({
 	);
 	/** 数据范围:key = 执行人 id(没选执行人时用 `""` 表示任务本身);不配 = 全部数据 */
 	const [rules, setRules] = useState<Record<string, { field: string; value: string }>>({});
-	const [name, setName] = useState("");
-	const [description, setDescription] = useState("");
-	const [due, setDue] = useState("");
+	const [name, setName] = useState(() => editing?.name ?? "");
+	const [description, setDescription] = useState(() => editing?.description ?? "");
+	const [due, setDue] = useState(() => toDateInput(editing?.dueAt));
 	/** `null` = 未设置;`0|1|2` = P0/P1/P2。DB 列是 tinyint,运行时是 number */
-	const [reminderConfig, setReminderConfig] = useState<TaskReminderConfig>(() =>
-		taskReminderConfigSchema.parse(undefined),
+	const [reminderConfig, setReminderConfig] = useState<TaskReminderConfig>(
+		() => editing?.reminderConfig ?? taskReminderConfigSchema.parse(undefined),
 	);
-	const [priority, setPriority] = useState<number | null>(null);
-	const [workflowId, setWorkflowId] = useState("");
+	const [priority, setPriority] = useState<number | null>(() => editing?.priority ?? null);
+	const [workflowId, setWorkflowId] = useState(() => (editing ? "" : (workflowOptions[0]?.value ?? "")));
 	const [executorIds, setExecutorIds] = useState<string[]>([]);
-	const [links, setLinks] = useState<TaskLinkBlock[]>([]);
-	const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+	const [links, setLinks] = useState<TaskLinkBlock[]>(() => editing?.links ?? []);
+	const [attachments, setAttachments] = useState<TaskAttachment[]>(() => editing?.attachments ?? []);
 	/** 预览已保存任务的附件 */
 	const preview = useAttachmentPreview<TaskAttachment>(editing?.id);
-
-	// 打开时回填;模板缺省取第一个,避免"没选模板点保存"这种可避免的报错
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 打开时取一次初始值，后台刷新不能覆盖用户输入
-	useEffect(() => {
-		if (!open) return;
-		setName(editing?.name ?? "");
-		setDescription(editing?.description ?? "");
-		setDue(toDateInput(editing?.dueAt));
-		setPriority(editing?.priority ?? null);
-		setReminderConfig(editing?.reminderConfig ?? taskReminderConfigSchema.parse(undefined));
-		setWorkflowId(editing ? "" : (workflowOptions[0]?.value ?? ""));
-		setExecutorIds([]);
-		setReportTemplateId("");
-		setFold({ report: false, links: false, attach: false, reminder: false });
-		resetReportRule();
-		setLinks(editing?.links ?? []);
-		setAttachments(editing?.attachments ?? []);
-	}, [open]);
 
 	// 流程列表可能在弹窗打开后才返回，只补尚未选择的默认值。
 	useEffect(() => {

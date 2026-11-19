@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BlockHeader } from "#/components/modules/task-close/block-header";
-import { InspectorSection } from "#/components/modules/task-close/inspector-section";
+import { BlockHeader, InspectorSection } from "#/components/modules/task-close/block-header";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { ActionButton } from "#/components/ui/action-button";
 import { useTRPC } from "#/integrations/trpc/react";

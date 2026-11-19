@@ -32,7 +32,13 @@ import {
 } from "#/db/data-base-schema";
 import { alive } from "#/lib/soft-delete";
 import { getObjectUrl } from "#/lib/storage";
-import { DUE_SOON_MS, isTerminalStatusOf, statusesOf, terminalStatusValues } from "#/lib/task/close-spec";
+import {
+	DUE_SOON_MS,
+	isTerminalStatusOf,
+	statusesOf,
+	statusLabelOf,
+	terminalStatusValues,
+} from "#/lib/task/close-spec";
 import { isRecord } from "#/lib/task/json";
 import { parseBlocks } from "#/lib/task/payload";
 import { executorReminderEvents, executorReminderRuleSchema, readTaskReminderConfig } from "#/lib/task/reminder-spec";
@@ -74,6 +80,7 @@ const toTaskBrief = (row: TaskRow, creatorName: string | null) => ({
 	/** 卡片页要显示两行摘要;详情与列表共用这一份投影,不另开接口 */
 	description: row.description,
 	status: row.status,
+	statusLabel: statusLabelOf(statusesOf(row.workflow), row.status),
 	creatorId: row.creator_id,
 	creatorName,
 	dueAt: row.due_at ? row.due_at.toISOString() : null,
@@ -273,8 +280,7 @@ export const taskQueryRouter = createTRPCRouter({
 	 */
 	taskList: protectedProcedure
 		.input(
-			z
-				.object({
+			z.object({
 					status: STATUS_VALUE.optional(),
 					/** 按流程模板筛 —— 各模板的状态互不相同,界面用它替代了全局状态筛选 */
 					workflowId: ID.optional(),

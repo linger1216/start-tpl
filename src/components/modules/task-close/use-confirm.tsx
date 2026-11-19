@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
 
 /**
  * 「破坏性操作的二次确认」状态机 —— 7 处手写 `useState<T|null> + open + onOpenChange` 收成一处。

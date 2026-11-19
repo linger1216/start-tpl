@@ -3,6 +3,9 @@
 import { Building2, CalendarClock, Flag, KeyRound, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
+import { FileDropzone } from "#/components/modules/shared/file-dropzone";
+import { FilterChipBar, type FilterChipGroup } from "#/components/modules/shared/filter-chips";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Cell, Group } from "#/components/modules/workbench/ui-gallery-layout";
 import { ModuleGallery } from "#/components/modules/workbench/ui-gallery-modules";
@@ -24,7 +27,6 @@ import { Calendar } from "#/components/ui/calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "#/components/ui/collapsible";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { DatePicker } from "#/components/ui/date-picker";
 import { DateRangePicker } from "#/components/ui/date-range-picker";
 import { DetailRow } from "#/components/ui/detail-row";
@@ -47,8 +49,6 @@ import {
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
-import { FileDropzone } from "#/components/ui/file-dropzone";
-import { FilterChipBar, type FilterChipGroup } from "#/components/ui/filter-chips";
 import { Input } from "#/components/ui/input";
 import { InputNumber } from "#/components/ui/input-number";
 import { JsonBlock } from "#/components/ui/json-block";

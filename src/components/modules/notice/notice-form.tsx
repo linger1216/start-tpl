@@ -1,8 +1,6 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import {
@@ -16,6 +14,7 @@ import {
 	DialogTitle,
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
+import { MultiSelect } from "#/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { NOTICE_LEVELS, type NoticeLevel } from "#/lib/notice-levels";
 import { NOTICE_BODY_MAX, NOTIFICATION_TITLE_MAX } from "#/lib/notification-status";

@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { MultiSelectOption } from "#/components/modules/shared/multi-select";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
+import type { MultiSelectOption } from "#/components/ui/multi-select";
 import { TagList } from "#/components/ui/tag-list";
 import { useTRPC } from "#/integrations/trpc/react";
 import { cn } from "#/lib/utils";

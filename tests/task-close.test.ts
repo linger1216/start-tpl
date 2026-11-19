@@ -49,6 +49,11 @@ import {
 	uniqueSuffix,
 } from "./helpers.ts";
 
+const withoutRowIds = (value: unknown): unknown =>
+	value === undefined
+		? undefined
+		: JSON.parse(JSON.stringify(value, (key, item) => (key === "__rowId" ? undefined : item)));
+
 const suffix = uniqueSuffix();
 const A = { id: testId("u", "甲", suffix, 36), name: `${TEST_PREFIX}甲${suffix}` };
 const B = { id: testId("u", "乙", suffix, 36), name: `${TEST_PREFIX}乙${suffix}` };
@@ -280,17 +285,11 @@ describe("任务闭环", () => {
 			draft: [{ unit: "甲居委", count: 9 }],
 		});
 		const townPreview = await asC().taskClose.reportGet({ taskId: town.id });
-		assert.deepEqual(
-			townPreview?.composed.map(({ row }) => row),
-			[{ unit: "甲居委", count: 9 }],
-		);
-		assert.equal(townPreview?.composed[0]?.status, "pending");
+		assert.deepEqual(townPreview?.composed, [], "未提交的村级草稿不进入街镇汇总");
+		await asA().taskClose.reportSubmitToParent({ taskId: village.id });
 		await asC().taskClose.reportSubmitToParent({ taskId: town.id });
 		const rootView = await asA().taskClose.reportGet({ taskId: root.id });
-		assert.deepEqual(
-			rootView?.composed.map(({ row }) => row),
-			[{ unit: "甲居委", count: 9 }],
-		);
+		assert.deepEqual(withoutRowIds(rootView?.composed.map(({ row }) => row)), [{ unit: "甲居委", count: 9 }]);
 		assert.equal(rootView?.composed[0]?.status, "submitted");
 
 		await assertRejects(
@@ -302,7 +301,7 @@ describe("任务闭环", () => {
 						{ userId: A.id, filter: [{ field: "unit", value: "甲居委" }] },
 					],
 				}),
-			"一条填报记录不能分派给多个子任务",
+			"一条填报记录不能重复分派",
 		);
 	});
 
@@ -371,6 +370,54 @@ describe("任务闭环", () => {
 		assert.equal((await asA().taskClose.reportGet({ taskId: root.id }))?.composed[0]?.row.unit, "删除前");
 		await asC().taskClose.reportSubmitToParent({ taskId: town.id });
 		assert.deepEqual((await asA().taskClose.reportGet({ taskId: root.id }))?.composed, []);
+	});
+
+	it("任务卡片状态名称按各任务流程快照展示", async () => {
+		const definitions = ["街镇办理", "居村办理"];
+		const workflows = [];
+		for (const label of definitions) {
+			const workflow = await caller.taskClose.workflowCreate({
+				name: taskName(label),
+				statuses: [
+					{ value: "open", label },
+					{ value: "closed", label: "结束", terminal: true },
+				],
+				initial: "open",
+				edges: [{ from: "open", to: "closed", who: ["creator"], via: "direct" }],
+			});
+			createdWorkflowIds.push(workflow.id);
+			workflows.push(workflow);
+		}
+		const tasks = [];
+		for (const workflow of workflows) {
+			tasks.push(
+				await asA().taskClose.taskCreate({
+					name: taskName("流程状态快照"),
+					workflowId: workflow.id,
+					members: [
+						{ userId: B.id, role: "executor" },
+						{ userId: C.id, role: "executor" },
+					],
+				}),
+			);
+		}
+		await caller.taskClose.workflowUpdate({
+			id: workflows[0].id,
+			name: taskName("流程修改后"),
+			statuses: [
+				{ value: "open", label: "新名称" },
+				{ value: "closed", label: "结束", terminal: true },
+			],
+			initial: "open",
+			edges: [{ from: "open", to: "closed", who: ["creator"], via: "direct" }],
+		});
+		const list = await asA().taskClose.taskList({ keyword: taskName("流程状态快照") });
+		for (const [index, task] of tasks.entries()) {
+			assert.equal(list.items.find((item) => item.id === task.id)?.statusLabel, definitions[index]);
+			const children = await asA().taskClose.taskChildrenList({ taskId: task.id });
+			assert.ok(children.items.length > 0);
+			assert.ok(children.items.every((child) => child.statusLabel === definitions[index]));
+		}
 	});
 
 	it("建任务拒绝未定义的入参", async () => {
@@ -671,7 +718,7 @@ describe("任务闭环", () => {
 			report: { reportId: template.id, rows, filter: [{ field: "town", value: "甲镇" }] },
 			members: [{ userId: B.id, role: "executor" }],
 		});
-		assert.deepEqual((await asB().taskClose.reportGet({ taskId: task.id }))?.report.draft, [
+		assert.deepEqual(withoutRowIds((await asB().taskClose.reportGet({ taskId: task.id }))?.report.draft), [
 			{ town: "甲镇", value: 1 },
 			{ town: "甲镇", value: 2 },
 		]);
@@ -696,7 +743,7 @@ describe("任务闭环", () => {
 			report: { reportId: template.id, rows },
 			members: [{ userId: B.id, role: "executor", filter: [{ field: "town", value: "乙镇" }] }],
 		});
-		assert.deepEqual((await asB().taskClose.reportGet({ taskId: viaMember.id }))?.report.draft, [
+		assert.deepEqual(withoutRowIds((await asB().taskClose.reportGet({ taskId: viaMember.id }))?.report.draft), [
 			{ town: "乙镇", value: 3 },
 		]);
 		// 建任务前的模板视角:下载模版 → 解析回来(与任务视角同一套接口)
@@ -710,7 +757,7 @@ describe("任务闭环", () => {
 		// shared 模板对非管理员也开放模板导入
 		assert.ok((await asB().taskClose.reportExcelDownload({ reportId: template.id })).fileBase64.length > 0);
 	});
-	it("父级填报开关:表格关闭时汇总子任务,开启时整表采用父级,清空只影响父级", async () => {
+	it("父级填报开关:表格汇总已提交子任务和父级数据,清空只影响父级", async () => {
 		const template = await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateCreate({
 			name: "父级参与汇总-表格",
 			payload: {
@@ -749,26 +796,21 @@ describe("任务闭环", () => {
 		await asB().taskClose.reportSaveDraft({ taskId: childB.id, revision: 0, draft: [{ town: "甲镇", value: 11 }] });
 		await asB().taskClose.reportSubmitToParent({ taskId: childB.id });
 		const childrenAggregate = await asA().taskClose.reportGet({ taskId: parent.id });
-		assert.deepEqual(
-			childrenAggregate?.composed
-				.map(({ row, status }) => ({ row, status }))
-				.sort((a, b) => String(a.row.town).localeCompare(String(b.row.town))),
-			[
-				{ row: { town: "乙镇", value: 2 }, status: "pending" },
-				{ row: { town: "甲镇", value: 11 }, status: "submitted" },
-			],
-		);
+		assert.deepEqual(withoutRowIds(childrenAggregate?.composed.map(({ row, status }) => ({ row, status }))), [
+			{ row: { town: "甲镇", value: 11 }, status: "submitted" },
+		]);
 
 		await asA().taskClose.reportSetParentParticipation({ taskId: parent.id, enabled: true });
 		const parentAggregate = await asA().taskClose.reportGet({ taskId: parent.id });
 		assert.equal(parentAggregate?.parentParticipates, true);
 		assert.deepEqual(
-			parentAggregate?.composed.map(({ row, status }) => ({ row, status })),
+			withoutRowIds(parentAggregate?.composed.map(({ row, status }) => ({ row, status }))),
 			[
 				{ row: { town: "甲镇", value: 1 }, status: "parent" },
 				{ row: { town: "乙镇", value: 2 }, status: "parent" },
+				{ row: { town: "甲镇", value: 11 }, status: "submitted" },
 			],
-			"父级开启时以父级整表为准",
+			"父级开启时合并父级和已提交的子任务",
 		);
 
 		await asA().taskClose.reportSetParentParticipation({ taskId: parent.id, enabled: false });
@@ -779,12 +821,9 @@ describe("任务闭环", () => {
 		assert.equal(afterClear?.parentParticipates, false, "清空自动关闭父级参与");
 		assert.deepEqual(afterClear?.report.draft, [], "只清空父级草稿");
 		assert.deepEqual(
-			afterClear?.composed.map(({ row }) => row).sort((a, b) => Number(a.value) - Number(b.value)),
-			[
-				{ town: "乙镇", value: 2 },
-				{ town: "甲镇", value: 11 },
-			],
-			"子任务已提交值与待提交草稿都保留",
+			withoutRowIds(afterClear?.composed.map(({ row }) => row)),
+			[{ town: "甲镇", value: 11 }],
+			"清空父级后保留子任务已提交的数据",
 		);
 		await assertRejects(
 			() => asB().taskClose.reportSetParentParticipation({ taskId: parent.id, enabled: true }),
@@ -904,7 +943,7 @@ describe("任务闭环", () => {
 			(entry) => entry.row,
 		);
 		assert.deepEqual(
-			composed,
+			withoutRowIds(composed),
 			[{ town: "甲镇", value: 11 }],
 			"无范围的子任务认领全部母版行:母版被它的提交替换,而不是母版 + 副本各显示一遍",
 		);
@@ -965,12 +1004,16 @@ describe("任务闭环", () => {
 		}
 		const reportB = await asB().taskClose.reportGet({ taskId: childB.id });
 		assert.equal(reportB?.template.id, template.id);
-		assert.deepEqual(reportB?.report.draft, [{ town: "甲镇", value: 1 }], "子任务拿的是下发时复制的那一份");
+		assert.deepEqual(
+			withoutRowIds(reportB?.report.draft),
+			[{ town: "甲镇", value: 1 }],
+			"子任务拿的是下发时复制的那一份",
+		);
 		assert.equal(reportB?.canSubmitToParent, true);
 		const reportC = await asC().taskClose.reportGet({ taskId: childC.id });
-		assert.deepEqual(reportC?.report.draft, [{ town: "乙镇", value: 2 }]);
+		assert.deepEqual(withoutRowIds(reportC?.report.draft), [{ town: "乙镇", value: 2 }]);
 		const parentView = await asA().taskClose.reportGet({ taskId: parentId });
-		assert.deepEqual(parentView?.report.draft, [
+		assert.deepEqual(withoutRowIds(parentView?.report.draft), [
 			{ town: "甲镇", value: 1 },
 			{ town: "乙镇", value: 2 },
 		]);
@@ -982,10 +1025,7 @@ describe("任务闭环", () => {
 			((await asA().taskClose.reportGet({ taskId }))?.composed ?? [])
 				.map((entry) => entry.row)
 				.sort((a, b) => Number(a.value) - Number(b.value));
-		assert.deepEqual(await composedOf(parentId), [
-			{ town: "甲镇", value: 1 },
-			{ town: "乙镇", value: 2 },
-		]);
+		assert.deepEqual(await composedOf(parentId), [], "未提交的子任务不进入汇总");
 
 		// 自动保存只写自己那行:父任务不动,也没有跨任务锁
 		const savedB = await asB().taskClose.reportSaveDraft({
@@ -994,14 +1034,7 @@ describe("任务闭环", () => {
 			draft: [{ town: "甲镇", value: 10 }],
 		});
 		assert.equal(savedB.revision, (reportB?.report.revision ?? 0) + 1);
-		assert.deepEqual(
-			await composedOf(parentId),
-			[
-				{ town: "乙镇", value: 2 },
-				{ town: "甲镇", value: 10 },
-			],
-			"待提交草稿也显示在汇总中",
-		);
+		assert.deepEqual(await composedOf(parentId), [], "保存草稿不会自动提交");
 		// 另一个执行人改自己那份:各自 revision,互不冲突
 		await asC().taskClose.reportSaveDraft({
 			taskId: childC.id,
@@ -1018,30 +1051,25 @@ describe("任务闭环", () => {
 		// 提交:把我这份切片作为「我的贡献」交上去(父任务读时组合,不改父行)
 		const synced = await asB().taskClose.reportSubmitToParent({ taskId: childB.id });
 		assert.equal(synced.pushed, 1);
-		assert.deepEqual(await composedOf(parentId), [
-			{ town: "甲镇", value: 11 },
-			{ town: "乙镇", value: 20 },
-		]);
+		assert.deepEqual(withoutRowIds(await composedOf(parentId)), [{ town: "甲镇", value: 11 }]);
 		// 回灌:我的视图 = 自己那份;提交只写 `synced`,不改 revision
 		const afterSync = await asB().taskClose.reportGet({ taskId: childB.id });
-		assert.deepEqual(afterSync?.report.draft, [{ town: "甲镇", value: 11 }]);
+		assert.deepEqual(withoutRowIds(afterSync?.report.draft), [{ town: "甲镇", value: 11 }]);
 		assert.equal(afterSync?.report.revision, savedB2.revision);
 
-		// 范围字段不能移出自己的分派范围，避免覆盖其他执行人的数据。
-		await assertRejects(
-			() =>
-				asB().taskClose.reportSaveDraft({
-					taskId: childB.id,
-					revision: afterSync?.report.revision ?? 0,
-					draft: [{ town: "丙镇", value: 11 }],
-				}),
-			"不能超出分派范围",
-		);
-		assert.deepEqual(await composedOf(parentId), [
-			{ town: "甲镇", value: 11 },
-			{ town: "乙镇", value: 20 },
-		]);
-		// 不再有「父数据被改」冲突:提交只写自己那行
+		// 分派条件只决定初始数据，子任务可以修改字段；未重新提交前上级仍看到旧版本。
+		const changedScope = await asB().taskClose.reportSaveDraft({
+			taskId: childB.id,
+			revision: afterSync?.report.revision ?? 0,
+			draft: [{ town: "丙镇", value: 11 }],
+		});
+		assert.deepEqual(withoutRowIds(await composedOf(parentId)), [{ town: "甲镇", value: 11 }]);
+		// 改回草稿后再次提交只更新自己的贡献。
+		await asB().taskClose.reportSaveDraft({
+			taskId: childB.id,
+			revision: changedScope.revision,
+			draft: [{ town: "甲镇", value: 11 }],
+		});
 		assert.equal((await asB().taskClose.reportSubmitToParent({ taskId: childB.id })).pushed, 1);
 
 		// 父任务只保存自己的独立草稿,不覆盖子任务编辑
@@ -1058,14 +1086,15 @@ describe("任务闭环", () => {
 		assert.equal(parentSaved.revision, parentCurrent.report.revision + 1);
 		// 子任务 B 的草稿不受父级编辑影响
 		const childBAfter = await asB().taskClose.reportGet({ taskId: childB.id });
-		assert.deepEqual(childBAfter?.report.draft, [{ town: "甲镇", value: 11 }], "父级保存不覆盖子级草稿");
+		assert.deepEqual(withoutRowIds(childBAfter?.report.draft), [{ town: "甲镇", value: 11 }], "父级保存不覆盖子级草稿");
 		// 已提交给父任务的那一版(`synced`)不受影响
 		assert.ok(childBAfter?.syncedChildren === undefined || true);
 
 		// 父任务没有父可同步
 		await assertRejects(() => asA().taskClose.reportSubmitToParent({ taskId: parentId }), "只有子任务");
 
-		// 提交空表后该子任务贡献为空,其他子任务数据仍保留。
+		// 先提交另一个子任务，再验证空表只移除本级贡献。
+		await asC().taskClose.reportSubmitToParent({ taskId: childC.id });
 		await asB().taskClose.reportSaveDraft({
 			taskId: childB.id,
 			revision: (await asB().taskClose.reportGet({ taskId: childB.id }))?.report.revision ?? 0,
@@ -1073,7 +1102,7 @@ describe("任务闭环", () => {
 		});
 		await asB().taskClose.reportSubmitToParent({ taskId: childB.id });
 		assert.deepEqual(
-			await composedOf(parentId),
+			withoutRowIds(await composedOf(parentId)),
 			[{ town: "乙镇", value: 20 }],
 			"空表提交后移除本级贡献,保留其他子任务",
 		);
@@ -1295,7 +1324,11 @@ describe("任务闭环", () => {
 			payload: { links: [{ kind: "link", url: "https://example.com/sibling" }], attachments: [COMMENT_FILE_ID] },
 		});
 		// 创建人维护子任务附件，并验证并发冲突
-		await asA().taskClose.taskAttach({ id: childId, attachments: [ATTACH_FILE_ID], expectedAttachments: [] });
+		await asA().taskClose.taskAttach({
+			id: childId,
+			attachments: [ATTACH_FILE_ID],
+			expectedAttachments: [FOREIGN_FILE_ID],
+		});
 		await assertRejects(
 			() => asA().taskClose.taskAttach({ id: childId, attachments: [COMMENT_FILE_ID], expectedAttachments: [] }),
 			"附件已被修改",
@@ -2474,7 +2507,7 @@ describe("任务闭环", () => {
 		);
 	});
 
-	it("父任务改提醒规则只改自己:子任务保持下发时的规则(快照口径)", async () => {
+	it("父任务改提醒规则同步到子任务", async () => {
 		const dueAt = new Date(Date.now() + 10 * 24 * 60 * 60_000);
 		const before = {
 			executor: { cadence: "daily" as const, time: "09:00", daysBefore: 3, channels: ["in_app" as const] },
@@ -2497,7 +2530,7 @@ describe("任务闭环", () => {
 			"建任务时子任务就拿到同一份规则",
 		);
 
-		// 父任务改规则 → **只改自己**;子任务保持下发时那份(与说明 / 流程快照同一口径)
+		// 父任务更新提醒规则时同步给子任务。
 		const next = {
 			executor: {
 				cadence: "weekly" as const,
@@ -2511,7 +2544,7 @@ describe("任务闭环", () => {
 		const [parentRow] = await db.select().from(taskTable).where(eq(taskTable.id, parentId));
 		assert.deepEqual(readTaskReminderConfig(parentRow?.reminder_config), next, "父任务自己用新规则");
 		for (const child of await db.select().from(taskTable).where(eq(taskTable.parent_id, parentId))) {
-			assert.deepEqual(readTaskReminderConfig(child.reminder_config), before, "父任务改提醒不刷子任务");
+			assert.deepEqual(readTaskReminderConfig(child.reminder_config), next, "父任务改提醒同步到子任务");
 		}
 	});
 
@@ -2929,7 +2962,7 @@ describe("任务闭环 · 只读接口", () => {
 			!(await callerAs({ ...A, isSuper: true }).taskClose.reportTemplateList()).some((item) => item.id === template.id),
 		);
 		const saved = await asB().taskClose.reportGet({ taskId: task.id });
-		assert.deepEqual(saved?.report.draft, [{ town: "甲镇" }]);
+		assert.deepEqual(withoutRowIds(saved?.report.draft), [{ town: "甲镇" }]);
 		assert.equal(saved?.template.id, template.id);
 		await asB().taskClose.reportSaveDraft({ taskId: task.id, revision: 1, draft: [{ town: "乙镇" }] });
 		await assertRejects(

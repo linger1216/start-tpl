@@ -72,7 +72,12 @@ export function TaskComments({
 
 	const listQuery = useQuery(trpc.taskClose.commentList.queryOptions({ taskId }));
 	// 评论也会进活动日志(`tc_log`)—— 失效要连日志一起,否则「动态」卡还停在发评论之前
-	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
+	const invalidate = async () => {
+		await Promise.all([
+			queryClient.invalidateQueries(trpc.taskClose.commentList.queryFilter({ taskId })),
+			queryClient.invalidateQueries(trpc.taskClose.logList.queryFilter({ taskId })),
+		]);
+	};
 	const mention = useMentionPicker(participants, setContent, textRef);
 
 	const createMutation = useMutation(

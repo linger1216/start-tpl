@@ -56,6 +56,7 @@ pnpm db:minio:init    # 建桶 + 公开桶只读策略 + tmp/ 生命周期
 
 **`biome.json` 是唯一权威**(`.editorconfig` 只是与它对齐):**Tab 缩进**、双引号、`lineWidth 120`;导入别名**只用 `#/*`**(`@/*` 已移除)。
 `src/components/ui/` 是 vendored 目录,有一条 scoped override —— **不要在里面顺手修 lint**;改配置,不改组件代码。
+**分层口径**(目录表见 `doc/界面约定.md`):`ui/` = 基础**控件**(单一交互元素,或项目改写的原语本身;自研控件也放这儿);由控件拼成、带结构 / 空态 / 流程的「**部件**」(含带产品默认文案的外壳,如 `shared/confirm-dialog` / `shared/detail-dialog`)归 `components/modules/shared/`。
 
 ## 硬规矩(每一条都不能越过)
 

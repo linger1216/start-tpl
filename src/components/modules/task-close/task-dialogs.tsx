@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { DepartmentUserSelect } from "#/components/modules/shared/department-user-select";
-import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { AttachmentChips, TaskAttachmentAddButton } from "#/components/modules/task-close/task-content-attachments";
 import { Alert } from "#/components/ui/alert";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
+import { MultiSelect } from "#/components/ui/multi-select";
 import { SearchSelect, type SearchSelectOption } from "#/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";

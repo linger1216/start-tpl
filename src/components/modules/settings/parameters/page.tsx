@@ -8,12 +8,12 @@ import { PARA_EXCEL_COLUMNS, paraExcelRows } from "#/components/modules/settings
 import { type ParameterFormPayload, SettingsParametersForm } from "#/components/modules/settings/parameters/form";
 import { type ParameterRow, parameterColumns } from "#/components/modules/settings/parameters/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";

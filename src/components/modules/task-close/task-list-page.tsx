@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import { EmptyState } from "#/components/layout/empty-state";
 import { PageFrame } from "#/components/layout/page-frame";
 import { PageHeader } from "#/components/layout/page-header";
+import { FilterChipBar, type FilterChipGroup } from "#/components/modules/shared/filter-chips";
 import { PaginationControl } from "#/components/modules/shared/pagination-control";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { AsyncState } from "#/components/modules/task-close/async-state";
@@ -25,7 +26,6 @@ import { useConfirm } from "#/components/modules/task-close/use-confirm";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import { DateRangePicker, type DateRangeValue } from "#/components/ui/date-range-picker";
-import { FilterChipBar, type FilterChipGroup } from "#/components/ui/filter-chips";
 import { Input } from "#/components/ui/input";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
@@ -33,10 +33,10 @@ import { writeSuccess } from "#/hooks/use-ledger-write";
 import { PAGE_SIZE_KEY, parsePageSize, useFilterPrefs, useParaRaw } from "#/hooks/use-para-prefs";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
-import { priorityLabelOf, priorityToneOf, statusesOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
+import { priorityLabelOf, priorityToneOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
 
 /**
- * 快速筛选的三组 —— 形态由 `ui/filter-chips` 统一,这里只给**语义**:
+ * 快速筛选的三组 —— 形态由 `shared/filter-chips` 统一,这里只给**语义**:
  * 组内单选还是多选、每个选项叫什么、选中时什么颜色。
  *
  * - 优先级:多选(P0/P1/P2 可同时开),颜色与任务卡片上的优先级徽章同色(同一哈希口径)
@@ -90,11 +90,11 @@ export function TaskListPage() {
 	const [keyword, setKeyword] = useState("");
 	const [workflowId, setWorkflowId] = useState("all");
 	/** 创建时间筛选:区间(本地日期,空 = 不限);形态全站统一走 `ui/date-range-picker` */
-	const [createdRange, setCreatedRange] = useState<DateRangeValue>({});
+	const [timeRange, setTimeRange] = useState<DateRangeValue>({});
 	/**
 	 * 快速筛选 —— 三组,统一成「每组一个选中值数组」(单选组最多一个,多选组可多个):
 	 * `priority` 优先级(多选)· `deadline` 期限(临期 / 超期 互斥)· `scope` 范围(两个独立开关)。
-	 * 形态全站统一走 `ui/filter-chips`,不再各页手写一排小按钮。
+	 * 形态全站统一走 `shared/filter-chips`,不再各页手写一排小按钮。
 	 */
 	const [quick, setQuick] = useState<Record<string, string[]>>({ priority: [], deadline: [], scope: ["mine"] });
 	const [page, setPage] = useState(1);
@@ -107,12 +107,12 @@ export function TaskListPage() {
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
 	const startTime = useMemo(
-		() => (createdRange.from ? new Date(`${createdRange.from}T00:00:00`) : undefined),
-		[createdRange.from],
+		() => (timeRange.from ? new Date(`${timeRange.from}T00:00:00`) : undefined),
+		[timeRange.from],
 	);
 	const endTime = useMemo(
-		() => (createdRange.to ? new Date(`${createdRange.to}T23:59:59.999`) : undefined),
-		[createdRange.to],
+		() => (timeRange.to ? new Date(`${timeRange.to}T23:59:59.999`) : undefined),
+		[timeRange.to],
 	);
 
 	const listQuery = useQuery(
@@ -143,21 +143,6 @@ export function TaskListPage() {
 		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
 		[usersQuery.data],
 	);
-
-	/**
-	 * 列表投影**不带状态图快照** —— 所以用**所有模板状态清单的并集**建 `value → label`,
-	 * 给卡片上的状态徽章用(同一个 value 取第一个出现的中文名)。筛选已改按流程模板:
-	 * 各模板的状态互不相同,全局状态筛选没有意义。
-	 */
-	const statusLabels = useMemo(() => {
-		const map = new Map<string, string>();
-		for (const row of workflowsQuery.data ?? []) {
-			const statuses = statusesOf(row.payload);
-			for (const item of statuses) if (!map.has(item.value)) map.set(item.value, item.label);
-		}
-		return map;
-	}, [workflowsQuery.data]);
-	const labelOf = (value: string) => statusLabels.get(value) ?? value;
 
 	const workflowFilterOptions = useMemo(
 		() => [{ value: "all", label: "全部流程" }, ...workflowOptions],
@@ -222,7 +207,7 @@ export function TaskListPage() {
 	const filtering =
 		keyword.trim().length > 0 ||
 		workflowId !== "all" ||
-		Boolean(createdRange.from || createdRange.to) ||
+		Boolean(timeRange.from || timeRange.to) ||
 		QUICK_GROUPS.some((group) => (quick[group.key] ?? []).length > 0 && group.key !== "scope") ||
 		!quick.scope.includes("mine") ||
 		quick.scope.includes("pending");
@@ -230,7 +215,7 @@ export function TaskListPage() {
 	const clearFilters = () => {
 		setKeyword("");
 		setWorkflowId("all");
-		setCreatedRange({});
+		setTimeRange({});
 		setQuick({ priority: [], deadline: [], scope: ["mine"] });
 		setPage(1);
 	};
@@ -352,20 +337,15 @@ export function TaskListPage() {
 				</Select>
 				{/* 创建时间区间:全站唯一形态 —— `ui/date-range-picker`(快捷范围在浮层里,不再另做一套) */}
 				<DateRangePicker
-					value={createdRange}
+					value={timeRange}
 					onChange={(next) => {
-						setCreatedRange(next);
+						setTimeRange(next);
 						setPage(1);
 					}}
 					placeholder="时间区间"
 				/>
 			</div>
 
-			{/*
-			  快捷筛选:一排**文字按钮**,点一下就过滤(再点取消)。
-			  — 优先级可多选(P0/P1/P2);临期 / 超期 互斥(都是"期限压力",同时成立没有意义);
-			  — 待我处理 / 只看与我相关 原来是开关,改成同一排文字按钮,保持一致。
-			*/}
 			<FilterChipBar
 				title="快速筛选"
 				collapsible
@@ -398,7 +378,6 @@ export function TaskListPage() {
 							{item.canRemove ? (
 								<TaskCard
 									task={item}
-									statusLabel={labelOf}
 									action={
 										<Button
 											variant="ghost"
@@ -414,7 +393,7 @@ export function TaskListPage() {
 								/>
 							) : (
 								<TaskCardLink task={item} className="block h-full">
-									<TaskCard task={item} statusLabel={labelOf} />
+									<TaskCard task={item} />
 								</TaskCardLink>
 							)}
 						</div>
@@ -431,15 +410,17 @@ export function TaskListPage() {
 				// 免得放出点了没反应的按钮(要去参数页改)
 			/>
 
-			<TaskForm
-				open={createOpen}
-				onOpenChange={setCreateOpen}
-				pending={createMutation.isPending}
-				editing={null}
-				workflowOptions={workflowOptions}
-				userOptions={userOptions}
-				onCreate={submit}
-			/>
+			{createOpen ? (
+				<TaskForm
+					open={createOpen}
+					onOpenChange={setCreateOpen}
+					pending={createMutation.isPending}
+					editing={null}
+					workflowOptions={workflowOptions}
+					userOptions={userOptions}
+					onCreate={submit}
+				/>
+			) : null}
 
 			<removeTask.Dialog
 				title="删除任务"

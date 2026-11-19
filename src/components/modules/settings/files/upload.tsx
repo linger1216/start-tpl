@@ -1,6 +1,7 @@
 import { Check, FileText, HardDrive, Plus, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FileDropzone } from "#/components/modules/shared/file-dropzone";
 import { Button } from "#/components/ui/button";
 import {
 	DIALOG_FIT,
@@ -11,7 +12,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
-import { FileDropzone } from "#/components/ui/file-dropzone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import { useParaRaw } from "#/hooks/use-para-prefs";

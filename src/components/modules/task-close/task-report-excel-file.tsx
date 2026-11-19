@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CloudUpload, Download, FileSpreadsheet, Upload } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ReportSection } from "#/components/modules/task-close/report-section";
 import type { ReportData } from "#/components/modules/task-close/report-types";
@@ -9,7 +9,7 @@ import { useAttachmentPreview } from "#/components/modules/task-close/use-attach
 import { Button } from "#/components/ui/button";
 import { useFileUpload } from "#/hooks/use-file-upload";
 import { useTRPC } from "#/integrations/trpc/react";
-import { toastApiError } from "#/lib/api/error";
+import { toastApiError, trpcErrorCode } from "#/lib/api/error";
 import { formatBytes } from "#/lib/format";
 import { isRecord } from "#/lib/task/json";
 import { MAX_REPORT_FILE_BYTES, type TaskReportSchema } from "#/lib/task/report-spec";
@@ -32,28 +32,43 @@ export function TaskReportExcelFile({
 	const client = useQueryClient();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const { upload } = useFileUpload();
-	const [fileId, setFileId] = useState(() =>
-		isRecord(data.report.draft) && typeof data.report.draft.fileId === "string" ? data.report.draft.fileId : "",
-	);
-	const [revision, setRevision] = useState(data.report.revision);
+	const [snapshot, setSnapshot] = useState(() => ({
+		fileId: isRecord(data.report.draft) && typeof data.report.draft.fileId === "string" ? data.report.draft.fileId : "",
+		revision: data.report.revision,
+	}));
+	const { fileId, revision } = snapshot;
+	const [pendingFile, setPendingFile] = useState<{ id: string; name: string } | null>(null);
+	const [conflicted, setConflicted] = useState(false);
 	const [uploading, setUploading] = useState(false);
-	useEffect(() => setRevision(data.report.revision), [data.report.revision]);
+	const remoteChanged = data.report.revision > revision;
 	const file = data.files.find((item) => item.id === fileId);
 	const preview = useAttachmentPreview<ReportData["files"][number]>(taskId);
 	const save = useMutation(
 		trpc.taskClose.reportSaveDraft.mutationOptions({
-			onSuccess: async (result) => {
-				setRevision(result.revision);
+			onSuccess: async (result, variables) => {
+				const draft = variables.draft;
+				setSnapshot({
+					revision: result.revision,
+					fileId: isRecord(draft) && typeof draft.fileId === "string" ? draft.fileId : "",
+				});
+				setPendingFile(null);
+				setConflicted(false);
 				await client.invalidateQueries(trpc.taskClose.reportGet.queryFilter({ taskId }));
 				toast.success("Excel 填报已保存");
 			},
-			onError: toastApiError,
+			onError: (error) => {
+				if (trpcErrorCode(error) === "CONFLICT") setConflicted(true);
+				toastApiError(error);
+			},
 		}),
 	);
 	const submit = useMutation(
 		trpc.taskClose.reportSubmitToParent.mutationOptions({
 			onSuccess: async ({ pushed }) => {
-				await client.invalidateQueries(trpc.taskClose.pathFilter());
+				await Promise.all([
+					client.invalidateQueries(trpc.taskClose.reportGet.queryFilter()),
+					client.invalidateQueries(trpc.taskClose.logList.queryFilter({ taskId })),
+				]);
 				toast.success(`已提交 ${pushed} 个工作簿给父任务`);
 			},
 			onError: toastApiError,
@@ -77,13 +92,27 @@ export function TaskReportExcelFile({
 			toast.error(result.message);
 			return;
 		}
-		setFileId(result.row.id);
+		setPendingFile({ id: result.row.id, name: next.name });
 		try {
 			await save.mutateAsync({ taskId, revision, draft: { fileId: result.row.id } });
 		} catch {
-			setFileId(
-				isRecord(data.report.draft) && typeof data.report.draft.fileId === "string" ? data.report.draft.fileId : "",
-			);
+			/* 保留所选文件，供重新载入后重试。 */
+		}
+	};
+	const reloadSnapshot = async () => {
+		try {
+			const latest = await client.fetchQuery({ ...trpc.taskClose.reportGet.queryOptions({ taskId }), staleTime: 0 });
+			if (!latest) throw new Error("任务没有填报");
+			setSnapshot({
+				revision: latest.report.revision,
+				fileId:
+					isRecord(latest.report.draft) && typeof latest.report.draft.fileId === "string"
+						? latest.report.draft.fileId
+						: "",
+			});
+			setConflicted(false);
+		} catch (error) {
+			toastApiError(error);
 		}
 	};
 	const downloadFile = async () => {
@@ -103,13 +132,19 @@ export function TaskReportExcelFile({
 			title="Excel 工作簿填报"
 			actions={
 				<div className="flex flex-wrap items-center gap-1">
-					{parentControls?.(busy)}
+					{parentControls?.(busy || conflicted || remoteChanged || !!pendingFile)}
 					<TaskReportExcel taskId={taskId} schema={schema} canEdit={false} disabled={busy} />
 					{data.canSubmitToParent && data.canEdit ? (
 						<Button
 							variant="ghost"
 							size="sm"
-							disabled={busy || (data.hasChildren ? data.excelSources.length === 0 : !fileId)}
+							disabled={
+								busy ||
+								conflicted ||
+								remoteChanged ||
+								!!pendingFile ||
+								(data.hasChildren ? data.excelSources.length === 0 : !fileId)
+							}
 							onClick={() => submit.mutate({ taskId })}
 						>
 							<CloudUpload className="size-3.5" />
@@ -119,6 +154,27 @@ export function TaskReportExcelFile({
 				</div>
 			}
 		>
+			{conflicted || remoteChanged ? (
+				<div role="alert" className="mb-2 flex flex-wrap items-center gap-2 text-sm text-destructive">
+					填报已被修改，请重新载入后再保存。
+					<Button variant="outline" size="sm" disabled={busy} onClick={() => void reloadSnapshot()}>
+						重新载入
+					</Button>
+				</div>
+			) : null}
+			{pendingFile ? (
+				<div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+					待保存：{pendingFile.name}
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={busy || conflicted || remoteChanged}
+						onClick={() => save.mutate({ taskId, revision, draft: { fileId: pendingFile.id } })}
+					>
+						重试保存
+					</Button>
+				</div>
+			) : null}
 			{data.canSubmitToParent ? (
 				<p className="mb-2 text-xs text-muted-foreground">本级变化需重新提交，父任务才能看到。</p>
 			) : null}
@@ -131,13 +187,18 @@ export function TaskReportExcelFile({
 							accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 							className="sr-only"
 							aria-label="上传 Excel 填报"
-							disabled={busy}
+							disabled={busy || conflicted || remoteChanged}
 							onChange={(event) => {
 								void pickFile(event.target.files?.[0]);
 								event.currentTarget.value = "";
 							}}
 						/>
-						<Button variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={busy || conflicted || remoteChanged}
+							onClick={() => inputRef.current?.click()}
+						>
 							<Upload className="size-3.5" />
 							{uploading ? "上传中…" : fileId ? "更换文件" : "上传填报文件"}
 						</Button>

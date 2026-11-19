@@ -948,7 +948,6 @@ export const taskTable = mysqlTable(
 		description: text("description"),
 		status: varchar("status", { length: 32 }).notNull(),
 		creator_id: varchar("creator_id", { length: 36 }).notNull(),
-		/** → sys_user.id;任务**唯一执行人**(至多一个,由本列本身保证)。null = 未指派 */
 		executor_id: varchar("executor_id", { length: 36 }),
 		due_at: datetime("due_at", { mode: "date" }),
 		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */

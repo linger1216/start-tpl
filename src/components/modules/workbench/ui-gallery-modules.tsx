@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { type CheckboxTreeNode, CheckboxTreeSelect } from "#/components/modules/shared/checkbox-tree-select";
 import { DetailDialog } from "#/components/modules/shared/detail-dialog";
-import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { SortableTree } from "#/components/modules/shared/sortable-tree";
 import { Cell, Group } from "#/components/modules/workbench/ui-gallery-layout";
 import { Button } from "#/components/ui/button";
 import { DetailRow } from "#/components/ui/detail-row";
 import { Input } from "#/components/ui/input";
+import { MultiSelect } from "#/components/ui/multi-select";
 import { Tag } from "#/components/ui/tag";
 import { TagList } from "#/components/ui/tag-list";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";

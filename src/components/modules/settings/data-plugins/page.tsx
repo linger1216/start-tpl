@@ -9,11 +9,11 @@ import { type PluginFormPayload, SettingsDataPluginsForm } from "#/components/mo
 import { SettingsDataPluginsPreviewDialog } from "#/components/modules/settings/data-plugins/preview-dialog";
 import { type PluginRow, pluginColumns } from "#/components/modules/settings/data-plugins/table";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";

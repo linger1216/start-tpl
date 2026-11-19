@@ -14,9 +14,9 @@ import {
 	type DeptTreeNode,
 	SettingsDepartmentsTree,
 } from "#/components/modules/settings/departments/tree";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useTRPC } from "#/integrations/trpc/react";

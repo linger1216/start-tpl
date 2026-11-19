@@ -10,12 +10,12 @@ import { type RoleFormPayload, type RoleFormTab, SettingsRolesForm } from "#/com
 import { type RoleRow, roleColumns } from "#/components/modules/settings/roles/table";
 import type { CheckboxTreeNode } from "#/components/modules/shared/checkbox-tree-select";
 import { ColumnToggle } from "#/components/modules/shared/column-toggle";
+import { ConfirmDialog } from "#/components/modules/shared/confirm-dialog";
 import { ExcelExportButton, ExcelImportButton } from "#/components/modules/shared/excel-actions";
 import { LedgerCard } from "#/components/modules/shared/ledger-card";
 import { LedgerToolbar } from "#/components/modules/shared/ledger-toolbar";
 import { StatCards, type StatItem } from "#/components/modules/shared/stat-cards";
 import { Button } from "#/components/ui/button";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { RefreshButton } from "#/components/ui/refresh-button";
 import { useLedgerDialogs } from "#/hooks/use-ledger-dialogs";
 import { useLedgerTable } from "#/hooks/use-ledger-table";

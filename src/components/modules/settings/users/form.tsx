@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { UserRow } from "#/components/modules/settings/users/table";
 import { DetailMeta } from "#/components/modules/shared/detail-dialog";
-import { MultiSelect, type MultiSelectOption } from "#/components/modules/shared/multi-select";
+import { FileDropzone } from "#/components/modules/shared/file-dropzone";
 import { ActionButton } from "#/components/ui/action-button";
 import { Avatar } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
@@ -18,9 +18,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
-import { FileDropzone } from "#/components/ui/file-dropzone";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import { MultiSelect, type MultiSelectOption } from "#/components/ui/multi-select";
 import { Switch } from "#/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useFileUpload } from "#/hooks/use-file-upload";

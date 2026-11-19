@@ -15,6 +15,7 @@ type TaskCardItem = {
 	name: string;
 	description: string | null;
 	status: string;
+	statusLabel: string;
 	priority: number | null;
 	creatorName: string | null;
 	dueAt: string | null;
@@ -40,15 +41,7 @@ type TaskCardItem = {
  * fan-out 的父任务是「分派容器」,没有唯一收件人 → 右上角退回类型图标块。
  * 通常由调用方用 `TaskCardLink` 包裹;带卡内动作时,本组件把链接内容和动作行作为卡片内的兄弟节点渲染。
  */
-export function TaskCard({
-	task,
-	statusLabel,
-	action,
-}: {
-	task: TaskCardItem;
-	statusLabel: (value: string) => string;
-	action?: ReactNode;
-}) {
+export function TaskCard({ task, action }: { task: TaskCardItem; action?: ReactNode }) {
 	// 首次渲染保持服务端和客户端一致，挂载后再按本机时钟计算并定期刷新。
 	const [now, setNow] = useState<number | null>(null);
 	useEffect(() => {
@@ -80,7 +73,7 @@ export function TaskCard({
 
 			{/* 第二行:状态成组 —— 状态(主扫读)+ 优先级(分流)+「待你处理」告警 */}
 			<div className="mt-3 flex flex-wrap items-center gap-2">
-				<Tag variant="outline">{statusLabel(task.status)}</Tag>
+				<Tag variant="outline">{task.statusLabel}</Tag>
 				<Tag variant="outline" className={`border-transparent ${priorityToneOf(task.priority)}`}>
 					{priorityLabelOf(task.priority)}
 				</Tag>

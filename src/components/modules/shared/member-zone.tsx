@@ -21,11 +21,10 @@
  */
 import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
-
-import { MultiSelect } from "#/components/modules/shared/multi-select";
 import { ActionButton } from "#/components/ui/action-button";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import { MultiSelect } from "#/components/ui/multi-select";
 import { TagList } from "#/components/ui/tag-list";
 
 /** 一行"人"至少要有这些（各域自己的业务字段由 `badgeValues` 提供） */

@@ -1,23 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ClipboardList, FileText, Share2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { DetailDialog } from "#/components/modules/shared/detail-dialog";
 import type { StatItem } from "#/components/modules/shared/stat-cards";
-import { TaskReportTemplateDetail } from "#/components/modules/task-close/task-report-template-detail";
+import { ReportField } from "#/components/modules/task-close/report-fields";
 import { TaskReportTemplateForm } from "#/components/modules/task-close/task-report-template-form";
 import { TemplateCard, TemplateCardPageShell } from "#/components/modules/task-close/template-card";
 import { useConfirm } from "#/components/modules/task-close/use-confirm";
-
+import { DetailRow } from "#/components/ui/detail-row";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { Tag } from "#/components/ui/tag";
 import { writeSuccess } from "#/hooks/use-ledger-write";
 import { useHasPerm } from "#/hooks/use-perms";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { PLACEHOLDER_EMPTY } from "#/lib/constants";
+import { MAX_ATTACHMENTS } from "#/lib/task/payload";
+import type { TaskReportSchema } from "#/lib/task/report-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { formatLocalMinute } from "#/lib/time";
 
 /** 卡片页用到的模板投影:`reportTemplateList` 的一行(与 `workflowList` 同形,时间一律 ISO) */
-export type ReportTemplateRow = {
+type ReportTemplateRow = {
 	id: string;
 	name: string;
 	creator_id: string;
@@ -133,14 +137,16 @@ export function TaskReportTemplatesPage() {
 				/>
 			))}
 		>
-			<TaskReportTemplateForm
-				open={form !== null}
-				onOpenChange={(next) => {
-					if (!next) setForm(null);
-				}}
-				templates={listQuery.data ?? []}
-				initialTemplateId={form?.templateId ?? null}
-			/>
+			{form !== null ? (
+				<TaskReportTemplateForm
+					open={form !== null}
+					onOpenChange={(next) => {
+						if (!next) setForm(null);
+					}}
+					templates={listQuery.data ?? []}
+					initialTemplateId={form?.templateId ?? null}
+				/>
+			) : null}
 
 			<TaskReportTemplateDetail
 				row={detailRow}
@@ -245,4 +251,115 @@ function ReportTemplateCard({
 			onDelete={onDelete}
 		/>
 	);
+}
+
+/**
+ * 填报模板详情 —— **就是预览**:按 payload 渲染出「填报人会看到的表单」(只读),
+ * 不单独列字段清单(字段数 / 可见性在卡片上,标识与选项在预览的控件与占位里)。
+ */
+function TaskReportTemplateDetail({
+	row,
+	open,
+	onOpenChange,
+	onEdit,
+}: {
+	row: ReportTemplateRow | null;
+	open: boolean;
+	onOpenChange: (next: boolean) => void;
+	onEdit?: (row: ReportTemplateRow) => void;
+}) {
+	const parsed = row ? taskReportSchema.safeParse(row.payload) : null;
+	return (
+		<DetailDialog
+			open={open}
+			onOpenChange={onOpenChange}
+			title={`填报模板 · ${row?.name ?? ""}`}
+			description="编辑影响后续绑定；已绑定任务保留原有结构。"
+			tag={
+				parsed?.success ? (
+					<Tag variant="outline">
+						{parsed.data.kind === "TABLE" ? "表格" : parsed.data.kind === "EXCEL" ? "Excel 文件" : "表单"}
+					</Tag>
+				) : null
+			}
+			meta={row ? { id: row.id, createdAt: row.createdAt, updatedAt: row.updatedAt } : null}
+			onEdit={row && onEdit ? () => onEdit(row) : undefined}
+		>
+			{row && parsed?.success ? (
+				<TaskReportPreview schema={parsed.data} />
+			) : (
+				<p className="text-sm text-destructive">模板结构无效,无法展示;请联系管理员重建。</p>
+			)}
+		</DetailDialog>
+	);
+}
+
+/**
+ * 填报模板的**只读预览** —— 按schema渲染出「填报人将会看到的表单」。
+ *
+ * 所有控件一律 disabled:预览只回答「长什么样、什么顺序、哪些必填」,不在这里填值。
+ * OBJECT 渲染成竖排表单;TABLE 渲染成「表头 + 一条空行」的网格。
+ */
+function TaskReportPreview({ schema }: { schema: TaskReportSchema }) {
+	return (
+		<div className="space-y-3">
+			<p className="text-xs text-muted-foreground">预览只读 —— 填报时的控件与顺序即此。</p>
+			{schema.kind === "EXCEL" ? (
+				<div className="grid gap-2 rounded-md border border-border p-3 text-sm">
+					<p>子任务上传 Excel 工作簿；系统保留模板表头并合并数据行。</p>
+					<p className="text-muted-foreground">
+						汇总工作表：{schema.excel?.sheetName} · 数据从第 {schema.excel?.dataStartRow} 行开始
+					</p>
+				</div>
+			) : schema.kind === "TABLE" ? (
+				<div className="overflow-x-auto rounded-md border">
+					<Table>
+						<TableHeader>
+							<TableRow>
+								{schema.fields.map((field) => (
+									<TableHead key={field.id}>{previewLabel(field)}</TableHead>
+								))}
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							<TableRow>
+								{schema.fields.map((field) => (
+									<TableCell key={field.id} className="text-muted-foreground">
+										—
+									</TableCell>
+								))}
+							</TableRow>
+						</TableBody>
+					</Table>
+				</div>
+			) : (
+				<div className="space-y-0">
+					{schema.fields.map((field) => (
+						<DetailRow key={field.id} label={previewLabel(field)}>
+							<PreviewControl field={field} />
+						</DetailRow>
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+/** 展示名:必填字段带星标 */
+function previewLabel(field: TaskReportSchema["fields"][number]): string {
+	return field.required ? `${field.label} *` : field.label;
+}
+
+/** 按类型渲染一个**禁用**的占位控件(值一律为空) */
+function PreviewControl({ field }: { field: TaskReportSchema["fields"][number] }) {
+	if (field.type === "attachment")
+		return <span className="text-sm text-muted-foreground">附件:填报时上传(最多 {MAX_ATTACHMENTS} 个)</span>;
+	if (field.type === "array")
+		return (
+			<span className="text-sm text-muted-foreground">
+				数组:填报时可「添加」多条 ——
+				{(field.itemFields ?? []).map((item) => item.label).join(" / ") || "未配置元素字段"}
+			</span>
+		);
+	return <ReportField field={field} value={undefined} disabled onChange={() => {}} />;
 }
