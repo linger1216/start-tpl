@@ -42,6 +42,19 @@ export function shiftToWorkingDay(value: Date): Date {
 }
 
 /**
+ * `from` 之后第 `count` 个**工作日**(不含当天;时分秒沿用 `from` 的)。
+ * 用来给新建任务算默认截止日:今天 + 3 个工作日。
+ */
+export function workingDaysAfter(from: Date, count: number): Date {
+	const next = new Date(from);
+	for (let found = 0; found < count; ) {
+		next.setDate(next.getDate() + 1);
+		if (isWorkingDay(next)) found += 1;
+	}
+	return next;
+}
+
+/**
  * `after` 之后最近的**工作日的 `hour:minute`**(当天那个点还没过就用当天)。
  *
  * 用在「迟到的提醒」上:worker 因为挂掉 / 被误触发,直到周末才来送货时,

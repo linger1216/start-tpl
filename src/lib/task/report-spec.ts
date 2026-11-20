@@ -172,25 +172,6 @@ type TaskReportIssue = { row: number | null; field: string; message: string };
 /** 填报值 / 行 —— **唯一真源**(界面与只读区都从这里 import) */
 export type ReportValue = string | number | boolean | string[] | Array<Record<string, ReportValue>> | null;
 export type ReportRow = Record<string, ReportValue>;
-export const REPORT_ROW_ID = "__rowId";
-
-/** 为历史表格行提供可重复的内部身份;保存和下发时会一并持久化。 */
-export function reportRowsWithIds<T extends Record<string, unknown>>(
-	rows: readonly T[],
-	taskId: string,
-	revision: number,
-): Array<T & { [REPORT_ROW_ID]: string }> {
-	const seen = new Set<string>();
-	return rows.map((row, index) => {
-		const existing = row[REPORT_ROW_ID];
-		const id =
-			typeof existing === "string" && existing.length > 0 && !seen.has(existing)
-				? existing
-				: `legacy:${taskId}:${revision}:${index}`;
-		seen.add(id);
-		return { ...row, [REPORT_ROW_ID]: id };
-	});
-}
 
 /**
  * 填报值 → **行数组**(统一形状):表格就是它本身,表单包成单行。
@@ -455,7 +436,7 @@ export function validateTaskReport(schema: TaskReportSchema, value: unknown): Ta
 				comparable && (rule.op === "eq" ? left === right : rule.op === "lte" ? left <= right : left >= right);
 			if (!valid) add(index, rule.left, rule.message);
 		}
-		const allowed = new Set([...schema.fields.map((field) => field.id), "__rowId"]);
+		const allowed = new Set(schema.fields.map((field) => field.id));
 		for (const key of Object.keys(row)) if (!allowed.has(key)) add(index, key, "未知字段");
 	}
 	return issues;

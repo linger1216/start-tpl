@@ -52,8 +52,10 @@ export function TaskCard({ task, action }: { task: TaskCardItem; action?: ReactN
 	}, [task.dueAt]);
 	// 已进入结束状态:不再有期限压力,卡片上不显示「超期 / 临期」
 	const deadline = now === null || task.terminal ? null : taskDeadlineState(task.dueAt, now);
+	// 卡片的宽度上下限由外层栅格轨道给(`minmax(min(…,100%),…)`,每个栅格自己定),高度下限由栅格项 `h-48` 给 ——
+	// 这两条写在这里都没用:Card 自带 `overflow-hidden`,轨道又能缩到 0,只会把超出的内容裁掉。
 	const content = (
-		<div className="flex min-h-0 flex-1 flex-col">
+		<div className="flex flex-1 flex-col">
 			{/* 第一行:**标题为主**(最多两行)+ 右侧执行人(圆牌 + 姓名,放不下就截断) */}
 			<div className="flex items-start justify-between gap-3">
 				<h3 className="min-w-0 flex-1 line-clamp-2 text-lg leading-snug font-semibold text-foreground">{task.name}</h3>

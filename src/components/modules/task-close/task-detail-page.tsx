@@ -590,7 +590,7 @@ export function TaskDetailPage({ taskId }: { taskId: string }) {
 										className="h-8 max-w-xs"
 									/>
 								</div>
-								<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+								<div className="grid grid-cols-[repeat(auto-fill,minmax(min(18rem,100%),24rem))] gap-3">
 									{visibleChildren.map((child) => (
 										<div key={child.id} className="h-48 min-w-0">
 											{permissions.canRemoveChildren ? (

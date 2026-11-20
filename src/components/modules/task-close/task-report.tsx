@@ -22,9 +22,7 @@ import {
 	asFormValue,
 	asTableValue,
 	pasteReportGrid,
-	REPORT_ROW_ID,
 	reportRowsOf,
-	reportRowsWithIds,
 	type TaskReportSchema,
 	updateKeyedItem,
 	validateTaskReport,
@@ -282,9 +280,7 @@ function TaskReportEditor({
 	const trpc = useTRPC();
 	const client = useQueryClient();
 	const [draft, setDraft] = useState<Row | Row[]>(() =>
-		schema.kind === "TABLE"
-			? reportRowsWithIds(reportRowsOf(schema, data.report.draft), taskId, data.report.revision)
-			: (data.report.draft as Row | Row[]),
+		schema.kind === "TABLE" ? reportRowsOf(schema, data.report.draft) : (data.report.draft as Row | Row[]),
 	);
 	// 删除或异步上传需按行身份定位；按位置复用的 useStableKeys 无法保留删除后的身份。
 	const [rowKeys, setRowKeys] = useState<string[]>(() =>
@@ -650,7 +646,6 @@ function TaskReportEditor({
 									setDraft([
 										...rows,
 										{
-											[REPORT_ROW_ID]: crypto.randomUUID(),
 											...Object.fromEntries(
 												schema.fields
 													.filter((field) => field.defaultValue !== undefined)

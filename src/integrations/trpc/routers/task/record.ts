@@ -6,16 +6,14 @@ import { taskMemberTable, taskReportTable, taskTable, taskWorkflowTable } from "
 import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { isTerminalStatusOf, MAX_TEXT_LENGTH, statusesOf } from "#/lib/task/close-spec";
-import { isRecord, stableJson } from "#/lib/task/json";
+import { stableJson } from "#/lib/task/json";
 import { MAX_ATTACHMENTS, normalizePayload, payloadOf, taskPayloadSchema, withContent } from "#/lib/task/payload";
 import { readTaskReminderConfig, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import {
 	MAX_REPORT_ROWS,
-	REPORT_ROW_ID,
 	reportAttachmentIds,
 	reportRowSchema,
 	reportRowsOf,
-	reportRowsWithIds,
 	rowMatchesFilter,
 	type taskReportSchema,
 	validateTaskReport,
@@ -37,6 +35,7 @@ import {
 	ID,
 	isAdminOf,
 	lockTask,
+	reportOf,
 	resolveReportTemplate,
 	type ScopeFilter,
 	STATUS_VALUE,
@@ -201,7 +200,6 @@ async function insertTask(
 			reportId: string;
 			schema: z.infer<typeof taskReportSchema>;
 			filter?: ScopeFilter;
-			allocatedRowIds?: string[];
 			parentParticipates?: boolean;
 		} | null;
 		/** 父任务 id(fan-out 时子任务指向父) */
@@ -220,14 +218,14 @@ async function insertTask(
 		executor_id: input.executorId ?? null,
 		due_at: input.dueAt ?? null,
 		priority: input.priority ?? null,
-		/** 一列装三样:状态图快照 + 提醒规则 + 内容区 */
+		/** 一列装四样:状态图快照 + 提醒规则 + 内容区 + 填报绑定 */
 		payload: {
 			workflow: input.workflow,
 			...(input.reminderConfig !== undefined ? { reminders: input.reminderConfig } : {}),
 			...(content ?? {}),
+			...(input.report ? { report: input.report } : {}),
 		},
 		parent_id: input.parentId ?? null,
-		report: input.report ?? null,
 		created_at: now,
 		updated_at: now,
 	});
@@ -395,9 +393,6 @@ async function createFanoutTask({
 								reportId: template.id,
 								schema: template.schema,
 								filter,
-								...(template.schema.kind === "TABLE"
-									? { allocatedRowIds: childRows.map((row) => String(row[REPORT_ROW_ID])) }
-									: {}),
 							},
 						}
 					: {}),
@@ -476,7 +471,8 @@ export const taskRecordRouter = createTRPCRouter({
 							userId: USER_ID,
 							mode: z.enum(["filter", "manual"]).default("filter"),
 							filter: dataScopeFilterSchema.optional(),
-							rowIds: z.array(z.string().min(1).max(255)).max(MAX_REPORT_ROWS).optional(),
+							/** 手动分配:要下发的数据行下标(0 基,按 `reportGet.allocationRows` 的顺序) */
+							rowIndexes: z.array(z.number().int().min(0)).max(MAX_REPORT_ROWS).optional(),
 						}),
 					)
 					.min(1)
@@ -494,7 +490,7 @@ export const taskRecordRouter = createTRPCRouter({
 				const ids = input.targets.map((target) => target.userId);
 				if (new Set(ids).size !== ids.length) throw new TRPCError({ code: "BAD_REQUEST", message: "下发对象不能重复" });
 				await assertUsersExist(tx, ids, "下发对象不存在");
-				const template = parent.report ? await getTaskReportTemplate(parent, tx) : null;
+				const template = reportOf(parent) ? await getTaskReportTemplate(parent, tx) : null;
 				const filters = input.targets.map((target) => target.filter ?? []);
 				if (filters.some((filter) => filter.length) && (!template || template.schema.kind !== "TABLE"))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "数据范围只支持表格填报" });
@@ -503,8 +499,8 @@ export const taskRecordRouter = createTRPCRouter({
 				if (
 					input.targets.some(
 						(target) =>
-							(target.mode === "manual" && (!target.rowIds?.length || target.filter?.length)) ||
-							(target.mode === "filter" && target.rowIds?.length),
+							(target.mode === "manual" && (!target.rowIndexes?.length || target.filter?.length)) ||
+							(target.mode === "filter" && target.rowIndexes?.length),
 					)
 				)
 					throw new TRPCError({ code: "BAD_REQUEST", message: "筛选分配和手动分配不能同时设置" });
@@ -521,41 +517,23 @@ export const taskRecordRouter = createTRPCRouter({
 					? await tx.select().from(taskReportTable).where(eq(taskReportTable.task_id, parent.id)).limit(1)
 					: [];
 				const own = ownReport[0];
-				const sourceRows =
-					template?.schema.kind === "TABLE"
-						? reportRowsWithIds(reportRowsOf(template.schema, own?.draft), parent.id, own?.revision ?? 0)
-						: [];
+				const sourceRows = template?.schema.kind === "TABLE" ? reportRowsOf(template.schema, own?.draft) : [];
 				if (template?.schema.kind === "TABLE") {
-					const children = await tx
-						.select({ report: taskTable.report })
-						.from(taskTable)
-						.where(and(eq(taskTable.parent_id, parent.id), alive(taskTable)));
-					const unavailable = new Set<string>();
-					for (const child of children) {
-						if (!isRecord(child.report)) continue;
-						const allocated = child.report.allocatedRowIds;
-						if (Array.isArray(allocated)) {
-							for (const id of allocated) if (typeof id === "string") unavailable.add(id);
-							continue;
-						}
-						const filter = Array.isArray(child.report.filter) ? (child.report.filter as ScopeFilter) : [];
-						for (const row of sourceRows)
-							if (rowMatchesFilter(row, filter)) unavailable.add(String(row[REPORT_ROW_ID]));
-					}
-					const selected = new Set<string>();
+					/** 同一次下发里,一条数据行不能派给两个执行人 */
+					const taken = new Set<number>();
 					for (const [index, target] of input.targets.entries()) {
-						const selectedIds =
+						const rowIndexes =
 							target.mode === "manual"
-								? (target.rowIds ?? [])
+								? (target.rowIndexes ?? [])
 								: sourceRows
-										.filter((row) => rowMatchesFilter(row, filters[index] ?? []))
-										.map((row) => String(row[REPORT_ROW_ID]));
-						for (const rowId of selectedIds) {
-							if (!sourceRows.some((row) => row[REPORT_ROW_ID] === rowId))
+										.map((row, rowIndex) => (rowMatchesFilter(row, filters[index] ?? []) ? rowIndex : -1))
+										.filter((rowIndex) => rowIndex >= 0);
+						for (const rowIndex of rowIndexes) {
+							if (rowIndex >= sourceRows.length)
 								throw new TRPCError({ code: "BAD_REQUEST", message: "选择的数据行已变化，请刷新后重试" });
-							if (unavailable.has(rowId) || selected.has(rowId))
+							if (taken.has(rowIndex))
 								throw new TRPCError({ code: "BAD_REQUEST", message: "一条填报记录不能重复分派" });
-							selected.add(rowId);
+							taken.add(rowIndex);
 						}
 					}
 				}
@@ -570,10 +548,9 @@ export const taskRecordRouter = createTRPCRouter({
 					const targetRows =
 						template?.schema.kind === "TABLE"
 							? target.mode === "manual"
-								? sourceRows.filter((row) => target.rowIds?.includes(String(row[REPORT_ROW_ID])))
+								? (target.rowIndexes ?? []).map((rowIndex) => sourceRows[rowIndex])
 								: sourceRows.filter((row) => rowMatchesFilter(row, filter))
 							: [];
-					const allocatedRowIds = targetRows.map((row) => String(row[REPORT_ROW_ID]));
 					await insertTask(
 						tx,
 						{
@@ -593,7 +570,6 @@ export const taskRecordRouter = createTRPCRouter({
 											reportId: template.id,
 											schema: template.schema,
 											filter: target.mode === "filter" ? filter : [],
-											...(template.schema.kind === "TABLE" ? { allocatedRowIds } : {}),
 											parentParticipates: false,
 										},
 									}
@@ -683,8 +659,8 @@ export const taskRecordRouter = createTRPCRouter({
 				if (template.schema.kind !== "TABLE")
 					throw new TRPCError({ code: "BAD_REQUEST", message: "数据规则只支持表格形式模板" });
 				const issues = validateTaskReport(template.schema, input.report.rows);
-				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
-				return reportRowsWithIds(input.report.rows, id, 0);
+				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效:${issues[0].message}` });
+				return input.report.rows;
 			})();
 			if (fanout && template?.schema.kind === "TABLE") {
 				const childFilters = executors.map((member) => member.filter ?? input.report?.filter ?? []);
@@ -753,6 +729,7 @@ export const taskRecordRouter = createTRPCRouter({
 				const nextPayload = {
 					workflow: currentStored.workflow,
 					...(nextReminders !== undefined ? { reminders: nextReminders } : {}),
+					...(currentStored.report !== undefined ? { report: currentStored.report } : {}),
 					...((nextContent !== undefined ? nextContent : normalizePayload(currentStored)) ?? {}),
 				};
 				const prevDueAt = task.due_at ? task.due_at.toISOString() : null;

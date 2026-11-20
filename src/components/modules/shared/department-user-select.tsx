@@ -224,7 +224,7 @@ export function DepartmentUserSelect({
 						layout="wrap"
 						values={value.map((id) => optionsById.get(id)?.label ?? id)}
 						onRemove={disabled ? undefined : (index) => onChange(value.filter((_, i) => i !== index))}
-						emptyPlaceholder="请选择人员"
+						emptyPlaceholder=""
 					/>
 				</div>
 			</div>

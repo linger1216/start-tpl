@@ -44,7 +44,7 @@ import { isRecord } from "#/lib/task/json";
 import { parseBlocks, payloadOf } from "#/lib/task/payload";
 import { executorReminderEvents, executorReminderRuleSchema, readTaskReminderConfig } from "#/lib/task/reminder-spec";
 import { reportAttachmentIds, reportRowsOf } from "#/lib/task/report-spec";
-import { isWorkingDay, workdayKnown } from "#/lib/workday";
+import { isWorkingDay, workdayKnown, workingDaysAfter } from "#/lib/workday";
 import { createTRPCRouter, protectedProcedure, requireCurrentUser } from "../../init";
 import {
 	type ActionRow,
@@ -103,7 +103,7 @@ const toTaskDetail = (row: TaskRow, creatorName: string | null, executorName: st
 	payload: row.payload,
 	workflow: workflowOf(row),
 	/** 任务创建时固定的填报结构快照,详情页分派范围编辑使用。 */
-	reportSchema: (row.report as { schema?: unknown } | null)?.schema ?? null,
+	reportSchema: payloadOf(row.payload)?.report?.schema ?? null,
 	reminderConfig: readTaskReminderConfig(payloadOf(row.payload)?.reminders),
 	updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
 });
@@ -629,6 +629,15 @@ export const taskQueryRouter = createTRPCRouter({
 	 * 树内并集是必须的:内容区按整棵树展示(见 `familyTasks`),父任务要能签子任务附件。
 	 * `download=true` 走预签名(带 `Content-Disposition`,按原始文件名下载)。
 	 */
+	/**
+	 * 新建任务的默认值 —— **服务端算**:截止默认「今天 + 3 个工作日」,优先级默认 P2。
+	 * 工作日口径与提醒排期同一套(`lib/workday.ts`),不给客户端塞一份节假日数据。
+	 */
+	taskDefaults: protectedProcedure.query(() => ({
+		dueAt: workingDaysAfter(new Date(), 3).toISOString(),
+		priority: 2,
+	})),
+
 	attachmentUrl: protectedProcedure
 		.input(z.object({ taskId: ID, fileId: FILE_ID, download: z.boolean().optional() }))
 		.query(async ({ ctx, input }) => {
@@ -647,8 +656,8 @@ export const taskQueryRouter = createTRPCRouter({
 				);
 			}
 			if (!owned) {
-				const snapshot = task.report as { schema?: unknown } | null;
-				if (snapshot && typeof snapshot === "object" && "reportId" in snapshot) {
+				const snapshot = payloadOf(task.payload)?.report;
+				if (snapshot?.reportId) {
 					const { schema } = await getTaskReportTemplate(task);
 					const report = await reportRowOf(db, task.id);
 					const excelContains = (value: unknown) =>

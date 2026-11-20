@@ -775,6 +775,15 @@ async function main() {
 			);
 		}
 	}
+	// 退役表:无人读的历史表直接删(与 MySQL 侧同一份清单)
+	if (existingTables.has("tc_report_submission")) {
+		await run(`drop table ${S}."tc_report_submission"`);
+		console.log("✓ 已删除 tc_report_submission(提交版改存 tc_task_report.synced)");
+	}
+	if (existingTables.has("tc_content_revision")) {
+		await run(`drop table ${S}."tc_content_revision"`);
+		console.log("✓ 已删除 tc_content_revision(说明修订退役)");
+	}
 	const columnDrops: Array<{ table: string; column: string; constraint?: string }> = [
 		{ table: "sys_notification_delivery", column: "provider" },
 		{ table: "sys_user_dept", column: "role_id", constraint: "fk_sys_dm_role" },

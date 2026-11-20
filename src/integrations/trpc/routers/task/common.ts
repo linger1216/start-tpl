@@ -26,7 +26,7 @@ import {
 	taskPathOf,
 	type WorkflowPayload,
 } from "#/lib/task/close-spec";
-import { payloadOf } from "#/lib/task/payload";
+import { payloadOf, type TaskReportBinding } from "#/lib/task/payload";
 import { taskReportSchema } from "#/lib/task/report-spec";
 import { cancelActionReminders, rescheduleTaskReminders, scheduleNodeReminders } from "#/lib/task/scheduled-reminders";
 
@@ -94,6 +94,11 @@ export const workflowOf = (task: TaskRow): WorkflowPayload => {
 	if (!payload) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "任务缺少状态图快照(数据未迁移)" });
 	return payload.workflow;
 };
+
+/** `tc_task.payload.report`(填报绑定)。没绑填报的任务不带这个键 —— 统一从这里取,别再摸 `task.report`。 */
+export function reportOf(task: { payload: unknown }): TaskReportBinding | null {
+	return payloadOf(task.payload)?.report ?? null;
+}
 
 // ────────────────────────────── 授权 ──────────────────────────────
 
@@ -185,14 +190,14 @@ export async function attachmentRows(reader: Reader, ids: readonly string[], inc
 }
 
 /**
- * 任务的结构快照(`tc_task.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
+ * 任务的结构快照(`tc_task.payload.report.schema`);**老任务没有快照** —— 回落到模板行的当前 payload
  * (模板是单版本,payload 即当前结构),否则老任务一打开就"无法加载填报"。
  */
-export async function getTaskReportTemplate(task: { report: unknown }, reader: Pick<typeof db, "select"> = db) {
-	const report = task.report as { reportId?: string; schema?: unknown } | null;
+export async function getTaskReportTemplate(task: { payload: unknown }, reader: Pick<typeof db, "select"> = db) {
+	const report = reportOf(task);
 	const reportId = report?.reportId;
 	if (!reportId) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报模板引用" });
-	if (report?.schema != null) return { id: reportId, schema: taskReportSchema.parse(report.schema) };
+	if (report.schema != null) return { id: reportId, schema: taskReportSchema.parse(report.schema) };
 	const [template] = await reader
 		.select({ payload: taskReportTemplateTable.payload })
 		.from(taskReportTemplateTable)
@@ -409,7 +414,7 @@ export async function resolveReportTemplate(
 	return { ...template, schema: taskReportSchema.parse(template.payload) };
 }
 
-/** 填报的「数据范围」:子任务按 `tc_task.report.filter` 过滤;父任务(无 filter)= 全部行。 */
+/** 填报的「数据范围」:子任务按 `tc_task.payload.report.filter` 过滤;父任务(无 filter)= 全部行。 */
 export type ScopeFilter = Array<{ field: string; value: unknown }>;
 
 /** 一批 user_id → 姓名(空 / null 自动滤掉)。分批查 + 内存拼(项目现有风格,不引入 leftJoin) */

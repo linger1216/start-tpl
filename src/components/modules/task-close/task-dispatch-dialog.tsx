@@ -43,7 +43,7 @@ export function TaskDispatchDialog({
 	const [dispatchIds, setDispatchIds] = useState<string[]>([]);
 	const [dispatchRules, setDispatchRules] = useState<Record<string, { field: string; value: string }>>({});
 	const [dispatchModes, setDispatchModes] = useState<Record<string, "filter" | "manual">>({});
-	const [dispatchManualRows, setDispatchManualRows] = useState<Record<string, string[]>>({});
+	const [dispatchManualRows, setDispatchManualRows] = useState<Record<string, number[]>>({});
 	const dispatchMutation = useMutation(
 		trpc.taskClose.taskDispatch.mutationOptions({
 			onSuccess: async (result) => {
@@ -75,7 +75,6 @@ export function TaskDispatchDialog({
 			: [];
 	const allocationPreviewFields = reportSchema?.kind === "TABLE" ? reportSchema.fields.slice(0, 4) : [];
 	const allocationRows = dispatchReportQuery.data?.allocationRows ?? [];
-	const alreadyAllocated = new Set(dispatchReportQuery.data?.allocatedRowIds ?? []);
 	const manualRowSelections = new Set(Object.values(dispatchManualRows).flat());
 	const missingManualSelection = dispatchIds.some(
 		(userId) => (dispatchModes[userId] ?? "filter") === "manual" && !(dispatchManualRows[userId]?.length ?? 0),
@@ -85,7 +84,7 @@ export function TaskDispatchDialog({
 		if (!dispatchIds.length || dispatchMutation.isPending) return;
 		const targets = dispatchIds.map((userId) => {
 			const mode = dispatchModes[userId] ?? "filter";
-			if (mode === "manual") return { userId, mode, rowIds: dispatchManualRows[userId] ?? [] };
+			if (mode === "manual") return { userId, mode, rowIndexes: dispatchManualRows[userId] ?? [] };
 			const rule = dispatchRules[userId];
 			const field = scopeFields.find((item) => item.id === rule?.field);
 			const value = rule?.value?.trim();
@@ -147,7 +146,7 @@ export function TaskDispatchDialog({
 					{reportSchema?.kind === "TABLE" && dispatchIds.length > 0 && (
 						<section className="grid gap-2 border-t border-border pt-3">
 							<p className="text-xs text-muted-foreground">
-								每位执行人可选择筛选或手动分配；已分配的数据行不可重复分配，删除子任务后会释放。
+								每位执行人可选择筛选或手动分配；同一次下发里,一条数据行不会重复分派。
 							</p>
 							<div className="max-h-[50vh] divide-y divide-border overflow-y-auto">
 								{dispatchIds.map((userId) => {
@@ -230,8 +229,7 @@ export function TaskDispatchDialog({
 											) : (
 												<div className="grid gap-1 rounded-md border border-border p-2">
 													<p className="text-xs text-muted-foreground">
-														已选 {dispatchManualRows[userId]?.length ?? 0} 行 · 可分配{" "}
-														{Math.max(0, allocationRows.length - alreadyAllocated.size)} 行
+														已选 {dispatchManualRows[userId]?.length ?? 0} 行 · 共 {allocationRows.length} 行
 													</p>
 													{dispatchReportQuery.isPending ? (
 														<p className="py-2 text-xs text-muted-foreground">正在加载数据行…</p>
@@ -240,13 +238,12 @@ export function TaskDispatchDialog({
 													) : (
 														<div className="max-h-44 overflow-y-auto">
 															{allocationRows.map((entry, index) => {
-																const selected = dispatchManualRows[userId]?.includes(entry.id) ?? false;
-																const usedByOther = manualRowSelections.has(entry.id) && !selected;
-																const disabled = alreadyAllocated.has(entry.id) || usedByOther;
+																const selected = dispatchManualRows[userId]?.includes(index) ?? false;
+																const usedByOther = manualRowSelections.has(index) && !selected;
 																const summary = allocationPreviewFields
 																	.slice(0, 4)
 																	.map((field) => {
-																		const raw = entry.values[field.id];
+																		const raw = entry[field.id];
 																		const value = Array.isArray(raw)
 																			? raw.join("、")
 																			: raw && typeof raw === "object"
@@ -256,30 +253,27 @@ export function TaskDispatchDialog({
 																	})
 																	.join(" · ");
 																return (
-																	<div
-																		key={entry.id}
-																		className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-muted/40"
-																	>
-																		<Checkbox
-																			aria-label={`第 ${index + 1} 行：${summary || "无可显示字段"}`}
-																			checked={selected}
-																			disabled={disabled}
-																			onCheckedChange={(checked) =>
-																				setDispatchManualRows((current) => {
-																					const rows = new Set(current[userId] ?? []);
-																					if (checked) rows.add(entry.id);
-																					else rows.delete(entry.id);
-																					return { ...current, [userId]: [...rows] };
-																				})
-																			}
-																		/>
-																		<span className="w-8 shrink-0 tabular-nums text-muted-foreground">
-																			第 {index + 1} 行
-																		</span>
-																		<span className="min-w-0 truncate">{summary || "（无可显示字段）"}</span>
-																		{alreadyAllocated.has(entry.id) ? (
-																			<span className="shrink-0 text-muted-foreground">已分配</span>
-																		) : null}
+																	// biome-ignore lint/suspicious/noArrayIndexKey: 母版行没有稳定 id;顺序即身份,只读展示
+																	<div key={`${userId}:${index}`}>
+																		<div className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-muted/40">
+																			<Checkbox
+																				aria-label={`第 ${index + 1} 行：${summary || "无可显示字段"}`}
+																				checked={selected}
+																				disabled={usedByOther}
+																				onCheckedChange={(checked) =>
+																					setDispatchManualRows((current) => {
+																						const rows = new Set(current[userId] ?? []);
+																						if (checked) rows.add(index);
+																						else rows.delete(index);
+																						return { ...current, [userId]: [...rows] };
+																					})
+																				}
+																			/>
+																			<span className="w-8 shrink-0 tabular-nums text-muted-foreground">
+																				第 {index + 1} 行
+																			</span>
+																			<span className="min-w-0 truncate">{summary || "（无可显示字段）"}</span>
+																		</div>
 																	</div>
 																);
 															})}

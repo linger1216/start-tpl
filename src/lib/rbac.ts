@@ -395,6 +395,8 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 类别 1:外壳级
 	"user.list",
 	"menu.mine",
+	// 新建任务表单的默认值(常量,不读任何业务行)
+	"taskClose.taskDefaults",
 	"department.tree",
 	"department.members",
 	"notice.list",
@@ -442,7 +444,7 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	// 那套「我 + 我的角色 + 我的部门 + 子孙」表达不了「我创建 + 我是成员」。行级口径写在 resolver 里:
 	// `taskList` 的 `mine` 是 `creator_id ∪ tc_member`,其余按 `taskId` 直读(天生自限范围)。
 	"taskClose.workflowList",
-	// 填报读取在 resolver 中按任务成员关系授权;模板引用在 tc_task.report(「填报模板」页管理)
+	// 填报读取在 resolver 中按任务成员关系授权;模板引用在 tc_task.payload.report(「填报模板」页管理)
 	"taskClose.reportGet",
 	"taskClose.taskList",
 	"taskClose.taskGet",
@@ -522,6 +524,8 @@ export const UNMAPPED_MUTATIONS: readonly string[] = [
 export const UNMAPPED_QUERIES: readonly string[] = [
 	// 类别 1:外壳级 —— 顶栏账号切换器 + 工作台 + 通知选人
 	"user.list",
+	// 类别 1:外壳级 —— 新建任务表单的默认值(截止日按工作日口径算,与提醒排期同源)
+	"taskClose.taskDefaults",
 	// 类别 1:外壳级 —— 侧边栏与 `useHasPerm` 的数据源(它自己就是权限结果,"要权限才能读权限"是死锁)
 	"menu.mine",
 	// 类别 1:外壳级 —— 顶栏铃铛在每个页面都有;SQL 按 `user_id` 自限(见 doc/通知中心.md)

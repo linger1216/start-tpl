@@ -65,7 +65,7 @@ const TABLE_COMMENTS: Record<string, string> = {
 	tc_task_report: "任务填报(draft = 工作稿;synced = 提交给父任务的那一版;一任务一行)",
 	tc_workflow:
 		"状态图模板(tc_close 模块:payload 装整套 statuses/initial/edges 定义;建任务时会快照一份到 tc_task.workflow 列)",
-	tc_task: "任务本体(payload 一列装三样:内容区 + 状态图快照 + 提醒规则;软删走 deleted_at)",
+	tc_task: "任务本体(payload 一列装四样:内容区 + 状态图快照 + 提醒规则 + 填报绑定;软删走 deleted_at)",
 	tc_task_reminder: "任务定时提醒记录(事件键去重;工作进程按计划时间投递)",
 	tc_action: "外挂动作,审批/征询/监督同一种模式(列结构+锁语义统一)",
 	tc_member: "任务-参与人关系(参与者集合,一人一行;creator 与 executor 都不入此表)",
@@ -467,7 +467,7 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 	{
 		table: "tc_task",
 		column: "payload",
-		comment: "一列装三样:内容区(links/attachments)+ 状态图快照 workflow + 提醒规则 reminders",
+		comment: "一列装四样:内容区(links/attachments)+ 状态图快照 workflow + 提醒规则 reminders + 填报绑定 report",
 	},
 	{ table: "tc_task_reminder", column: "id", comment: "主键" },
 	{ table: "tc_task_reminder", column: "task_id", comment: "任务 ID" },
@@ -485,11 +485,6 @@ const COLUMN_COMMENTS: Array<{ table: string; column: string; comment: string }>
 		table: "tc_task",
 		column: "parent_id",
 		comment: "→ tc_task.id(父任务;多执行人 + 填报模板建任务时 fan-out 产生)",
-	},
-	{
-		table: "tc_task",
-		column: "report",
-		comment: "填报规则 { reportId, filter? }:引用填报模板,子任务带过滤条件",
 	},
 	{ table: "tc_task", column: "deleted_at", comment: "软删除时间(null = 未删除);口径见 lib/soft-delete.ts" },
 	{ table: "tc_task", column: "created_at", comment: "创建时间" },

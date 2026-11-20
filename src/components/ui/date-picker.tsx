@@ -11,7 +11,7 @@ import { cn } from "#/lib/utils";
  * 单日期选择器 —— 点触发器直接弹出「单月日历」,粒度只到**天**,没有时分秒。
  *
  * 值统一是本地 `YYYY-MM-DD` 字符串(空串 = 未选),**不做时区换算** —— 落库时由调用方
- * 把它当"本地这一天的 0 点"处理(见 `TaskCloseForm` 的 `fromDateInput`)。
+ * 把它当"本地这一天的 0 点"处理(见 `lib/time.ts` 的 `localDateToIso`)。
  *
  * 触发器外观与 `Input` / `SearchSelect` 对齐(`h-8` / `rounded-xl` / `border-input`),
  * 同一张表单里几个字段才长得一样。浮层走 Base UI 的 Popover 原语(与 `SearchSelect` 同款)——

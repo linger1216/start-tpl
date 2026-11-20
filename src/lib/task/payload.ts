@@ -38,15 +38,33 @@ export const taskPayloadSchema = z.object({
 export type TaskLinkBlock = z.infer<typeof linkBlockSchema>;
 /** 客户端可提交的**内容区**(links / attachments)—— 入参校验与「内容是否改了」的比较都只看它 */
 export type TaskContent = z.infer<typeof taskPayloadSchema>;
+
 /**
- * 库里 `tc_task.payload` 的**完整**形状:内容区 + 状态图快照 + 提醒规则。
- * 三者合成一列(不再有 `workflow` / `reminder_config` 两个独立 JSON 列)。
+ * `tc_task.payload.report` —— 填报绑定:模板引用 + 建任务时的结构快照 + 可选数据范围。
+ * 没绑填报的任务**不带这个键**;填报值不在这里(每个任务自己的 `tc_task_report` 行)。
+ */
+export type TaskReportBinding = {
+	/** → `tc_report_template.id` */
+	reportId: string;
+	/** 建任务时从模板复制的结构快照;老任务可能没有,回落到模板当前 payload */
+	schema?: unknown;
+	/** 子任务的数据范围过滤条件(表格模板) */
+	filter?: Array<{ field: string; value: unknown }>;
+	/** 父任务是否参与汇总 */
+	parentParticipates?: boolean;
+};
+
+/**
+ * 库里 `tc_task.payload` 的**完整**形状:内容区 + 状态图快照 + 提醒规则 + 填报绑定。
+ * 四者合成一列(不再有 `workflow` / `reminder_config` / `report` 三个独立 JSON 列)。
  */
 export type TaskPayload = TaskContent & {
 	/** 创建时从 `tc_workflow.payload` 复制的状态图快照(必填) */
 	workflow: WorkflowPayload;
 	/** 提醒规则;缺省 = 走 `readTaskReminderConfig` 的默认值 */
 	reminders?: TaskReminderConfig;
+	/** 填报绑定;没绑填报 = 无此键 */
+	report?: TaskReportBinding;
 };
 /** 附件(服务端 join `sys_file` 后的形状;编辑态新传的还没 size 时可缺省) */
 export type TaskAttachment = { id: string; name: string; size: number; contentType?: string | null };
@@ -133,19 +151,22 @@ export function payloadOf(value: unknown): TaskPayload | null {
 	if (!isRecord(workflow) || !Array.isArray((workflow as { statuses?: unknown }).statuses)) return null;
 	const content = normalizePayload(value as TaskContent) ?? {};
 	const reminders = value.reminders;
+	const report = value.report;
 	return {
 		workflow: workflow as WorkflowPayload,
 		...(reminders !== undefined ? { reminders: reminders as TaskReminderConfig } : {}),
+		...(report !== undefined ? { report: report as TaskReportBinding } : {}),
 		...content,
 	};
 }
 
-/** 把新的**内容区**并进一份完整 payload(保留 `workflow` / `reminders`;内容被清空就真的去掉这两键之外的内容) */
+/** 把新的**内容区**并进一份完整 payload(保留 `workflow` / `reminders` / `report`;内容被清空就真的去掉内容键) */
 export function withContent(base: TaskPayload, content: TaskContent | null): TaskPayload {
 	const { links, attachments } = normalizePayload(content) ?? {};
 	return {
 		workflow: base.workflow,
 		...(base.reminders !== undefined ? { reminders: base.reminders } : {}),
+		...(base.report !== undefined ? { report: base.report } : {}),
 		...(links !== undefined ? { links } : {}),
 		...(attachments !== undefined ? { attachments } : {}),
 	};

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { ChevronDown, Plus, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DepartmentUserSelect } from "#/components/modules/shared/department-user-select";
 import { TaskActionDialog } from "#/components/modules/task-close/task-action-dialog";
@@ -23,18 +23,8 @@ import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "#/lib/t
 import { blankBlock, MAX_ATTACHMENTS, MAX_LINKS, type TaskAttachment, type TaskLinkBlock } from "#/lib/task/payload";
 import { reminderSummaryOf, type TaskReminderConfig, taskReminderConfigSchema } from "#/lib/task/reminder-spec";
 import { taskReportSchema } from "#/lib/task/report-spec";
-import { formatLocalDate } from "#/lib/time";
+import { formatLocalDate, localDateToIso } from "#/lib/time";
 import { cn } from "#/lib/utils";
-
-/** ISO → 本地 `YYYY-MM-DD`(日期选择器只认这个形状;空值回空串) */
-function toDateInput(iso: string | null | undefined): string {
-	return iso ? formatLocalDate(iso) : "";
-}
-
-/** 本地 `YYYY-MM-DD` → ISO(按本地 0 点算,避免 `new Date("YYYY-MM-DD")` 当 UTC 差一天) */
-function fromDateInput(date: string): string | null {
-	return date ? new Date(`${date}T00:00:00`).toISOString() : null;
-}
 
 /**
  * 优先级 Select 的固定选项 —— 「未设置」放最前,允许保留旧值不变。
@@ -183,6 +173,7 @@ export function TaskForm({
 	pending,
 	workflowOptions = [],
 	userOptions,
+	defaultDueAt,
 	...submit
 }: TaskFormSubmit & {
 	open: boolean;
@@ -191,6 +182,8 @@ export function TaskForm({
 	/** 只有新建态用得到(编辑态流程模板不可改);不传就当作空 */
 	workflowOptions?: Option[];
 	userOptions: Option[];
+	/** 新建态的默认截止(ISO;服务端按「今天 + 3 个工作日」算好)—— 编辑态忽略 */
+	defaultDueAt?: string | null;
 }) {
 	const editing = submit.editing;
 	const trpc = useTRPC();
@@ -205,12 +198,13 @@ export function TaskForm({
 	const [rules, setRules] = useState<Record<string, { field: string; value: string }>>({});
 	const [name, setName] = useState(() => editing?.name ?? "");
 	const [description, setDescription] = useState(() => editing?.description ?? "");
-	const [due, setDue] = useState(() => toDateInput(editing?.dueAt));
+	const [due, setDue] = useState(() => (editing ? formatLocalDate(editing.dueAt) : formatLocalDate(defaultDueAt)));
 	/** `null` = 未设置;`0|1|2` = P0/P1/P2。DB 列是 tinyint,运行时是 number */
 	const [reminderConfig, setReminderConfig] = useState<TaskReminderConfig>(
 		() => editing?.reminderConfig ?? taskReminderConfigSchema.parse(undefined),
 	);
-	const [priority, setPriority] = useState<number | null>(() => editing?.priority ?? null);
+	/** 新建默认 P2;编辑沿用库里已有的值(包括「未设置」) */
+	const [priority, setPriority] = useState<number | null>(() => (editing ? (editing.priority ?? null) : 2));
 	const [workflowId, setWorkflowId] = useState(() => (editing ? "" : (workflowOptions[0]?.value ?? "")));
 	const [executorIds, setExecutorIds] = useState<string[]>([]);
 	const [links, setLinks] = useState<TaskLinkBlock[]>(() => editing?.links ?? []);
@@ -297,7 +291,7 @@ export function TaskForm({
 				const common = {
 					name: name.trim(),
 					description: description.trim() || null,
-					dueAt: fromDateInput(due),
+					dueAt: localDateToIso(due),
 					priority,
 					reminderConfig,
 					links,
@@ -364,16 +358,18 @@ export function TaskForm({
 								</SelectContent>
 							</Select>
 						</DetailRow>
-						<DetailRow label="执行人" className="max-w-xl flex-col gap-1 py-1 [&>div]:w-full">
+						<DetailRow label="执行人" className={cn("max-w-xl", !editing && "py-1")}>
 							<div className="min-w-0 space-y-1.5">
 								<DepartmentUserSelect options={userOptions} value={executorIds} onChange={setExecutorIds} compact />
-								{executorIds.length > 1 ? (
-									<Alert variant="warn" title="注意">
-										选了 <b className="tabular-nums">{executorIds.length}</b> 位执行人,会各自下发 1 条任务,共{" "}
-										<b className="tabular-nums">{executorIds.length}</b> 条。
-									</Alert>
-								) : (
-									<p className="text-xs text-muted-foreground">可不选,之后再指派。</p>
+								{executorIds.length > 1 && (
+									/* 一行高的行内提醒(不用 Alert:左竖线 + 版记小标会把它撑成两行、且像引用块) */
+									<p className="flex items-center gap-1.5 text-xs text-warn-fg mt-3">
+										<TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+										<span>
+											选了 <b className="tabular-nums">{executorIds.length}</b> 位执行人,会各自下发 1 条任务,共{" "}
+											<b className="tabular-nums">{executorIds.length}</b> 条。
+										</span>
+									</p>
 								)}
 							</div>
 						</DetailRow>
@@ -578,7 +574,7 @@ export function TaskForm({
 				open={fold.reminder}
 				onToggle={() => setFold((prev) => ({ ...prev, reminder: !prev.reminder }))}
 			>
-				<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} dueAt={fromDateInput(due)} />
+				<TaskReminderConfigEditor value={reminderConfig} onChange={setReminderConfig} dueAt={localDateToIso(due)} />
 			</FoldSection>
 		</TaskActionDialog>
 	);

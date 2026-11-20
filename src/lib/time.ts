@@ -41,6 +41,28 @@ export function formatLocalDate(value: Date | string | number | null | undefined
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/**
+ * 本地 `YYYY-MM-DD` → **本地 0 点**的 Date。
+ * 别直接 `new Date("YYYY-MM-DD")` —— 那会被当成 UTC,东八区会差一天。
+ */
+function localMidnightOf(text: string | null | undefined): Date | null {
+	if (!text) return null;
+	const date = new Date(`${text}T00:00:00`);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** 本地 `YYYY-MM-DD` → 当天 0 点的 ISO(空值回 `null`)。日期选择器的值落库/传参统一走它 */
+export function localDateToIso(text: string | null | undefined): string | null {
+	const date = localMidnightOf(text);
+	return date ? date.toISOString() : null;
+}
+
+/** 本地 `YYYY-MM-DD` → 当天 `23:59:59.999` 的 ISO(空值回 `null`)。做「截至某天」的上界 */
+export function localDateEndIso(text: string | null | undefined): string | null {
+	const date = localMidnightOf(text);
+	return date ? new Date(date.getTime() + 86_400_000 - 1).toISOString() : null;
+}
+
 /** 本地 `YYYY-MM-DDTHH:mm` —— `<input type="datetime-local">` 的 `value`(直接 slice ISO 会拿到 UTC) */
 export function toLocalMinuteInput(value: Date | string | number | null | undefined): string {
 	const text = formatLocalDateTime(value);

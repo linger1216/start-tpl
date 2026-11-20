@@ -33,6 +33,7 @@ import { PAGE_SIZE_KEY, parsePageSize, useFilterPrefs, useParaRaw } from "#/hook
 import { useTRPC } from "#/integrations/trpc/react";
 import { toastApiError } from "#/lib/api/error";
 import { priorityLabelOf, priorityToneOf, TASK_PRIORITIES } from "#/lib/task/close-spec";
+import { localDateEndIso, localDateToIso } from "#/lib/time";
 
 /**
  * 快速筛选的三组 —— 形态由 `shared/filter-chips` 统一,这里只给**语义**:
@@ -104,11 +105,8 @@ export function TaskListPage() {
 	const removeTask = useConfirm<{ id: string; name: string; childCount: number }>();
 
 	// 时间筛选折成创建时间的下限 / 上限:开始取当天零点,结束取当天 23:59:59.999(本地)
-	const startTime = useMemo(
-		() => (timeRange.from ? new Date(`${timeRange.from}T00:00:00`) : undefined),
-		[timeRange.from],
-	);
-	const endTime = useMemo(() => (timeRange.to ? new Date(`${timeRange.to}T23:59:59.999`) : undefined), [timeRange.to]);
+	const startTime = useMemo(() => localDateToIso(timeRange.from) ?? undefined, [timeRange.from]);
+	const endTime = useMemo(() => localDateEndIso(timeRange.to) ?? undefined, [timeRange.to]);
 
 	const listQuery = useQuery(
 		trpc.taskClose.taskList.queryOptions(
@@ -137,6 +135,9 @@ export function TaskListPage() {
 		() => (usersQuery.data ?? []).map((row) => ({ value: row.id, label: row.name })),
 		[usersQuery.data],
 	);
+
+	/** 新建表单的默认值(截止日按工作日口径,服务端算) */
+	const defaultsQuery = useQuery(trpc.taskClose.taskDefaults.queryOptions());
 
 	const invalidate = () => queryClient.invalidateQueries(trpc.taskClose.pathFilter());
 
@@ -340,7 +341,7 @@ export function TaskListPage() {
 					/>
 				</Card>
 			) : (
-				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+				<div className="grid grid-cols-[repeat(auto-fill,minmax(min(24rem,100%),1fr))] gap-3">
 					{items.map((item) => (
 						<div key={item.id} className="h-48 min-w-0">
 							{item.canRemove ? (
@@ -386,6 +387,7 @@ export function TaskListPage() {
 					editing={null}
 					workflowOptions={workflowOptions}
 					userOptions={userOptions}
+					defaultDueAt={defaultsQuery.data?.dueAt}
 					onCreate={submit}
 				/>
 			) : null}

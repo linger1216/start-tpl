@@ -7,17 +7,15 @@ import { newId } from "#/lib/ids";
 import { alive, softDeleted } from "#/lib/soft-delete";
 import { MAX_NAME_LENGTH } from "#/lib/task/close-spec";
 import { isRecord, stableJson } from "#/lib/task/json";
+import { payloadOf } from "#/lib/task/payload";
 import { createReportWorkbook, mergeTaskExcelWorkbooks, previewReportWorkbook } from "#/lib/task/report-excel";
 import {
 	asFormValue,
 	asTableValue,
 	MAX_REPORT_BYTES,
 	MAX_REPORT_ROWS,
-	REPORT_ROW_ID,
 	reportAttachmentIds,
 	reportRowsOf,
-	reportRowsWithIds,
-	rowMatchesFilter,
 	type TaskReportSchema,
 	taskReportSchema,
 	validateTaskReport,
@@ -35,6 +33,7 @@ import {
 	isAdminOf,
 	lockTask,
 	readTaskExcelFile,
+	reportOf,
 	reportRowOf,
 	resolveReportTemplate,
 	type ScopeFilter,
@@ -95,7 +94,7 @@ function canEditReport(task: { creator_id: string; executor_id: string | null },
 	return task.creator_id === userId || task.executor_id === userId;
 }
 
-/** `tc_task.report` 上的数据范围。子任务带 filter,父任务没有(没有就是全部行)。 */
+/** `tc_task.payload.report` 上的数据范围。子任务带 filter,父任务没有(没有就是全部行)。 */
 function filterOf(report: unknown): ScopeFilter {
 	const bag = report && typeof report === "object" ? (report as { filter?: unknown }) : null;
 	return Array.isArray(bag?.filter) ? (bag.filter as ScopeFilter) : [];
@@ -109,7 +108,7 @@ function filterOf(report: unknown): ScopeFilter {
  */
 async function submittedChildrenOf(reader: Pick<typeof db, "select">, taskId: string) {
 	const children = await reader
-		.select({ id: taskTable.id, name: taskTable.name, report: taskTable.report })
+		.select({ id: taskTable.id, name: taskTable.name, payload: taskTable.payload })
 		.from(taskTable)
 		.where(and(eq(taskTable.parent_id, taskId), alive(taskTable)))
 		.orderBy(asc(taskTable.created_at), asc(taskTable.id));
@@ -124,6 +123,7 @@ async function submittedChildrenOf(reader: Pick<typeof db, "select">, taskId: st
 	return {
 		hasChildren: true,
 		children: children.map((child) => {
+			const report = reportOf(child);
 			const payload = reportMap.get(child.id) ?? null;
 			return {
 				taskId: child.id,
@@ -131,11 +131,7 @@ async function submittedChildrenOf(reader: Pick<typeof db, "select">, taskId: st
 				executorName: names.get(child.id) ?? null,
 				payload,
 				submitted: payload !== null,
-				filter: filterOf(child.report),
-				allocatedRowIds:
-					isRecord(child.report) && Array.isArray(child.report.allocatedRowIds)
-						? child.report.allocatedRowIds.filter((id): id is string => typeof id === "string")
-						: null,
+				filter: filterOf(report),
 			};
 		}),
 	};
@@ -285,7 +281,7 @@ export const taskReportRouter = createTRPCRouter({
 					const effective = excelSnapshotOf(
 						own.draft,
 						submitted.children,
-						submitted.hasChildren && parentParticipationOf(task.report),
+						submitted.hasChildren && parentParticipationOf(reportOf(task)),
 						submitted.hasChildren,
 					);
 					const templateBuffer = await readTaskExcelFile(db, config.templateFileId);
@@ -301,7 +297,7 @@ export const taskReportRouter = createTRPCRouter({
 					template.schema,
 					own.draft,
 					submitted.children,
-					submitted.hasChildren && parentParticipationOf(task.report),
+					submitted.hasChildren && parentParticipationOf(reportOf(task)),
 					submitted.hasChildren,
 				);
 				const data = composed.map((entry) => entry.row);
@@ -450,7 +446,7 @@ export const taskReportRouter = createTRPCRouter({
 		const syncedChildren = childReports.filter((child) => child.submitted);
 		// 附件文件名:自己那份 + 子任务当前汇总版本里引用的都要解出来
 		const hasChildren = submitted.hasChildren;
-		const parentParticipates = hasChildren && parentParticipationOf(task.report);
+		const parentParticipates = hasChildren && parentParticipationOf(reportOf(task));
 		const composed = composedRowsOf(template.schema, own.draft, childReports, parentParticipates, hasChildren);
 		const ownExcelFileId = isRecord(own.draft) && typeof own.draft.fileId === "string" ? own.draft.fileId : null;
 		const excelSources =
@@ -479,22 +475,8 @@ export const taskReportRouter = createTRPCRouter({
 			...(template.schema.kind === "EXCEL" && ownExcelFileId ? [ownExcelFileId] : []),
 			...excelSources.map((source) => source.fileId),
 		]);
-		const allocationRows =
-			template.schema.kind === "TABLE"
-				? reportRowsWithIds(reportRowsOf(template.schema, own.draft), task.id, own.revision).map((row) => ({
-						id: String(row[REPORT_ROW_ID]),
-						values: row,
-					}))
-				: [];
-		const allocatedRowIds = new Set(
-			childReports.flatMap(
-				(child) =>
-					child.allocatedRowIds ??
-					reportRowsWithIds(reportRowsOf(template.schema, own.draft), task.id, own.revision)
-						.filter((row) => rowMatchesFilter(row, child.filter))
-						.map((row) => String(row[REPORT_ROW_ID])),
-			),
-		);
+		/** 表格:父任务母版行(数组顺序即下标,下发「手动分配」按它选行) */
+		const allocationRows = template.schema.kind === "TABLE" ? reportRowsOf(template.schema, own.draft) : [];
 		return {
 			report: own,
 			template,
@@ -511,7 +493,6 @@ export const taskReportRouter = createTRPCRouter({
 			composed,
 			hasChildren,
 			allocationRows,
-			allocatedRowIds: [...allocatedRowIds],
 			excelSources,
 		};
 	}),
@@ -533,12 +514,11 @@ export const taskReportRouter = createTRPCRouter({
 					throw new TRPCError({ code: "CONFLICT", message: REPORT_CONFLICT_MESSAGE });
 				const template = await getTaskReportTemplate(task);
 				const schema = template.schema;
-				let rows = reportRowsOf(schema, input.draft);
+				const rows = reportRowsOf(schema, input.draft);
 				if (rows.length > MAX_REPORT_ROWS || rows.some((row) => !isRecord(row)))
 					throw new TRPCError({ code: "BAD_REQUEST", message: "填报格式无效" });
 				const issues = schema.kind === "TABLE" && rows.length === 0 ? [] : validateTaskReport(schema, input.draft);
 				if (issues.length) throw new TRPCError({ code: "BAD_REQUEST", message: `填报数据无效: ${issues[0].message}` });
-				if (schema.kind === "TABLE") rows = reportRowsWithIds(rows, task.id, own.revision);
 				if (schema.kind === "EXCEL") {
 					if (!isRecord(input.draft) || (input.draft.fileId !== null && typeof input.draft.fileId !== "string"))
 						throw new TRPCError({ code: "BAD_REQUEST", message: "Excel 填报格式无效" });
@@ -584,12 +564,15 @@ export const taskReportRouter = createTRPCRouter({
 					throw new TRPCError({ code: "BAD_REQUEST", message: "只有包含子任务的父任务可以设置参与状态" });
 				if (!canEditReport(task, me.id))
 					throw new TRPCError({ code: "FORBIDDEN", message: "只有任务创建人或当前执行人可以修改" });
-				if (!task.report || !isRecord(task.report))
-					throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
+				const stored = payloadOf(task.payload);
+				if (!stored?.report) throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
 				const now = new Date();
 				await tx
 					.update(taskTable)
-					.set({ report: { ...task.report, parentParticipates: input.enabled }, updated_at: now })
+					.set({
+						payload: { ...stored, report: { ...stored.report, parentParticipates: input.enabled } },
+						updated_at: now,
+					})
 					.where(eq(taskTable.id, task.id));
 				return { parentParticipates: input.enabled };
 			});
@@ -610,8 +593,8 @@ export const taskReportRouter = createTRPCRouter({
 				if (own.revision !== input.revision)
 					throw new TRPCError({ code: "CONFLICT", message: REPORT_CONFLICT_MESSAGE });
 				const template = await getTaskReportTemplate(task, tx);
-				if (!task.report || !isRecord(task.report))
-					throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
+				const stored = payloadOf(task.payload);
+				if (!stored?.report) throw new TRPCError({ code: "BAD_REQUEST", message: "任务没有填报配置" });
 				const now = new Date();
 				const emptyDraft =
 					template.schema.kind === "TABLE" ? [] : template.schema.kind === "EXCEL" ? { fileId: null } : {};
@@ -621,7 +604,7 @@ export const taskReportRouter = createTRPCRouter({
 					.where(eq(taskReportTable.id, own.id));
 				await tx
 					.update(taskTable)
-					.set({ report: { ...task.report, parentParticipates: false }, updated_at: now })
+					.set({ payload: { ...stored, report: { ...stored.report, parentParticipates: false } }, updated_at: now })
 					.where(eq(taskTable.id, task.id));
 				return { revision: own.revision + 1, parentParticipates: false };
 			});
@@ -642,7 +625,7 @@ export const taskReportRouter = createTRPCRouter({
 			if (!own) throw new TRPCError({ code: "NOT_FOUND", message: "任务没有填报" });
 			let pushed = 1;
 			const descendants = await submittedChildrenOf(tx, task.id);
-			const participates = descendants.hasChildren && parentParticipationOf(task.report);
+			const participates = descendants.hasChildren && parentParticipationOf(reportOf(task));
 			const composed = composedRowsOf(
 				template.schema,
 				own.draft,

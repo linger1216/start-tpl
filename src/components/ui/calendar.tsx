@@ -180,7 +180,10 @@ function Calendar({
 					defaultClassNames.range_end,
 				),
 				today: cn(
-					"rounded-(--cell-radius) bg-muted text-foreground data-[selected=true]:rounded-none",
+					// 「今天」要一眼认出来:数字加粗 + 品牌蓝 + 内描边;被选中时让位给实底(去掉描边)
+					"rounded-(--cell-radius) data-[selected=true]:rounded-none",
+					"[&>button]:font-semibold [&>button]:text-primary [&>button]:ring-1 [&>button]:ring-primary/50 [&>button]:ring-inset",
+					"[&[data-selected=true]>button]:text-primary-foreground [&[data-selected=true]>button]:ring-0",
 					defaultClassNames.today,
 				),
 				outside: cn("text-muted-foreground aria-selected:text-muted-foreground", defaultClassNames.outside),

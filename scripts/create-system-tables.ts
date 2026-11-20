@@ -508,7 +508,6 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     \`priority\` tinyint default null,
     \`payload\` json not null,
     \`parent_id\` varchar(32) collate utf8mb4_unicode_ci default null,
-    \`report\` json default null,
     \`deleted_at\` datetime default null,
     \`created_at\` datetime not null default current_timestamp,
     \`updated_at\` datetime(3) not null default current_timestamp(3) on update current_timestamp(3),
@@ -516,7 +515,7 @@ const TABLES: Array<{ name: string; ddl: string }> = [
     key \`idx_task_status_created\` (\`flow_status\`, \`created_at\`),
     key \`idx_task_creator_status\` (\`creator_id\`, \`flow_status\`),
     key \`idx_task_parent\` (\`parent_id\`)
-  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:payload 一列装三样 = 内容区 + 状态图快照 workflow + 提醒规则 reminders;parent_id/report 承载父子填报;软删走 deleted_at)'`,
+  ) engine = InnoDB default charset = utf8mb4 collate = utf8mb4_unicode_ci comment = '任务本体(tc_close 模块:payload 一列装四样 = 内容区 + 状态图快照 workflow + 提醒规则 reminders + 填报绑定 report;软删走 deleted_at)'`,
 	},
 	{
 		name: "tc_task_reminder",
@@ -713,16 +712,11 @@ const COLUMN_UPGRADES: Array<{ table: string; column: string; ddl: string }> = [
 		column: "deleted_at",
 		ddl: "datetime default null",
 	},
-	// 父子任务 + 填报规则(批次退役):parent_id 指向父任务;report 存 { reportId, filter }
+	// 父子任务(批次退役):parent_id 指向父任务(report 已并入 payload.report,不再单独成列)
 	{
 		table: "tc_task",
 		column: "parent_id",
 		ddl: "varchar(32) collate utf8mb4_unicode_ci default null",
-	},
-	{
-		table: "tc_task",
-		column: "report",
-		ddl: "json default null",
 	},
 	// 执行人下沉到任务列(原 tc_member.role=executor);两个单例(creator/executor)都由列保证唯一
 	{
@@ -1039,6 +1033,8 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 	// 三列 JSON 合一:状态图快照 / 提醒规则搬进 tc_task.payload(先跑 scripts/migrate-task-payload.mjs 回填)
 	{ table: "tc_task", column: "workflow" },
 	{ table: "tc_task", column: "reminder_config" },
+	// 填报绑定搬进 tc_task.payload.report(回填见下方「report 并入 payload」段)
+	{ table: "tc_task", column: "report" },
 	// 数据权限 v1.1:「给值 / 给行」不再是字段,改由 `domain` / `resource` 推导(`data-scope-spec.ts` 的 `producesOf()`)
 	{ table: "sys_data_plugin", column: "produces" },
 	// 数据权限 v1.2:插件只剩「一段函数体」一档,`declared`(登记取数)整档删掉 —— 这两列随之废弃
@@ -1095,6 +1091,68 @@ const COLUMN_DROPS: Array<{ table: string; column: string; constraint?: string }
 		);
 		console.log("✓ tc_report_submission 最新快照回填到 tc_task_report.synced");
 	}
+}
+
+/**
+ * **退役表** —— 无人读的历史表,直接删(幂等)。
+ *
+ * ⚠️ 必须排在上面那些「回填」之后:`tc_report_submission` 的最新快照要先搬进 `tc_task_report.synced` 才删。
+ * 加表时写清「为什么没用了」,别让它变成第二张没人敢删的孤岛表。
+ */
+const RETIRED_TABLES: Array<{ table: string; why: string }> = [
+	{ table: "tc_report_submission", why: "提交的那一版改存 tc_task_report.synced,不再保留历史版本" },
+	{ table: "tc_content_revision", why: "任务说明改成就地编辑(审计走 tc_log),不可变修订表无人读" },
+];
+for (const retired of RETIRED_TABLES) {
+	const tables = (await db.execute(sql`show tables like ${retired.table}`))[0] as unknown as Array<
+		Record<string, unknown>
+	>;
+	if (tables.length > 0) {
+		await db.execute(sql.raw(`drop table \`${retired.table}\``));
+		console.log(`✓ 已删除 ${retired.table}(${retired.why})`);
+	}
+}
+
+// tc_task.report → payload.report(必须在下面的删列之前跑;两列都在时才跑,幂等)
+{
+	const tkCols = (
+		await db.execute(
+			sql`select column_name as name from information_schema.columns where table_schema = database() and table_name = 'tc_task'`,
+		)
+	)[0] as unknown as Array<{ name: string }>;
+	if (tkCols.some((row) => row.name === "report")) {
+		await db.execute(
+			sql`update tc_task set payload = json_set(payload, '$.report', report) where report is not null and json_extract(payload, '$.report') is null`,
+		);
+		console.log("✓ tc_task.report 并入 payload.report");
+	}
+}
+
+// rowId 机制退役:清掉历史填报里的 `__rowId`(表格行不再有内部身份),并抹掉 payload.report.allocatedRowIds
+{
+	const rows = (
+		await db.execute(
+			sql`select id, draft, synced from tc_task_report
+				where cast(draft as char) like '%"__rowId"%' or cast(synced as char) like '%"__rowId"%'`,
+		)
+	)[0] as unknown as Array<{ id: string; draft: unknown; synced: unknown }>;
+	const strip = (value: unknown) =>
+		Array.isArray(value)
+			? value.map((row) =>
+					row && typeof row === "object" && "__rowId" in row
+						? Object.fromEntries(Object.entries(row).filter(([key]) => key !== "__rowId"))
+						: row,
+				)
+			: value;
+	for (const row of rows) {
+		await db.execute(
+			sql`update tc_task_report set draft = ${JSON.stringify(strip(row.draft))}, synced = ${JSON.stringify(strip(row.synced))} where id = ${row.id}`,
+		);
+	}
+	if (rows.length) console.log(`✓ 清理了 ${rows.length} 条历史填报里的 __rowId`);
+	await db.execute(
+		sql`update tc_task set payload = json_remove(payload, '$.report.allocatedRowIds') where json_extract(payload, '$.report.allocatedRowIds') is not null`,
+	);
 }
 
 for (const drop of COLUMN_DROPS) {

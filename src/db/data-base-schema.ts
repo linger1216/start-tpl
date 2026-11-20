@@ -932,9 +932,9 @@ export const taskWorkflowTable = mysqlTable("tc_workflow", {
 });
 
 /**
- * 任务本体 —— `payload` 是**一列装三样**:内容区(links / attachments)、状态图快照(`workflow`,
- * 创建时从 `tc_workflow.payload` 复制)、提醒规则(`reminders`)。快照复制之后,`tc_workflow` 怎么改都不影响已建任务。
- * 软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
+ * 任务本体 —— `payload` 是**一列装四样**:内容区(links / attachments)、状态图快照(`workflow`,
+ * 创建时从 `tc_workflow.payload` 复制)、提醒规则(`reminders`)、填报绑定(`report`)。快照复制之后,
+ * `tc_workflow` 怎么改都不影响已建任务。软删:`deleted_at` 直接接 `lib/soft-delete.ts` 的 `alive()` / `softDeleted()`。
  *
  * `priority` —— `tinyint(1)` 存数字档位:`0` = P0(最高)、`1` = P1(高)、`2` = P2(普通);
  * 映射见 `lib/task/close-spec.ts` 的词表。允许 null:老数据没有,新建时可空。
@@ -956,17 +956,13 @@ export const taskTable = mysqlTable(
 		/** `0` = P0 / `1` = P1 / `2` = P2;null = 未设置 */
 		priority: tinyint("priority"),
 		/**
-		 * 内容区(links / attachments)+ 状态图快照(`workflow`)+ 提醒规则(`reminders`)—— 一列装三样。
-		 * `workflow` 是创建时从 `tc_workflow.payload` 复制的快照;`reminders` 缺省走默认规则。
+		 * 内容区(links / attachments)+ 状态图快照(`workflow`)+ 提醒规则(`reminders`)+ 填报绑定(`report`)
+		 * —— 一列装四样。`workflow` 是创建时从 `tc_workflow.payload` 复制的快照;`reminders` 缺省走默认规则;
+		 * `report`(模板 id / 结构快照 / 数据范围)没绑填报时不出现,填报值另存 `tc_task_report`。
 		 */
 		payload: json("payload").notNull(),
 		/** → `tc_task.id`(父任务)。null = 本身不是子任务;多执行人 + 填报模板建任务时 fan-out 产生 */
 		parent_id: varchar("parent_id", { length: 32 }),
-		/**
-		 * 填报配置:模板 id、创建时的结构快照及可选筛选条件。
-		 * 填报值不在这里 —— 每个任务(含子任务)的 draft / synced 存在自己的 `tc_task_report` 行。null 表示未绑定。
-		 */
-		report: json("report"),
 		deleted_at: datetime("deleted_at", { mode: "date" }),
 		created_at: datetime("created_at", { mode: "date" }).$defaultFn(() => new Date()),
 		updated_at: datetime("updated_at", { mode: "date" }).$defaultFn(() => new Date()),
@@ -1166,7 +1162,7 @@ export const taskReportTemplateTable = mysqlTable("tc_report_template", {
 	deleted_at: datetime("deleted_at", { mode: "date" }),
 });
 
-/** 一任务一行独立填报，模板引用走 `tc_task.report.reportId`。 */
+/** 一任务一行独立填报，模板引用走 `tc_task.payload.report.reportId`。 */
 export const taskReportTable = mysqlTable(
 	"tc_task_report",
 	{
