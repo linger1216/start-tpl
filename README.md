@@ -166,7 +166,7 @@ UI 组件与跨域展示件通过真实页面或工作台示例展示；Excel �
 
 ## Docker / 容器化
 
-本机不装 MySQL / MinIO 也能起全栈:`docker-compose.yml` 是唯一环境定义,devcontainer 只是它的叠加层。
+本机不装 MySQL / MinIO 也能起全栈:`docker-compose.yml` 是唯一环境定义。
 
 ```bash
 cp .env.example .env.local                            # 至少填 BETTER_AUTH_SECRET
@@ -181,8 +181,7 @@ docker compose up -d                                  # http://localhost:3000
 | `minio` | `9000` / `9001` | 对象存储 + 控制台 |
 | `bootstrap` | — | profile `setup` 的一次性任务:建 34 张系统表 + 四个种子 + `db:minio:init` |
 
-端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。VS Code 用户可以直接
-「Reopen in Container」(`.devcontainer/`),仓库挂进容器、依赖放命名卷。
+端口只绑 `127.0.0.1`;换 `APP_PORT` 要同步放行 `BETTER_AUTH_TRUSTED_ORIGINS`。
 
 > 一个反直觉但必须知道的事实:**Nitro 的 `.output` 不是自包含的** —— `.output` 里的
 > bundle 是按包名 import 的,所以运行镜像里必须 `pnpm install --prod`。完整口径、可覆盖变量表与踩过的坑见
@@ -543,7 +542,7 @@ pnpm check
 - `doc/通知中心.md` · `doc/文件管理.md` —— 通知与 MinIO 文件的能力边界
 - `doc/已知陷阱.md` —— 踩过的坑(前端 bundle 混入服务端模块、`not in` 的 NULL 三值逻辑、错误终态写死 500…)
 - `doc/数据权限.md` —— 行级数据范围 + 值域插件:表结构、三态状态流、内置插件清单与试算口径
-- `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表、Dev Container,以及「`.output` 不自包含」这类容器专坑
+- `doc/容器化.md` —— Dockerfile 四个目标、compose 变量表,以及「`.output` 不自包含」这类容器专坑
 - `doc/测试数据/README.md` —— 六个种子脚本与演示账号
 - `AGENTS.md` —— 面向 AI 编码代理的**规矩摘要 + 文档索引**(精简版,约 7KB)
 - `DESIGN.md` —— 视觉规范(品牌 7 色 + 点缀 6 色相 + 间距 / 圆角 / 阴影 / 动效原语清单)

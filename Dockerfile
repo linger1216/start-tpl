@@ -3,7 +3,7 @@
 #   base     —— 公共底座:pnpm 环境变量 + corepack(`deps` / `runtime` 都从它起)
 #   deps     —— 装依赖(含 devDependencies),给 build / dev 复用
 #   build    —— 编译出 `.output`(Nitro node-server)
-#   dev      —— 源码 + 全部依赖 + git,给 .devcontainer 与 compose 的初始化任务用
+#   dev      —— 源码 + 全部依赖 + git,给 compose 的初始化任务(bootstrap)用
 #   runtime  —— 生产镜像:`.output` + **生产依赖**
 #
 # 为什么运行镜像还要装一遍依赖(踩过的坑,不是偷懒):
@@ -48,7 +48,7 @@ FROM deps AS build
 COPY . .
 RUN pnpm build
 
-# ── 开发镜像(devcontainer / 初始化任务)────────────────────────────
+# ── 开发镜像(compose 初始化任务)──────────────────────────────────
 FROM deps AS dev
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends git ca-certificates \
