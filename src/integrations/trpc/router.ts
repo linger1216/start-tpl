@@ -5,6 +5,7 @@ import { demoGridRouter } from "./routers/demo-grid";
 import { departmentRouter } from "./routers/department";
 import { dictRouter } from "./routers/dict";
 import { fileRouter } from "./routers/file";
+import { globalEyeRouter } from "./routers/global-eye";
 import { logRouter } from "./routers/log";
 import { menuRouter } from "./routers/menu";
 import { noticeRouter } from "./routers/notice";
@@ -42,6 +43,8 @@ export const trpcRouter = createTRPCRouter({
 	shareToken: shareTokenRouter,
 	/** 系统设置 ▸ 文件管理 —— 读写 `sys_file`(字节存 MinIO,见 doc/文件管理.md) */
 	file: fileRouter,
+	/** 全球眼视频 —— 外部视频平台(中国电信 DSS),见 doc/全球眼视频.md */
+	globalEye: globalEyeRouter,
 	/** 系统设置 ▸ 数据权限 ▸ 数据范围 —— 读写 `sys_data_policy`(行级可见范围,见 doc/数据权限.md) */
 	dataScope: dataScopeRouter,
 	/** 系统设置 ▸ 数据权限 ▸ 值域插件 —— 读写 `sys_data_plugin`(写接口**只给超管**,见 doc/数据权限.md) */

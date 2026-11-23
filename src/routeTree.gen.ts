@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as mainRouteRouteImport } from './routes/(main)/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as mainIndexRouteImport } from './routes/(main)/index'
+import { Route as mainGlobalEyeRouteImport } from './routes/(main)/global-eye'
 import { Route as mainNoticesRouteImport } from './routes/(main)/notices'
 import { Route as ApiCaptchaRouteImport } from './routes/api.captcha'
 import { Route as mainSettingsIndexRouteImport } from './routes/(main)/settings/index'
@@ -32,6 +33,7 @@ import { Route as mainTaskCloseIndexRouteImport } from './routes/(main)/task-clo
 import { Route as mainTaskCloseReportTemplatesRouteImport } from './routes/(main)/task-close/report-templates'
 import { Route as mainTaskCloseWorkflowsRouteImport } from './routes/(main)/task-close/workflows'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiGlobaleyeStreamRouteImport } from './routes/api.globaleye.stream'
 import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 import { Route as mainTaskCloseTaskIdIndexRouteImport } from './routes/(main)/task-close/$taskId/index'
@@ -48,6 +50,11 @@ const LoginRoute = LoginRouteImport.update({
 const mainIndexRoute = mainIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => mainRouteRoute,
+} as any)
+const mainGlobalEyeRoute = mainGlobalEyeRouteImport.update({
+  id: '/global-eye',
+  path: '/global-eye',
   getParentRoute: () => mainRouteRoute,
 } as any)
 const mainNoticesRoute = mainNoticesRouteImport.update({
@@ -151,6 +158,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGlobaleyeStreamRoute = ApiGlobaleyeStreamRouteImport.update({
+  id: '/api/globaleye/stream',
+  path: '/api/globaleye/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSseNoticeRoute = ApiSseNoticeRouteImport.update({
   id: '/api/sse/notice',
   path: '/api/sse/notice',
@@ -170,6 +182,7 @@ const mainTaskCloseTaskIdIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
+  '/global-eye': typeof mainGlobalEyeRoute
   '/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
@@ -189,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
@@ -197,6 +211,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/global-eye': typeof mainGlobalEyeRoute
   '/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/': typeof mainIndexRoute
@@ -216,6 +231,7 @@ export interface FileRoutesByTo {
   '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
@@ -226,6 +242,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(main)': typeof mainRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/(main)/global-eye': typeof mainGlobalEyeRoute
   '/(main)/notices': typeof mainNoticesRoute
   '/api/captcha': typeof ApiCaptchaRoute
   '/(main)/': typeof mainIndexRoute
@@ -245,6 +262,7 @@ export interface FileRoutesById {
   '/(main)/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/(main)/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
@@ -255,6 +273,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/login'
+    | '/global-eye'
     | '/notices'
     | '/api/captcha'
     | '/'
@@ -274,6 +293,7 @@ export interface FileRouteTypes {
     | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
+    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings/'
@@ -282,6 +302,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/global-eye'
     | '/notices'
     | '/api/captcha'
     | '/'
@@ -301,6 +322,7 @@ export interface FileRouteTypes {
     | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
+    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings'
@@ -310,6 +332,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/(main)'
     | '/login'
+    | '/(main)/global-eye'
     | '/(main)/notices'
     | '/api/captcha'
     | '/(main)/'
@@ -329,6 +352,7 @@ export interface FileRouteTypes {
     | '/(main)/task-close/report-templates'
     | '/(main)/task-close/workflows'
     | '/api/auth/$'
+    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/(main)/settings/'
@@ -341,6 +365,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApiCaptchaRoute: typeof ApiCaptchaRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiGlobaleyeStreamRoute: typeof ApiGlobaleyeStreamRoute
   ApiSseNoticeRoute: typeof ApiSseNoticeRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
@@ -366,6 +391,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof mainIndexRouteImport
+      parentRoute: typeof mainRouteRoute
+    }
+    '/(main)/global-eye': {
+      id: '/(main)/global-eye'
+      path: '/global-eye'
+      fullPath: '/global-eye'
+      preLoaderRoute: typeof mainGlobalEyeRouteImport
       parentRoute: typeof mainRouteRoute
     }
     '/(main)/notices': {
@@ -508,6 +540,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/globaleye/stream': {
+      id: '/api/globaleye/stream'
+      path: '/api/globaleye/stream'
+      fullPath: '/api/globaleye/stream'
+      preLoaderRoute: typeof ApiGlobaleyeStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sse/notice': {
       id: '/api/sse/notice'
       path: '/api/sse/notice'
@@ -533,6 +572,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface mainRouteRouteChildren {
+  mainGlobalEyeRoute: typeof mainGlobalEyeRoute
   mainNoticesRoute: typeof mainNoticesRoute
   mainIndexRoute: typeof mainIndexRoute
   mainSettingsDataPluginsRoute: typeof mainSettingsDataPluginsRoute
@@ -556,6 +596,7 @@ interface mainRouteRouteChildren {
 }
 
 const mainRouteRouteChildren: mainRouteRouteChildren = {
+  mainGlobalEyeRoute: mainGlobalEyeRoute,
   mainNoticesRoute: mainNoticesRoute,
   mainIndexRoute: mainIndexRoute,
   mainSettingsDataPluginsRoute: mainSettingsDataPluginsRoute,
@@ -587,6 +628,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApiCaptchaRoute: ApiCaptchaRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiGlobaleyeStreamRoute: ApiGlobaleyeStreamRoute,
   ApiSseNoticeRoute: ApiSseNoticeRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }

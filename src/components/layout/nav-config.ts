@@ -53,6 +53,7 @@ import {
 	Table as TableIcon,
 	Tags,
 	Users,
+	Video,
 	Workflow,
 } from "lucide-react";
 
@@ -72,6 +73,7 @@ export const NAV_ICON_MAP = {
 	workflow: Workflow,
 	settings: Settings,
 	boxes: Boxes,
+	video: Video,
 	// 组件展示
 	"bar-chart-3": BarChart3,
 	"layout-dashboard": LayoutDashboard,
@@ -130,6 +132,12 @@ export const NAV_NODES: NavNode[] = [
 		path: "/notices",
 		icon: "bell",
 		description: "站内通知:全部已读、点一条跳到对应页面;有「发通知」权限的人还能给指定的人发一条。",
+	},
+	{
+		name: "全球眼视频",
+		path: "/global-eye",
+		icon: "video",
+		description: "视频通道树:组织 → 设备 → 通道;点通道看全部信息,并可实时预览(HLS)。",
 	},
 	{
 		name: "任务闭环",

@@ -309,6 +309,9 @@ export const PERM_BY_PATH: Record<string, string | readonly string[]> = {
 	// 文件(文件页 + 它的详情弹窗)
 	"file.list": pagePermOf("/settings/files"),
 	"file.url": pagePermOf("/settings/files"),
+	// 全球眼视频(读的是外部视频平台,按页面码放行)
+	"globalEye.channelTree": pagePermOf("/global-eye"),
+	"globalEye.streamUrl": pagePermOf("/global-eye"),
 	// 审计日志(读接口也走这张表)
 	"log.list": "sys:log:list",
 	// 站内通知(读自己的不需要权限点;替别人发才需要)
@@ -462,6 +465,10 @@ export const UNSCOPED_QUERIES: readonly string[] = [
 	"taskClose.attachmentUrl",
 	// 类别 3:截止提醒预览 —— 纯算,**不读任何行**,所以没有"这行归谁看"的问题
 	"taskClose.reminderRulePreview",
+	// 类别 3:全球眼视频 —— 读的是**外部视频平台**的目录 / 取流地址,不碰本地业务行,
+	// 也没有"这行归哪个部门"这一说(权限维度已在 PERM_BY_PATH 按页面码登记)
+	"globalEye.channelTree",
+	"globalEye.streamUrl",
 ];
 
 /**

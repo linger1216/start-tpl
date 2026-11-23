@@ -72,6 +72,7 @@ export const ICON_NAMES: readonly string[] = Object.freeze([
 	"unlock",
 	"bell",
 	"bell-off",
+	"video",
 	"mail",
 	"phone",
 	"send",

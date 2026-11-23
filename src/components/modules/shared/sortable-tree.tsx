@@ -60,6 +60,7 @@ export function SortableTree<T extends SortableTreeNode>({
 	nodes,
 	selectedId,
 	dragDisabled,
+	draggable = true,
 	ariaLabel,
 	defaultCollapsed = true,
 	searchable = true,
@@ -76,6 +77,11 @@ export function SortableTree<T extends SortableTreeNode>({
 	selectedId: string | null;
 	/** 有未保存的修改时禁止重排(否则顺序与右侧详情对不上) */
 	dragDisabled?: boolean;
+	/**
+	 * 是否可拖拽排序(默认 `true`)。**只读树**(如全球眼通道树)传 `false`:
+	 * 不设 `draggable`、不渲染拖拽把手、禁用 ↑/↓ 键盘换序 —— 否则把手会误导"这几行能拖"。
+	 */
+	draggable?: boolean;
 	ariaLabel: string;
 	/**
 	 * 初始是否**全部折叠**(默认 `true`)。大树上"打开即全展开"会瞬间渲染几千行 ——
@@ -199,7 +205,7 @@ export function SortableTree<T extends SortableTreeNode>({
 				<div key={node.id}>
 					<div
 						ref={selectedId === node.id ? selectedRef : undefined}
-						draggable={!dragDisabled}
+						draggable={draggable && !dragDisabled}
 						onDragStart={() => setDragId(node.id)}
 						onDragEnd={() => {
 							setDragId(null);
@@ -219,11 +225,11 @@ export function SortableTree<T extends SortableTreeNode>({
 								event.preventDefault();
 								onSelect(node);
 							}
-							if (event.key === "ArrowUp" && !dragDisabled) {
+							if (event.key === "ArrowUp" && draggable && !dragDisabled) {
 								event.preventDefault();
 								onReorder(node.id, node.id, "before");
 							}
-							if (event.key === "ArrowDown" && !dragDisabled) {
+							if (event.key === "ArrowDown" && draggable && !dragDisabled) {
 								event.preventDefault();
 								onReorder(node.id, node.id, "after");
 							}
@@ -282,10 +288,13 @@ export function SortableTree<T extends SortableTreeNode>({
 						 * 于是"有子节点的那几行没有把手"—— 用户看到的现象是**"这几行不能拖动"**,
 						 * 其实能拖,只是**没给可供性**。所以箭头归箭头(负责展开),把手归把手(每行都有)。
 						 */}
-						<GripVertical
-							className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50 active:cursor-grabbing"
-							aria-hidden="true"
-						/>
+						{/* 只读树(`draggable={false}`)不渲染把手 —— 没有可拖的动作,就不给可辨认的入口 */}
+						{draggable ? (
+							<GripVertical
+								className="size-3.5 shrink-0 cursor-grab text-muted-foreground/50 active:cursor-grabbing"
+								aria-hidden="true"
+							/>
+						) : null}
 
 						{renderRow(node)}
 
