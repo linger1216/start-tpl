@@ -33,7 +33,6 @@ import { Route as mainTaskCloseIndexRouteImport } from './routes/(main)/task-clo
 import { Route as mainTaskCloseReportTemplatesRouteImport } from './routes/(main)/task-close/report-templates'
 import { Route as mainTaskCloseWorkflowsRouteImport } from './routes/(main)/task-close/workflows'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as ApiGlobaleyeStreamRouteImport } from './routes/api.globaleye.stream'
 import { Route as ApiSseNoticeRouteImport } from './routes/api.sse.notice'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api.trpc.$'
 import { Route as mainTaskCloseTaskIdIndexRouteImport } from './routes/(main)/task-close/$taskId/index'
@@ -158,11 +157,6 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiGlobaleyeStreamRoute = ApiGlobaleyeStreamRouteImport.update({
-  id: '/api/globaleye/stream',
-  path: '/api/globaleye/stream',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiSseNoticeRoute = ApiSseNoticeRouteImport.update({
   id: '/api/sse/notice',
   path: '/api/sse/notice',
@@ -202,7 +196,6 @@ export interface FileRoutesByFullPath {
   '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings/': typeof mainSettingsIndexRoute
@@ -231,7 +224,6 @@ export interface FileRoutesByTo {
   '/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/settings': typeof mainSettingsIndexRoute
@@ -262,7 +254,6 @@ export interface FileRoutesById {
   '/(main)/task-close/report-templates': typeof mainTaskCloseReportTemplatesRoute
   '/(main)/task-close/workflows': typeof mainTaskCloseWorkflowsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/globaleye/stream': typeof ApiGlobaleyeStreamRoute
   '/api/sse/notice': typeof ApiSseNoticeRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
   '/(main)/settings/': typeof mainSettingsIndexRoute
@@ -293,7 +284,6 @@ export interface FileRouteTypes {
     | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
-    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings/'
@@ -322,7 +312,6 @@ export interface FileRouteTypes {
     | '/task-close/report-templates'
     | '/task-close/workflows'
     | '/api/auth/$'
-    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/settings'
@@ -352,7 +341,6 @@ export interface FileRouteTypes {
     | '/(main)/task-close/report-templates'
     | '/(main)/task-close/workflows'
     | '/api/auth/$'
-    | '/api/globaleye/stream'
     | '/api/sse/notice'
     | '/api/trpc/$'
     | '/(main)/settings/'
@@ -365,7 +353,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApiCaptchaRoute: typeof ApiCaptchaRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiGlobaleyeStreamRoute: typeof ApiGlobaleyeStreamRoute
   ApiSseNoticeRoute: typeof ApiSseNoticeRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
@@ -540,13 +527,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/globaleye/stream': {
-      id: '/api/globaleye/stream'
-      path: '/api/globaleye/stream'
-      fullPath: '/api/globaleye/stream'
-      preLoaderRoute: typeof ApiGlobaleyeStreamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/sse/notice': {
       id: '/api/sse/notice'
       path: '/api/sse/notice'
@@ -628,7 +608,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApiCaptchaRoute: ApiCaptchaRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ApiGlobaleyeStreamRoute: ApiGlobaleyeStreamRoute,
   ApiSseNoticeRoute: ApiSseNoticeRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
