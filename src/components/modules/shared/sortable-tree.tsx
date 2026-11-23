@@ -127,6 +127,9 @@ export function SortableTree<T extends SortableTreeNode>({
 	const [expanded, setExpanded] = useState<ReadonlySet<string>>(
 		() => new Set(defaultCollapsed ? [] : collectExpandableIds(nodes)),
 	);
+	/** 首帧(服务端 + 水合首帧)工具栏禁用态取固定值,挂载后再按真实展开态算 —— 避免 hydration 不一致 */
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
 	const applyExpanded = (next: ReadonlySet<string>) => {
 		setExpanded(next);
 		onExpandedChange?.([...next]);
@@ -363,12 +366,16 @@ export function SortableTree<T extends SortableTreeNode>({
 				<div className="flex items-center gap-0.5">
 					<ActionIconButton
 						label="全部展开"
-						disabled={allExpanded}
+						disabled={!mounted || allExpanded}
 						onClick={() => applyExpanded(new Set(expandableIds))}
 					>
 						<ListChevronsUpDown className="size-3.5" />
 					</ActionIconButton>
-					<ActionIconButton label="全部折叠" disabled={expanded.size === 0} onClick={() => applyExpanded(new Set())}>
+					<ActionIconButton
+						label="全部折叠"
+						disabled={!mounted || expanded.size === 0}
+						onClick={() => applyExpanded(new Set())}
+					>
 						<ListChevronsDownUp className="size-3.5" />
 					</ActionIconButton>
 				</div>

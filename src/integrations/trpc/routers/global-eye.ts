@@ -29,10 +29,13 @@ export const globalEyeRouter = createTRPCRouter({
 			throw badGateway(error);
 		}
 	}),
-	/** 通道的 HLS 播放地址(浏览器直连) */
+	/** 通道的 HLS 播放地址;`httpPlayerUrl` 是可选的外部 http 播放页(HTTPS 部署时用它在新标签播放) */
 	streamUrl: protectedProcedure.input(z.object({ channelId: z.string().min(1).max(128) })).query(async ({ input }) => {
 		try {
-			return await getGlobalEyeStreamUrl(input.channelId);
+			return {
+				url: await getGlobalEyeStreamUrl(input.channelId),
+				httpPlayerUrl: process.env.GLOBALEYE_HTTP_PLAYER_URL?.trim() || null,
+			};
 		} catch (error) {
 			throw badGateway(error);
 		}

@@ -216,7 +216,11 @@ export function GlobalEyeVideoPage() {
 										</Button>
 									</div>
 								) : streamQuery.data ? (
-									<GlobalEyePlayer url={streamQuery.data} onRetry={() => void streamQuery.refetch()} />
+									<GlobalEyePlayer
+										url={streamQuery.data.url}
+										httpPlayerUrl={streamQuery.data.httpPlayerUrl}
+										onRetry={() => void streamQuery.refetch()}
+									/>
 								) : null}
 							</div>
 						) : null}
