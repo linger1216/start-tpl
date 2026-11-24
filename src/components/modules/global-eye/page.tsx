@@ -11,6 +11,7 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { DetailRow } from "#/components/ui/detail-row";
 import { RefreshButton } from "#/components/ui/refresh-button";
+import { Spinner } from "#/components/ui/spinner";
 import { Tag } from "#/components/ui/tag";
 import { useTRPC } from "#/integrations/trpc/react";
 import { toApiError, toastApiError } from "#/lib/api/error";
@@ -152,7 +153,12 @@ export function GlobalEyeVideoPage() {
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="flex min-h-0 flex-1 flex-col gap-2">
-						{treeQuery.isError ? (
+						{treeQuery.isPending ? (
+							<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+								<Spinner size="lg" />
+								<p className="text-xs text-muted-foreground">正在加载通道树…(首次较慢,请稍候)</p>
+							</div>
+						) : treeQuery.isError ? (
 							<div className="flex flex-col items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-4">
 								<p className="text-sm text-destructive">{toApiError(treeQuery.error).message}</p>
 								<Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
